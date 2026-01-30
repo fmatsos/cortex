@@ -181,19 +181,19 @@ This file tracks the implementation progress for each development phase.
 - [~] Confirmation prompt
 
 ### 5.6 Export Command
-- [ ] Implement `export.go`
-- [ ] Args: optional memory ID
-- [ ] Flags: `--output`, `--all`, `--intent`
-- [ ] Export single memory by ID
-- [ ] Export all memories
-- [ ] Export synthesis by intent
+- [x] Implement `export.go`
+- [x] Args: optional memory ID
+- [x] Flags: `--output`, `--all`, `--intent`
+- [x] Export single memory by ID
+- [x] Export all memories
+- [x] Export synthesis by intent
 
 ### 5.7 Import Command
-- [ ] Implement `import.go`
-- [ ] Args: file paths (variadic)
-- [ ] Flags: `--force`, `--dry-run`
-- [ ] Multi-file import
-- [ ] Validation reporting
+- [x] Implement `import.go`
+- [x] Args: file paths (variadic)
+- [x] Flags: `--force`, `--dry-run`
+- [x] Multi-file import
+- [x] Validation reporting
 
 ### 5.8 Output Options
 - [x] Add `--json` flag to all commands
@@ -210,42 +210,42 @@ This file tracks the implementation progress for each development phase.
 ## Phase 6: Markdown Format
 
 ### 6.1 Frontmatter Schema
-- [ ] Define `Frontmatter` struct in `pkg/markdown/frontmatter.go`
-- [ ] YAML tags for all fields
-- [ ] Required fields: `title`, `type` (same as create command)
-- [ ] Support `type` as array (combined types)
+- [x] Define `Frontmatter` struct in `pkg/markdown/frontmatter.go`
+- [x] YAML tags for all fields
+- [x] Required fields: `title`, `type` (same as create command)
+- [x] Support `type` as array (combined types)
 
 ### 6.2 Parser
-- [ ] Implement `parseFrontmatter(content)` function
-- [ ] Handle `---` delimiters
-- [ ] Extract YAML and body separately
+- [x] Implement `parseFrontmatter(content)` function
+- [x] Handle `---` delimiters
+- [x] Extract YAML and body separately
 
 ### 6.3 Exporter
-- [ ] Implement `Exporter` struct in `pkg/markdown/export.go`
-- [ ] `ExportMemory(memory)` - single file export
-- [ ] `ExportAll(memories)` - batch export
-- [ ] `ExportSynthesis(intent, results)` - intent-based synthesis
-- [ ] File naming convention (`<id>.md`)
+- [x] Implement `Exporter` struct in `pkg/markdown/export.go`
+- [x] `ExportMemory(memory)` - single file export
+- [x] `ExportAll(memories)` - batch export
+- [x] `ExportSynthesis(intent, results)` - intent-based synthesis
+- [x] File naming convention (`<id>.md`)
 
 ### 6.4 Importer
-- [ ] Implement `Importer` struct in `pkg/markdown/import.go`
-- [ ] `ImportFile(path)` - single file import
-- [ ] `ImportFiles(paths)` - batch import
-- [ ] UUID generation for missing IDs
-- [ ] Error aggregation for batch imports
+- [x] Implement `Importer` struct in `pkg/markdown/import.go`
+- [x] `ImportFile(path)` - single file import
+- [x] `ImportFiles(paths)` - batch import
+- [x] UUID generation for missing IDs
+- [x] Error aggregation for batch imports
 
 ### 6.5 Validation
-- [ ] Implement `validateFrontmatter(fm)` in `pkg/markdown/validate.go`
-- [ ] Required field checks (title, type - same as create command)
-- [ ] Type validation (solution|issue|analysis|rule|any)
-- [ ] Support combined types validation
-- [ ] Clear error messages
+- [x] Implement `validateFrontmatter(fm)` in `pkg/markdown/validate.go`
+- [x] Required field checks (title, type - same as create command)
+- [x] Type validation (solution|issue|analysis|rule|any)
+- [x] Support combined types validation
+- [x] Clear error messages
 
 ### 6.6 Tests
-- [ ] Write import/export round-trip tests
-- [ ] Write frontmatter validation tests
-- [ ] Test edge cases (missing fields, invalid types)
-- [ ] Test synthesis generation
+- [x] Write import/export round-trip tests
+- [x] Write frontmatter validation tests
+- [x] Test edge cases (missing fields, invalid types)
+- [x] Test synthesis generation
 
 ---
 
@@ -358,9 +358,9 @@ This file tracks the implementation progress for each development phase.
 | 2. Core Domain | Completed | 100% |
 | 3. Embedding System | Completed | 100% |
 | 4. Storage Layer | Completed | 100% |
-| 5. CLI Implementation | In progress | 70% |
-| 6. Markdown Format | Not started | 0% |
-| 7. Configuration | Not started | 0% |
+| 5. CLI Implementation | Completed | 100% |
+| 6. Markdown Format | Completed | 100% |
+| 7. Configuration | In progress | 0% |
 | 8. MCP Integration | Not started | 0% |
 | 9. Testing & Quality | Not started | 0% |
 | 10. Documentation & Release | Not started | 0% |
