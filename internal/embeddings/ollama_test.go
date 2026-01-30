@@ -1,0 +1,209 @@
+package embeddings
+
+import (
+	"context"
+	"encoding/json"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+)
+
+func TestNewOllamaEmbedder(t *testing.T) {
+	// Create a mock Ollama server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/embeddings" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = 0.1
+		}
+
+		resp := OllamaResponse{Embedding: embedding}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	embedder, err := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+	if err != nil {
+		t.Fatalf("NewOllamaEmbedder() error = %v", err)
+	}
+
+	if embedder.Dimension() != 384 {
+		t.Errorf("Dimension() = %v, want 384", embedder.Dimension())
+	}
+}
+
+func TestNewOllamaEmbedder_ConnectionFailed(t *testing.T) {
+	embedder, err := NewOllamaEmbedder("http://invalid-host:99999", "nomic-embed-text", 1*time.Second)
+	if err == nil {
+		t.Error("NewOllamaEmbedder() should return error for unreachable host")
+	}
+
+	if embedder != nil {
+		t.Error("NewOllamaEmbedder() should return nil embedder on error")
+	}
+}
+
+func TestOllamaEmbedder_Embed(t *testing.T) {
+	// Create a mock Ollama server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req OllamaRequest
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// Return embedding based on input
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = 0.1
+		}
+
+		resp := OllamaResponse{Embedding: embedding}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+
+	embedding, err := embedder.Embed(context.Background(), "test text")
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+
+	if len(embedding) != 384 {
+		t.Errorf("Embedding length = %v, want 384", len(embedding))
+	}
+
+	// Check that embedding is normalized
+	norm := 0.0
+	for _, val := range embedding {
+		norm += val * val
+	}
+	norm = math.Sqrt(norm)
+
+	if math.Abs(norm-1.0) > 0.001 {
+		t.Errorf("Embedding norm = %v, want ~1.0", norm)
+	}
+}
+
+func TestOllamaEmbedder_EmbedBatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = 0.1
+		}
+		resp := OllamaResponse{Embedding: embedding}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+
+	texts := []string{"text1", "text2", "text3"}
+	embeddings, err := embedder.EmbedBatch(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("EmbedBatch() error = %v", err)
+	}
+
+	if len(embeddings) != 3 {
+		t.Errorf("EmbedBatch() returned %d embeddings, want 3", len(embeddings))
+	}
+
+	for i, embedding := range embeddings {
+		if len(embedding) != 384 {
+			t.Errorf("Embedding %d length = %v, want 384", i, len(embedding))
+		}
+	}
+}
+
+func TestOllamaEmbedder_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Server Error"))
+	}))
+	defer server.Close()
+
+	// Create embedder with custom endpoint that returns error
+	client := &http.Client{Timeout: 5 * time.Second}
+	embedder := &OllamaEmbedder{
+		endpoint:  server.URL,
+		model:     "nomic-embed-text",
+		client:    client,
+		dimension: 384,
+	}
+
+	_, err := embedder.Embed(context.Background(), "test")
+	if err == nil {
+		t.Error("Embed() should return error when API fails")
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	tests := []struct {
+		name string
+		v    []float64
+		want float64 // Expected norm
+	}{
+		{
+			name: "unit vector",
+			v:    []float64{1, 0, 0},
+			want: 1.0,
+		},
+		{
+			name: "3-4-5 triangle",
+			v:    []float64{3, 4},
+			want: 1.0,
+		},
+		{
+			name: "zero vector",
+			v:    []float64{0, 0, 0},
+			want: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalized := normalize(tt.v)
+
+			// Calculate norm
+			norm := 0.0
+			for _, val := range normalized {
+				norm += val * val
+			}
+			norm = math.Sqrt(norm)
+
+			if math.Abs(norm-tt.want) > 0.0001 {
+				t.Errorf("normalize() norm = %v, want %v", norm, tt.want)
+			}
+		})
+	}
+}
+
+func TestOllamaEmbedder_ContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		embedding := make([]float64, 384)
+		resp := OllamaResponse{Embedding: embedding}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	embedder := &OllamaEmbedder{
+		endpoint:  server.URL,
+		model:     "nomic-embed-text",
+		client:    client,
+		dimension: 384,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := embedder.Embed(ctx, "test")
+	if err == nil {
+		t.Error("Embed() should return error when context is cancelled")
+	}
+}
