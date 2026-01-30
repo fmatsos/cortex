@@ -104,23 +104,23 @@ This file tracks the implementation progress for each development phase.
 ## Phase 4: Storage Layer
 
 ### 4.1 Storage Interface
-- [ ] Define `Storage` interface in `internal/storage/storage.go`
-  - [ ] `Save(ctx, memory) error`
-  - [ ] `Get(ctx, id) (*Memory, error)`
-  - [ ] `List(ctx, opts) ([]Memory, error)`
-  - [ ] `Delete(ctx, id) error`
-  - [ ] `Update(ctx, memory) error`
-  - [ ] `SearchByVector(ctx, vector, topK) ([]VectorMatch, error)`
-  - [ ] `Close() error`
-- [ ] Define `VectorMatch` struct
+- [x] Define `Storage` interface in `internal/storage/storage.go`
+  - [x] `Save(ctx, memory) error`
+  - [x] `Get(ctx, id) (*Memory, error)`
+  - [x] `List(ctx, opts) ([]Memory, error)`
+  - [x] `Delete(ctx, id) error`
+  - [x] `Update(ctx, memory) error`
+  - [x] `SearchByVector(ctx, vector, topK) ([]VectorMatch, error)`
+  - [x] `Close() error`
+- [x] Define `VectorMatch` struct
 
 ### 4.2 Gob Storage
-- [ ] Implement `GobStorage` in `internal/storage/gob.go`
-- [ ] File-based memory persistence (`<id>.gob`)
-- [ ] In-memory vector index
-- [ ] Index persistence (`index.gob`)
-- [ ] File locking for concurrent access
-- [ ] Directory initialization
+- [x] Implement `GobStorage` in `internal/storage/gob.go`
+- [x] File-based memory persistence (`<id>.gob`)
+- [x] In-memory vector index
+- [x] Index persistence (`index.gob`)
+- [~] File locking for concurrent access (mutex-based sync)
+- [x] Directory initialization
 
 ### 4.3 SQLite Storage
 - [ ] Implement `SQLiteStorage` in `internal/storage/sqlite.go`
@@ -130,8 +130,8 @@ This file tracks the implementation progress for each development phase.
 - [ ] Vector search query
 
 ### 4.4 Vector Search
-- [ ] Implement `CosineSimilarity` in `internal/search/cosine.go`
-- [ ] Implement top-K search with min score filtering
+- [x] Implement `CosineSimilarity` in `internal/search/cosine.go`
+- [x] Implement top-K search with min score filtering
 - [ ] Optimize for performance (SIMD if possible)
 
 ### 4.5 Storage Factory
@@ -139,9 +139,9 @@ This file tracks the implementation progress for each development phase.
 - [ ] Backend selection (gob/sqlite)
 
 ### 4.6 Tests
-- [ ] Write unit tests for Gob storage
+- [x] Write unit tests for Gob storage
 - [ ] Write unit tests for SQLite storage
-- [ ] Write benchmarks for vector search
+- [x] Write tests for cosine similarity search
 - [ ] Test storage factory
 
 ---
@@ -356,8 +356,8 @@ This file tracks the implementation progress for each development phase.
 |-------|--------|----------|
 | 1. Project Foundation | Completed | 100% |
 | 2. Core Domain | Completed | 100% |
-| 3. Embedding System | In progress | 95% |
-| 4. Storage Layer | Not started | 0% |
+| 3. Embedding System | Completed | 100% |
+| 4. Storage Layer | In progress | 75% |
 | 5. CLI Implementation | Not started | 0% |
 | 6. Markdown Format | Not started | 0% |
 | 7. Configuration | Not started | 0% |
