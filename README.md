@@ -1,2 +1,194 @@
-# cortex-ai
-Cortex AI is a memory for your agentic AI coding tool.
+# Cortex AI
+
+**Cortex AI** is a CLI tool written in Go that provides persistent memory for AI agentic coding tools. It enables LLMs to recall past problems, solutions, and project-specific rules across sessions.
+
+## Overview
+
+When working with AI coding assistants like Claude Code, Cursor, or Windsurf, context is often lost between sessions. Cortex AI solves this by providing a local vector database that stores "memories" - structured knowledge that can be retrieved semantically.
+
+The tool follows a similar approach to [grepai](https://github.com/yoanbernabeu/grepai): **search by intent**, local operation via **Ollama**, and vector embeddings for semantic matching.
+
+## Key Features
+
+- **Memory Creation** - Store structured memories on user request (problems encountered, solutions found, project rules)
+- **Vector Search** - Semantic search across all saved memories using natural language queries
+- **Memory Deletion** - Remove obsolete or outdated memories
+- **Memory Listing** - View all existing memories
+- **Markdown Export** - Export memories to Markdown format for sharing or backup
+- **Markdown Import** - Import memories written in Markdown format
+
+## How It Works
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   AI Agent      │────▶│   Cortex AI     │────▶│  Vector Store   │
+│  (via Skill)    │◀────│     CLI         │◀────│  (Gob/SQLite)   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                               │
+                               ▼
+                        ┌─────────────────┐
+                        │     Ollama      │
+                        │  (Embeddings)   │
+                        └─────────────────┘
+```
+
+1. **User triggers memory creation** - When the user asks the LLM to remember something, a memory is created
+2. **Embedding generation** - The memory content is converted to a vector embedding via Ollama (local)
+3. **Vector storage** - The embedding and metadata are stored in the vector database
+4. **Semantic retrieval** - The LLM can freely search memories by intent/meaning, not just keywords
+
+## Storage Backends
+
+| Backend | Description | Use Case |
+|---------|-------------|----------|
+| **Gob** (default) | File-based storage using Go's gob encoding | Simple setup, single user, small to medium datasets |
+| **SQLite** | Embedded SQL database | Better querying, larger datasets, potential for advanced features |
+
+## Memory Types
+
+Memories can be classified with one or more types:
+
+| Type | Description |
+|------|-------------|
+| `solution` | A fix or workaround for a problem |
+| `issue` | A problem, bug, or challenge encountered |
+| `analysis` | Investigation, root cause analysis, or technical deep-dive |
+| `rule` | Project convention, coding standard, or guideline |
+| `any` | Generic memory that doesn't fit other categories |
+
+Types can be **combined** - for example, a memory documenting both an issue and its solution can have `type: [issue, solution]`.
+
+## CLI Commands
+
+```bash
+# Create a new memory (title, type, content are required)
+cortex create --title "Auth fix" --type solution --content "JWT refresh tokens must be rotated..."
+
+# Create a memory with multiple types
+cortex create --title "JWT Bug Analysis" --type issue,solution,analysis --content "..."
+
+# Search memories semantically
+cortex search "authentication issues"
+
+# List all memories
+cortex list
+
+# Delete an obsolete memory
+cortex delete <memory-id>
+
+# Export a specific memory by ID (creates a single .md file)
+cortex export <memory-id> --output ./memories/
+
+# Export all memories (each memory becomes a separate .md file)
+cortex export --all --output ./memories/
+
+# Export by intent - generates a synthesis of relevant memories
+cortex export --intent "authentication patterns" --output auth-synthesis.md
+
+# Import one or multiple memory files
+cortex import memory1.md memory2.md memory3.md
+```
+
+### Markdown Format
+
+Exported memories use YAML frontmatter for metadata:
+
+```markdown
+---
+id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+title: JWT Token Refresh Fix
+type:
+  - issue
+  - solution
+tags:
+  - authentication
+  - jwt
+created_at: 2024-01-10T14:22:00Z
+updated_at: 2024-01-10T14:22:00Z
+---
+
+When JWT tokens expire, the refresh mechanism was failing because...
+
+The fix involved adding a retry loop with exponential backoff...
+```
+
+**Required fields** (for both `create` command and import):
+- `title` - Memory title
+- `type` - One or more types (solution, issue, analysis, rule, any)
+- Content (body of the markdown file, or `--content` flag)
+
+The `id` field is optional on import - a new UUID will be generated if not provided.
+
+## Integration with AI Agents
+
+Cortex AI is designed to be used as a **Skill** (or MCP tool) for AI coding assistants:
+
+```yaml
+# Example skill definition
+name: cortex-memory
+description: Search and manage project memories
+commands:
+  - search: Query memories by intent
+  - create: Store a new memory (user-initiated)
+```
+
+### Typical Workflow
+
+1. **Problem encountered** - User asks LLM to remember a bug fix or solution
+2. **Memory stored** - `cortex create` stores the memory with embeddings
+3. **Future session** - LLM encounters similar issue
+4. **Semantic search** - LLM uses `cortex search` to find relevant past experiences
+5. **Informed solution** - LLM applies learned knowledge to current problem
+
+## Local-First & Privacy
+
+Like grepai, Cortex AI is designed to run **entirely locally**:
+
+- **Ollama** for embeddings - No data sent to external APIs
+- **Local storage** - All memories stored on your machine
+- **No telemetry** - Your project knowledge stays private
+
+## Requirements
+
+- Go 1.21+
+- Ollama with an embedding model (recommended: `nomic-embed-text`)
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/cortex-ai.git
+cd cortex-ai
+
+# Build
+go build -o cortex ./cmd/cortex
+
+# Or install directly
+go install ./cmd/cortex
+```
+
+## Configuration
+
+```yaml
+# ~/.config/cortex-ai/config.yaml
+storage:
+  backend: gob  # or "sqlite"
+  path: ~/.local/share/cortex-ai/memories
+
+embeddings:
+  provider: ollama
+  model: nomic-embed-text
+  endpoint: http://localhost:11434
+
+search:
+  top_k: 5
+  min_score: 0.7
+```
+
+## Contributing
+
+Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+
+## License
+
+MIT License - See [LICENSE](LICENSE) for details.
