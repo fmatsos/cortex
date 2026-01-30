@@ -190,14 +190,14 @@ func (gs *GobStorage) Update(ctx context.Context, m *memory.Memory) error {
 }
 
 // SearchByVector searches memories by vector similarity
-func (gs *GobStorage) SearchByVector(ctx context.Context, vector []float64, topK int) ([]*VectorMatch, error) {
+func (gs *GobStorage) SearchByVector(ctx context.Context, vector []float64, topK int) ([]*memory.VectorMatch, error) {
 	gs.index.mu.RLock()
 	defer gs.index.mu.RUnlock()
 
-	var matches []*VectorMatch
+	var matches []*memory.VectorMatch
 	for id, stored := range gs.index.vectors {
 		score := search.CosineSimilarity(vector, stored)
-		matches = append(matches, &VectorMatch{
+		matches = append(matches, &memory.VectorMatch{
 			MemoryID: id,
 			Score:    score,
 		})

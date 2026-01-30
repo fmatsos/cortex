@@ -15,6 +15,12 @@ type Embedder interface {
 	Dimension() int
 }
 
+// VectorMatch represents a memory matched by vector search
+type VectorMatch struct {
+	MemoryID string
+	Score    float64
+}
+
 // Storage interface for persisting memories
 type Storage interface {
 	Save(ctx context.Context, memory *Memory) error
@@ -24,12 +30,6 @@ type Storage interface {
 	Update(ctx context.Context, memory *Memory) error
 	SearchByVector(ctx context.Context, vector []float64, topK int) ([]*VectorMatch, error)
 	Close() error
-}
-
-// VectorMatch represents a memory matched by vector search
-type VectorMatch struct {
-	MemoryID string
-	Score    float64
 }
 
 // Service interface defines all memory operations

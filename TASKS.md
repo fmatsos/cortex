@@ -149,36 +149,36 @@ This file tracks the implementation progress for each development phase.
 ## Phase 5: CLI Implementation
 
 ### 5.1 Root Command
-- [ ] Implement `root.go` with Cobra
-- [ ] Global flags: `--config`, `--storage`
-- [ ] Version command
-- [ ] Help formatting
+- [x] Implement `root.go` with Cobra
+- [x] Global flags: `--config`, `--storage`
+- [~] Version command (built-in via Cobra)
+- [x] Help formatting
 
 ### 5.2 Create Command
-- [ ] Implement `create.go`
-- [ ] Required flags: `--title`, `--type`, `--content`
-- [ ] Optional flags: `--tags`
-- [ ] Support combined types (`--type issue,solution,analysis`)
-- [ ] Type validation (solution, issue, analysis, rule, any)
-- [ ] Input validation (required fields check)
-- [ ] Success/error output formatting
+- [x] Implement `create.go`
+- [x] Required flags: `--title`, `--type`, `--content`
+- [x] Optional flags: `--tags`
+- [x] Support combined types (`--type issue,solution,analysis`)
+- [x] Type validation (solution, issue, analysis, rule, any)
+- [x] Input validation (required fields check)
+- [x] Success/error output formatting
 
 ### 5.3 Search Command
-- [ ] Implement `search.go`
-- [ ] Args: query string
-- [ ] Flags: `--top`, `--min-score`, `--type`
-- [ ] Results formatting (table/JSON)
+- [x] Implement `search.go`
+- [x] Args: query string
+- [x] Flags: `--top`, `--min-score`, `--type`
+- [x] Results formatting (table/JSON)
 
 ### 5.4 List Command
-- [ ] Implement `list.go`
-- [ ] Flags: `--type`, `--include-obsolete`
-- [ ] Output formatting (table/JSON)
+- [x] Implement `list.go`
+- [x] Flags: `--type`, `--include-obsolete`
+- [x] Output formatting (table/JSON)
 
 ### 5.5 Delete Command
-- [ ] Implement `delete.go`
-- [ ] Args: memory ID
-- [ ] Flag: `--obsolete` (delete all obsolete)
-- [ ] Confirmation prompt
+- [x] Implement `delete.go`
+- [x] Args: memory ID
+- [x] Flag: `--obsolete` (delete all obsolete)
+- [~] Confirmation prompt
 
 ### 5.6 Export Command
 - [ ] Implement `export.go`
@@ -196,7 +196,7 @@ This file tracks the implementation progress for each development phase.
 - [ ] Validation reporting
 
 ### 5.8 Output Options
-- [ ] Add `--json` flag to all commands
+- [x] Add `--json` flag to all commands
 - [ ] Add `--quiet` flag for scripts
 - [ ] Colored output support
 
@@ -357,8 +357,8 @@ This file tracks the implementation progress for each development phase.
 | 1. Project Foundation | Completed | 100% |
 | 2. Core Domain | Completed | 100% |
 | 3. Embedding System | Completed | 100% |
-| 4. Storage Layer | In progress | 75% |
-| 5. CLI Implementation | Not started | 0% |
+| 4. Storage Layer | Completed | 100% |
+| 5. CLI Implementation | In progress | 70% |
 | 6. Markdown Format | Not started | 0% |
 | 7. Configuration | Not started | 0% |
 | 8. MCP Integration | Not started | 0% |
