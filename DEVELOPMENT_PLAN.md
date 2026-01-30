@@ -358,14 +358,55 @@ var deleteCmd = &cobra.Command{
 }
 ```
 
-### 5.6 Export/Import Commands
+### 5.6 Export Command
 
 ```go
-// cortex export --output memories.md
-// cortex import --file memories.md
+// internal/cli/export.go
+
+// Export a specific memory by ID
+// cortex export <memory-id> --output ./memories/
+
+// Export all memories (each memory = separate file)
+// cortex export --all --output ./memories/
+
+// Export by intent (synthesis of relevant memories)
+// cortex export --intent "authentication patterns" --output auth-synthesis.md
+
+var exportCmd = &cobra.Command{
+    Use:   "export [id]",
+    Short: "Export memories to Markdown files",
+    RunE:  runExport,
+}
+
+func init() {
+    exportCmd.Flags().StringP("output", "o", ".", "Output directory or file path")
+    exportCmd.Flags().Bool("all", false, "Export all memories")
+    exportCmd.Flags().String("intent", "", "Export synthesis based on semantic search")
+}
 ```
 
-### 5.7 Deliverables
+### 5.7 Import Command
+
+```go
+// internal/cli/import.go
+
+// Import one or multiple memory files
+// cortex import memory1.md memory2.md memory3.md
+
+var importCmd = &cobra.Command{
+    Use:   "import [files...]",
+    Short: "Import memories from Markdown files",
+    Args:  cobra.MinimumNArgs(1),
+    RunE:  runImport,
+}
+
+func init() {
+    importCmd.Flags().Bool("force", false, "Overwrite existing memories with same ID")
+    importCmd.Flags().Bool("dry-run", false, "Validate files without importing")
+}
+```
+
+### 5.8 Deliverables
 
 - [ ] Implement root command with global flags
 - [ ] Implement create command
@@ -381,61 +422,251 @@ var deleteCmd = &cobra.Command{
 
 ## Phase 6: Markdown Format
 
-### 6.1 Export Format
+### 6.1 Memory File Format (Individual Export)
+
+Each memory is exported as a separate Markdown file with YAML frontmatter:
 
 ```markdown
-# Cortex AI Memories Export
-
-Exported: 2024-01-15T10:30:00Z
-Total: 42 memories
-
+---
+id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+title: JWT Token Refresh Fix
+type: solution
+tags:
+  - authentication
+  - jwt
+  - bug-fix
+created_at: 2024-01-10T14:22:00Z
+updated_at: 2024-01-10T14:22:00Z
+obsolete: false
+metadata:
+  project: api-gateway
+  author: dev-team
 ---
 
-## Auth Token Refresh Bug
+When JWT tokens expire, the refresh mechanism was failing because the token
+validation was happening before the refresh attempt.
 
-- **ID:** `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
-- **Type:** solution
-- **Tags:** `authentication`, `jwt`, `bug-fix`
-- **Created:** 2024-01-10T14:22:00Z
+## Root Cause
 
-### Content
+The middleware was checking token validity synchronously...
 
-When JWT tokens expire, the refresh mechanism was failing because...
+## Solution
 
-The fix involved adding a retry loop with exponential backoff...
+Added a retry loop with exponential backoff that attempts refresh before
+rejecting the request...
 
----
+## Code Example
 
-## Project Coding Standards
-
-- **ID:** `b2c3d4e5-f6a7-8901-bcde-f12345678901`
-- **Type:** rule
-- **Tags:** `standards`, `code-style`
-- **Created:** 2024-01-05T09:00:00Z
-
-### Content
-
-All error messages must include context using `fmt.Errorf("operation: %w", err)`...
-
----
+\`\`\`go
+func refreshToken(ctx context.Context, token string) (*Token, error) {
+    // Implementation here
+}
+\`\`\`
 ```
 
-### 6.2 Import Parser
+**File naming convention:** `<id>.md` or `<slugified-title>.md`
 
-The import parser should:
-1. Parse the Markdown structure
-2. Extract metadata from the frontmatter-style fields
-3. Generate new embeddings for imported content
-4. Handle conflicts (same ID exists)
+### 6.2 Frontmatter Schema
 
-### 6.3 Deliverables
+```go
+// pkg/markdown/frontmatter.go
+type Frontmatter struct {
+    ID        string            `yaml:"id,omitempty"`        // Optional on import (generated if missing)
+    Title     string            `yaml:"title"`               // Required
+    Type      string            `yaml:"type"`                // Required: problem|solution|rule|note
+    Tags      []string          `yaml:"tags,omitempty"`
+    CreatedAt time.Time         `yaml:"created_at,omitempty"`
+    UpdatedAt time.Time         `yaml:"updated_at,omitempty"`
+    Obsolete  bool              `yaml:"obsolete,omitempty"`
+    Metadata  map[string]string `yaml:"metadata,omitempty"`
+}
 
-- [ ] Define Markdown export format
-- [ ] Implement Markdown exporter
-- [ ] Implement Markdown parser/importer
-- [ ] Handle import conflicts
-- [ ] Add import validation
+// Required fields for import
+var requiredFields = []string{"title", "type"}
+```
+
+### 6.3 Synthesis Export (Intent-Based)
+
+When exporting by intent, generate a synthesis document:
+
+```markdown
+---
+type: synthesis
+intent: "authentication patterns"
+generated_at: 2024-01-15T10:30:00Z
+source_memories:
+  - id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+    title: JWT Token Refresh Fix
+    score: 0.92
+  - id: b2c3d4e5-f6a7-8901-bcde-f12345678901
+    title: OAuth2 Integration Guide
+    score: 0.87
+  - id: c3d4e5f6-a789-0123-cdef-123456789012
+    title: Session Management Rules
+    score: 0.81
+---
+
+# Authentication Patterns - Synthesis
+
+This document synthesizes 3 memories related to "authentication patterns".
+
+## Summary
+
+Based on the stored memories, the following authentication patterns are documented...
+
+## Key Learnings
+
+### From: JWT Token Refresh Fix (score: 0.92)
+
+When JWT tokens expire, the refresh mechanism was failing...
+
+### From: OAuth2 Integration Guide (score: 0.87)
+
+OAuth2 integration requires careful handling of...
+
+### From: Session Management Rules (score: 0.81)
+
+Sessions should be managed with the following rules...
+
+---
+
+*Generated by Cortex AI - This is a read-only synthesis, not importable.*
+```
+
+### 6.4 Exporter Implementation
+
+```go
+// pkg/markdown/export.go
+type Exporter struct {
+    outputDir string
+}
+
+// ExportMemory exports a single memory to a Markdown file
+func (e *Exporter) ExportMemory(m *Memory) (string, error) {
+    filename := fmt.Sprintf("%s.md", m.ID)
+    // Marshal frontmatter + content
+    return filepath.Join(e.outputDir, filename), nil
+}
+
+// ExportAll exports all memories to separate files
+func (e *Exporter) ExportAll(memories []*Memory) ([]string, error) {
+    var paths []string
+    for _, m := range memories {
+        path, err := e.ExportMemory(m)
+        if err != nil {
+            return nil, err
+        }
+        paths = append(paths, path)
+    }
+    return paths, nil
+}
+
+// ExportSynthesis generates a synthesis from search results
+func (e *Exporter) ExportSynthesis(intent string, results []SearchResult) (string, error) {
+    // Generate synthesis document
+    return filepath.Join(e.outputDir, "synthesis.md"), nil
+}
+```
+
+### 6.5 Importer Implementation
+
+```go
+// pkg/markdown/import.go
+type Importer struct {
+    embedder Embedder
+}
+
+// ImportFile parses a Markdown file and returns a Memory
+func (i *Importer) ImportFile(path string) (*Memory, error) {
+    content, err := os.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+
+    fm, body, err := parseFrontmatter(content)
+    if err != nil {
+        return nil, err
+    }
+
+    if err := validateFrontmatter(fm); err != nil {
+        return nil, fmt.Errorf("invalid frontmatter in %s: %w", path, err)
+    }
+
+    memory := &Memory{
+        ID:        fm.ID, // May be empty, will be generated
+        Title:     fm.Title,
+        Type:      MemoryType(fm.Type),
+        Tags:      fm.Tags,
+        Content:   body,
+        Metadata:  fm.Metadata,
+        CreatedAt: fm.CreatedAt,
+        UpdatedAt: fm.UpdatedAt,
+    }
+
+    // Generate new ID if not provided
+    if memory.ID == "" {
+        memory.ID = uuid.New().String()
+    }
+
+    return memory, nil
+}
+
+// ImportFiles imports multiple files
+func (i *Importer) ImportFiles(paths []string) ([]*Memory, []error) {
+    var memories []*Memory
+    var errors []error
+
+    for _, path := range paths {
+        m, err := i.ImportFile(path)
+        if err != nil {
+            errors = append(errors, fmt.Errorf("%s: %w", path, err))
+            continue
+        }
+        memories = append(memories, m)
+    }
+
+    return memories, errors
+}
+```
+
+### 6.6 Validation Rules
+
+```go
+// pkg/markdown/validate.go
+func validateFrontmatter(fm *Frontmatter) error {
+    var errs []string
+
+    if fm.Title == "" {
+        errs = append(errs, "title is required")
+    }
+
+    if fm.Type == "" {
+        errs = append(errs, "type is required")
+    } else if !isValidType(fm.Type) {
+        errs = append(errs, fmt.Sprintf("invalid type: %s (must be problem|solution|rule|note)", fm.Type))
+    }
+
+    if len(errs) > 0 {
+        return fmt.Errorf("validation failed: %s", strings.Join(errs, ", "))
+    }
+
+    return nil
+}
+```
+
+### 6.7 Deliverables
+
+- [ ] Define YAML frontmatter schema
+- [ ] Implement frontmatter parser (using `gopkg.in/yaml.v3`)
+- [ ] Implement single memory exporter
+- [ ] Implement batch exporter (all memories)
+- [ ] Implement synthesis exporter (intent-based)
+- [ ] Implement file importer with validation
+- [ ] Implement multi-file import
+- [ ] Handle import conflicts (--force flag)
+- [ ] Add dry-run validation mode
 - [ ] Write tests for import/export round-trip
+- [ ] Write tests for frontmatter validation
 
 ---
 

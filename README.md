@@ -59,12 +59,42 @@ cortex list
 # Delete an obsolete memory
 cortex delete <memory-id>
 
-# Export memories to Markdown
-cortex export --output memories.md
+# Export a specific memory by ID (creates a single .md file)
+cortex export <memory-id> --output ./memories/
 
-# Import memories from Markdown
-cortex import --file memories.md
+# Export all memories (each memory becomes a separate .md file)
+cortex export --all --output ./memories/
+
+# Export by intent - generates a synthesis of relevant memories
+cortex export --intent "authentication patterns" --output auth-synthesis.md
+
+# Import one or multiple memory files
+cortex import memory1.md memory2.md memory3.md
 ```
+
+### Markdown Format
+
+Exported memories use YAML frontmatter for metadata:
+
+```markdown
+---
+id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+title: JWT Token Refresh Fix
+type: solution
+tags:
+  - authentication
+  - jwt
+  - bug-fix
+created_at: 2024-01-10T14:22:00Z
+updated_at: 2024-01-10T14:22:00Z
+---
+
+When JWT tokens expire, the refresh mechanism was failing because...
+
+The fix involved adding a retry loop with exponential backoff...
+```
+
+When importing, the frontmatter metadata (`title`, `type`, `tags`) is required. The `id` field is optional - a new UUID will be generated if not provided.
 
 ## Integration with AI Agents
 
