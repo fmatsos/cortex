@@ -9,33 +9,33 @@ This file tracks the implementation progress for each development phase.
 ## Phase 1: Project Foundation
 
 ### 1.1 Project Setup
-- [ ] Initialize Go module (`go mod init`)
-- [ ] Create directory structure
-  - [ ] `cmd/cortex/`
-  - [ ] `internal/cli/`
-  - [ ] `internal/memory/`
-  - [ ] `internal/storage/`
-  - [ ] `internal/embeddings/`
-  - [ ] `internal/search/`
-  - [ ] `internal/config/`
-  - [ ] `pkg/markdown/`
+- [x] Initialize Go module (`go mod init`)
+- [x] Create directory structure
+  - [x] `cmd/cortex/`
+  - [x] `internal/cli/`
+  - [x] `internal/memory/`
+  - [x] `internal/storage/`
+  - [x] `internal/embeddings/`
+  - [x] `internal/search/`
+  - [x] `internal/config/`
+  - [x] `pkg/markdown/`
 
 ### 1.2 Build & CI
-- [ ] Create Makefile
-  - [ ] `build` target
-  - [ ] `test` target
-  - [ ] `lint` target
-  - [ ] `install` target
+- [x] Create Makefile
+  - [x] `build` target
+  - [x] `test` target
+  - [x] `lint` target
+  - [x] `install` target
 - [ ] Configure GitHub Actions CI
-- [ ] Add `.gitignore`
-- [ ] Add `.golangci.yml` (linter config)
+- [x] Add `.gitignore`
+- [x] Add `.golangci.yml` (linter config)
 
 ### 1.3 Dependencies
-- [ ] Add `github.com/spf13/cobra`
-- [ ] Add `github.com/spf13/viper`
-- [ ] Add `github.com/google/uuid`
-- [ ] Add `gopkg.in/yaml.v3`
-- [ ] Add `github.com/mattn/go-sqlite3` (optional)
+- [x] Add `github.com/spf13/cobra`
+- [x] Add `github.com/spf13/viper`
+- [x] Add `github.com/google/uuid`
+- [x] Add `gopkg.in/yaml.v3`
+- [x] Add `github.com/mattn/go-sqlite3` (optional)
 
 ---
 
@@ -354,7 +354,7 @@ This file tracks the implementation progress for each development phase.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| 1. Project Foundation | Not started | 0% |
+| 1. Project Foundation | In progress | 95% |
 | 2. Core Domain | Not started | 0% |
 | 3. Embedding System | Not started | 0% |
 | 4. Storage Layer | Not started | 0% |
