@@ -77,27 +77,27 @@ This file tracks the implementation progress for each development phase.
 ## Phase 3: Embedding System
 
 ### 3.1 Embedder Interface
-- [ ] Define `Embedder` interface in `internal/embeddings/embedder.go`
-  - [ ] `Embed(ctx, text) ([]float64, error)`
-  - [ ] `EmbedBatch(ctx, texts) ([][]float64, error)`
-  - [ ] `Dimension() int`
+- [x] Define `Embedder` interface in `internal/embeddings/embedder.go`
+  - [x] `Embed(ctx, text) ([]float64, error)`
+  - [x] `EmbedBatch(ctx, texts) ([][]float64, error)`
+  - [x] `Dimension() int`
 
 ### 3.2 Ollama Implementation
-- [ ] Implement `OllamaEmbedder` in `internal/embeddings/ollama.go`
-- [ ] HTTP client setup with timeout
-- [ ] Request/response structs for Ollama API
-- [ ] Connection pooling
-- [ ] Retry logic with exponential backoff
-- [ ] Error handling (Ollama not running, model not found)
+- [x] Implement `OllamaEmbedder` in `internal/embeddings/ollama.go`
+- [x] HTTP client setup with timeout
+- [x] Request/response structs for Ollama API
+- [x] Connection pooling (via http.Client)
+- [~] Retry logic with exponential backoff (basic error handling)
+- [x] Error handling (Ollama not running, model not found)
 
 ### 3.3 Text Preprocessing
-- [ ] Implement `PrepareForEmbedding(memory)` function
-- [ ] Combine title, content, and tags with weighting
+- [x] Implement `PrepareForEmbedding(memory)` function (in memory/service.go)
+- [x] Combine title, content, and tags with weighting
 
 ### 3.4 Tests
-- [ ] Write unit tests with mock HTTP server
+- [x] Write unit tests with mock HTTP server
 - [ ] Write integration tests (requires Ollama)
-- [ ] Add embedding dimension validation tests
+- [x] Add embedding dimension validation tests
 
 ---
 
@@ -355,8 +355,8 @@ This file tracks the implementation progress for each development phase.
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Project Foundation | Completed | 100% |
-| 2. Core Domain | In progress | 100% |
-| 3. Embedding System | Not started | 0% |
+| 2. Core Domain | Completed | 100% |
+| 3. Embedding System | In progress | 95% |
 | 4. Storage Layer | Not started | 0% |
 | 5. CLI Implementation | Not started | 0% |
 | 6. Markdown Format | Not started | 0% |
