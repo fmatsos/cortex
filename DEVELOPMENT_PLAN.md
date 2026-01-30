@@ -82,11 +82,11 @@ require (
 // internal/memory/memory.go
 type Memory struct {
     ID          string            `json:"id"`
-    Title       string            `json:"title"`
-    Content     string            `json:"content"`
+    Title       string            `json:"title"`               // Required
+    Content     string            `json:"content"`             // Required
+    Types       []MemoryType      `json:"types"`               // Required, can be combined
     Tags        []string          `json:"tags,omitempty"`
-    Type        MemoryType        `json:"type"`        // problem, solution, rule, note
-    Embedding   []float64         `json:"-"`           // Vector embedding
+    Embedding   []float64         `json:"-"`                   // Vector embedding
     CreatedAt   time.Time         `json:"created_at"`
     UpdatedAt   time.Time         `json:"updated_at"`
     Metadata    map[string]string `json:"metadata,omitempty"`
@@ -96,11 +96,24 @@ type Memory struct {
 type MemoryType string
 
 const (
-    MemoryTypeProblem  MemoryType = "problem"
-    MemoryTypeSolution MemoryType = "solution"
-    MemoryTypeRule     MemoryType = "rule"
-    MemoryTypeNote     MemoryType = "note"
+    MemoryTypeSolution MemoryType = "solution"  // A fix or workaround
+    MemoryTypeIssue    MemoryType = "issue"     // A problem, bug, or challenge
+    MemoryTypeAnalysis MemoryType = "analysis"  // Investigation, root cause analysis
+    MemoryTypeRule     MemoryType = "rule"      // Convention, standard, guideline
+    MemoryTypeAny      MemoryType = "any"       // Generic memory
 )
+
+// ValidMemoryTypes for validation
+var ValidMemoryTypes = []MemoryType{
+    MemoryTypeSolution,
+    MemoryTypeIssue,
+    MemoryTypeAnalysis,
+    MemoryTypeRule,
+    MemoryTypeAny,
+}
+
+// Memory can have combined types, e.g., []MemoryType{MemoryTypeIssue, MemoryTypeSolution}
+// for a memory that documents both the problem and its fix
 ```
 
 ### 2.2 Service Layer
@@ -300,7 +313,8 @@ func init() {
 ### 5.2 Create Command
 
 ```go
-// cortex create --title "Title" --content "Content" --type solution --tags "go,bug"
+// cortex create --title "Title" --type solution --content "Content"
+// cortex create --title "Bug Fix" --type issue,solution --content "..." --tags "go,bug"
 var createCmd = &cobra.Command{
     Use:   "create",
     Short: "Create a new memory",
@@ -309,10 +323,11 @@ var createCmd = &cobra.Command{
 
 func init() {
     createCmd.Flags().StringP("title", "t", "", "Memory title (required)")
+    createCmd.Flags().StringSlice("type", nil, "Memory type(s): solution,issue,analysis,rule,any (required, can be combined)")
     createCmd.Flags().StringP("content", "c", "", "Memory content (required)")
-    createCmd.Flags().String("type", "note", "Memory type (problem|solution|rule|note)")
     createCmd.Flags().StringSlice("tags", nil, "Tags for the memory")
     createCmd.MarkFlagRequired("title")
+    createCmd.MarkFlagRequired("type")
     createCmd.MarkFlagRequired("content")
 }
 ```
@@ -430,11 +445,13 @@ Each memory is exported as a separate Markdown file with YAML frontmatter:
 ---
 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 title: JWT Token Refresh Fix
-type: solution
+type:
+  - issue
+  - solution
+  - analysis
 tags:
   - authentication
   - jwt
-  - bug-fix
 created_at: 2024-01-10T14:22:00Z
 updated_at: 2024-01-10T14:22:00Z
 obsolete: false
@@ -466,6 +483,8 @@ func refreshToken(ctx context.Context, token string) (*Token, error) {
 
 **File naming convention:** `<id>.md` or `<slugified-title>.md`
 
+**Note:** Types can be combined - in this example the memory documents an issue, its solution, and the analysis that led to the fix.
+
 ### 6.2 Frontmatter Schema
 
 ```go
@@ -473,7 +492,7 @@ func refreshToken(ctx context.Context, token string) (*Token, error) {
 type Frontmatter struct {
     ID        string            `yaml:"id,omitempty"`        // Optional on import (generated if missing)
     Title     string            `yaml:"title"`               // Required
-    Type      string            `yaml:"type"`                // Required: problem|solution|rule|note
+    Types     []string          `yaml:"type"`                // Required: solution|issue|analysis|rule|any (can be combined)
     Tags      []string          `yaml:"tags,omitempty"`
     CreatedAt time.Time         `yaml:"created_at,omitempty"`
     UpdatedAt time.Time         `yaml:"updated_at,omitempty"`
@@ -481,8 +500,11 @@ type Frontmatter struct {
     Metadata  map[string]string `yaml:"metadata,omitempty"`
 }
 
-// Required fields for import
+// Required fields for import (same as create command)
 var requiredFields = []string{"title", "type"}
+
+// ValidTypes for validation
+var validTypes = []string{"solution", "issue", "analysis", "rule", "any"}
 ```
 
 ### 6.3 Synthesis Export (Intent-Based)
@@ -640,10 +662,14 @@ func validateFrontmatter(fm *Frontmatter) error {
         errs = append(errs, "title is required")
     }
 
-    if fm.Type == "" {
-        errs = append(errs, "type is required")
-    } else if !isValidType(fm.Type) {
-        errs = append(errs, fmt.Sprintf("invalid type: %s (must be problem|solution|rule|note)", fm.Type))
+    if len(fm.Types) == 0 {
+        errs = append(errs, "type is required (at least one)")
+    } else {
+        for _, t := range fm.Types {
+            if !isValidType(t) {
+                errs = append(errs, fmt.Sprintf("invalid type: %s (must be solution|issue|analysis|rule|any)", t))
+            }
+        }
     }
 
     if len(errs) > 0 {
@@ -651,6 +677,15 @@ func validateFrontmatter(fm *Frontmatter) error {
     }
 
     return nil
+}
+
+func isValidType(t string) bool {
+    for _, valid := range validTypes {
+        if t == valid {
+            return true
+        }
+    }
+    return false
 }
 ```
 

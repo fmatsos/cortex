@@ -44,11 +44,28 @@ The tool follows a similar approach to [grepai](https://github.com/yoanbernabeu/
 | **Gob** (default) | File-based storage using Go's gob encoding | Simple setup, single user, small to medium datasets |
 | **SQLite** | Embedded SQL database | Better querying, larger datasets, potential for advanced features |
 
+## Memory Types
+
+Memories can be classified with one or more types:
+
+| Type | Description |
+|------|-------------|
+| `solution` | A fix or workaround for a problem |
+| `issue` | A problem, bug, or challenge encountered |
+| `analysis` | Investigation, root cause analysis, or technical deep-dive |
+| `rule` | Project convention, coding standard, or guideline |
+| `any` | Generic memory that doesn't fit other categories |
+
+Types can be **combined** - for example, a memory documenting both an issue and its solution can have `type: [issue, solution]`.
+
 ## CLI Commands
 
 ```bash
-# Create a new memory
-cortex create --title "Auth fix" --content "JWT refresh tokens must be rotated..."
+# Create a new memory (title, type, content are required)
+cortex create --title "Auth fix" --type solution --content "JWT refresh tokens must be rotated..."
+
+# Create a memory with multiple types
+cortex create --title "JWT Bug Analysis" --type issue,solution,analysis --content "..."
 
 # Search memories semantically
 cortex search "authentication issues"
@@ -80,11 +97,12 @@ Exported memories use YAML frontmatter for metadata:
 ---
 id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 title: JWT Token Refresh Fix
-type: solution
+type:
+  - issue
+  - solution
 tags:
   - authentication
   - jwt
-  - bug-fix
 created_at: 2024-01-10T14:22:00Z
 updated_at: 2024-01-10T14:22:00Z
 ---
@@ -94,7 +112,12 @@ When JWT tokens expire, the refresh mechanism was failing because...
 The fix involved adding a retry loop with exponential backoff...
 ```
 
-When importing, the frontmatter metadata (`title`, `type`, `tags`) is required. The `id` field is optional - a new UUID will be generated if not provided.
+**Required fields** (for both `create` command and import):
+- `title` - Memory title
+- `type` - One or more types (solution, issue, analysis, rule, any)
+- Content (body of the markdown file, or `--content` flag)
+
+The `id` field is optional on import - a new UUID will be generated if not provided.
 
 ## Integration with AI Agents
 

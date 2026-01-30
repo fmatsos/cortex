@@ -43,8 +43,12 @@ This file tracks the implementation progress for each development phase.
 
 ### 2.1 Memory Model
 - [ ] Define `Memory` struct in `internal/memory/memory.go`
-- [ ] Define `MemoryType` enum (problem, solution, rule, note)
-- [ ] Define `CreateInput` struct
+  - [ ] Required fields: `ID`, `Title`, `Types`, `Content`
+  - [ ] Optional fields: `Tags`, `Metadata`, `Obsolete`
+  - [ ] Timestamps: `CreatedAt`, `UpdatedAt`
+- [ ] Define `MemoryType` enum (solution, issue, analysis, rule, any)
+- [ ] Implement type validation (types can be combined)
+- [ ] Define `CreateInput` struct (title, types, content required)
 - [ ] Define `SearchOptions` struct
 - [ ] Define `SearchResult` struct
 - [ ] Define `ListOptions` struct
@@ -152,8 +156,11 @@ This file tracks the implementation progress for each development phase.
 
 ### 5.2 Create Command
 - [ ] Implement `create.go`
-- [ ] Flags: `--title`, `--content`, `--type`, `--tags`
-- [ ] Input validation
+- [ ] Required flags: `--title`, `--type`, `--content`
+- [ ] Optional flags: `--tags`
+- [ ] Support combined types (`--type issue,solution,analysis`)
+- [ ] Type validation (solution, issue, analysis, rule, any)
+- [ ] Input validation (required fields check)
 - [ ] Success/error output formatting
 
 ### 5.3 Search Command
@@ -205,7 +212,8 @@ This file tracks the implementation progress for each development phase.
 ### 6.1 Frontmatter Schema
 - [ ] Define `Frontmatter` struct in `pkg/markdown/frontmatter.go`
 - [ ] YAML tags for all fields
-- [ ] Required fields definition
+- [ ] Required fields: `title`, `type` (same as create command)
+- [ ] Support `type` as array (combined types)
 
 ### 6.2 Parser
 - [ ] Implement `parseFrontmatter(content)` function
@@ -228,8 +236,9 @@ This file tracks the implementation progress for each development phase.
 
 ### 6.5 Validation
 - [ ] Implement `validateFrontmatter(fm)` in `pkg/markdown/validate.go`
-- [ ] Required field checks (title, type)
-- [ ] Type validation (problem|solution|rule|note)
+- [ ] Required field checks (title, type - same as create command)
+- [ ] Type validation (solution|issue|analysis|rule|any)
+- [ ] Support combined types validation
 - [ ] Clear error messages
 
 ### 6.6 Tests
