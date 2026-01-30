@@ -42,35 +42,35 @@ This file tracks the implementation progress for each development phase.
 ## Phase 2: Core Domain
 
 ### 2.1 Memory Model
-- [ ] Define `Memory` struct in `internal/memory/memory.go`
-  - [ ] Required fields: `ID`, `Title`, `Types`, `Content`
-  - [ ] Optional fields: `Tags`, `Metadata`, `Obsolete`
-  - [ ] Timestamps: `CreatedAt`, `UpdatedAt`
-- [ ] Define `MemoryType` enum (solution, issue, analysis, rule, any)
-- [ ] Implement type validation (types can be combined)
-- [ ] Define `CreateInput` struct (title, types, content required)
-- [ ] Define `SearchOptions` struct
-- [ ] Define `SearchResult` struct
-- [ ] Define `ListOptions` struct
+- [x] Define `Memory` struct in `internal/memory/memory.go`
+  - [x] Required fields: `ID`, `Title`, `Types`, `Content`
+  - [x] Optional fields: `Tags`, `Metadata`, `Obsolete`
+  - [x] Timestamps: `CreatedAt`, `UpdatedAt`
+- [x] Define `MemoryType` enum (solution, issue, analysis, rule, any)
+- [x] Implement type validation (types can be combined)
+- [x] Define `CreateInput` struct (title, types, content required)
+- [x] Define `SearchOptions` struct
+- [x] Define `SearchResult` struct
+- [x] Define `ListOptions` struct
 
 ### 2.2 Service Interface
-- [ ] Define `Service` interface in `internal/memory/service.go`
-  - [ ] `Create(ctx, input) (*Memory, error)`
-  - [ ] `Search(ctx, query, opts) ([]SearchResult, error)`
-  - [ ] `List(ctx, opts) ([]Memory, error)`
-  - [ ] `Get(ctx, id) (*Memory, error)`
-  - [ ] `Delete(ctx, id) error`
-  - [ ] `MarkObsolete(ctx, id) error`
+- [x] Define `Service` interface in `internal/memory/service.go`
+  - [x] `Create(ctx, input) (*Memory, error)`
+  - [x] `Search(ctx, query, opts) ([]SearchResult, error)`
+  - [x] `List(ctx, opts) ([]Memory, error)`
+  - [x] `Get(ctx, id) (*Memory, error)`
+  - [x] `Delete(ctx, id) error`
+  - [x] `MarkObsolete(ctx, id) error`
 
 ### 2.3 Service Implementation
-- [ ] Implement `MemoryService` struct
-- [ ] Wire dependencies (storage, embedder)
-- [ ] Implement all interface methods
+- [x] Implement `MemoryService` struct
+- [x] Wire dependencies (storage, embedder)
+- [x] Implement all interface methods
 
 ### 2.4 Tests
-- [ ] Write unit tests for `Memory` model
-- [ ] Write unit tests for `MemoryService`
-- [ ] Create test fixtures
+- [x] Write unit tests for `Memory` model
+- [x] Write unit tests for `MemoryService`
+- [x] Create test fixtures
 
 ---
 
@@ -354,8 +354,8 @@ This file tracks the implementation progress for each development phase.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| 1. Project Foundation | In progress | 95% |
-| 2. Core Domain | Not started | 0% |
+| 1. Project Foundation | Completed | 100% |
+| 2. Core Domain | In progress | 100% |
 | 3. Embedding System | Not started | 0% |
 | 4. Storage Layer | Not started | 0% |
 | 5. CLI Implementation | Not started | 0% |
