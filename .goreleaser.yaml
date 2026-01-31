@@ -29,27 +29,10 @@ builds:
       - -X main.Commit={{.Commit}}
       - -X main.Date={{.Date}}
 
-  - id: cortex-mcp
-    main: ./cmd/cortex-mcp
-    binary: cortex-mcp
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
-      - -X main.Version={{.Version}}
-
 archives:
   - id: default
     builds:
       - cortex
-      - cortex-mcp
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -104,7 +87,6 @@ brews:
       system "#{bin}/cortex", "--help"
     install: |
       bin.install "cortex"
-      bin.install "cortex-mcp"
 
 dockers:
   - image_templates:
@@ -123,7 +105,6 @@ nfpms:
     package_name: cortex-ai
     builds:
       - cortex
-      - cortex-mcp
     vendor: Cortex AI
     homepage: https://github.com/cortex-ai/cortex-ai
     maintainer: Cortex AI Contributors

@@ -12,17 +12,15 @@ Cortex AI provides an MCP (Model Context Protocol) server that exposes memory op
 
 ## Installation
 
-Build the MCP server:
+Build and install Cortex AI:
 
 ```bash
-make build-mcp
+make build
+# or
+make install
 ```
 
-Or install it to your GOBIN:
-
-```bash
-make install-mcp
-```
+The MCP server is available as a subcommand: `cortex start-mcp-server`
 
 ## Configuration
 
@@ -34,11 +32,8 @@ Add the following to your Claude Code MCP configuration (`~/.config/claude-code/
 {
   "mcpServers": {
     "cortex": {
-      "command": "cortex-mcp",
-      "args": [],
-      "env": {
-        "CORTEX_STORAGE_PATH": "~/.local/share/cortex-ai"
-      }
+      "command": "cortex",
+      "args": ["start-mcp-server"]
     }
   }
 }
@@ -53,7 +48,8 @@ Add to your Cursor MCP settings:
   "mcp": {
     "servers": {
       "cortex": {
-        "command": "cortex-mcp"
+        "command": "cortex",
+        "args": ["start-mcp-server"]
       }
     }
   }
@@ -189,5 +185,5 @@ mkdir -p ~/.local/share/cortex-ai
 The MCP server logs to stderr. To capture logs:
 
 ```bash
-cortex-mcp 2>mcp.log
+cortex start-mcp-server 2>mcp.log
 ```

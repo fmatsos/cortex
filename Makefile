@@ -1,10 +1,8 @@
-.PHONY: build build-mcp test lint install clean help
+.PHONY: build test lint install clean help
 
 # Variables
 BINARY_NAME=cortex
-MCP_BINARY_NAME=cortex-mcp
 MAIN_PATH=./cmd/cortex
-MCP_PATH=./cmd/cortex-mcp
 BUILD_DIR=./bin
 VERSION?=dev
 LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
@@ -15,10 +13,7 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build       - Build the cortex binary"
-	@echo "  build-mcp   - Build the MCP server binary"
-	@echo "  build-all   - Build all binaries"
 	@echo "  install     - Build and install cortex to GOBIN"
-	@echo "  install-mcp - Build and install MCP server to GOBIN"
 	@echo "  test        - Run all tests"
 	@echo "  test-race   - Run tests with race detector"
 	@echo "  lint        - Run linter"
@@ -32,26 +27,10 @@ build:
 	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
-# Build the MCP server binary
-build-mcp:
-	@echo "Building $(MCP_BINARY_NAME)..."
-	@mkdir -p $(BUILD_DIR)
-	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(MCP_BINARY_NAME) $(MCP_PATH)
-	@echo "Build complete: $(BUILD_DIR)/$(MCP_BINARY_NAME)"
-
-# Build all binaries
-build-all: build build-mcp
-
 # Install CLI to GOBIN
 install:
 	@echo "Installing $(BINARY_NAME)..."
 	@go install $(LDFLAGS) $(MAIN_PATH)
-	@echo "Installation complete"
-
-# Install MCP server to GOBIN
-install-mcp:
-	@echo "Installing $(MCP_BINARY_NAME)..."
-	@go install $(LDFLAGS) $(MCP_PATH)
 	@echo "Installation complete"
 
 # Run tests

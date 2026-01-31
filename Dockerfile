@@ -15,9 +15,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build binaries
+# Build binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o cortex ./cmd/cortex
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o cortex-mcp ./cmd/cortex-mcp
 
 # Final stage
 FROM alpine:3.19
@@ -26,9 +25,8 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-# Copy binaries from builder
+# Copy binary from builder
 COPY --from=builder /build/cortex /usr/local/bin/
-COPY --from=builder /build/cortex-mcp /usr/local/bin/
 
 # Create data directory
 RUN mkdir -p /data
