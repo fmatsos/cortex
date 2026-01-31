@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -59,25 +60,15 @@ func TestNewTextContent(t *testing.T) {
 }
 
 func TestServerInitialize(t *testing.T) {
-	input := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}
-`
-	reader := strings.NewReader(input)
-	var output bytes.Buffer
-
-	server := NewServer(reader, &output)
-
-	// Read and handle one message
-	line, err := server.reader.ReadString('\n')
-	if err != nil {
-		t.Fatalf("Failed to read: %v", err)
+	req := &Request{
+		JSONRPC: JSONRPCVersion,
+		ID:      1,
+		Method:  "initialize",
 	}
 
-	var req Request
-	if err := json.Unmarshal([]byte(line), &req); err != nil {
-		t.Fatalf("Failed to parse request: %v", err)
-	}
+	server := NewServerWithStdio(strings.NewReader(""), &bytes.Buffer{})
+	resp := server.handleRequest(req)
 
-	resp := server.handleRequest(&req)
 	if resp == nil {
 		t.Fatal("Response should not be nil")
 	}
@@ -100,18 +91,15 @@ func TestServerInitialize(t *testing.T) {
 }
 
 func TestServerListTools(t *testing.T) {
-	input := `{"jsonrpc":"2.0","id":2,"method":"tools/list"}
-`
-	reader := strings.NewReader(input)
-	var output bytes.Buffer
+	req := &Request{
+		JSONRPC: JSONRPCVersion,
+		ID:      2,
+		Method:  "tools/list",
+	}
 
-	server := NewServer(reader, &output)
+	server := NewServerWithStdio(strings.NewReader(""), &bytes.Buffer{})
+	resp := server.handleRequest(req)
 
-	line, _ := server.reader.ReadString('\n')
-	var req Request
-	json.Unmarshal([]byte(line), &req)
-
-	resp := server.handleRequest(&req)
 	if resp == nil {
 		t.Fatal("Response should not be nil")
 	}
@@ -152,18 +140,15 @@ func TestServerListTools(t *testing.T) {
 }
 
 func TestServerUnknownMethod(t *testing.T) {
-	input := `{"jsonrpc":"2.0","id":3,"method":"unknown/method"}
-`
-	reader := strings.NewReader(input)
-	var output bytes.Buffer
+	req := &Request{
+		JSONRPC: JSONRPCVersion,
+		ID:      3,
+		Method:  "unknown/method",
+	}
 
-	server := NewServer(reader, &output)
+	server := NewServerWithStdio(strings.NewReader(""), &bytes.Buffer{})
+	resp := server.handleRequest(req)
 
-	line, _ := server.reader.ReadString('\n')
-	var req Request
-	json.Unmarshal([]byte(line), &req)
-
-	resp := server.handleRequest(&req)
 	if resp == nil {
 		t.Fatal("Response should not be nil")
 	}
@@ -178,9 +163,7 @@ func TestServerUnknownMethod(t *testing.T) {
 }
 
 func TestToolInputSchemas(t *testing.T) {
-	var output bytes.Buffer
-	server := NewServer(strings.NewReader(""), &output)
-
+	server := NewServerWithStdio(strings.NewReader(""), &bytes.Buffer{})
 	resp := server.handleListTools(&Request{ID: 1, Method: "tools/list"})
 	result := resp.Result.(ListToolsResult)
 
@@ -230,5 +213,77 @@ func TestJSONRPCMarshal(t *testing.T) {
 
 	if parsed.JSONRPC != JSONRPCVersion {
 		t.Errorf("JSONRPC = %q, want %q", parsed.JSONRPC, JSONRPCVersion)
+	}
+}
+
+func TestStdioTransportReceive(t *testing.T) {
+	input := `{"jsonrpc":"2.0","id":1,"method":"initialize"}
+`
+	transport := NewStdioTransport(strings.NewReader(input), &bytes.Buffer{})
+
+	ctx := context.Background()
+	req, err := transport.Receive(ctx)
+	if err != nil {
+		t.Fatalf("Receive failed: %v", err)
+	}
+
+	if req.Method != "initialize" {
+		t.Errorf("Method = %q, want %q", req.Method, "initialize")
+	}
+	if req.ID != float64(1) {
+		t.Errorf("ID = %v, want %v", req.ID, 1)
+	}
+}
+
+func TestStdioTransportSend(t *testing.T) {
+	var output bytes.Buffer
+	transport := NewStdioTransport(strings.NewReader(""), &output)
+
+	ctx := context.Background()
+	resp := NewResponse(1, "test result")
+
+	err := transport.Send(ctx, resp)
+	if err != nil {
+		t.Fatalf("Send failed: %v", err)
+	}
+
+	// Verify output contains JSON
+	outStr := output.String()
+	if !strings.Contains(outStr, `"jsonrpc":"2.0"`) {
+		t.Errorf("Output should contain jsonrpc version")
+	}
+	if !strings.Contains(outStr, `"result":"test result"`) {
+		t.Errorf("Output should contain result")
+	}
+}
+
+func TestTransportTypes(t *testing.T) {
+	if !IsValidTransport(TransportStdio) {
+		t.Error("stdio should be a valid transport")
+	}
+	if !IsValidTransport(TransportSSE) {
+		t.Error("sse should be a valid transport")
+	}
+	if IsValidTransport(TransportType("invalid")) {
+		t.Error("invalid should not be a valid transport")
+	}
+}
+
+func TestValidTransports(t *testing.T) {
+	transports := ValidTransports()
+	if len(transports) != 2 {
+		t.Errorf("Expected 2 transports, got %d", len(transports))
+	}
+
+	found := make(map[TransportType]bool)
+	for _, tr := range transports {
+		found[tr] = true
+	}
+
+	if !found[TransportStdio] {
+		t.Error("stdio should be in valid transports")
+	}
+	if !found[TransportSSE] {
+		t.Error("sse should be in valid transports")
 	}
 }

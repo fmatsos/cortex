@@ -1,14 +1,12 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
@@ -24,20 +22,23 @@ const (
 
 // Server represents the MCP server
 type Server struct {
-	reader  *bufio.Reader
-	writer  io.Writer
-	service memory.Service
-	storage storage.Storage
-	logger  *log.Logger
+	transport Transport
+	service   memory.Service
+	storage   storage.Storage
+	logger    *log.Logger
 }
 
-// NewServer creates a new MCP server
-func NewServer(reader io.Reader, writer io.Writer) *Server {
+// NewServer creates a new MCP server with the given transport
+func NewServer(transport Transport) *Server {
 	return &Server{
-		reader: bufio.NewReader(reader),
-		writer: writer,
-		logger: log.New(os.Stderr, "[mcp] ", log.LstdFlags),
+		transport: transport,
+		logger:    log.New(os.Stderr, "[mcp] ", log.LstdFlags),
 	}
+}
+
+// NewServerWithStdio creates a new MCP server using stdio transport (convenience function)
+func NewServerWithStdio(reader io.Reader, writer io.Writer) *Server {
+	return NewServer(NewStdioTransport(reader, writer))
 }
 
 // Initialize sets up the memory service
@@ -63,45 +64,64 @@ func (s *Server) Initialize(storagePath string) error {
 
 // Close cleans up resources
 func (s *Server) Close() error {
+	var errs []error
+
+	if s.transport != nil {
+		if err := s.transport.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("transport close: %w", err))
+		}
+	}
+
 	if s.storage != nil {
-		return s.storage.Close()
+		if err := s.storage.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("storage close: %w", err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errs[0]
 	}
 	return nil
 }
 
 // Run starts the MCP server main loop
 func (s *Server) Run() error {
+	return s.RunWithContext(context.Background())
+}
+
+// RunWithContext starts the MCP server main loop with context support
+func (s *Server) RunWithContext(ctx context.Context) error {
 	s.logger.Println("Starting MCP server...")
 
 	for {
-		// Read line (JSON-RPC message)
-		line, err := s.reader.ReadString('\n')
+		// Receive request from transport
+		req, err := s.transport.Receive(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || ctx.Err() != nil {
 				s.logger.Println("Client disconnected")
 				return nil
 			}
-			return fmt.Errorf("read error: %w", err)
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Parse request
-		var req Request
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			s.sendError(nil, ParseError, "Parse error", err.Error())
-			continue
+			// Check for parse errors
+			if isParseError(err) {
+				s.sendError(ctx, nil, ParseError, "Parse error", err.Error())
+				continue
+			}
+			return fmt.Errorf("receive error: %w", err)
 		}
 
 		// Handle request
-		resp := s.handleRequest(&req)
+		resp := s.handleRequest(req)
 		if resp != nil {
-			s.sendResponse(resp)
+			if err := s.transport.Send(ctx, resp); err != nil {
+				s.logger.Printf("Failed to send response: %v", err)
+			}
 		}
 	}
+}
+
+// isParseError checks if the error is a JSON parse error
+func isParseError(err error) bool {
+	return err != nil && err.Error() != "" && len(err.Error()) > 6 && err.Error()[:5] == "parse"
 }
 
 // handleRequest processes a JSON-RPC request
@@ -343,8 +363,8 @@ func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.Raw
 
 	// Return JSON structured response
 	response := struct {
-		Success bool                `json:"success"`
-		Memory  pkgjson.MemoryJSON  `json:"memory"`
+		Success bool               `json:"success"`
+		Memory  pkgjson.MemoryJSON `json:"memory"`
 	}{
 		Success: true,
 		Memory:  pkgjson.ToMemoryJSON(mem),
@@ -438,19 +458,10 @@ func (s *Server) toolError(id interface{}, message string) *Response {
 	})
 }
 
-// sendResponse sends a JSON-RPC response
-func (s *Server) sendResponse(resp *Response) {
-	data, err := json.Marshal(resp)
-	if err != nil {
-		s.logger.Printf("Error marshaling response: %v", err)
-		return
-	}
-
-	fmt.Fprintln(s.writer, string(data))
-}
-
 // sendError sends an error response
-func (s *Server) sendError(id interface{}, code int, message, data string) {
+func (s *Server) sendError(ctx context.Context, id interface{}, code int, message, data string) {
 	resp := NewErrorResponse(id, code, message, data)
-	s.sendResponse(resp)
+	if err := s.transport.Send(ctx, resp); err != nil {
+		s.logger.Printf("Error sending error response: %v", err)
+	}
 }
