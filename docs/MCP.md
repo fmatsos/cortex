@@ -22,7 +22,81 @@ make install
 
 The MCP server is available as a subcommand: `cortex start-mcp-server`
 
-## Configuration
+## Transport Modes
+
+The MCP server supports two transport modes:
+
+| Transport | Description | Use Case |
+|-----------|-------------|----------|
+| `stdio` | Communication via stdin/stdout | CLI integrations (default) |
+| `sse` | Server-Sent Events over HTTP | Web integrations, remote access |
+
+### Stdio Transport (Default)
+
+The stdio transport communicates via standard input/output streams. This is the default mode used by CLI tools like Claude Code and Cursor.
+
+```bash
+cortex start-mcp-server
+# or explicitly:
+cortex start-mcp-server --transport stdio
+```
+
+### SSE Transport
+
+The SSE (Server-Sent Events) transport runs an HTTP server for web-based integrations.
+
+```bash
+cortex start-mcp-server --transport sse --address :8080
+```
+
+**Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/sse` | GET | SSE event stream for server messages |
+| `/message?session_id=<id>` | POST | Send JSON-RPC requests to the server |
+| `/health` | GET | Health check endpoint |
+
+**Connection Flow:**
+
+1. Client connects to `GET /sse` to establish the event stream
+2. Server sends an `endpoint` event with the message URL including session ID
+3. Client sends requests via `POST /message?session_id=<id>`
+4. Server sends responses as `message` events on the SSE stream
+
+**Example SSE Client (JavaScript):**
+
+```javascript
+const eventSource = new EventSource('http://localhost:8080/sse');
+let messageEndpoint = '';
+
+eventSource.addEventListener('endpoint', (e) => {
+  messageEndpoint = e.data;
+  console.log('Message endpoint:', messageEndpoint);
+});
+
+eventSource.addEventListener('message', (e) => {
+  const response = JSON.parse(e.data);
+  console.log('Response:', response);
+});
+
+// Send a request
+async function sendRequest(method, params) {
+  const response = await fetch(messageEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: method,
+      params: params
+    })
+  });
+  return response.json();
+}
+```
+
+## CLI Configuration
 
 ### Claude Code
 
@@ -55,6 +129,13 @@ Add to your Cursor MCP settings:
   }
 }
 ```
+
+## Command-Line Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--transport` | `stdio` | Transport mode: `stdio` or `sse` |
+| `--address` | `:8080` | Address for SSE transport (e.g., `:8080` or `127.0.0.1:8080`) |
 
 ## Available Tools
 
@@ -146,7 +227,7 @@ Get a specific memory by ID.
 
 ## Protocol
 
-The MCP server communicates using JSON-RPC 2.0 over stdio. It implements the MCP specification version `2024-11-05`.
+The MCP server communicates using JSON-RPC 2.0 over the selected transport (stdio or SSE). It implements the MCP specification version `2024-11-05`.
 
 ### Supported Methods
 

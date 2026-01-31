@@ -113,7 +113,7 @@ graph LR
 | `export` | Export to Markdown | `--all`, `--intent`, `--output` |
 | `import` | Import from Markdown | `--force`, `--dry-run` |
 | `config` | View/edit config | `--show`, `--edit` |
-| `start-mcp-server` | Start MCP server | - |
+| `start-mcp-server` | Start MCP server | `--transport`, `--address` |
 | `completion` | Generate shell completions | `bash`, `zsh`, `fish` |
 
 ### Memory Service
@@ -275,29 +275,82 @@ classDiagram
 
 ### MCP Server
 
+The MCP server uses a transport abstraction layer to support multiple communication protocols.
+
+```mermaid
+classDiagram
+    class Transport {
+        <<interface>>
+        +Receive(ctx) Request, error
+        +Send(ctx, resp) error
+        +Close() error
+    }
+
+    class StdioTransport {
+        -reader *bufio.Reader
+        -writer io.Writer
+        +Receive(ctx) Request, error
+        +Send(ctx, resp) error
+        +Close() error
+    }
+
+    class SSETransport {
+        -server *http.Server
+        -addr string
+        -requests chan Request
+        +Start() error
+        +Receive(ctx) Request, error
+        +Send(ctx, resp) error
+        +Close() error
+    }
+
+    class Server {
+        -transport Transport
+        -service Service
+        -storage Storage
+        +Initialize(path) error
+        +Run() error
+        +Close() error
+    }
+
+    Transport <|.. StdioTransport
+    Transport <|.. SSETransport
+    Server --> Transport
+```
+
+**Transport Modes:**
+
+| Transport | Protocol | Use Case |
+|-----------|----------|----------|
+| `StdioTransport` | JSON-RPC over stdin/stdout | CLI tools (Claude Code, Cursor) |
+| `SSETransport` | JSON-RPC over HTTP/SSE | Web integrations, remote access |
+
+**MCP Request/Response Flow:**
+
 ```mermaid
 sequenceDiagram
     participant C as MCP Client
+    participant T as Transport
     participant S as MCP Server
     participant H as Request Handler
     participant MS as Memory Service
 
-    C->>S: initialize
-    S-->>C: { capabilities: { tools: {} } }
-    C->>S: initialized (notification)
+    C->>T: Request (stdio or HTTP POST)
+    T->>S: Receive()
+    S->>H: handleRequest()
 
-    C->>S: tools/list
-    S-->>C: [ cortex_search, cortex_create, ... ]
+    alt initialize
+        H-->>S: InitializeResult
+    else tools/list
+        H-->>S: ListToolsResult
+    else tools/call
+        H->>MS: Service method
+        MS-->>H: Result
+        H-->>S: CallToolResult
+    end
 
-    C->>S: tools/call { name: "cortex_search", arguments: {...} }
-    S->>H: handleToolCall
-    H->>MS: Search(query, opts)
-    MS-->>H: []SearchResult
-    H-->>S: format response
-    S-->>C: { content: [...] }
-
-    C->>S: shutdown
-    S-->>C: { }
+    S->>T: Send(response)
+    T-->>C: Response (stdio or SSE event)
 ```
 
 ---
