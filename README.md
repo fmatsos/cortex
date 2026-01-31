@@ -1,12 +1,6 @@
 # Cortex AI
 
-**Cortex AI** is a CLI tool written in Go that provides persistent semantic memory for AI coding assistants. It enables LLMs to recall past problems, solutions, and project-specific rules across sessions using vector embeddings.
-
-## Overview
-
-When working with AI coding assistants like Claude Code, Cursor, or Windsurf, context is often lost between sessions. Cortex AI solves this by providing a local vector database that stores "memories" - structured knowledge that can be retrieved semantically.
-
-The tool follows a similar approach to [grepai](https://github.com/yoanbernabeu/grepai): **search by intent**, local operation via **Ollama**, and vector embeddings for semantic matching.
+**Cortex AI** is a CLI tool written in Go that provides persistent semantic memory for AI coding assistants. It enables LLMs to recall past problems, solutions, and project-specific rules across sessions using vector embeddings from Ollama.
 
 ```mermaid
 graph LR
@@ -48,34 +42,10 @@ graph LR
 
 ## How It Works
 
-```mermaid
-sequenceDiagram
-    participant U as User/Agent
-    participant C as Cortex CLI
-    participant O as Ollama
-    participant S as Storage
-
-    Note over U,S: Creating a Memory
-    U->>C: cortex create --title "..." --type solution
-    C->>O: Generate embedding
-    O-->>C: Vector [0.12, -0.34, ...]
-    C->>S: Save memory + vector
-    S-->>C: OK
-    C-->>U: Memory created
-
-    Note over U,S: Searching Memories
-    U->>C: cortex search "authentication issues"
-    C->>O: Embed query
-    O-->>C: Query vector
-    C->>S: Find similar vectors
-    S-->>C: Top K matches
-    C-->>U: Ranked results
-```
-
-1. **Memory creation** - User asks LLM to remember something, a memory is created
-2. **Embedding generation** - Content is converted to a vector embedding via Ollama
-3. **Vector storage** - Embedding and metadata are stored locally
-4. **Semantic retrieval** - LLM searches memories by meaning, not keywords
+1. **Create** - Store memories with type, content, and tags
+2. **Embed** - Content is converted to vector embeddings via Ollama
+3. **Search** - Query memories semantically (by meaning, not keywords)
+4. **Retrieve** - Memories ranked by relevance and returned to the AI agent
 
 ---
 
@@ -128,35 +98,13 @@ cortex export --all --output ./memories/
 
 Memories can be classified with one or more types:
 
-```mermaid
-graph TB
-    subgraph "Memory Types"
-        solution["solution<br/>Fix or workaround"]
-        issue["issue<br/>Bug or problem"]
-        analysis["analysis<br/>Investigation"]
-        rule["rule<br/>Convention or guideline"]
-        any["any<br/>Generic"]
-    end
-
-    subgraph "Combinations"
-        combo1["issue + solution<br/>Problem with its fix"]
-        combo2["issue + analysis + solution<br/>Full investigation"]
-    end
-
-    issue --> combo1
-    solution --> combo1
-    issue --> combo2
-    analysis --> combo2
-    solution --> combo2
-```
-
-| Type | Description | Example |
-|------|-------------|---------|
-| `solution` | Fix or workaround | "Add retry logic for flaky API" |
-| `issue` | Bug or problem | "Race condition in auth middleware" |
-| `analysis` | Investigation | "Memory leak root cause analysis" |
-| `rule` | Convention | "Always use context for timeouts" |
-| `any` | Generic | Uncategorized knowledge |
+| Type | Description |
+|------|-------------|
+| `solution` | Fix or workaround |
+| `issue` | Bug or problem |
+| `analysis` | Investigation findings |
+| `rule` | Convention or guideline |
+| `any` | Generic/uncategorized |
 
 Types can be **combined**: `--type issue,solution,analysis`
 
@@ -164,262 +112,82 @@ Types can be **combined**: `--type issue,solution,analysis`
 
 ## CLI Commands
 
-### Create
-
 ```bash
-# Required: title, type, content
-cortex create --title "Auth fix" --type solution --content "JWT refresh tokens..."
+# Create a memory
+cortex create --title "..." --type solution --content "..."
 
-# With multiple types and tags
-cortex create \
-  --title "JWT Bug Analysis" \
-  --type issue,solution,analysis \
-  --content "Investigation of token expiration..." \
-  --tags "jwt,security,auth"
-```
+# Search semantically
+cortex search "your query"
 
-### Search
-
-```bash
-# Semantic search
-cortex search "authentication issues"
-
-# With options
-cortex search "database optimization" --top 10 --min-score 0.7 --type solution
-```
-
-### List & Get
-
-```bash
-# List all
-cortex list
-
-# Filter by type
-cortex list --type rule
+# List memories
+cortex list [--type solution]
 
 # Get specific memory
-cortex get <memory-id>
-```
+cortex get <id>
 
-### Delete
+# Delete
+cortex delete <id>
+cortex mark-obsolete <id>
 
-```bash
-# Delete by ID
-cortex delete <memory-id>
-
-# Soft delete (mark as obsolete)
-cortex mark-obsolete <memory-id>
-```
-
-### Export
-
-```bash
-# Export single memory
-cortex export <memory-id> --output ./memories/
-
-# Export all memories
+# Export to Markdown
 cortex export --all --output ./memories/
 
-# Generate synthesis by intent
-cortex export --intent "authentication patterns" --output auth-synthesis.md
+# Import from Markdown
+cortex import memory.md
 ```
 
-### Import
-
-```bash
-# Import markdown files
-cortex import memory1.md memory2.md
-
-# Force overwrite existing
-cortex import --force memory.md
-
-# Validate without importing
-cortex import --dry-run *.md
-```
+See [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for detailed command reference.
 
 ---
 
 ## Markdown Format
 
-Exported memories use YAML frontmatter:
-
-```markdown
----
-id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-title: JWT Token Refresh Fix
-type:
-  - issue
-  - solution
-tags:
-  - authentication
-  - jwt
-created_at: 2024-01-10T14:22:00Z
-updated_at: 2024-01-10T14:22:00Z
-obsolete: false
-metadata:
-  project: api-gateway
----
-
-When JWT tokens expire, the refresh mechanism was failing because...
-
-## Root Cause
-
-The middleware was checking token validity synchronously...
-
-## Solution
-
-Added a retry loop with exponential backoff...
-```
-
-**Required fields** (for import):
+Exported memories use YAML frontmatter with the memory content in the body. Required fields for import:
 - `title` - Memory title
 - `type` - One or more types
-- Content (body of the markdown file)
+- Body content
+
+See [docs/MARKDOWN_FORMAT.md](docs/MARKDOWN_FORMAT.md) for format details and examples.
 
 ---
 
 ## MCP Integration
 
-Cortex AI provides an MCP server for AI agent integration:
+Cortex AI works with Claude Code, Cursor, and other MCP-compatible editors.
 
-```mermaid
-graph LR
-    Agent["AI Agent<br/>(Claude Code, Cursor)"]
-    MCP["cortex start-mcp-server<br/>JSON-RPC 2.0"]
-    Service["Memory Service"]
-
-    Agent <-->|stdio| MCP
-    MCP --> Service
+```bash
+cortex start-mcp-server
 ```
 
-### Configuration
+Available tools:
+- `cortex_search` - Semantic search
+- `cortex_create` - Create memory
+- `cortex_list` - List memories
+- `cortex_get` - Get memory by ID
 
-**Claude Code** (`~/.config/claude-code/mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "cortex": {
-      "command": "cortex",
-      "args": ["start-mcp-server"]
-    }
-  }
-}
-```
-
-**Cursor** (MCP settings):
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "cortex": {
-        "command": "cortex",
-        "args": ["start-mcp-server"]
-      }
-    }
-  }
-}
-```
-
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `cortex_search` | Semantic search for memories |
-| `cortex_create` | Create a new memory |
-| `cortex_list` | List all memories |
-| `cortex_get` | Get memory by ID |
-
-See [docs/MCP.md](docs/MCP.md) for full documentation.
+See [docs/MCP.md](docs/MCP.md) for configuration and full details.
 
 ---
 
 ## Configuration
 
-```yaml
-# ~/.config/cortex-ai/config.yaml
-storage:
-  backend: gob
-  path: ~/.local/share/cortex-ai
+Configuration file: `~/.config/cortex-ai/config.yaml`
 
-embeddings:
-  provider: ollama
-  model: nomic-embed-text
-  endpoint: http://localhost:11434
-  timeout: 30s
-
-search:
-  top_k: 5
-  min_score: 0.5
-  include_obsolete: false
-
-output:
-  format: text
-  colors: true
-```
-
-### Environment Variables
-
-```bash
-CORTEX_STORAGE_BACKEND=gob
-CORTEX_EMBEDDINGS_ENDPOINT=http://localhost:11434
-CORTEX_EMBEDDINGS_MODEL=nomic-embed-text
-CORTEX_SEARCH_TOP_K=5
-```
-
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for full reference.
+Default settings work out-of-the-box with Ollama. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for detailed reference and environment variables.
 
 ---
 
-## Storage Backends
+## Storage
 
-| Backend | Description | Use Case |
-|---------|-------------|----------|
-| **Gob** (default) | File-based Go encoding | Simple, single user |
-| **SQLite** (planned) | Embedded SQL database | Larger datasets |
-
-### File Structure
-
-```
-~/.local/share/cortex-ai/
-├── memories/
-│   ├── <uuid-1>.gob
-│   └── <uuid-2>.gob
-└── index.gob
-```
+Cortex AI stores memories locally at `~/.local/share/cortex-ai/` using Go's Gob encoding. All data stays on your machine—no external services.
 
 ---
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph "CLI Layer"
-        CLI["Cobra Commands"]
-        MCP["MCP Server"]
-    end
+Built with a layered architecture: CLI/MCP layer → Memory service → Ollama embeddings & local storage.
 
-    subgraph "Service Layer"
-        Service["Memory Service"]
-        Config["Config Manager"]
-    end
-
-    subgraph "Infrastructure"
-        Embedder["Ollama Embedder"]
-        Storage["Gob Storage"]
-        Search["Cosine Similarity"]
-    end
-
-    CLI --> Service
-    MCP --> Service
-    Service --> Config
-    Service --> Embedder
-    Service --> Storage
-    Service --> Search
-```
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 
 ---
 
@@ -456,14 +224,34 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design with diagrams |
-| [CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference |
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guidelines |
-| [MCP.md](docs/MCP.md) | MCP integration guide |
-| [AGENTS.md](AGENTS.md) | Guide for AI coding assistants |
-| [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Implementation roadmap |
+For complete documentation, see **[docs/INDEX.md](docs/INDEX.md)** - the master guide to all documentation.
+
+### Core Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | Complete command reference |
+| [MEMORY_MODEL.md](docs/MEMORY_MODEL.md) | Memory structure and best practices |
+| [MARKDOWN_FORMAT.md](docs/MARKDOWN_FORMAT.md) | Markdown import/export specification |
+| [CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration and setup |
+| [MCP.md](docs/MCP.md) | MCP integration with AI editors |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+
+### Technical Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and internals |
+| [STORAGE.md](docs/STORAGE.md) | Storage system documentation |
+| [EMBEDDINGS.md](docs/EMBEDDINGS.md) | Vector generation and Ollama |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development setup and workflow |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contributing guidelines |
+
+### Additional Resources
+
+- [AGENTS.md](AGENTS.md) - Guide for AI coding assistants
+- [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) - Implementation roadmap
+- [CHANGELOG.md](CHANGELOG.md) - Version history
 
 ---
 
