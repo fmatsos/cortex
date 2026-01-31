@@ -136,7 +136,7 @@ cortex export --all --output ./memories/
 cortex import memory.md
 ```
 
-See [docs/](docs/) for detailed command reference.
+See [docs/CLI_REFERENCE.md](docs/CLI_REFERENCE.md) for detailed command reference.
 
 ---
 
@@ -147,7 +147,7 @@ Exported memories use YAML frontmatter with the memory content in the body. Requ
 - `type` - One or more types
 - Body content
 
-See [docs/](docs/) for format details and examples.
+See [docs/MARKDOWN_FORMAT.md](docs/MARKDOWN_FORMAT.md) for format details and examples.
 
 ---
 
@@ -224,14 +224,34 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design with diagrams |
-| [CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration reference |
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guidelines |
-| [MCP.md](docs/MCP.md) | MCP integration guide |
-| [AGENTS.md](AGENTS.md) | Guide for AI coding assistants |
-| [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) | Implementation roadmap |
+For complete documentation, see **[docs/INDEX.md](docs/INDEX.md)** - the master guide to all documentation.
+
+### Core Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [CLI_REFERENCE.md](docs/CLI_REFERENCE.md) | Complete command reference |
+| [MEMORY_MODEL.md](docs/MEMORY_MODEL.md) | Memory structure and best practices |
+| [MARKDOWN_FORMAT.md](docs/MARKDOWN_FORMAT.md) | Markdown import/export specification |
+| [CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration and setup |
+| [MCP.md](docs/MCP.md) | MCP integration with AI editors |
+| [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+
+### Technical Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and internals |
+| [STORAGE.md](docs/STORAGE.md) | Storage system documentation |
+| [EMBEDDINGS.md](docs/EMBEDDINGS.md) | Vector generation and Ollama |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development setup and workflow |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contributing guidelines |
+
+### Additional Resources
+
+- [AGENTS.md](AGENTS.md) - Guide for AI coding assistants
+- [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) - Implementation roadmap
+- [CHANGELOG.md](CHANGELOG.md) - Version history
 
 ---
 
