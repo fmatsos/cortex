@@ -13,6 +13,7 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
+	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 )
 
 const (
@@ -301,22 +302,13 @@ func (s *Server) handleSearch(ctx context.Context, id interface{}, args json.Raw
 		return s.toolError(id, fmt.Sprintf("Search failed: %v", err))
 	}
 
-	// Format results
-	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Found %d results:\n\n", len(results)))
-
-	for i, r := range results {
-		output.WriteString(fmt.Sprintf("## %d. %s\n", i+1, r.Memory.Title))
-		output.WriteString(fmt.Sprintf("- ID: %s\n", r.Memory.ID))
-		output.WriteString(fmt.Sprintf("- Type: %v\n", r.Memory.Types))
-		output.WriteString(fmt.Sprintf("- Score: %.2f\n", r.Score))
-		if len(r.Memory.Tags) > 0 {
-			output.WriteString(fmt.Sprintf("- Tags: %s\n", strings.Join(r.Memory.Tags, ", ")))
-		}
-		output.WriteString(fmt.Sprintf("\n%s\n\n---\n\n", r.Memory.Content))
+	// Return JSON structured results for better LLM parsing
+	jsonBytes, err := pkgjson.MarshalSearchResults(results, false)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal results: %v", err))
 	}
 
-	return s.toolResult(id, output.String())
+	return s.toolResult(id, string(jsonBytes))
 }
 
 // Create arguments
@@ -349,10 +341,21 @@ func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.Raw
 		return s.toolError(id, fmt.Sprintf("Create failed: %v", err))
 	}
 
-	result := fmt.Sprintf("Memory created successfully!\n\n- ID: %s\n- Title: %s\n- Type: %v\n- Created: %s",
-		mem.ID, mem.Title, mem.Types, mem.CreatedAt.Format("2006-01-02 15:04:05"))
+	// Return JSON structured response
+	response := struct {
+		Success bool                `json:"success"`
+		Memory  pkgjson.MemoryJSON  `json:"memory"`
+	}{
+		Success: true,
+		Memory:  pkgjson.ToMemoryJSON(mem),
+	}
 
-	return s.toolResult(id, result)
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
 }
 
 // List arguments
@@ -382,22 +385,13 @@ func (s *Server) handleList(ctx context.Context, id interface{}, args json.RawMe
 		return s.toolError(id, fmt.Sprintf("List failed: %v", err))
 	}
 
-	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Found %d memories:\n\n", len(memories)))
-
-	for i, m := range memories {
-		output.WriteString(fmt.Sprintf("%d. **%s** (ID: %s)\n", i+1, m.Title, m.ID))
-		output.WriteString(fmt.Sprintf("   - Type: %v\n", m.Types))
-		if len(m.Tags) > 0 {
-			output.WriteString(fmt.Sprintf("   - Tags: %s\n", strings.Join(m.Tags, ", ")))
-		}
-		if m.Obsolete {
-			output.WriteString("   - Status: OBSOLETE\n")
-		}
-		output.WriteString("\n")
+	// Return JSON structured results for better LLM parsing
+	jsonBytes, err := pkgjson.MarshalMemories(memories, false)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal memories: %v", err))
 	}
 
-	return s.toolResult(id, output.String())
+	return s.toolResult(id, string(jsonBytes))
 }
 
 // Get arguments
@@ -420,21 +414,13 @@ func (s *Server) handleGet(ctx context.Context, id interface{}, args json.RawMes
 		return s.toolError(id, fmt.Sprintf("Get failed: %v", err))
 	}
 
-	var output strings.Builder
-	output.WriteString(fmt.Sprintf("# %s\n\n", mem.Title))
-	output.WriteString(fmt.Sprintf("- **ID**: %s\n", mem.ID))
-	output.WriteString(fmt.Sprintf("- **Type**: %v\n", mem.Types))
-	if len(mem.Tags) > 0 {
-		output.WriteString(fmt.Sprintf("- **Tags**: %s\n", strings.Join(mem.Tags, ", ")))
+	// Return JSON structured memory for better LLM parsing
+	jsonBytes, err := pkgjson.MarshalMemory(mem, false)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal memory: %v", err))
 	}
-	output.WriteString(fmt.Sprintf("- **Created**: %s\n", mem.CreatedAt.Format("2006-01-02 15:04:05")))
-	output.WriteString(fmt.Sprintf("- **Updated**: %s\n", mem.UpdatedAt.Format("2006-01-02 15:04:05")))
-	if mem.Obsolete {
-		output.WriteString("- **Status**: OBSOLETE\n")
-	}
-	output.WriteString(fmt.Sprintf("\n---\n\n%s", mem.Content))
 
-	return s.toolResult(id, output.String())
+	return s.toolResult(id, string(jsonBytes))
 }
 
 // toolResult creates a successful tool result

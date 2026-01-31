@@ -8,14 +8,16 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
+	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/cortex-ai/cortex-ai/pkg/markdown"
 	"github.com/spf13/cobra"
 )
 
 var exportCmd = &cobra.Command{
 	Use:   "export [id]",
-	Short: "Export memories to Markdown files",
-	Long: `Export memories to Markdown files with YAML frontmatter.
+	Short: "Export memories to files (JSON by default, Markdown optional)",
+	Long: `Export memories to files. JSON is the default format for better LLM parsing.
+Use --format markdown for human-readable export with YAML frontmatter.
 
 Export modes:
   - Export a single memory by ID
@@ -25,7 +27,8 @@ Export modes:
 Examples:
   cortex export abc-123 --output ./memories/
   cortex export --all --output ./memories/
-  cortex export --intent "authentication patterns" --output ./auth-synthesis.md`,
+  cortex export --all --format markdown --output ./memories/
+  cortex export --intent "authentication patterns" --output ./`,
 	RunE: runExport,
 }
 
@@ -40,7 +43,7 @@ func init() {
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", ".", "Output directory or file path")
 	exportCmd.Flags().BoolVar(&exportAll, "all", false, "Export all memories")
 	exportCmd.Flags().StringVar(&exportIntent, "intent", "", "Export synthesis based on semantic search")
-	exportCmd.Flags().StringVar(&exportFormat, "format", "text", "Output format (text|json)")
+	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "json", "Export format (json|markdown)")
 
 	rootCmd.AddCommand(exportCmd)
 }
@@ -54,6 +57,11 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("please provide a memory ID, --all, or --intent")
 	}
 
+	// Validate format
+	if exportFormat != "json" && exportFormat != "markdown" {
+		return fmt.Errorf("invalid format: %s (must be json or markdown)", exportFormat)
+	}
+
 	// Initialize storage
 	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
 	if err != nil {
@@ -61,34 +69,43 @@ func runExport(cmd *cobra.Command, args []string) error {
 	}
 	defer storageBackend.Close()
 
-	exporter := markdown.NewExporter(exportOutput)
-
 	// Export by intent (synthesis)
 	if exportIntent != "" {
-		return exportSynthesis(ctx, storageBackend, exporter)
+		return exportSynthesis(ctx, storageBackend)
 	}
 
 	// Export all memories
 	if exportAll {
-		return exportAllMemories(ctx, storageBackend, exporter)
+		return exportAllMemories(ctx, storageBackend)
 	}
 
 	// Export single memory by ID
-	return exportSingleMemory(ctx, storageBackend, exporter, args[0])
+	return exportSingleMemory(ctx, storageBackend, args[0])
 }
 
-func exportSingleMemory(ctx context.Context, store storage.Storage, exporter *markdown.Exporter, id string) error {
+func exportSingleMemory(ctx context.Context, store storage.Storage, id string) error {
 	mem, err := store.Get(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get memory: %w", err)
 	}
 
-	path, err := exporter.ExportMemory(mem)
-	if err != nil {
-		return fmt.Errorf("failed to export memory: %w", err)
-	}
+	var path string
 
-	if exportFormat == "json" {
+	if exportFormat == "markdown" {
+		// Export as Markdown with YAML frontmatter
+		exporter := markdown.NewExporter(exportOutput)
+		path, err = exporter.ExportMemory(mem)
+		if err != nil {
+			return fmt.Errorf("failed to export memory: %w", err)
+		}
+		fmt.Printf("Exported memory to: %s\n", path)
+	} else {
+		// Export as JSON (default)
+		exporter := pkgjson.NewExporter(exportOutput)
+		path, err = exporter.ExportMemory(mem)
+		if err != nil {
+			return fmt.Errorf("failed to export memory: %w", err)
+		}
 		output := map[string]interface{}{
 			"path":    path,
 			"id":      mem.ID,
@@ -97,14 +114,12 @@ func exportSingleMemory(ctx context.Context, store storage.Storage, exporter *ma
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Exported memory to: %s\n", path)
 	}
 
 	return nil
 }
 
-func exportAllMemories(ctx context.Context, store storage.Storage, exporter *markdown.Exporter) error {
+func exportAllMemories(ctx context.Context, store storage.Storage) error {
 	memories, err := store.List(ctx, memory.ListOptions{
 		IncludeObsolete: true,
 	})
@@ -117,29 +132,38 @@ func exportAllMemories(ctx context.Context, store storage.Storage, exporter *mar
 		return nil
 	}
 
-	paths, err := exporter.ExportAll(memories)
-	if err != nil {
-		return fmt.Errorf("failed to export memories: %w", err)
-	}
+	var paths []string
 
-	if exportFormat == "json" {
+	if exportFormat == "markdown" {
+		// Export as Markdown with YAML frontmatter
+		exporter := markdown.NewExporter(exportOutput)
+		paths, err = exporter.ExportAll(memories)
+		if err != nil {
+			return fmt.Errorf("failed to export memories: %w", err)
+		}
+		fmt.Printf("Exported %d memories:\n", len(paths))
+		for _, p := range paths {
+			fmt.Printf("  - %s\n", p)
+		}
+	} else {
+		// Export as JSON (default)
+		exporter := pkgjson.NewExporter(exportOutput)
+		paths, err = exporter.ExportAll(memories)
+		if err != nil {
+			return fmt.Errorf("failed to export memories: %w", err)
+		}
 		output := map[string]interface{}{
 			"count": len(paths),
 			"paths": paths,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Exported %d memories:\n", len(paths))
-		for _, p := range paths {
-			fmt.Printf("  - %s\n", p)
-		}
 	}
 
 	return nil
 }
 
-func exportSynthesis(ctx context.Context, store storage.Storage, exporter *markdown.Exporter) error {
+func exportSynthesis(ctx context.Context, store storage.Storage) error {
 	// Initialize embedder for search
 	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
 	if err != nil {
@@ -162,12 +186,24 @@ func exportSynthesis(ctx context.Context, store storage.Storage, exporter *markd
 		return fmt.Errorf("no memories found matching intent: %s", exportIntent)
 	}
 
-	path, err := exporter.ExportSynthesis(exportIntent, results)
-	if err != nil {
-		return fmt.Errorf("failed to export synthesis: %w", err)
-	}
+	var path string
 
-	if exportFormat == "json" {
+	if exportFormat == "markdown" {
+		// Export as Markdown
+		exporter := markdown.NewExporter(exportOutput)
+		path, err = exporter.ExportSynthesis(exportIntent, results)
+		if err != nil {
+			return fmt.Errorf("failed to export synthesis: %w", err)
+		}
+		fmt.Printf("Exported synthesis to: %s\n", path)
+		fmt.Printf("Based on %d memories matching '%s'\n", len(results), exportIntent)
+	} else {
+		// Export as JSON (default)
+		exporter := pkgjson.NewExporter(exportOutput)
+		path, err = exporter.ExportSynthesis(exportIntent, results)
+		if err != nil {
+			return fmt.Errorf("failed to export synthesis: %w", err)
+		}
 		sources := make([]map[string]interface{}, len(results))
 		for i, r := range results {
 			sources[i] = map[string]interface{}{
@@ -184,9 +220,6 @@ func exportSynthesis(ctx context.Context, store storage.Storage, exporter *markd
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Exported synthesis to: %s\n", path)
-		fmt.Printf("Based on %d memories matching '%s'\n", len(results), exportIntent)
 	}
 
 	return nil

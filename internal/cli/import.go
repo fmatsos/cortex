@@ -4,41 +4,47 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
+	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/cortex-ai/cortex-ai/pkg/markdown"
 	"github.com/spf13/cobra"
 )
 
 var importCmd = &cobra.Command{
 	Use:   "import [files...]",
-	Short: "Import memories from Markdown files",
-	Long: `Import memories from Markdown files with YAML frontmatter.
+	Short: "Import memories from files (JSON by default, Markdown supported)",
+	Long: `Import memories from JSON or Markdown files.
+JSON files (.json) are the default format. Markdown files (.md) with YAML frontmatter are also supported.
 
-Files must have valid frontmatter with required fields: title and type.
-If no ID is provided in the frontmatter, one will be generated.
+Files must have required fields: title and types.
+If no ID is provided, one will be generated.
 
 Examples:
-  cortex import memory1.md memory2.md
-  cortex import ./memories/*.md
-  cortex import --dry-run document.md
-  cortex import --force existing-memory.md`,
+  cortex import memory1.json memory2.json
+  cortex import ./memories/*.json
+  cortex import --format markdown memory.md
+  cortex import --dry-run document.json
+  cortex import --force existing-memory.json`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runImport,
 }
 
 var (
-	importForce  bool
-	importDryRun bool
-	importFormat string
+	importForce      bool
+	importDryRun     bool
+	importFormat     string
+	importFileFormat string
 )
 
 func init() {
 	importCmd.Flags().BoolVar(&importForce, "force", false, "Overwrite existing memories with same ID")
 	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "Validate files without importing")
 	importCmd.Flags().StringVar(&importFormat, "output", "text", "Output format (text|json)")
+	importCmd.Flags().StringVarP(&importFileFormat, "format", "f", "", "File format (json|markdown). Auto-detected by extension if not specified")
 
 	rootCmd.AddCommand(importCmd)
 }
@@ -49,39 +55,91 @@ func runImport(cmd *cobra.Command, args []string) error {
 	// Expand glob patterns if any
 	var files []string
 	for _, pattern := range args {
-		expanded, err := markdown.ExpandGlob(pattern)
+		// Try JSON glob first
+		jsonExpanded, err := pkgjson.ExpandGlob(pattern)
 		if err != nil {
 			return fmt.Errorf("invalid pattern %s: %w", pattern, err)
 		}
-		if len(expanded) > 0 {
-			files = append(files, expanded...)
-		} else {
-			// If no glob expansion, treat as literal path
-			files = append(files, pattern)
+		if len(jsonExpanded) > 0 {
+			files = append(files, jsonExpanded...)
+			continue
 		}
+
+		// Try Markdown glob
+		mdExpanded, err := markdown.ExpandGlob(pattern)
+		if err != nil {
+			return fmt.Errorf("invalid pattern %s: %w", pattern, err)
+		}
+		if len(mdExpanded) > 0 {
+			files = append(files, mdExpanded...)
+			continue
+		}
+
+		// If no glob expansion, treat as literal path
+		files = append(files, pattern)
 	}
 
 	if len(files) == 0 {
 		return fmt.Errorf("no files to import")
 	}
 
-	importer := markdown.NewImporter()
-
 	// Dry run mode - just validate
 	if importDryRun {
-		return runDryRun(importer, files)
+		return runDryRun(files)
 	}
 
 	// Real import
-	return runRealImport(ctx, importer, files)
+	return runRealImport(ctx, files)
 }
 
-func runDryRun(importer *markdown.Importer, files []string) error {
-	results := importer.ValidateFiles(files)
+// ImportFileResult represents the result of importing a single file
+type ImportFileResult struct {
+	Path   string
+	Memory *memory.Memory
+	Error  error
+}
 
+// detectFileFormat detects the format of a file based on extension or flag
+func detectFileFormat(path string) string {
+	if importFileFormat != "" {
+		return importFileFormat
+	}
+	ext := filepath.Ext(path)
+	if ext == ".md" || ext == ".markdown" {
+		return "markdown"
+	}
+	return "json" // Default to JSON
+}
+
+// validateFile validates a single file
+func validateFile(path string) error {
+	format := detectFileFormat(path)
+	if format == "markdown" {
+		return markdown.NewImporter().ValidateFile(path)
+	}
+	return pkgjson.NewImporter().ValidateFile(path)
+}
+
+// importFile imports a single file
+func importFile(path string) (*memory.Memory, error) {
+	format := detectFileFormat(path)
+	if format == "markdown" {
+		return markdown.NewImporter().ImportFile(path)
+	}
+	return pkgjson.NewImporter().ImportFile(path)
+}
+
+func runDryRun(files []string) error {
 	var valid, invalid int
-	for _, r := range results {
-		if r.Error != nil {
+	var results []ImportFileResult
+
+	for _, path := range files {
+		err := validateFile(path)
+		results = append(results, ImportFileResult{
+			Path:  path,
+			Error: err,
+		})
+		if err != nil {
 			invalid++
 		} else {
 			valid++
@@ -126,7 +184,7 @@ func runDryRun(importer *markdown.Importer, files []string) error {
 	return nil
 }
 
-func runRealImport(ctx context.Context, importer *markdown.Importer, files []string) error {
+func runRealImport(ctx context.Context, files []string) error {
 	// Initialize embedder
 	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
 	if err != nil {
@@ -143,48 +201,47 @@ func runRealImport(ctx context.Context, importer *markdown.Importer, files []str
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
 
-	// Import files
-	results := importer.ImportFiles(files)
-
 	var imported, failed, skipped int
 	var importResults []map[string]interface{}
 
-	for _, r := range results {
+	for _, path := range files {
 		entry := map[string]interface{}{
-			"path": r.Path,
+			"path": path,
 		}
 
-		if r.Error != nil {
+		// Import file based on format
+		mem, err := importFile(path)
+		if err != nil {
 			failed++
 			entry["status"] = "failed"
-			entry["error"] = r.Error.Error()
+			entry["error"] = err.Error()
 			importResults = append(importResults, entry)
 			continue
 		}
 
 		// Check if memory already exists
-		existing, _ := storageBackend.Get(ctx, r.Memory.ID)
+		existing, _ := storageBackend.Get(ctx, mem.ID)
 		if existing != nil && !importForce {
 			skipped++
 			entry["status"] = "skipped"
 			entry["reason"] = "memory already exists (use --force to overwrite)"
-			entry["id"] = r.Memory.ID
+			entry["id"] = mem.ID
 			importResults = append(importResults, entry)
 			continue
 		}
 
 		// Save the memory (this will generate embedding)
 		input := memory.CreateInput{
-			Title:    r.Memory.Title,
-			Content:  r.Memory.Content,
-			Types:    r.Memory.Types,
-			Tags:     r.Memory.Tags,
-			Metadata: r.Memory.Metadata,
+			Title:    mem.Title,
+			Content:  mem.Content,
+			Types:    mem.Types,
+			Tags:     mem.Tags,
+			Metadata: mem.Metadata,
 		}
 
 		// If we're forcing overwrite and memory exists, delete first
 		if existing != nil && importForce {
-			if err := storageBackend.Delete(ctx, r.Memory.ID); err != nil {
+			if err := storageBackend.Delete(ctx, mem.ID); err != nil {
 				failed++
 				entry["status"] = "failed"
 				entry["error"] = fmt.Sprintf("failed to delete existing: %v", err)
@@ -193,7 +250,7 @@ func runRealImport(ctx context.Context, importer *markdown.Importer, files []str
 			}
 		}
 
-		mem, err := svc.Create(ctx, input)
+		createdMem, err := svc.Create(ctx, input)
 		if err != nil {
 			failed++
 			entry["status"] = "failed"
@@ -204,8 +261,8 @@ func runRealImport(ctx context.Context, importer *markdown.Importer, files []str
 
 		imported++
 		entry["status"] = "imported"
-		entry["id"] = mem.ID
-		entry["title"] = mem.Title
+		entry["id"] = createdMem.ID
+		entry["title"] = createdMem.Title
 		importResults = append(importResults, entry)
 	}
 
