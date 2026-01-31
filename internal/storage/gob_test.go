@@ -249,8 +249,8 @@ func TestGobStorage_List_FilterByType(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	storage.Save(context.Background(), m1)
-	storage.Save(context.Background(), m2)
+	_ = storage.Save(context.Background(), m1)
+	_ = storage.Save(context.Background(), m2)
 
 	// List only solutions
 	opts := memory.ListOptions{
