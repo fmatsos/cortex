@@ -118,10 +118,10 @@ func TestMemoryService_Create(t *testing.T) {
 	service := NewMemoryService(storage, embedder)
 
 	input := CreateInput{
-		Title:   "Test Memory",
-		Content: "Test content",
-		Types:   []MemoryType{MemoryTypeSolution},
-		Tags:    []string{"test", "golang"},
+		Title:    "Test Memory",
+		Content:  "Test content",
+		Types:    []MemoryType{MemoryTypeSolution},
+		Tags:     []string{"test", "golang"},
 		Metadata: map[string]string{"key": "value"},
 	}
 

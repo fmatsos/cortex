@@ -25,9 +25,9 @@ Examples:
 }
 
 var (
-	listType         string
+	listType            string
 	listIncludeObsolete bool
-	listJSON         bool
+	listJSON            bool
 )
 
 func init() {
@@ -69,8 +69,8 @@ func runList(cmd *cobra.Command, args []string) error {
 	// List
 	opts := memory.ListOptions{
 		IncludeObsolete: listIncludeObsolete,
-		FilterTypes:    filterTypes,
-		SortBy:         "created",
+		FilterTypes:     filterTypes,
+		SortBy:          "created",
 	}
 
 	memories, err := svc.List(ctx, opts)

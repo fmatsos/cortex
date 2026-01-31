@@ -90,10 +90,10 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Output
 	if createOutput == "json" {
 		output := map[string]interface{}{
-			"id":       m.ID,
-			"title":    m.Title,
-			"types":    m.Types,
-			"created":  m.CreatedAt,
+			"id":      m.ID,
+			"title":   m.Title,
+			"types":   m.Types,
+			"created": m.CreatedAt,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))
