@@ -20,14 +20,14 @@ help:
 	@echo "  clean       - Remove build artifacts"
 	@echo "  help        - Show this help message"
 
-# Build the binary
+# Build the CLI binary
 build:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
-# Install to GOBIN
+# Install CLI to GOBIN
 install:
 	@echo "Installing $(BINARY_NAME)..."
 	@go install $(LDFLAGS) $(MAIN_PATH)
