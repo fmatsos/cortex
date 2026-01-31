@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	configPath string
+	configPath     string
 	storageBackend string
 )
 

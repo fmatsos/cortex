@@ -39,9 +39,9 @@ func init() {
 	createCmd.Flags().StringSliceVar(&createTags, "tags", nil, "Memory tags")
 	createCmd.Flags().StringVar(&createOutput, "output", "text", "Output format (text|json)")
 
-	createCmd.MarkFlagRequired("title")
-	createCmd.MarkFlagRequired("type")
-	createCmd.MarkFlagRequired("content")
+	_ = createCmd.MarkFlagRequired("title")
+	_ = createCmd.MarkFlagRequired("type")
+	_ = createCmd.MarkFlagRequired("content")
 
 	rootCmd.AddCommand(createCmd)
 }
@@ -60,7 +60,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
@@ -90,10 +90,10 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Output
 	if createOutput == "json" {
 		output := map[string]interface{}{
-			"id":       m.ID,
-			"title":    m.Title,
-			"types":    m.Types,
-			"created":  m.CreatedAt,
+			"id":      m.ID,
+			"title":   m.Title,
+			"types":   m.Types,
+			"created": m.CreatedAt,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))

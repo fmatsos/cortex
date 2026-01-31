@@ -21,15 +21,15 @@ Examples:
   cortex search "authentication issues" --top 5
   cortex search "JWT tokens" --min-score 0.7
   cortex search "bug fix" --type solution`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runSearch,
+	Args: cobra.ExactArgs(1),
+	RunE: runSearch,
 }
 
 var (
-	searchTop        int
-	searchMinScore   float64
-	searchType       string
-	searchJSON       bool
+	searchTop      int
+	searchMinScore float64
+	searchType     string
+	searchJSON     bool
 )
 
 func init() {
@@ -110,7 +110,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				result.Memory.Title,
 				result.Memory.Types)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	return nil

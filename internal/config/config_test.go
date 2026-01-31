@@ -143,13 +143,13 @@ output:
 
 func TestManagerEnvironmentOverrides(t *testing.T) {
 	// Set environment variables
-	os.Setenv("CORTEX_STORAGE_BACKEND", "sqlite")
-	os.Setenv("CORTEX_EMBEDDINGS_MODEL", "env-model")
-	os.Setenv("CORTEX_SEARCH_TOP_K", "20")
+	_ = os.Setenv("CORTEX_STORAGE_BACKEND", "sqlite")
+	_ = os.Setenv("CORTEX_EMBEDDINGS_MODEL", "env-model")
+	_ = os.Setenv("CORTEX_SEARCH_TOP_K", "20")
 	defer func() {
-		os.Unsetenv("CORTEX_STORAGE_BACKEND")
-		os.Unsetenv("CORTEX_EMBEDDINGS_MODEL")
-		os.Unsetenv("CORTEX_SEARCH_TOP_K")
+		_ = os.Unsetenv("CORTEX_STORAGE_BACKEND")
+		_ = os.Unsetenv("CORTEX_EMBEDDINGS_MODEL")
+		_ = os.Unsetenv("CORTEX_SEARCH_TOP_K")
 	}()
 
 	manager := NewManager()
@@ -217,7 +217,8 @@ func TestGlobal(t *testing.T) {
 
 	cfg := Global()
 	if cfg == nil {
-		t.Error("Global() returned nil")
+		t.Fatal("Global() returned nil")
+		return
 	}
 
 	// Should return default config

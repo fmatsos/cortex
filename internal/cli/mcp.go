@@ -104,7 +104,7 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 	if err := server.Initialize(cfg.Storage.Path); err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	// Handle shutdown signals for SSE mode
 	if transportType == mcp.TransportSSE {
@@ -112,7 +112,7 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
 			<-sigChan
-			server.Close()
+			_ = server.Close()
 		}()
 	}
 

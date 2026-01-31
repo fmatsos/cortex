@@ -40,11 +40,11 @@ func IsValidType(t string) bool {
 // Memory represents a single memory entry with embeddings
 type Memory struct {
 	ID        string            `json:"id"`
-	Title     string            `json:"title"`                // Required
-	Content   string            `json:"content"`              // Required
-	Types     []MemoryType      `json:"types"`                // Required, can be combined
+	Title     string            `json:"title"`   // Required
+	Content   string            `json:"content"` // Required
+	Types     []MemoryType      `json:"types"`   // Required, can be combined
 	Tags      []string          `json:"tags,omitempty"`
-	Embedding []float64         `json:"-"`                    // Vector embedding
+	Embedding []float64         `json:"-"` // Vector embedding
 	CreatedAt time.Time         `json:"created_at"`
 	UpdatedAt time.Time         `json:"updated_at"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
@@ -91,15 +91,15 @@ type SearchResult struct {
 
 // SearchOptions contains options for searching memories
 type SearchOptions struct {
-	TopK            int     // Number of results to return
-	MinScore        float64 // Minimum similarity score
-	IncludeObsolete bool    // Include obsolete memories
+	TopK            int          // Number of results to return
+	MinScore        float64      // Minimum similarity score
+	IncludeObsolete bool         // Include obsolete memories
 	FilterTypes     []MemoryType // Filter by memory types (empty = no filter)
 }
 
 // ListOptions contains options for listing memories
 type ListOptions struct {
-	IncludeObsolete bool // Include obsolete memories
+	IncludeObsolete bool         // Include obsolete memories
 	FilterTypes     []MemoryType // Filter by memory types (empty = no filter)
-	SortBy          string // Sort by: "created", "updated", "title"
+	SortBy          string       // Sort by: "created", "updated", "title"
 }

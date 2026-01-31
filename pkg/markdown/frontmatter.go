@@ -19,10 +19,10 @@ type Frontmatter struct {
 
 // SynthesisFrontmatter represents the frontmatter for synthesis exports
 type SynthesisFrontmatter struct {
-	Type           string          `yaml:"type"`            // Always "synthesis"
-	Intent         string          `yaml:"intent"`          // Search query/intent
-	GeneratedAt    time.Time       `yaml:"generated_at"`    // Generation timestamp
-	SourceMemories []SourceMemory  `yaml:"source_memories"` // Referenced memories
+	Type           string         `yaml:"type"`            // Always "synthesis"
+	Intent         string         `yaml:"intent"`          // Search query/intent
+	GeneratedAt    time.Time      `yaml:"generated_at"`    // Generation timestamp
+	SourceMemories []SourceMemory `yaml:"source_memories"` // Referenced memories
 }
 
 // SourceMemory represents a memory reference in synthesis

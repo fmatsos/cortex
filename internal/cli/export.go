@@ -67,7 +67,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Export by intent (synthesis)
 	if exportIntent != "" {

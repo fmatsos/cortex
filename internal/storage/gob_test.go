@@ -78,7 +78,7 @@ func TestGobStorage_Delete(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	storage.Save(context.Background(), m)
+	_ = storage.Save(context.Background(), m)
 
 	// Delete memory
 	err := storage.Delete(context.Background(), m.ID)
@@ -99,11 +99,14 @@ func TestGobStorage_List(t *testing.T) {
 
 	// Create multiple memories
 	for i := 0; i < 3; i++ {
-		idStr := "test"
-		if i == 1 {
+		var idStr string
+		switch i {
+		case 1:
 			idStr = "test-1"
-		} else if i == 2 {
+		case 2:
 			idStr = "test-2"
+		default:
+			idStr = "test"
 		}
 		m := &memory.Memory{
 			ID:        idStr,
@@ -113,7 +116,7 @@ func TestGobStorage_List(t *testing.T) {
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
-		storage.Save(context.Background(), m)
+		_ = storage.Save(context.Background(), m)
 	}
 
 	// List all
@@ -166,9 +169,9 @@ func TestGobStorage_SearchByVector(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	storage.Save(context.Background(), m1)
-	storage.Save(context.Background(), m2)
-	storage.Save(context.Background(), m3)
+	_ = storage.Save(context.Background(), m1)
+	_ = storage.Save(context.Background(), m2)
+	_ = storage.Save(context.Background(), m3)
 
 	// Search with query similar to embedding1
 	queryEmbedding := []float64{0.95, 0.05, 0}
@@ -207,7 +210,7 @@ func TestGobStorage_Update(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	storage.Save(context.Background(), m)
+	_ = storage.Save(context.Background(), m)
 
 	// Update
 	m.Title = "Updated Title"
@@ -246,8 +249,8 @@ func TestGobStorage_List_FilterByType(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	storage.Save(context.Background(), m1)
-	storage.Save(context.Background(), m2)
+	_ = storage.Save(context.Background(), m1)
+	_ = storage.Save(context.Background(), m2)
 
 	// List only solutions
 	opts := memory.ListOptions{
@@ -288,8 +291,8 @@ func TestGobStorage_IndexPersistence(t *testing.T) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	storage1.Save(context.Background(), m)
-	storage1.Close()
+	_ = storage1.Save(context.Background(), m)
+	_ = storage1.Close()
 
 	// Create new storage instance and verify index is loaded
 	storage2, _ := NewGobStorage(tmpDir)

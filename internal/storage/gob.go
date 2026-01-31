@@ -44,10 +44,8 @@ func NewGobStorage(basePath string) (*GobStorage, error) {
 		index:    &VectorIndex{vectors: make(map[string][]float64)},
 	}
 
-	// Load existing index if it exists
-	if err := gs.loadIndex(); err != nil {
-		// Index doesn't exist yet, which is fine
-	}
+	// Load existing index if it exists (ignore error if it doesn't exist yet)
+	_ = gs.loadIndex()
 
 	return gs, nil
 }
@@ -63,7 +61,7 @@ func (gs *GobStorage) Save(ctx context.Context, m *memory.Memory) error {
 	if err != nil {
 		return fmt.Errorf("failed to create memory file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if err := gob.NewEncoder(file).Encode(m); err != nil {
 		return fmt.Errorf("failed to encode memory: %w", err)
@@ -92,7 +90,7 @@ func (gs *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error
 	if err != nil {
 		return nil, fmt.Errorf("memory not found: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var m memory.Memory
 	if err := gob.NewDecoder(file).Decode(&m); err != nil {
@@ -234,7 +232,7 @@ func (gs *GobStorage) saveIndex() error {
 	if err != nil {
 		return fmt.Errorf("failed to create index file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gs.index.mu.RLock()
 	defer gs.index.mu.RUnlock()
@@ -254,7 +252,7 @@ func (gs *GobStorage) loadIndex() error {
 	if err != nil {
 		return fmt.Errorf("index not found: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	vectors := make(map[string][]float64)
 	if err := gob.NewDecoder(file).Decode(&vectors); err != nil {
