@@ -206,7 +206,7 @@ func TestMemoryService_List(t *testing.T) {
 			Content: fmt.Sprintf("Content %d", i),
 			Types:   []MemoryType{MemoryTypeSolution},
 		}
-		service.Create(context.Background(), input)
+		_, _ = service.Create(context.Background(), input)
 	}
 
 	// List all memories
@@ -378,7 +378,7 @@ func TestMemoryService_Search_WithTypeFilter(t *testing.T) {
 	}
 
 	for _, input := range inputs {
-		service.Create(context.Background(), input)
+		_, _ = service.Create(context.Background(), input)
 	}
 
 	// Search for issues only

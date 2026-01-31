@@ -1,15 +1,12 @@
-version: "2"
-
 run:
   timeout: 5m
   tests: true
 
 linters:
   enable:
+    - errcheck
     - govet
     - ineffassign
     - unused
-  disable:
-    - errcheck  # TODO: Fix unchecked errors in follow-up PR
-    - staticcheck  # TODO: Fix staticcheck issues in follow-up PR
-    - gocritic  # TODO: Re-enable after fixing issues
+    - staticcheck
+    - gocritic

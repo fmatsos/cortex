@@ -102,7 +102,7 @@ func (t *SSETransport) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	// Send endpoint event with message URL
 	messageEndpoint := fmt.Sprintf("http://%s/message?session_id=%s", r.Host, sessionID)
-	fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", messageEndpoint)
+	_, _ = fmt.Fprintf(w, "event: endpoint\ndata: %s\n\n", messageEndpoint)
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
@@ -134,7 +134,7 @@ func (t *SSETransport) handleSSE(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
@@ -178,7 +178,7 @@ func (t *SSETransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	var req Request
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -195,10 +195,7 @@ func (t *SSETransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		Params:  req.Params,
 	}
 
-	// Store session mapping temporarily
-	t.mu.Lock()
-	// Use a context-like approach: store session in a separate map keyed by request ID
-	t.mu.Unlock()
+	// Store session mapping temporarily (no-op for now)
 
 	select {
 	case t.requests <- wrappedReq:
@@ -213,7 +210,7 @@ func (t *SSETransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 	default:
 		http.Error(w, "Server busy", http.StatusServiceUnavailable)
 	}
@@ -222,7 +219,7 @@ func (t *SSETransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 // handleHealth handles health check requests
 func (t *SSETransport) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // Package-level map to track request ID to session ID mapping

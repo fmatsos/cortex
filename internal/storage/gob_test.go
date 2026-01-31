@@ -99,11 +99,14 @@ func TestGobStorage_List(t *testing.T) {
 
 	// Create multiple memories
 	for i := 0; i < 3; i++ {
-		idStr := "test"
-		if i == 1 {
+		var idStr string
+		switch i {
+		case 1:
 			idStr = "test-1"
-		} else if i == 2 {
+		case 2:
 			idStr = "test-2"
+		default:
+			idStr = "test"
 		}
 		m := &memory.Memory{
 			ID:        idStr,

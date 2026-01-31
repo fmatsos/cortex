@@ -110,7 +110,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				result.Memory.Title,
 				result.Memory.Types)
 		}
-		w.Flush()
+		_ = w.Flush()
 	}
 
 	return nil

@@ -24,7 +24,7 @@ func TestNewOllamaEmbedder(t *testing.T) {
 		}
 
 		resp := OllamaResponse{Embedding: embedding}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -53,7 +53,7 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 	// Create a mock Ollama server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req OllamaRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		// Return embedding based on input
 		embedding := make([]float64, 384)
@@ -62,7 +62,7 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 		}
 
 		resp := OllamaResponse{Embedding: embedding}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -96,7 +96,7 @@ func TestOllamaEmbedder_EmbedBatch(t *testing.T) {
 			embedding[i] = 0.1
 		}
 		resp := OllamaResponse{Embedding: embedding}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -122,7 +122,7 @@ func TestOllamaEmbedder_EmbedBatch(t *testing.T) {
 func TestOllamaEmbedder_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 	}))
 	defer server.Close()
 
@@ -187,7 +187,7 @@ func TestOllamaEmbedder_ContextCancellation(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		embedding := make([]float64, 384)
 		resp := OllamaResponse{Embedding: embedding}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
