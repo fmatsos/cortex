@@ -285,27 +285,86 @@ View and manage configuration.
 **Usage:**
 ```bash
 cortex config [flags]
+cortex config <subcommand>
 ```
 
+**Subcommands:**
+- `init` - Create default configuration file
+- `path` - Show configuration file path
+- `get <key>` - Get a configuration value
+- `schema <type>` - Show or export JSON schema for templates
+- `template validate <file>` - Validate a custom template file
+
 **Optional Flags:**
-- `--show` - Display current configuration
-- `--edit` - Open config in default editor
-- `--reset` - Reset to defaults
-- `--path` - Show config file path
+- `--output <format>` - Output format (yaml, json, text)
 
 **Examples:**
 ```bash
 # Show current config
-cortex config --show
+cortex config
+
+# Show config as JSON
+cortex config --output json
 
 # Show config path
-cortex config --path
+cortex config path
 
-# Open in editor
-cortex config --edit
+# Get specific value
+cortex config get embeddings.model
 
-# Reset to defaults
-cortex config --reset
+# Create default config file
+cortex config init
+```
+
+### config schema
+
+Display or export JSON schema for configuration templates.
+
+**Usage:**
+```bash
+cortex config schema <type> [flags]
+```
+
+**Arguments:**
+- `markdown` - Markdown export template schema
+
+**Flags:**
+- `-o, --output <file>` - Export schema to file
+
+**Examples:**
+```bash
+# Display schema
+cortex config schema markdown
+
+# Export schema to file
+cortex config schema markdown -o markdown-template.schema.json
+```
+
+### config template validate
+
+Validate a custom template configuration file against the schema.
+
+**Usage:**
+```bash
+cortex config template validate <file>
+```
+
+**Arguments:**
+- File path (JSON or YAML format)
+
+**Validation checks:**
+- File format (JSON/YAML syntax)
+- Schema structure compliance
+- Go template syntax validity
+- Configuration value constraints
+
+**Examples:**
+```bash
+# Validate JSON template
+cortex config template validate my-template.json
+
+# Validate YAML template
+cortex config template validate my-template.yaml
 ```
 
 ---
