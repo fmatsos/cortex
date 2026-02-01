@@ -250,12 +250,10 @@ func exportSynthesis(ctx context.Context, store storage.Storage) error {
 
 // loadTemplateConfig loads template configuration from files or config
 func loadTemplateConfig() (*config.MarkdownTemplateConfig, error) {
-var tmplCfg *config.MarkdownTemplateConfig
+	// Start with defaults
+	tmplCfg := config.DefaultMarkdownTemplateConfig()
 
-// Start with defaults
-tmplCfg = config.DefaultMarkdownTemplateConfig()
-
-// Load from config file if templates are configured
+	// Load from config file if templates are configured
 globalCfg := config.Global()
 if globalCfg.Templates.Markdown != nil {
 // Merge with config from file
