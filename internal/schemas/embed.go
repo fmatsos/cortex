@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-//go:embed mcp/*.json cli/*.json
+//go:embed mcp/*.json cli/*.json templates/*.json
 var FS embed.FS
 
 // MCPToolSchema represents an MCP tool schema loaded from JSON.
@@ -78,3 +78,15 @@ var MCPToolNames = []string{
 	"cortex_list",
 	"cortex_get",
 }
+
+// LoadTemplateSchema loads a template JSON schema by name.
+func LoadTemplateSchema(name string) ([]byte, error) {
+	data, err := FS.ReadFile(fmt.Sprintf("templates/%s", name))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read template schema %s: %w", name, err)
+	}
+	return data, nil
+}
+
+// MarkdownTemplateSchemaFile is the filename for the Markdown template schema.
+const MarkdownTemplateSchemaFile = "markdown_template.schema.json"

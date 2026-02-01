@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
+	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -52,6 +53,20 @@ Examples:
 	RunE: runConfigGet,
 }
 
+var configSchemaCmd = &cobra.Command{
+	Use:   "schema [type]",
+	Short: "Show JSON schema for configuration templates",
+	Long: `Display the JSON schema for configuration templates.
+
+Available schemas:
+  markdown   - Markdown export template schema
+
+Examples:
+  cortex config schema markdown   # Show Markdown template schema`,
+	Args: cobra.ExactArgs(1),
+	RunE: runConfigSchema,
+}
+
 var (
 	configOutputFormat string
 )
@@ -62,6 +77,7 @@ func init() {
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configPathCmd)
 	configCmd.AddCommand(configGetCmd)
+	configCmd.AddCommand(configSchemaCmd)
 
 	rootCmd.AddCommand(configCmd)
 }
@@ -176,5 +192,22 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println(value)
+	return nil
+}
+
+func runConfigSchema(cmd *cobra.Command, args []string) error {
+	schemaType := args[0]
+
+	switch schemaType {
+	case "markdown":
+		data, err := schemas.LoadTemplateSchema(schemas.MarkdownTemplateSchemaFile)
+		if err != nil {
+			return fmt.Errorf("failed to load markdown template schema: %w", err)
+		}
+		fmt.Println(string(data))
+	default:
+		return fmt.Errorf("unknown schema type: %s (available: markdown)", schemaType)
+	}
+
 	return nil
 }

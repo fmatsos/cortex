@@ -1,25 +1,134 @@
 package markdown
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 )
 
 // Exporter exports memories to Markdown files
 type Exporter struct {
-	outputDir string
+	outputDir      string
+	templateConfig *config.MarkdownTemplateConfig
 }
 
-// NewExporter creates a new Exporter
+// NewExporter creates a new Exporter with default templates
 func NewExporter(outputDir string) *Exporter {
 	return &Exporter{
-		outputDir: outputDir,
+		outputDir:      outputDir,
+		templateConfig: config.DefaultMarkdownTemplateConfig(),
 	}
+}
+
+// NewExporterWithConfig creates a new Exporter with custom template configuration
+func NewExporterWithConfig(outputDir string, cfg *config.MarkdownTemplateConfig) *Exporter {
+	tmplCfg := config.DefaultMarkdownTemplateConfig()
+	if cfg != nil {
+		tmplCfg = mergeTemplateConfig(tmplCfg, cfg)
+	}
+	return &Exporter{
+		outputDir:      outputDir,
+		templateConfig: tmplCfg,
+	}
+}
+
+// mergeTemplateConfig merges user config into default config
+func mergeTemplateConfig(base, override *config.MarkdownTemplateConfig) *config.MarkdownTemplateConfig {
+	if override == nil {
+		return base
+	}
+
+	result := *base
+
+	// Merge memory config
+	if override.Memory != nil {
+		if result.Memory == nil {
+			result.Memory = &config.MemoryTemplateConfig{}
+		}
+		if override.Memory.Body != "" {
+			result.Memory.Body = override.Memory.Body
+		}
+		if override.Memory.Frontmatter != nil {
+			if result.Memory.Frontmatter == nil {
+				result.Memory.Frontmatter = &config.FrontmatterTemplateConfig{}
+			}
+			mergeFrontmatterConfig(result.Memory.Frontmatter, override.Memory.Frontmatter)
+		}
+	}
+
+	// Merge synthesis config
+	if override.Synthesis != nil {
+		if result.Synthesis == nil {
+			result.Synthesis = &config.SynthesisTemplateConfig{}
+		}
+		if override.Synthesis.Header != "" {
+			result.Synthesis.Header = override.Synthesis.Header
+		}
+		if override.Synthesis.Footer != "" {
+			result.Synthesis.Footer = override.Synthesis.Footer
+		}
+		if override.Synthesis.Frontmatter != nil {
+			if result.Synthesis.Frontmatter == nil {
+				result.Synthesis.Frontmatter = &config.FrontmatterTemplateConfig{}
+			}
+			mergeFrontmatterConfig(result.Synthesis.Frontmatter, override.Synthesis.Frontmatter)
+		}
+		if override.Synthesis.SummarySection != nil {
+			if result.Synthesis.SummarySection == nil {
+				result.Synthesis.SummarySection = &config.SectionTemplateConfig{}
+			}
+			if override.Synthesis.SummarySection.Title != "" {
+				result.Synthesis.SummarySection.Title = override.Synthesis.SummarySection.Title
+			}
+			if override.Synthesis.SummarySection.Content != "" {
+				result.Synthesis.SummarySection.Content = override.Synthesis.SummarySection.Content
+			}
+		}
+		if override.Synthesis.LearningsSection != nil {
+			if result.Synthesis.LearningsSection == nil {
+				result.Synthesis.LearningsSection = &config.LearningsTemplateConfig{}
+			}
+			if override.Synthesis.LearningsSection.Title != "" {
+				result.Synthesis.LearningsSection.Title = override.Synthesis.LearningsSection.Title
+			}
+			if override.Synthesis.LearningsSection.ItemTemplate != "" {
+				result.Synthesis.LearningsSection.ItemTemplate = override.Synthesis.LearningsSection.ItemTemplate
+			}
+			if override.Synthesis.LearningsSection.ContentPreviewLength > 0 {
+				result.Synthesis.LearningsSection.ContentPreviewLength = override.Synthesis.LearningsSection.ContentPreviewLength
+			}
+		}
+	}
+
+	return &result
+}
+
+// mergeFrontmatterConfig merges frontmatter config
+func mergeFrontmatterConfig(base, override *config.FrontmatterTemplateConfig) {
+	if override.IncludeID != nil {
+		base.IncludeID = override.IncludeID
+	}
+	if override.IncludeDates != nil {
+		base.IncludeDates = override.IncludeDates
+	}
+	if override.IncludeMetadata != nil {
+		base.IncludeMetadata = override.IncludeMetadata
+	}
+	if override.DateFormat != "" {
+		base.DateFormat = override.DateFormat
+	}
+}
+
+// templateFuncs provides template functions
+var templateFuncs = template.FuncMap{
+	"title": toTitleCase,
 }
 
 // ExportMemory exports a single memory to a Markdown file
@@ -91,6 +200,19 @@ func (e *Exporter) ExportAll(memories []*memory.Memory) ([]string, error) {
 	return paths, nil
 }
 
+// SynthesisData represents data passed to synthesis templates
+type SynthesisData struct {
+	Intent  string
+	Results []*memory.SearchResult
+}
+
+// LearningItemData represents data for a single learning item in template
+type LearningItemData struct {
+	Title   string
+	Score   float64
+	Preview string
+}
+
 // ExportSynthesis generates a synthesis document from search results
 func (e *Exporter) ExportSynthesis(intent string, results []*memory.SearchResult) (string, error) {
 	if len(results) == 0 {
@@ -101,6 +223,8 @@ func (e *Exporter) ExportSynthesis(intent string, results []*memory.SearchResult
 	if err := os.MkdirAll(e.outputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
+
+	cfg := e.templateConfig.Synthesis
 
 	// Build source memories list
 	sources := make([]SourceMemory, len(results))
@@ -126,27 +250,58 @@ func (e *Exporter) ExportSynthesis(intent string, results []*memory.SearchResult
 		return "", fmt.Errorf("failed to format synthesis frontmatter: %w", err)
 	}
 
-	// Build synthesis body
+	// Build synthesis body using templates
 	var body strings.Builder
 
-	body.WriteString(fmt.Sprintf("# %s - Synthesis\n\n", toTitleCase(intent)))
-	body.WriteString(fmt.Sprintf("This document synthesizes %d memories related to \"%s\".\n\n", len(results), intent))
+	// Header
+	headerTmpl, err := template.New("header").Funcs(templateFuncs).Parse(cfg.Header)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse header template: %w", err)
+	}
+	var headerBuf bytes.Buffer
+	if err := headerTmpl.Execute(&headerBuf, SynthesisData{Intent: intent, Results: results}); err != nil {
+		return "", fmt.Errorf("failed to execute header template: %w", err)
+	}
+	body.WriteString(headerBuf.String())
+	body.WriteString("\n\n")
 
-	body.WriteString("## Summary\n\n")
-	body.WriteString("Based on the stored memories, the following information was found:\n\n")
+	// Summary section
+	body.WriteString(cfg.SummarySection.Title)
+	body.WriteString("\n\n")
+	body.WriteString(cfg.SummarySection.Content)
+	body.WriteString("\n\n")
 
-	body.WriteString("## Key Learnings\n\n")
+	// Learnings section
+	body.WriteString(cfg.LearningsSection.Title)
+	body.WriteString("\n\n")
+
+	itemTmpl, err := template.New("item").Funcs(templateFuncs).Parse(cfg.LearningsSection.ItemTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse item template: %w", err)
+	}
+
+	previewLen := cfg.LearningsSection.ContentPreviewLength
+	if previewLen <= 0 {
+		previewLen = 500
+	}
+
 	for _, r := range results {
-		body.WriteString(fmt.Sprintf("### From: %s (score: %.2f)\n\n", r.Memory.Title, r.Score))
-
-		// Include a preview of the content (first 500 chars or up to first section)
-		preview := getContentPreview(r.Memory.Content, 500)
-		body.WriteString(preview)
+		preview := getContentPreview(r.Memory.Content, previewLen)
+		var itemBuf bytes.Buffer
+		if err := itemTmpl.Execute(&itemBuf, LearningItemData{
+			Title:   r.Memory.Title,
+			Score:   r.Score,
+			Preview: preview,
+		}); err != nil {
+			return "", fmt.Errorf("failed to execute item template: %w", err)
+		}
+		body.WriteString(itemBuf.String())
 		body.WriteString("\n\n")
 	}
 
-	body.WriteString("---\n\n")
-	body.WriteString("*Generated by Cortex AI - This is a read-only synthesis, not importable.*\n")
+	// Footer
+	body.WriteString(cfg.Footer)
+	body.WriteString("\n")
 
 	// Combine frontmatter and body
 	content := fmStr + "\n" + body.String()
