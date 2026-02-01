@@ -254,66 +254,66 @@ func loadTemplateConfig() (*config.MarkdownTemplateConfig, error) {
 	tmplCfg := config.DefaultMarkdownTemplateConfig()
 
 	// Load from config file if templates are configured
-globalCfg := config.Global()
-if globalCfg.Templates.Markdown != nil {
-// Merge with config from file
-if globalCfg.Templates.Markdown.Memory != nil && tmplCfg.Memory != nil {
-if globalCfg.Templates.Markdown.Memory.Body != "" {
-tmplCfg.Memory.Body = globalCfg.Templates.Markdown.Memory.Body
-}
-if globalCfg.Templates.Markdown.Memory.Frontmatter != nil {
-// Merge frontmatter settings
-if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID != nil {
-tmplCfg.Memory.Frontmatter.IncludeID = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID
-}
-if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates != nil {
-tmplCfg.Memory.Frontmatter.IncludeDates = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates
-}
-if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata != nil {
-tmplCfg.Memory.Frontmatter.IncludeMetadata = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata
-}
-if globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat != "" {
-tmplCfg.Memory.Frontmatter.DateFormat = globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat
-}
-}
-}
-if globalCfg.Templates.Markdown.Synthesis != nil {
-tmplCfg.Synthesis = globalCfg.Templates.Markdown.Synthesis
-}
-}
+	globalCfg := config.Global()
+	if globalCfg.Templates.Markdown != nil {
+		// Merge with config from file
+		if globalCfg.Templates.Markdown.Memory != nil && tmplCfg.Memory != nil {
+			if globalCfg.Templates.Markdown.Memory.Body != "" {
+				tmplCfg.Memory.Body = globalCfg.Templates.Markdown.Memory.Body
+			}
+			if globalCfg.Templates.Markdown.Memory.Frontmatter != nil {
+				// Merge frontmatter settings
+				if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID != nil {
+					tmplCfg.Memory.Frontmatter.IncludeID = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID
+				}
+				if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates != nil {
+					tmplCfg.Memory.Frontmatter.IncludeDates = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates
+				}
+				if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata != nil {
+					tmplCfg.Memory.Frontmatter.IncludeMetadata = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata
+				}
+				if globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat != "" {
+					tmplCfg.Memory.Frontmatter.DateFormat = globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat
+				}
+			}
+		}
+		if globalCfg.Templates.Markdown.Synthesis != nil {
+			tmplCfg.Synthesis = globalCfg.Templates.Markdown.Synthesis
+		}
+	}
 
-// Override with command-line template files
-if exportMemoryTemplate != "" {
-memTmpl, err := schemas.LoadMemoryTemplateFromFile(exportMemoryTemplate)
-if err != nil {
-return nil, fmt.Errorf("failed to load memory template: %w", err)
-}
-// Validate the template
-result, err := schemas.ValidateMemoryTemplateFile(exportMemoryTemplate)
-if err != nil {
-return nil, fmt.Errorf("failed to validate memory template: %w", err)
-}
-if !result.Valid {
-return nil, fmt.Errorf("invalid memory template: %v", result.Errors)
-}
-tmplCfg.Memory = memTmpl
-}
+	// Override with command-line template files
+	if exportMemoryTemplate != "" {
+		memTmpl, err := schemas.LoadMemoryTemplateFromFile(exportMemoryTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load memory template: %w", err)
+		}
+		// Validate the template
+		result, err := schemas.ValidateMemoryTemplateFile(exportMemoryTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate memory template: %w", err)
+		}
+		if !result.Valid {
+			return nil, fmt.Errorf("invalid memory template: %v", result.Errors)
+		}
+		tmplCfg.Memory = memTmpl
+	}
 
-if exportSynthTemplate != "" {
-synthTmpl, err := schemas.LoadSynthesisTemplateFromFile(exportSynthTemplate)
-if err != nil {
-return nil, fmt.Errorf("failed to load synthesis template: %w", err)
-}
-// Validate the template
-result, err := schemas.ValidateSynthesisTemplateFile(exportSynthTemplate)
-if err != nil {
-return nil, fmt.Errorf("failed to validate synthesis template: %w", err)
-}
-if !result.Valid {
-return nil, fmt.Errorf("invalid synthesis template: %v", result.Errors)
-}
-tmplCfg.Synthesis = synthTmpl
-}
+	if exportSynthTemplate != "" {
+		synthTmpl, err := schemas.LoadSynthesisTemplateFromFile(exportSynthTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load synthesis template: %w", err)
+		}
+		// Validate the template
+		result, err := schemas.ValidateSynthesisTemplateFile(exportSynthTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to validate synthesis template: %w", err)
+		}
+		if !result.Valid {
+			return nil, fmt.Errorf("invalid synthesis template: %v", result.Errors)
+		}
+		tmplCfg.Synthesis = synthTmpl
+	}
 
-return tmplCfg, nil
+	return tmplCfg, nil
 }

@@ -110,8 +110,8 @@ func detectTemplateType(filePath string) string {
 	synthCfg, synthErr := schemas.LoadSynthesisTemplateFromFile(filePath)
 	if synthErr == nil {
 		// Check if it has synthesis-specific fields
-		if synthCfg.Header != "" || synthCfg.Footer != "" || 
-		   synthCfg.LearningsSection != nil || synthCfg.SummarySection != nil {
+		if synthCfg.Header != "" || synthCfg.Footer != "" ||
+			synthCfg.LearningsSection != nil || synthCfg.SummarySection != nil {
 			return "synthesis"
 		}
 	}
