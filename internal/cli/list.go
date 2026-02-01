@@ -50,7 +50,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
@@ -97,13 +97,13 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTITLE\tTYPES\tCREATED")
+		_, _ = fmt.Fprintln(w, "ID\tTITLE\tTYPES\tCREATED")
 		for _, m := range memories {
 			status := ""
 			if m.Obsolete {
 				status = " (obsolete)"
 			}
-			fmt.Fprintf(w, "%s\t%s%s\t%v\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s%s\t%v\t%s\n",
 				m.ID[:8]+"...",
 				m.Title,
 				status,

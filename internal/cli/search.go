@@ -54,7 +54,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
@@ -100,9 +100,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "SCORE\tID\tTITLE\tTYPES")
+		_, _ = fmt.Fprintln(w, "SCORE\tID\tTITLE\tTYPES")
 		for _, result := range results {
-			fmt.Fprintf(w, "%.2f\t%s\t%s\t%v\n",
+			_, _ = fmt.Fprintf(w, "%.2f\t%s\t%s\t%v\n",
 				result.Score,
 				result.Memory.ID[:8]+"...",
 				result.Memory.Title,

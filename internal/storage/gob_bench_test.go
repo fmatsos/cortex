@@ -17,13 +17,13 @@ func BenchmarkGobStorageSave(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	storage, err := NewGobStorage(tmpDir)
 	if err != nil {
 		b.Fatalf("failed to create storage: %v", err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	ctx := context.Background()
 
@@ -51,13 +51,13 @@ func BenchmarkGobStorageGet(b *testing.B) {
 	if err != nil {
 		b.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	storage, err := NewGobStorage(tmpDir)
 	if err != nil {
 		b.Fatalf("failed to create storage: %v", err)
 	}
-	defer storage.Close()
+	defer func() { _ = storage.Close() }()
 
 	ctx := context.Background()
 
@@ -93,13 +93,13 @@ func BenchmarkGobStorageSearchByVector(b *testing.B) {
 			if err != nil {
 				b.Fatalf("failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tmpDir)
+			defer func() { _ = os.RemoveAll(tmpDir) }()
 
 			storage, err := NewGobStorage(tmpDir)
 			if err != nil {
 				b.Fatalf("failed to create storage: %v", err)
 			}
-			defer storage.Close()
+			defer func() { _ = storage.Close() }()
 
 			ctx := context.Background()
 

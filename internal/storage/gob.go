@@ -199,7 +199,7 @@ func (gs *GobStorage) listMulti(ctx context.Context, opts memory.ListOptions) ([
 	if err != nil {
 		return nil, fmt.Errorf("failed to open memories directory: %w", err)
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 
 	files, err := dir.Readdirnames(-1)
 	if err != nil {
