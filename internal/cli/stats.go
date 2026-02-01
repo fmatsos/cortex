@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
@@ -50,13 +51,14 @@ type Statistics struct {
 	ActiveCount     int            `json:"active_count"`
 	StorageMode     string         `json:"storage_mode"`
 	StoragePath     string         `json:"storage_path"`
+	ConfigFile      string         `json:"config_file,omitempty"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize storage (no embedder needed for stats)
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config (no embedder needed for stats)
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -75,6 +77,9 @@ func runStats(cmd *cobra.Command, args []string) error {
 
 	// Calculate statistics
 	stats := calculateStats(memories, storageBackend)
+
+	// Add config file info
+	stats.ConfigFile = config.GlobalConfigFileUsed()
 
 	// Output
 	if statsJSON {
@@ -185,6 +190,14 @@ func outputStatsText(cmd *cobra.Command, stats Statistics) error {
 		if err == nil {
 			fmt.Fprintf(w, "Storage file modified:\t%s\n", info.ModTime().Format("2006-01-02 15:04:05"))
 		}
+	}
+	fmt.Fprintln(w)
+
+	// Config info
+	if stats.ConfigFile != "" {
+		fmt.Fprintf(w, "Config file:\t%s\n", stats.ConfigFile)
+	} else {
+		fmt.Fprintf(w, "Config file:\t(using defaults)\n")
 	}
 
 	_ = w.Flush()

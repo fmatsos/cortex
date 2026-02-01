@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"github.com/cortex-ai/cortex-ai/internal/config"
+	"github.com/cortex-ai/cortex-ai/internal/embeddings"
+	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +19,10 @@ var rootCmd = &cobra.Command{
 	Long: `Cortex AI is a CLI tool that provides persistent memory for AI coding agents.
 It allows storing, retrieving, and searching memories using semantic similarity.`,
 	Version: "0.0.1",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize configuration with custom config file if provided
+		return config.Initialize(configPath)
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -26,4 +33,25 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file")
 	rootCmd.PersistentFlags().StringVar(&storageBackend, "storage", "gob", "Storage backend (gob|sqlite)")
+}
+
+// GetConfigPath returns the current config file path (for commands that need to display it)
+func GetConfigPath() string {
+	return configPath
+}
+
+// initStorage initializes storage from the global configuration
+func initStorage() (*storage.GobStorage, error) {
+	cfg := config.Global()
+	return storage.NewGobStorage(cfg.Storage.Path)
+}
+
+// initEmbedder initializes the embedder from the global configuration
+func initEmbedder() (embeddings.Embedder, error) {
+	cfg := config.Global()
+	return embeddings.NewOllamaEmbedder(
+		cfg.Embeddings.Endpoint,
+		cfg.Embeddings.Model,
+		cfg.Embeddings.Timeout,
+	)
 }

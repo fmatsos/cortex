@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -36,14 +34,14 @@ func init() {
 func runDelete(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}

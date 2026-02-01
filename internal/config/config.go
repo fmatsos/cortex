@@ -306,15 +306,16 @@ output:
 
 // Global config instance for easy access
 var globalConfig *Config
+var globalManager *Manager
 
 // Initialize loads the global configuration
 func Initialize(configFile string) error {
-	manager := NewManager()
+	globalManager = NewManager()
 	if configFile != "" {
-		manager.SetConfigFile(configFile)
+		globalManager.SetConfigFile(configFile)
 	}
 
-	cfg, err := manager.Load()
+	cfg, err := globalManager.Load()
 	if err != nil {
 		return err
 	}
@@ -329,4 +330,18 @@ func Global() *Config {
 		globalConfig = DefaultConfig()
 	}
 	return globalConfig
+}
+
+// GlobalManager returns the global configuration manager
+func GlobalManager() *Manager {
+	return globalManager
+}
+
+// GlobalConfigFileUsed returns the path of the config file that was loaded
+// Returns empty string if no config file was loaded (using defaults)
+func GlobalConfigFileUsed() string {
+	if globalManager == nil {
+		return ""
+	}
+	return globalManager.ConfigFileUsed()
 }
