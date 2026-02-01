@@ -129,6 +129,7 @@ func mergeFrontmatterConfig(base, override *config.FrontmatterTemplateConfig) {
 // templateFuncs provides template functions
 var templateFuncs = template.FuncMap{
 	"title": toTitleCase,
+	"mul":   func(a, b float64) float64 { return a * b },
 }
 
 // ExportMemory exports a single memory to a Markdown file

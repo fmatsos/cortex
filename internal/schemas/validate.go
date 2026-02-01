@@ -190,6 +190,7 @@ func validateFrontmatterConfig(prefix string, fm *config.FrontmatterTemplateConf
 // templateFuncs provides template functions for validation
 var templateFuncs = template.FuncMap{
 	"title": func(s string) string { return s },
+	"mul":   func(a, b float64) float64 { return a * b },
 }
 
 func validateGoTemplate(field, tmplStr string) *ValidationError {
