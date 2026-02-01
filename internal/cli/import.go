@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/cortex-ai/cortex-ai/pkg/markdown"
 	"github.com/spf13/cobra"
@@ -185,18 +183,18 @@ func runDryRun(files []string) error {
 }
 
 func runRealImport(ctx context.Context, files []string) error {
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)

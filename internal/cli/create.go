@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -49,14 +48,14 @@ func init() {
 func runCreate(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -89,13 +88,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if createOutput == "json" {
-		output := map[string]interface{}{
-			"id":      m.ID,
-			"title":   m.Title,
-			"types":   m.Types,
-			"created": m.CreatedAt,
+		out := output.CreateOutput{
+			ID:      m.ID,
+			Title:   m.Title,
+			Types:   m.Types,
+			Created: m.CreatedAt,
 		}
-		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		fmt.Printf("Memory created: %s\n", m.ID)

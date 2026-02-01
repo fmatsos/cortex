@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -41,18 +40,18 @@ func init() {
 func runList(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
@@ -80,17 +79,17 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if listJSON {
-		var jsonMemories []map[string]interface{}
-		for _, m := range memories {
-			jsonMemories = append(jsonMemories, map[string]interface{}{
-				"id":       m.ID,
-				"title":    m.Title,
-				"types":    m.Types,
-				"created":  m.CreatedAt,
-				"obsolete": m.Obsolete,
-			})
+		items := make([]output.ListItem, len(memories))
+		for i, m := range memories {
+			items[i] = output.ListItem{
+				ID:        m.ID,
+				Title:     m.Title,
+				Types:     m.Types,
+				CreatedAt: m.CreatedAt,
+				Obsolete:  m.Obsolete,
+			}
 		}
-		jsonBytes, _ := json.MarshalIndent(jsonMemories, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(items, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		if len(memories) == 0 {
@@ -99,13 +98,13 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tTITLE\tTYPES\tCREATED")
+		_, _ = fmt.Fprintln(w, "ID\tTITLE\tTYPES\tCREATED")
 		for _, m := range memories {
 			status := ""
 			if m.Obsolete {
 				status = " (obsolete)"
 			}
-			fmt.Fprintf(w, "%s\t%s%s\t%v\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s%s\t%v\t%s\n",
 				m.ID[:8]+"...",
 				m.Title,
 				status,

@@ -71,7 +71,7 @@ func TestManagerLoadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create test config file
 	configContent := `
@@ -233,12 +233,12 @@ func TestWriteDefaultConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Override CORTEX_BASE_PATH to use temp dir
 	oldBasePath := os.Getenv("CORTEX_BASE_PATH")
-	os.Setenv("CORTEX_BASE_PATH", tmpDir)
-	defer os.Setenv("CORTEX_BASE_PATH", oldBasePath)
+	_ = os.Setenv("CORTEX_BASE_PATH", tmpDir)
+	defer func() { _ = os.Setenv("CORTEX_BASE_PATH", oldBasePath) }()
 
 	// Write default config
 	err = WriteDefaultConfig()

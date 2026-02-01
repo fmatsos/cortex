@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -45,18 +44,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	query := args[0]
 
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
@@ -84,16 +83,16 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if searchJSON {
-		var jsonResults []map[string]interface{}
-		for _, result := range results {
-			jsonResults = append(jsonResults, map[string]interface{}{
-				"id":    result.Memory.ID,
-				"title": result.Memory.Title,
-				"types": result.Memory.Types,
-				"score": result.Score,
-			})
+		items := make([]output.SearchItem, len(results))
+		for i, result := range results {
+			items[i] = output.SearchItem{
+				ID:    result.Memory.ID,
+				Title: result.Memory.Title,
+				Types: result.Memory.Types,
+				Score: result.Score,
+			}
 		}
-		jsonBytes, _ := json.MarshalIndent(jsonResults, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(items, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		if len(results) == 0 {
@@ -102,9 +101,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "SCORE\tID\tTITLE\tTYPES")
+		_, _ = fmt.Fprintln(w, "SCORE\tID\tTITLE\tTYPES")
 		for _, result := range results {
-			fmt.Fprintf(w, "%.2f\t%s\t%s\t%v\n",
+			_, _ = fmt.Fprintf(w, "%.2f\t%s\t%s\t%v\n",
 				result.Score,
 				result.Memory.ID[:8]+"...",
 				result.Memory.Title,

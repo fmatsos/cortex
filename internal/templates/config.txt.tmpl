@@ -1,0 +1,25 @@
+Configuration:
+
+[Storage]
+  Backend:	{{.Storage.Backend}}
+  Path:	{{.Storage.Path}}
+
+[Embeddings]
+  Provider:	{{.Embeddings.Provider}}
+  Model:	{{.Embeddings.Model}}
+  Endpoint:	{{.Embeddings.Endpoint}}
+  Timeout:	{{.Embeddings.Timeout}}
+
+[Search]
+  Top K:	{{.Search.TopK}}
+  Min Score:	{{printf "%.2f" .Search.MinScore}}
+  Include Obsolete:	{{.Search.IncludeObsolete}}
+
+[Output]
+  Format:	{{.Output.Format}}
+  Colors:	{{.Output.Colors}}
+{{if .ConfigFile}}
+Config file: {{.ConfigFile}}
+{{else}}
+Config file: (using defaults)
+{{end}}

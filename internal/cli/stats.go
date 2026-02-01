@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
@@ -50,17 +51,18 @@ type Statistics struct {
 	ActiveCount     int            `json:"active_count"`
 	StorageMode     string         `json:"storage_mode"`
 	StoragePath     string         `json:"storage_path"`
+	ConfigFile      string         `json:"config_file,omitempty"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize storage (no embedder needed for stats)
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config (no embedder needed for stats)
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	defer storageBackend.Close()
+	defer func() { _ = storageBackend.Close() }()
 
 	// Get all memories including obsolete
 	opts := memory.ListOptions{
@@ -75,6 +77,9 @@ func runStats(cmd *cobra.Command, args []string) error {
 
 	// Calculate statistics
 	stats := calculateStats(memories, storageBackend)
+
+	// Add config file info
+	stats.ConfigFile = config.GlobalConfigFileUsed()
 
 	// Output
 	if statsJSON {
@@ -143,48 +148,56 @@ func outputStatsJSON(stats Statistics) error {
 func outputStatsText(cmd *cobra.Command, stats Statistics) error {
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "=== Cortex Memory Statistics ===")
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "=== Cortex Memory Statistics ===")
+	_, _ = fmt.Fprintln(w)
 
 	// General stats
-	fmt.Fprintf(w, "Total memories:\t%d\n", stats.TotalMemories)
-	fmt.Fprintf(w, "Active memories:\t%d\n", stats.ActiveCount)
-	fmt.Fprintf(w, "Obsolete memories:\t%d\n", stats.ObsoleteCount)
-	fmt.Fprintf(w, "Vector chunks:\t%d\n", stats.TotalChunks)
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "Total memories:\t%d\n", stats.TotalMemories)
+	_, _ = fmt.Fprintf(w, "Active memories:\t%d\n", stats.ActiveCount)
+	_, _ = fmt.Fprintf(w, "Obsolete memories:\t%d\n", stats.ObsoleteCount)
+	_, _ = fmt.Fprintf(w, "Vector chunks:\t%d\n", stats.TotalChunks)
+	_, _ = fmt.Fprintln(w)
 
 	// Memories by type
-	fmt.Fprintln(w, "Memories by type:")
+	_, _ = fmt.Fprintln(w, "Memories by type:")
 	for _, t := range memory.ValidMemoryTypes {
 		count := stats.MemoriesByType[string(t)]
-		fmt.Fprintf(w, "  %s:\t%d\n", t, count)
+		_, _ = fmt.Fprintf(w, "  %s:\t%d\n", t, count)
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
 	// Dates
 	if stats.DatabaseCreated != nil {
-		fmt.Fprintf(w, "Database created:\t%s\n", stats.DatabaseCreated.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(w, "Database created:\t%s\n", stats.DatabaseCreated.Format("2006-01-02 15:04:05"))
 	} else {
-		fmt.Fprintf(w, "Database created:\t-\n")
+		_, _ = fmt.Fprintf(w, "Database created:\t-\n")
 	}
 
 	if stats.LastRecordDate != nil {
-		fmt.Fprintf(w, "Last record:\t%s\n", stats.LastRecordDate.Format("2006-01-02 15:04:05"))
+		_, _ = fmt.Fprintf(w, "Last record:\t%s\n", stats.LastRecordDate.Format("2006-01-02 15:04:05"))
 	} else {
-		fmt.Fprintf(w, "Last record:\t-\n")
+		_, _ = fmt.Fprintf(w, "Last record:\t-\n")
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 
 	// Storage info
-	fmt.Fprintf(w, "Storage mode:\t%s\n", stats.StorageMode)
-	fmt.Fprintf(w, "Storage path:\t%s\n", stats.StoragePath)
+	_, _ = fmt.Fprintf(w, "Storage mode:\t%s\n", stats.StorageMode)
+	_, _ = fmt.Fprintf(w, "Storage path:\t%s\n", stats.StoragePath)
 
 	// Check if storage file exists
 	if _, err := os.Stat(stats.StoragePath); err == nil {
 		info, err := os.Stat(stats.StoragePath)
 		if err == nil {
-			fmt.Fprintf(w, "Storage file modified:\t%s\n", info.ModTime().Format("2006-01-02 15:04:05"))
+			_, _ = fmt.Fprintf(w, "Storage file modified:\t%s\n", info.ModTime().Format("2006-01-02 15:04:05"))
 		}
+	}
+	_, _ = fmt.Fprintln(w)
+
+	// Config info
+	if stats.ConfigFile != "" {
+		_, _ = fmt.Fprintf(w, "Config file:\t%s\n", stats.ConfigFile)
+	} else {
+		_, _ = fmt.Fprintf(w, "Config file:\t(using defaults)\n")
 	}
 
 	_ = w.Flush()

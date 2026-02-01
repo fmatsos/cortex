@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable Markdown Templates**
+  - Customizable export templates for memories and synthesis documents
+  - JSON schema for template configuration validation
+  - Support for Go template syntax with variables and functions
+  - Template configuration in YAML or JSON format
+
+- **Template Management Commands**
+  - `cortex config schema markdown` - Display JSON schema for templates
+  - `cortex config schema markdown -o <file>` - Export schema to file
+  - `cortex config template validate <file>` - Validate custom template files
+
+- **Configuration Enhancements**
+  - `-c` flag now properly loads custom configuration files
+  - `cortex stats` shows which config file is loaded
+  - All commands respect custom config file settings
+
+- **External JSON Schemas**
+  - MCP tool schemas embedded at compile time
+  - CLI output schemas for structured responses
+  - Template schemas with Go embed directive
+
+### Changed
+
+- Updated golangci-lint configuration to v2 format
+- Improved error handling with errcheck compliance
+
 ## [1.0.0] - 2024-01-31
 
 ### Added

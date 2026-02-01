@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
@@ -62,8 +61,8 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid format: %s (must be json or markdown)", exportFormat)
 	}
 
-	// Initialize storage
-	storageBackend, err := storage.NewGobStorage(".local/share/cortex-ai")
+	// Initialize storage from config
+	storageBackend, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -164,8 +163,8 @@ func exportAllMemories(ctx context.Context, store storage.Storage) error {
 }
 
 func exportSynthesis(ctx context.Context, store storage.Storage) error {
-	// Initialize embedder for search
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
+	// Initialize embedder from config for search
+	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}

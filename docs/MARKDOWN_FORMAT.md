@@ -492,7 +492,107 @@ created_at: 2024-01-10T14:22:00Z
 
 ---
 
+## Customizing Export Templates
+
+Markdown export templates can be customized via the configuration file. This allows you to control the structure and content of exported files.
+
+### Getting the JSON Schema
+
+Export the template schema for reference:
+
+```bash
+cortex config schema markdown -o markdown-template.schema.json
+```
+
+### Creating a Custom Template
+
+Create a YAML or JSON file with your template configuration:
+
+```yaml
+# my-template.yaml
+memory:
+  frontmatter:
+    include_id: false
+    include_dates: true
+    include_metadata: false
+    date_format: "2006-01-02"
+  body: "## Content\n\n{{.Content}}"
+
+synthesis:
+  header: "# {{.Intent | title}}\n\nFound {{len .Results}} relevant memories."
+  summary_section:
+    title: "## Overview"
+    content: "Key findings from the knowledge base:"
+  learnings_section:
+    title: "## Details"
+    item_template: "### {{.Title}}\n\nRelevance: {{printf \"%.0f\" .Score}}%\n\n{{.Preview}}"
+    content_preview_length: 300
+  footer: "---\n\n*Exported from Cortex AI*"
+```
+
+### Validating Templates
+
+Before using a custom template, validate it:
+
+```bash
+cortex config template validate my-template.yaml
+```
+
+The validator checks:
+- JSON/YAML syntax
+- Schema compliance
+- Go template syntax
+- Value constraints
+
+### Using Custom Templates
+
+Add the template configuration to your config file:
+
+```yaml
+# .ai/cortex/config.yaml
+storage:
+  path: .ai/cortex
+
+templates:
+  markdown:
+    synthesis:
+      header: "# {{.Intent | title}} Report"
+      learnings_section:
+        content_preview_length: 200
+```
+
+### Template Variables Reference
+
+**Memory Export:**
+| Variable | Description |
+|----------|-------------|
+| `{{.Content}}` | Full memory content |
+| `{{.Title}}` | Memory title |
+| `{{.Types}}` | Array of types |
+| `{{.Tags}}` | Array of tags |
+| `{{.CreatedAt}}` | Creation timestamp |
+| `{{.UpdatedAt}}` | Update timestamp |
+
+**Synthesis Export:**
+| Variable | Context | Description |
+|----------|---------|-------------|
+| `{{.Intent}}` | Header | Search query |
+| `{{len .Results}}` | Header | Result count |
+| `{{.Title}}` | Item | Memory title |
+| `{{.Score}}` | Item | Similarity (0-1) |
+| `{{.Preview}}` | Item | Content preview |
+
+**Template Functions:**
+| Function | Description | Example |
+|----------|-------------|---------|
+| `title` | Title Case | `{{.Intent \| title}}` |
+| `printf` | Format string | `{{printf "%.2f" .Score}}` |
+| `len` | Array length | `{{len .Results}}` |
+
+---
+
 ## Related Documentation
 
 - [MEMORY_MODEL.md](./MEMORY_MODEL.md) - Memory structure and fields
 - [CLI_REFERENCE.md](./CLI_REFERENCE.md) - Import/export commands
+- [CONFIGURATION.md](./CONFIGURATION.md) - Full configuration reference
