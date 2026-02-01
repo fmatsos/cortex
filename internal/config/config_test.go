@@ -235,10 +235,10 @@ func TestWriteDefaultConfig(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Override XDG_CONFIG_HOME to use temp dir
-	oldXDG := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
-	defer os.Setenv("XDG_CONFIG_HOME", oldXDG)
+	// Override CORTEX_BASE_PATH to use temp dir
+	oldBasePath := os.Getenv("CORTEX_BASE_PATH")
+	os.Setenv("CORTEX_BASE_PATH", tmpDir)
+	defer os.Setenv("CORTEX_BASE_PATH", oldBasePath)
 
 	// Write default config
 	err = WriteDefaultConfig()
@@ -247,7 +247,7 @@ func TestWriteDefaultConfig(t *testing.T) {
 	}
 
 	// Verify file exists
-	configFile := filepath.Join(tmpDir, "cortex-ai", "config.yaml")
+	configFile := filepath.Join(tmpDir, "config.yaml")
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		t.Errorf("config file not created at %s", configFile)
 	}

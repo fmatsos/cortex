@@ -23,6 +23,7 @@ type Config struct {
 type StorageConfig struct {
 	Backend string `mapstructure:"backend"` // gob | sqlite
 	Path    string `mapstructure:"path"`    // data directory path
+	Mode    string `mapstructure:"mode"`    // single | multi (single file vs one file per memory)
 }
 
 // EmbeddingsConfig contains embedding provider configuration
@@ -52,6 +53,7 @@ func DefaultConfig() *Config {
 		Storage: StorageConfig{
 			Backend: "gob",
 			Path:    defaultDataPath(),
+			Mode:    "single",
 		},
 		Embeddings: EmbeddingsConfig{
 			Provider: "ollama",
@@ -71,36 +73,24 @@ func DefaultConfig() *Config {
 	}
 }
 
+// defaultBasePath returns the default base directory for all Cortex data
+// Uses .ai/cortex in the current directory (project-local storage)
+// Can be overridden via CORTEX_BASE_PATH environment variable
+func defaultBasePath() string {
+	if basePath := os.Getenv("CORTEX_BASE_PATH"); basePath != "" {
+		return basePath
+	}
+	return filepath.Join(".ai", "cortex")
+}
+
 // defaultDataPath returns the default data directory path
 func defaultDataPath() string {
-	// Check XDG_DATA_HOME first
-	if xdgData := os.Getenv("XDG_DATA_HOME"); xdgData != "" {
-		return filepath.Join(xdgData, "cortex-ai")
-	}
-
-	// Fall back to ~/.local/share
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".local/share/cortex-ai"
-	}
-
-	return filepath.Join(home, ".local", "share", "cortex-ai")
+	return defaultBasePath()
 }
 
 // defaultConfigPath returns the default config directory path
 func defaultConfigPath() string {
-	// Check XDG_CONFIG_HOME first
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return filepath.Join(xdgConfig, "cortex-ai")
-	}
-
-	// Fall back to ~/.config
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ".config/cortex-ai"
-	}
-
-	return filepath.Join(home, ".config", "cortex-ai")
+	return defaultBasePath()
 }
 
 // ConfigFilePath returns the path to the config file
@@ -139,8 +129,8 @@ func (m *Manager) Load() (*Config, error) {
 	if m.cfgFile != "" {
 		m.v.SetConfigFile(m.cfgFile)
 	} else {
-		m.v.AddConfigPath(defaultConfigPath())
-		m.v.AddConfigPath(".")
+		m.v.AddConfigPath(defaultConfigPath()) // .ai/cortex
+		m.v.AddConfigPath(".")                 // current directory
 	}
 
 	// Set up environment variable binding
@@ -175,6 +165,7 @@ func (m *Manager) bindEnvVars() {
 	// Storage
 	_ = m.v.BindEnv("storage.backend", "CORTEX_STORAGE_BACKEND")
 	_ = m.v.BindEnv("storage.path", "CORTEX_STORAGE_PATH")
+	_ = m.v.BindEnv("storage.mode", "CORTEX_STORAGE_MODE")
 
 	// Embeddings
 	_ = m.v.BindEnv("embeddings.provider", "CORTEX_EMBEDDINGS_PROVIDER")
@@ -199,6 +190,7 @@ func (m *Manager) setDefaults() {
 	// Storage defaults
 	m.v.SetDefault("storage.backend", defaults.Storage.Backend)
 	m.v.SetDefault("storage.path", defaults.Storage.Path)
+	m.v.SetDefault("storage.mode", defaults.Storage.Mode)
 
 	// Embeddings defaults
 	m.v.SetDefault("embeddings.provider", defaults.Embeddings.Provider)
@@ -290,7 +282,8 @@ func WriteDefaultConfig() error {
 
 storage:
   backend: gob                              # gob | sqlite
-  path: ~/.local/share/cortex-ai
+  path: .ai/cortex                          # project-local storage
+  mode: single                              # single | multi (single file vs one file per memory)
 
 embeddings:
   provider: ollama

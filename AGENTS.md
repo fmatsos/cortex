@@ -222,8 +222,9 @@ func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error)
 3. Call Ollama API for embedding
 4. Normalize vector to unit length
 5. Generate UUID
-6. Save memory file (uuid.gob)
-7. Update vector index (index.gob)
+6. Save memory (mode-dependent):
+   - **single**: Add to in-memory store, persist to `cortex.gob`
+   - **multi**: Write `{uuid}.gob` file, update `index.gob`
 
 ### Search Memory
 
@@ -238,20 +239,30 @@ func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error)
 
 ## File Locations
 
-### Runtime Data
+All Cortex files are stored in `.ai/cortex/` (project-local by default):
 
 ```
-~/.local/share/cortex-ai/
-├── memories/
-│   ├── <uuid-1>.gob
-│   └── <uuid-2>.gob
-└── index.gob
+.ai/cortex/
+├── config.yaml         # Configuration file
+├── cortex.gob          # Single mode: all memories + index
+└── memories/           # Multi mode: individual files
+    ├── <uuid-1>.gob
+    └── index.gob
 ```
 
-### Configuration
+### Storage Modes
 
-```
-~/.config/cortex-ai/config.yaml
+Configurable via `storage.mode` in the config file:
+
+- **single** (default): All memories in one `cortex.gob` file. Best for solo developers.
+- **multi**: One `{uuid}.gob` file per memory + `index.gob`. Best for team sharing via version control.
+
+### Environment Variable
+
+Override the base path with `CORTEX_BASE_PATH`:
+
+```bash
+export CORTEX_BASE_PATH=/custom/path
 ```
 
 ---
