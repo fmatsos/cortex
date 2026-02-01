@@ -55,29 +55,56 @@ Examples:
 
 var configSchemaCmd = &cobra.Command{
 	Use:   "schema [type]",
-	Short: "Show JSON schema for configuration templates",
-	Long: `Display the JSON schema for configuration templates.
+	Short: "Show or export JSON schema for configuration templates",
+	Long: `Display or export the JSON schema for configuration templates.
 
 Available schemas:
   markdown   - Markdown export template schema
 
 Examples:
-  cortex config schema markdown   # Show Markdown template schema`,
+  cortex config schema markdown              # Show Markdown template schema
+  cortex config schema markdown -o schema.json  # Export schema to file`,
 	Args: cobra.ExactArgs(1),
 	RunE: runConfigSchema,
 }
 
+var configTemplateCmd = &cobra.Command{
+	Use:   "template",
+	Short: "Template management commands",
+	Long:  `Commands for managing and validating configuration templates.`,
+}
+
+var configTemplateValidateCmd = &cobra.Command{
+	Use:   "validate <file>",
+	Short: "Validate a custom template configuration file",
+	Long: `Validate a custom Markdown template configuration file against the schema.
+
+Supports JSON (.json) and YAML (.yaml, .yml) files.
+
+Examples:
+  cortex config template validate my-template.json
+  cortex config template validate my-template.yaml`,
+	Args: cobra.ExactArgs(1),
+	RunE: runConfigTemplateValidate,
+}
+
 var (
 	configOutputFormat string
+	schemaOutputFile   string
 )
 
 func init() {
 	configCmd.Flags().StringVar(&configOutputFormat, "output", "yaml", "Output format (yaml|json|text)")
 
+	configSchemaCmd.Flags().StringVarP(&schemaOutputFile, "output", "o", "", "Export schema to file")
+
+	configTemplateCmd.AddCommand(configTemplateValidateCmd)
+
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configPathCmd)
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSchemaCmd)
+	configCmd.AddCommand(configTemplateCmd)
 
 	rootCmd.AddCommand(configCmd)
 }
@@ -198,16 +225,54 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 func runConfigSchema(cmd *cobra.Command, args []string) error {
 	schemaType := args[0]
 
+	var data []byte
+	var err error
+
 	switch schemaType {
 	case "markdown":
-		data, err := schemas.LoadTemplateSchema(schemas.MarkdownTemplateSchemaFile)
+		data, err = schemas.LoadTemplateSchema(schemas.MarkdownTemplateSchemaFile)
 		if err != nil {
 			return fmt.Errorf("failed to load markdown template schema: %w", err)
 		}
-		fmt.Println(string(data))
 	default:
 		return fmt.Errorf("unknown schema type: %s (available: markdown)", schemaType)
 	}
 
+	// Export to file if output flag is set
+	if schemaOutputFile != "" {
+		if err := os.WriteFile(schemaOutputFile, data, 0644); err != nil {
+			return fmt.Errorf("failed to write schema to file: %w", err)
+		}
+		fmt.Printf("Schema exported to: %s\n", schemaOutputFile)
+		return nil
+	}
+
+	fmt.Println(string(data))
 	return nil
+}
+
+func runConfigTemplateValidate(cmd *cobra.Command, args []string) error {
+	filePath := args[0]
+
+	result, err := schemas.ValidateMarkdownTemplateFile(filePath)
+	if err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	if result.Valid {
+		fmt.Printf("Template file is valid: %s\n", filePath)
+		return nil
+	}
+
+	fmt.Printf("Template file is invalid: %s\n\n", filePath)
+	fmt.Println("Errors:")
+	for _, e := range result.Errors {
+		if e.Field != "" {
+			fmt.Printf("  - %s: %s\n", e.Field, e.Message)
+		} else {
+			fmt.Printf("  - %s\n", e.Message)
+		}
+	}
+
+	return fmt.Errorf("validation failed with %d error(s)", len(result.Errors))
 }
