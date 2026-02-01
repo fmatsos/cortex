@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SearchOutput",
+  "description": "Output schema for cortex search command",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Memory UUID"
+      },
+      "title": {
+        "type": "string",
+        "description": "Memory title"
+      },
+      "types": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["solution", "issue", "analysis", "rule", "any"]
+        },
+        "description": "Memory types"
+      },
+      "score": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Similarity score"
+      }
+    },
+    "required": ["id", "title", "types", "score"]
+  }
+}

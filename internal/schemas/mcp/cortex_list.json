@@ -1,0 +1,19 @@
+{
+  "name": "cortex_list",
+  "description": "List all memories",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "description": "Filter by memory type",
+        "enum": ["solution", "issue", "analysis", "rule", "any"]
+      },
+      "include_obsolete": {
+        "type": "boolean",
+        "description": "Include obsolete memories",
+        "default": false
+      }
+    }
+  }
+}

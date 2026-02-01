@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExportOutput",
+  "description": "Output schema for cortex export command",
+  "oneOf": [
+    {
+      "title": "SingleExportOutput",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Export file path"
+        },
+        "id": {
+          "type": "string",
+          "description": "Memory ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Memory title"
+        },
+        "success": {
+          "type": "boolean",
+          "description": "Export success status"
+        }
+      },
+      "required": ["path", "id", "title", "success"]
+    },
+    {
+      "title": "BatchExportOutput",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of exported memories"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Export file paths"
+        }
+      },
+      "required": ["count", "paths"]
+    },
+    {
+      "title": "SynthesisExportOutput",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Synthesis file path"
+        },
+        "intent": {
+          "type": "string",
+          "description": "Synthesis intent/query"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of source memories"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              }
+            },
+            "required": ["id", "title", "score"]
+          },
+          "description": "Source memories"
+        }
+      },
+      "required": ["path", "intent", "count", "sources"]
+    }
+  ]
+}

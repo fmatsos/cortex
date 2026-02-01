@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/spf13/cobra"
 )
@@ -82,16 +83,16 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if searchJSON {
-		var jsonResults []map[string]interface{}
-		for _, result := range results {
-			jsonResults = append(jsonResults, map[string]interface{}{
-				"id":    result.Memory.ID,
-				"title": result.Memory.Title,
-				"types": result.Memory.Types,
-				"score": result.Score,
-			})
+		items := make([]output.SearchItem, len(results))
+		for i, result := range results {
+			items[i] = output.SearchItem{
+				ID:    result.Memory.ID,
+				Title: result.Memory.Title,
+				Types: result.Memory.Types,
+				Score: result.Score,
+			}
 		}
-		jsonBytes, _ := json.MarshalIndent(jsonResults, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(items, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		if len(results) == 0 {

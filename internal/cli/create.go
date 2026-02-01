@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/spf13/cobra"
 )
@@ -87,13 +88,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if createOutput == "json" {
-		output := map[string]interface{}{
-			"id":      m.ID,
-			"title":   m.Title,
-			"types":   m.Types,
-			"created": m.CreatedAt,
+		out := output.CreateOutput{
+			ID:      m.ID,
+			Title:   m.Title,
+			Types:   m.Types,
+			Created: m.CreatedAt,
 		}
-		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		fmt.Printf("Memory created: %s\n", m.ID)

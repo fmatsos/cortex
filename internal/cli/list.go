@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/spf13/cobra"
 )
@@ -78,17 +79,17 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if listJSON {
-		var jsonMemories []map[string]interface{}
-		for _, m := range memories {
-			jsonMemories = append(jsonMemories, map[string]interface{}{
-				"id":       m.ID,
-				"title":    m.Title,
-				"types":    m.Types,
-				"created":  m.CreatedAt,
-				"obsolete": m.Obsolete,
-			})
+		items := make([]output.ListItem, len(memories))
+		for i, m := range memories {
+			items[i] = output.ListItem{
+				ID:        m.ID,
+				Title:     m.Title,
+				Types:     m.Types,
+				CreatedAt: m.CreatedAt,
+				Obsolete:  m.Obsolete,
+			}
 		}
-		jsonBytes, _ := json.MarshalIndent(jsonMemories, "", "  ")
+		jsonBytes, _ := json.MarshalIndent(items, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
 		if len(memories) == 0 {

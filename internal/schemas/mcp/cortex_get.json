@@ -1,0 +1,14 @@
+{
+  "name": "cortex_get",
+  "description": "Get a memory by ID",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Memory ID"
+      }
+    },
+    "required": ["id"]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StatsOutput",
+  "description": "Output schema for cortex stats command",
+  "type": "object",
+  "properties": {
+    "total_memories": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of memories"
+    },
+    "memories_by_type": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "description": "Count of memories by type"
+    },
+    "total_chunks": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total vector chunks"
+    },
+    "database_created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Database creation date"
+    },
+    "last_record_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last record date"
+    },
+    "obsolete_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of obsolete memories"
+    },
+    "active_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of active memories"
+    },
+    "storage_mode": {
+      "type": "string",
+      "enum": ["single", "multi"],
+      "description": "Storage mode"
+    },
+    "storage_path": {
+      "type": "string",
+      "description": "Path to storage"
+    },
+    "config_file": {
+      "type": "string",
+      "description": "Path to config file"
+    }
+  },
+  "required": ["total_memories", "memories_by_type", "total_chunks", "obsolete_count", "active_count", "storage_mode", "storage_path"]
+}

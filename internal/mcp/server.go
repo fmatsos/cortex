@@ -10,6 +10,7 @@ import (
 
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 )
@@ -161,102 +162,48 @@ func (s *Server) handleInitialize(req *Request) *Response {
 	return NewResponse(req.ID, result)
 }
 
-// handleListTools returns available tools
+// handleListTools returns available tools loaded from embedded schemas
 func (s *Server) handleListTools(req *Request) *Response {
-	tools := []Tool{
-		{
-			Name:        "cortex_search",
-			Description: "Search memories using semantic similarity. Returns relevant memories based on the query.",
-			InputSchema: InputSchema{
-				Type: "object",
-				Properties: map[string]Property{
-					"query": {
-						Type:        "string",
-						Description: "The search query to find relevant memories",
-					},
-					"top_k": {
-						Type:        "integer",
-						Description: "Maximum number of results to return (default: 5)",
-						Default:     5,
-					},
-					"min_score": {
-						Type:        "number",
-						Description: "Minimum similarity score (0-1, default: 0.5)",
-						Default:     0.5,
-					},
-					"type": {
-						Type:        "string",
-						Description: "Filter by memory type",
-						Enum:        []string{"solution", "issue", "analysis", "rule", "any"},
-					},
-				},
-				Required: []string{"query"},
-			},
-		},
-		{
-			Name:        "cortex_create",
-			Description: "Create a new memory. Memories store solutions, issues, analyses, or rules for future reference.",
-			InputSchema: InputSchema{
-				Type: "object",
-				Properties: map[string]Property{
-					"title": {
-						Type:        "string",
-						Description: "Title of the memory",
-					},
-					"content": {
-						Type:        "string",
-						Description: "Content of the memory (markdown supported)",
-					},
-					"type": {
-						Type:        "string",
-						Description: "Type of memory",
-						Enum:        []string{"solution", "issue", "analysis", "rule", "any"},
-					},
-					"tags": {
-						Type:        "array",
-						Description: "Tags for categorization",
-						Items:       &Items{Type: "string"},
-					},
-				},
-				Required: []string{"title", "content", "type"},
-			},
-		},
-		{
-			Name:        "cortex_list",
-			Description: "List all memories, optionally filtered by type.",
-			InputSchema: InputSchema{
-				Type: "object",
-				Properties: map[string]Property{
-					"type": {
-						Type:        "string",
-						Description: "Filter by memory type",
-						Enum:        []string{"solution", "issue", "analysis", "rule", "any"},
-					},
-					"include_obsolete": {
-						Type:        "boolean",
-						Description: "Include obsolete memories (default: false)",
-						Default:     false,
-					},
-				},
-			},
-		},
-		{
-			Name:        "cortex_get",
-			Description: "Get a specific memory by ID.",
-			InputSchema: InputSchema{
-				Type: "object",
-				Properties: map[string]Property{
-					"id": {
-						Type:        "string",
-						Description: "The memory ID",
-					},
-				},
-				Required: []string{"id"},
-			},
-		},
+	tools := make([]Tool, 0, len(schemas.MCPToolNames))
+
+	for _, name := range schemas.MCPToolNames {
+		schema, err := schemas.LoadMCPToolSchema(name)
+		if err != nil {
+			s.logger.Printf("Failed to load schema for %s: %v", name, err)
+			continue
+		}
+
+		tool := Tool{
+			Name:        schema.Name,
+			Description: schema.Description,
+			InputSchema: convertInputSchema(schema.InputSchema),
+		}
+		tools = append(tools, tool)
 	}
 
 	return NewResponse(req.ID, ListToolsResult{Tools: tools})
+}
+
+// convertInputSchema converts schema types to MCP protocol types
+func convertInputSchema(s schemas.InputSchema) InputSchema {
+	props := make(map[string]Property)
+	for k, v := range s.Properties {
+		prop := Property{
+			Type:        v.Type,
+			Description: v.Description,
+			Enum:        v.Enum,
+			Default:     v.Default,
+		}
+		if v.Items != nil {
+			prop.Items = &Items{Type: v.Items.Type}
+		}
+		props[k] = prop
+	}
+	return InputSchema{
+		Type:       s.Type,
+		Properties: props,
+		Required:   s.Required,
+	}
 }
 
 // handleCallTool handles tool invocations
