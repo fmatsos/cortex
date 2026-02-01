@@ -100,8 +100,14 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 	// Create MCP server with transport
 	server := mcp.NewServer(transport)
 
+	// Initialize embedder from config
+	embedder, err := initEmbedder()
+	if err != nil {
+		return fmt.Errorf("failed to initialize embedder: %w", err)
+	}
+
 	// Initialize with storage path from config
-	if err := server.Initialize(cfg.Storage.Path); err != nil {
+	if err := server.Initialize(cfg.Storage.Path, embedder); err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer func() { _ = server.Close() }()

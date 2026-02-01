@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
@@ -43,19 +42,17 @@ func NewServerWithStdio(reader io.Reader, writer io.Writer) *Server {
 }
 
 // Initialize sets up the memory service
-func (s *Server) Initialize(storagePath string) error {
+func (s *Server) Initialize(storagePath string, embedder memory.Embedder) error {
+	if embedder == nil {
+		return fmt.Errorf("embedder is required")
+	}
+
 	// Initialize storage
 	store, err := storage.NewGobStorage(storagePath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	s.storage = store
-
-	// Initialize embedder
-	embedder, err := embeddings.NewOllamaEmbedder("", "nomic-embed-text", 0)
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
 
 	// Create service
 	s.service = memory.NewMemoryService(store, embedder)
