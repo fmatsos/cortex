@@ -1,6 +1,6 @@
-# Contributing to Cortex AI
+# Contributing to Cortex
 
-Thank you for your interest in contributing to Cortex AI! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to Cortex! This document provides guidelines and information for contributors.
 
 ## Table of Contents
 

@@ -1,6 +1,6 @@
-# Cortex AI - Development Guide
+# Cortex - Development Guide
 
-Guide for setting up the development environment and contributing to Cortex AI.
+Guide for setting up the development environment and contributing to Cortex.
 
 ## Table of Contents
 

@@ -9,7 +9,7 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
 
 # Default target
 help:
-	@echo "Cortex AI - CLI tool for persistent AI agent memory"
+	@echo "Cortex - CLI tool for persistent AI agent memory"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build       - Build the cortex binary"

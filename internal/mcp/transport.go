@@ -1,4 +1,4 @@
-// Package mcp implements the Model Context Protocol for Cortex AI
+// Package mcp implements the Model Context Protocol for Cortex
 package mcp
 
 import (

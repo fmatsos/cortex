@@ -1,6 +1,6 @@
-# Contributing to Cortex AI
+# Contributing to Cortex
 
-Thank you for your interest in contributing to Cortex AI! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Cortex! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -162,7 +162,7 @@ go test -bench=. -benchmem ./internal/storage/...
 
 When reporting issues, please include:
 
-1. Cortex AI version
+1. Cortex version
 2. Go version
 3. Operating system
 4. Steps to reproduce

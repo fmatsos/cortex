@@ -15,8 +15,8 @@ var (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "cortex",
-	Short: "Cortex AI - Persistent memory for AI coding agents",
-	Long: `Cortex AI is a CLI tool that provides persistent memory for AI coding agents.
+	Short: "Cortex - Persistent memory for AI coding agents",
+	Long: `Cortex is a CLI tool that provides persistent memory for AI coding agents.
 It allows storing, retrieving, and searching memories using semantic similarity.`,
 	Version: "0.0.1",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

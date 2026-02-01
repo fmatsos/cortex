@@ -1,10 +1,10 @@
 # Custom Template Examples
 
-This directory contains example custom templates for Cortex AI exports.
+This directory contains example custom templates for Cortex exports.
 
 ## Template Types
 
-Cortex AI supports custom templates for two export types:
+Cortex supports custom templates for two export types:
 
 1. **Memory Templates** - For exporting individual memories
 2. **Synthesis Templates** - For exporting synthesis documents from search results

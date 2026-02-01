@@ -9,7 +9,7 @@ import (
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|fish|powershell]",
 	Short: "Generate shell completion scripts",
-	Long: `Generate shell completion scripts for Cortex AI.
+	Long: `Generate shell completion scripts for Cortex.
 
 To load completions:
 

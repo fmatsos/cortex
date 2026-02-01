@@ -1,4 +1,4 @@
-# Cortex AI - Embeddings System Documentation
+# Cortex - Embeddings System Documentation
 
 Documentation for the embeddings system and vector generation.
 
@@ -124,7 +124,7 @@ dim := embedder.Dimension()
 
 ## Ollama Integration
 
-Cortex AI uses Ollama to provide local, privacy-preserving embeddings.
+Cortex uses Ollama to provide local, privacy-preserving embeddings.
 
 ### What is Ollama?
 
@@ -163,7 +163,7 @@ embeddings:
   timeout: 30s
 ```
 
-Cortex AI connects to Ollama via HTTP API:
+Cortex connects to Ollama via HTTP API:
 
 ```
 POST http://localhost:11434/api/embeddings

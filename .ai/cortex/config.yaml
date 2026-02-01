@@ -1,0 +1,18 @@
+storage:
+  backend: gob
+  path: .ai/cortex
+
+embeddings:
+  provider: ollama
+  model: nomic-embed-text-v2-moe
+  endpoint: http://localhost:11434
+  timeout: 30s
+
+search:
+  top_k: 5
+  min_score: 0.5
+  include_obsolete: false
+
+output:
+  format: text
+  colors: true

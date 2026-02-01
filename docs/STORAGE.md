@@ -1,4 +1,4 @@
-# Cortex AI - Storage System Documentation
+# Cortex - Storage System Documentation
 
 Documentation for the storage layer and different backend implementations.
 
@@ -17,7 +17,7 @@ Documentation for the storage layer and different backend implementations.
 
 ## Overview
 
-The storage layer is responsible for persisting memories and their vector embeddings to disk. Cortex AI uses a modular storage architecture that allows for different backend implementations.
+The storage layer is responsible for persisting memories and their vector embeddings to disk. Cortex uses a modular storage architecture that allows for different backend implementations.
 
 ### Current Backends
 

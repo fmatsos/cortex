@@ -1,4 +1,4 @@
-# GoReleaser configuration for Cortex AI
+# GoReleaser configuration for Cortex
 # See https://goreleaser.com for documentation
 
 version: 2
@@ -105,9 +105,9 @@ nfpms:
     package_name: cortex-ai
     builds:
       - cortex
-    vendor: Cortex AI
+    vendor: Cortex
     homepage: https://github.com/cortex-ai/cortex-ai
-    maintainer: Cortex AI Contributors
+    maintainer: Cortex Contributors
     description: CLI tool for persistent AI agent memory with semantic search
     license: MIT
     formats:

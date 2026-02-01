@@ -15,7 +15,7 @@ import (
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
-	Long: `View and manage Cortex AI configuration.
+	Long: `View and manage Cortex configuration.
 
 Without subcommands, displays the current configuration.
 

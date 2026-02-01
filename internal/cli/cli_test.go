@@ -106,6 +106,30 @@ func TestDeleteCommandValidation(t *testing.T) {
 	}
 }
 
+func TestGetCommandValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{
+			name:    "missing id",
+			args:    []string{"get"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rootCmd.SetArgs(tt.args)
+			err := rootCmd.Execute()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Execute() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestConfigCommand(t *testing.T) {
 	// Just verify the command exists and runs without error
 	rootCmd.SetArgs([]string{"config", "path"})

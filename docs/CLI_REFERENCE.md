@@ -1,6 +1,6 @@
-# Cortex AI - CLI Reference
+# Cortex - CLI Reference
 
-Complete reference for all Cortex AI command-line commands.
+Complete reference for all Cortex command-line commands.
 
 ## Table of Contents
 
@@ -156,7 +156,7 @@ cortex get <memory-id> [flags]
 - Memory ID (UUID)
 
 **Optional Flags:**
-- `--format <format>` - Output format: text, json (default: text)
+- `--json` - Output as JSON
 
 **Examples:**
 ```bash
@@ -164,7 +164,7 @@ cortex get <memory-id> [flags]
 cortex get a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
 # JSON output
-cortex get a1b2c3d4-e5f6-7890-abcd-ef1234567890 --format json
+cortex get a1b2c3d4-e5f6-7890-abcd-ef1234567890 --json
 ```
 
 ---

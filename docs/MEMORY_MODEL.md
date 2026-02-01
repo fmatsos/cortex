@@ -1,4 +1,4 @@
-# Cortex AI - Memory Model
+# Cortex - Memory Model
 
 Detailed documentation of the Memory structure, types, and validation rules.
 
@@ -15,7 +15,7 @@ Detailed documentation of the Memory structure, types, and validation rules.
 
 ## Memory Structure
 
-A Memory is the core unit of information in Cortex AI. It represents a single piece of structured knowledge.
+A Memory is the core unit of information in Cortex. It represents a single piece of structured knowledge.
 
 ```go
 type Memory struct {

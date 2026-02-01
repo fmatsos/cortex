@@ -1,4 +1,4 @@
-# Cortex AI Docker Image
+# Cortex Docker Image
 # Multi-stage build for minimal image size
 
 FROM golang:1.21-alpine AS builder

@@ -1,6 +1,6 @@
-# Cortex AI - Architecture Documentation
+# Cortex - Architecture Documentation
 
-This document provides a comprehensive overview of the Cortex AI architecture, including system design, component interactions, and data flows.
+This document provides a comprehensive overview of the Cortex architecture, including system design, component interactions, and data flows.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ This document provides a comprehensive overview of the Cortex AI architecture, i
 
 ## System Overview
 
-Cortex AI is a CLI tool that provides **persistent semantic memory** for AI coding agents. It enables LLMs to recall past solutions, problems, and project-specific rules across sessions using vector embeddings and local storage.
+Cortex is a CLI tool that provides **persistent semantic memory** for AI coding agents. It enables LLMs to recall past solutions, problems, and project-specific rules across sessions using vector embeddings and local storage.
 
 ### Key Characteristics
 

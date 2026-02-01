@@ -1,6 +1,6 @@
-# Cortex AI - Custom Templates Guide
+# Cortex - Custom Templates Guide
 
-Complete guide for customizing Cortex AI markdown exports using templates.
+Complete guide for customizing Cortex markdown exports using templates.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Complete guide for customizing Cortex AI markdown exports using templates.
 
 ## Overview
 
-Cortex AI allows you to customize the markdown output of memory and synthesis exports using Go templates. Templates can be configured in three ways:
+Cortex allows you to customize the markdown output of memory and synthesis exports using Go templates. Templates can be configured in three ways:
 
 1. **Config File** - Set defaults in your `config.yaml`
 2. **Command Line** - Override with `--memory-template` or `--synthesis-template` flags

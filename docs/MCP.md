@@ -1,10 +1,10 @@
-# Cortex AI - MCP Integration
+# Cortex - MCP Integration
 
-This document describes how to integrate Cortex AI with MCP-compatible tools like Claude Code and Cursor.
+This document describes how to integrate Cortex with MCP-compatible tools like Claude Code and Cursor.
 
 ## Overview
 
-Cortex AI provides an MCP (Model Context Protocol) server that exposes memory operations as tools. This allows AI assistants to:
+Cortex provides an MCP (Model Context Protocol) server that exposes memory operations as tools. This allows AI assistants to:
 
 - Search for relevant memories semantically
 - Create new memories to store solutions, issues, and analyses
@@ -12,7 +12,7 @@ Cortex AI provides an MCP (Model Context Protocol) server that exposes memory op
 
 ## Installation
 
-Build and install Cortex AI:
+Build and install Cortex:
 
 ```bash
 make build

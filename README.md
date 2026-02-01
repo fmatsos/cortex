@@ -1,6 +1,6 @@
-# Cortex AI
+# Cortex
 
-**Cortex AI** is a CLI tool written in Go that provides persistent semantic memory for AI coding assistants. It enables LLMs to recall past problems, solutions, and project-specific rules across sessions using vector embeddings from Ollama.
+**Cortex** is a CLI tool written in Go that provides persistent semantic memory for AI coding assistants. It enables LLMs to recall past problems, solutions, and project-specific rules across sessions using vector embeddings from Ollama.
 
 ```mermaid
 graph LR
@@ -9,7 +9,7 @@ graph LR
         Agent["AI Assistant"]
     end
 
-    subgraph "Cortex AI"
+    subgraph "Cortex"
         CLI["cortex CLI"]
         MCP["MCP Server"]
         Store["Memory Store"]
@@ -153,7 +153,7 @@ See [docs/MARKDOWN_FORMAT.md](docs/MARKDOWN_FORMAT.md) for format details and ex
 
 ## MCP Integration
 
-Cortex AI works with Claude Code, Cursor, and other MCP-compatible editors.
+Cortex works with Claude Code, Cursor, and other MCP-compatible editors.
 
 ```bash
 cortex start-mcp-server
@@ -179,7 +179,7 @@ Default settings work out-of-the-box with Ollama. See [docs/CONFIGURATION.md](do
 
 ## Storage
 
-Cortex AI stores memories locally at `~/.local/share/cortex-ai/` using Go's Gob encoding. All data stays on your machine—no external services.
+Cortex stores memories locally at `~/.local/share/cortex-ai/` using Go's Gob encoding. All data stays on your machine—no external services.
 
 ---
 
@@ -193,7 +193,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentati
 
 ## Privacy & Local-First
 
-Cortex AI runs **entirely locally**:
+Cortex runs **entirely locally**:
 
 - **Ollama** for embeddings - No data sent to external APIs
 - **Local storage** - All memories stored on your machine

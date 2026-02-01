@@ -1,367 +1,146 @@
-# Cortex AI - AI Agent Guidelines
+# Cortex - Agent Notes
 
-This document provides essential information for AI coding assistants (Claude Code, Cursor, Windsurf, etc.) working on the Cortex AI codebase.
+This file is for agentic coding tools working in this repo. It summarizes how to build/test/lint and the local code style conventions.
 
-## Project Overview
+## Project Snapshot
 
-**Cortex AI** is a Go CLI tool that provides persistent semantic memory for AI coding agents. It uses vector embeddings via Ollama for semantic search and stores memories locally using Gob encoding.
+- Module: `github.com/cortex-ai/cortex-ai`
+- Language: Go (Go 1.24+)
+- CLI: Cobra
+- Config: Viper
+- Embeddings: Ollama (local)
+- Storage: Gob files
 
-```
-Module:     github.com/cortex-ai/cortex-ai
-Language:   Go 1.24+
-CLI:        Cobra
-Config:     Viper
-Embeddings: Ollama (local)
-Storage:    Gob files
-```
+Key locations
 
----
+- `cmd/cortex/main.go` entry point
+- `internal/cli/` Cobra commands
+- `internal/memory/` domain model + service
+- `internal/storage/` storage interface + Gob implementation
+- `internal/embeddings/` embedder interface + Ollama client
+- `internal/search/` cosine similarity
+- `internal/config/` configuration
+- `internal/mcp/` MCP server (JSON-RPC 2.0)
+- `pkg/` helpers (markdown, json)
 
-## Quick Reference
+## Build / Lint / Test
 
-### Build Commands
-
-```bash
-make build          # Build to ./bin/cortex
-make install        # Install to $GOBIN
-make test           # Run tests
-make test-race      # Run with race detector
-make lint           # Run golangci-lint
-make clean          # Remove artifacts
-make deps           # Download dependencies
-```
-
-### Project Structure
-
-```
-cortex-ai/
-├── cmd/cortex/main.go           # Entry point
-├── internal/
-│   ├── cli/                     # Cobra commands (create, search, list, etc.)
-│   ├── memory/                  # Domain model & service
-│   ├── storage/                 # Storage interface & Gob implementation
-│   ├── embeddings/              # Embedder interface & Ollama client
-│   ├── search/                  # Cosine similarity
-│   ├── config/                  # Viper configuration
-│   └── mcp/                     # MCP server (JSON-RPC 2.0)
-├── pkg/
-│   ├── markdown/                # Markdown import/export with YAML frontmatter
-│   └── json/                    # JSON format handling
-└── docs/                        # Documentation
-```
-
----
-
-## Architecture Overview
-
-```mermaid
-graph TB
-    subgraph "CLI Layer"
-        CLI["cortex CLI"]
-        MCP["MCP Server"]
-    end
-
-    subgraph "Service Layer"
-        Service["Memory Service"]
-    end
-
-    subgraph "Infrastructure"
-        Embedder["Ollama Embedder"]
-        Storage["Gob Storage"]
-        Search["Cosine Search"]
-    end
-
-    CLI --> Service
-    MCP --> Service
-    Service --> Embedder
-    Service --> Storage
-    Service --> Search
-```
-
----
-
-## Key Types
-
-### Memory
-
-```go
-// internal/memory/memory.go
-type Memory struct {
-    ID        string            // UUID
-    Title     string            // Required
-    Content   string            // Required
-    Types     []MemoryType      // Required: solution, issue, analysis, rule, any
-    Tags      []string          // Optional
-    Embedding []float64         // Vector (hidden from JSON)
-    CreatedAt time.Time
-    UpdatedAt time.Time
-    Metadata  map[string]string
-    Obsolete  bool              // Soft delete flag
-}
-
-type MemoryType string
-const (
-    MemoryTypeSolution MemoryType = "solution"
-    MemoryTypeIssue    MemoryType = "issue"
-    MemoryTypeAnalysis MemoryType = "analysis"
-    MemoryTypeRule     MemoryType = "rule"
-    MemoryTypeAny      MemoryType = "any"
-)
-```
-
-### Service Interface
-
-```go
-// internal/memory/service.go
-type Service interface {
-    Create(ctx context.Context, input CreateInput) (*Memory, error)
-    Search(ctx context.Context, query string, opts SearchOptions) ([]*SearchResult, error)
-    List(ctx context.Context, opts ListOptions) ([]*Memory, error)
-    Get(ctx context.Context, id string) (*Memory, error)
-    Delete(ctx context.Context, id string) error
-    MarkObsolete(ctx context.Context, id string) error
-}
-```
-
-### Storage Interface
-
-```go
-// internal/storage/storage.go
-type Storage interface {
-    Save(ctx context.Context, memory *memory.Memory) error
-    Get(ctx context.Context, id string) (*memory.Memory, error)
-    List(ctx context.Context, opts ListOptions) ([]*memory.Memory, error)
-    Delete(ctx context.Context, id string) error
-    Update(ctx context.Context, memory *memory.Memory) error
-    SearchByVector(ctx context.Context, vector []float64, topK int) ([]*VectorMatch, error)
-    Close() error
-}
-```
-
-### Embedder Interface
-
-```go
-// internal/embeddings/embedder.go
-type Embedder interface {
-    Embed(ctx context.Context, text string) ([]float64, error)
-    EmbedBatch(ctx context.Context, texts []string) ([][]float64, error)
-    Dimension() int
-}
-```
-
----
-
-## CLI Commands
-
-| Command | Purpose | Key File |
-|---------|---------|----------|
-| `create` | Create memory | `internal/cli/create.go` |
-| `search` | Semantic search | `internal/cli/search.go` |
-| `list` | List memories | `internal/cli/list.go` |
-| `get` | Get by ID | `internal/cli/list.go` |
-| `delete` | Delete memory | `internal/cli/delete.go` |
-| `mark-obsolete` | Soft delete | `internal/cli/delete.go` |
-| `export` | Export to Markdown | `internal/cli/export.go` |
-| `import` | Import from Markdown | `internal/cli/import.go` |
-| `config` | Manage config | `internal/cli/config.go` |
-| `start-mcp-server` | MCP server | `internal/cli/mcp.go` |
-| `completion` | Shell completions | `internal/cli/completion.go` |
-
----
-
-## Important Patterns
-
-### Dependency Injection
-
-Services use constructor-based DI:
-
-```go
-func NewService(storage Storage, embedder Embedder) *DefaultService {
-    return &DefaultService{
-        storage:  storage,
-        embedder: embedder,
-    }
-}
-```
-
-### Error Handling
-
-Wrap errors with context:
-
-```go
-if err != nil {
-    return fmt.Errorf("failed to save memory: %w", err)
-}
-```
-
-### Thread Safety
-
-Storage and index use `sync.RWMutex`:
-
-```go
-type GobStorage struct {
-    mu sync.RWMutex
-    // ...
-}
-
-func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-    // ...
-}
-```
-
----
-
-## Data Flow
-
-### Create Memory
-
-1. Validate input (title, type, content required)
-2. Prepare text: combine title + content + tags
-3. Call Ollama API for embedding
-4. Normalize vector to unit length
-5. Generate UUID
-6. Save memory (mode-dependent):
-   - **single**: Add to in-memory store, persist to `cortex.gob`
-   - **multi**: Write `{uuid}.gob` file, update `index.gob`
-
-### Search Memory
-
-1. Embed query via Ollama
-2. Normalize query vector
-3. For each stored vector: compute cosine similarity
-4. Sort by score, take top K
-5. Filter by min_score, type, obsolete flag
-6. Load and return full Memory objects
-
----
-
-## File Locations
-
-All Cortex files are stored in `.ai/cortex/` (project-local by default):
-
-```
-.ai/cortex/
-├── config.yaml         # Configuration file
-├── cortex.gob          # Single mode: all memories + index
-└── memories/           # Multi mode: individual files
-    ├── <uuid-1>.gob
-    └── index.gob
-```
-
-### Storage Modes
-
-Configurable via `storage.mode` in the config file:
-
-- **single** (default): All memories in one `cortex.gob` file. Best for solo developers.
-- **multi**: One `{uuid}.gob` file per memory + `index.gob`. Best for team sharing via version control.
-
-### Environment Variable
-
-Override the base path with `CORTEX_BASE_PATH`:
+From repo root:
 
 ```bash
-export CORTEX_BASE_PATH=/custom/path
+make build          # ./bin/cortex
+make install        # install to $GOBIN
+make test           # all tests (verbose + coverage)
+make test-race      # race detector
+make lint           # golangci-lint run ./...
+make fmt            # go fmt ./...
+make deps           # go mod download + tidy
+make clean          # remove build artifacts
 ```
 
----
-
-## Testing
-
-### Running Tests
+Run a single package:
 
 ```bash
-# All tests
-make test
-
-# Specific package
 go test ./internal/memory/...
-
-# With coverage
-go test -cover ./...
-
-# Benchmarks
-go test -bench=. ./internal/storage/...
+go test ./internal/storage/...
 ```
 
-### Test Files
+Run a single test (regex):
 
-Tests are colocated with source files:
-
-```
-internal/memory/
-├── memory.go
-├── memory_test.go
-├── service.go
-└── service_test.go
+```bash
+go test ./internal/memory -run TestCreate
+go test ./internal/storage -run "TestGobStorage/.*"
 ```
 
----
+Run a single test once (avoid cached results):
 
-## Common Tasks
+```bash
+go test ./internal/memory -run TestCreate -count=1
+```
 
-### Adding a CLI Command
+Benchmarks:
 
-1. Create `internal/cli/mycommand.go`
-2. Define Cobra command and flags
-3. Register with `rootCmd.AddCommand(myCmd)`
-4. Add tests
+```bash
+go test ./internal/storage -bench=. -count=1
+```
 
-### Adding a Storage Backend
+## Code Style Guidelines
 
-1. Implement `Storage` interface in `internal/storage/`
-2. Add factory function
-3. Add configuration options
-4. Add tests and benchmarks
+General
 
-### Adding an Embedding Provider
+- Follow Effective Go and standard library patterns.
+- Keep functions small and focused; prefer clear control flow over cleverness.
+- Keep exported APIs stable; add new helpers rather than changing call sites widely.
+- Use context-aware operations where IO or long work happens.
+- Avoid global state; prefer constructor-based dependency injection.
 
-1. Implement `Embedder` interface in `internal/embeddings/`
-2. Add configuration options
-3. Add tests
+Formatting
 
----
+- Use `gofmt` for all Go files; `make fmt` is available.
+- Keep lines reasonably short when it improves readability; avoid dense one-liners.
+
+Imports
+
+- Use standard Go import grouping: stdlib, blank line, third-party.
+- Avoid dot imports; avoid aliasing unless it resolves a conflict or improves clarity.
+- Prefer explicit package names over renaming to short aliases.
+
+Types and naming
+
+- Use Go naming conventions: `camelCase` for locals, `PascalCase` for exported.
+- Avoid stuttering in type names when package already provides context.
+- Prefer concrete types in structs; use interfaces at boundaries.
+- Use pointer receivers for methods that mutate state or to avoid large copies.
+- Use `time.Time` consistently; capture `time.Now()` once when needed.
+
+Error handling
+
+- Return early on error; avoid deep nesting.
+- Wrap errors with context using `fmt.Errorf("...: %w", err)`.
+- Error strings should be lowercase, no trailing punctuation.
+- Prefer typed errors or sentinel values only when callers need to branch on them.
+
+Logging and output
+
+- CLI commands should report user-facing errors at the command layer, not deep inside.
+- Avoid printing from library packages; return errors instead.
+
+Concurrency
+
+- Use `sync.RWMutex` or `sync.Mutex` consistently for shared state.
+- Keep critical sections minimal; lock ordering should be obvious.
+
+Testing
+
+- Tests are colocated with source files (`*_test.go`).
+- Prefer table-driven tests where multiple cases share structure.
+- Use `t.Helper()` in helper functions.
+- Name tests with behavior intent: `TestCreate_ValidInput`.
+
+## CLI and Configuration Patterns
+
+- Cobra commands live in `internal/cli/` and are registered in the root command.
+- Viper configuration is in `internal/config/`.
+- If you add flags, wire them to config where appropriate.
+
+## Data and Storage Notes
+
+- Storage files live under `.ai/cortex/` by default.
+- Storage mode is configured by `storage.mode` (single or multi).
+- Respect existing Gob serialization formats when changing structures.
 
 ## MCP Integration
 
-The MCP server (`internal/mcp/`) exposes tools for AI agents:
+- MCP server is implemented in `internal/mcp/` and exposes JSON-RPC tools.
+- Keep tool names stable; update docs if you add or rename tools.
 
-| Tool | Purpose |
-|------|---------|
-| `cortex_search` | Semantic search |
-| `cortex_create` | Create memory |
-| `cortex_list` | List memories |
-| `cortex_get` | Get by ID |
+## Repo Rules from Other Systems
 
-Protocol: JSON-RPC 2.0 over stdio
+- No `.cursor/rules/`, `.cursorrules`, or `.github/copilot-instructions.md` found in this repo at this time.
 
----
+## Useful Docs
 
-## Code Style
-
-- Follow [Effective Go](https://golang.org/doc/effective_go)
-- Use `gofmt` / `goimports`
-- Run `golangci-lint` before committing
-- Keep functions focused and testable
-- Document exported types and functions
-
----
-
-## External Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `github.com/spf13/cobra` | CLI framework |
-| `github.com/spf13/viper` | Configuration |
-| `github.com/google/uuid` | UUID generation |
-| `gopkg.in/yaml.v3` | YAML parsing |
-
----
-
-## Useful Links
-
-- [Architecture Documentation](docs/ARCHITECTURE.md)
-- [Configuration Reference](docs/CONFIGURATION.md)
-- [MCP Integration Guide](docs/MCP.md)
-- [Contributing Guidelines](docs/CONTRIBUTING.md)
+- `docs/ARCHITECTURE.md`
+- `docs/CONFIGURATION.md`
+- `docs/MCP.md`
+- `docs/CONTRIBUTING.md`

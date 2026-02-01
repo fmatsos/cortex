@@ -1,10 +1,10 @@
-# Cortex AI - Documentation Index
+# Cortex - Documentation Index
 
-Complete guide to all Cortex AI documentation.
+Complete guide to all Cortex documentation.
 
 ## Getting Started
 
-**New to Cortex AI?** Start here:
+**New to Cortex?** Start here:
 
 1. [README.md](../README.md) - Quick start and feature overview
 2. [CLI_REFERENCE.md](./CLI_REFERENCE.md) - Commands and usage
@@ -101,7 +101,7 @@ search:
 
 ### "I want to..."
 
-#### Use Cortex AI as a User
+#### Use Cortex as a User
 
 1. Start: [README.md](../README.md) quick start
 2. Learn commands: [CLI_REFERENCE.md](./CLI_REFERENCE.md)
@@ -122,20 +122,20 @@ search:
 2. Use commands: [CLI_REFERENCE.md](./CLI_REFERENCE.md) - import/export
 3. Solve issues: [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 
-#### Understand How Cortex AI Works
+#### Understand How Cortex Works
 
 1. Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
 2. Storage: [STORAGE.md](./STORAGE.md)
 3. Embeddings: [EMBEDDINGS.md](./EMBEDDINGS.md)
 
-#### Contribute or Extend Cortex AI
+#### Contribute or Extend Cortex
 
 1. Setup: [DEVELOPMENT.md](./DEVELOPMENT.md)
 2. Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
 3. Guidelines: [CONTRIBUTING.md](./CONTRIBUTING.md)
 4. Test: [DEVELOPMENT.md](./DEVELOPMENT.md) - Testing
 
-#### Deploy Cortex AI
+#### Deploy Cortex
 
 1. Installation: [README.md](../README.md) - Quick Start
 2. Configuration: [CONFIGURATION.md](./CONFIGURATION.md)
@@ -292,7 +292,7 @@ DEVELOPMENT.md (Development)
 
 ## FAQ Pointers
 
-**Q: How do I install Cortex AI?**
+**Q: How do I install Cortex?**
 → [README.md Quick Start](../README.md#quick-start)
 
 **Q: What commands are available?**
@@ -319,7 +319,7 @@ DEVELOPMENT.md (Development)
 **Q: How do I contribute?**
 → [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-**Q: Can I extend Cortex AI?**
+**Q: Can I extend Cortex?**
 → [DEVELOPMENT.md](./DEVELOPMENT.md) and [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ---

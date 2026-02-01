@@ -1,4 +1,4 @@
-# Cortex AI - Markdown Format Specification
+# Cortex - Markdown Format Specification
 
 Complete specification for the Markdown format used for memory import/export.
 
@@ -15,7 +15,7 @@ Complete specification for the Markdown format used for memory import/export.
 
 ## Overview
 
-Cortex AI memories are exported to and imported from Markdown files with YAML frontmatter. This format enables:
+Cortex memories are exported to and imported from Markdown files with YAML frontmatter. This format enables:
 
 - **Version control**: Track memories in git
 - **Portability**: Export and share memories
@@ -527,7 +527,7 @@ synthesis:
     title: "## Details"
     item_template: "### {{.Title}}\n\nRelevance: {{printf \"%.0f\" .Score}}%\n\n{{.Preview}}"
     content_preview_length: 300
-  footer: "---\n\n*Exported from Cortex AI*"
+  footer: "---\n\n*Exported from Cortex*"
 ```
 
 ### Validating Templates

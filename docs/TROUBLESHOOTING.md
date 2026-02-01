@@ -1,4 +1,4 @@
-# Cortex AI - Troubleshooting Guide
+# Cortex - Troubleshooting Guide
 
 Solutions for common problems and issues.
 
