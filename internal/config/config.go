@@ -22,49 +22,49 @@ type Config struct {
 
 // TemplatesConfig contains template customization options
 type TemplatesConfig struct {
-	Markdown *MarkdownTemplateConfig `mapstructure:"markdown" json:"markdown,omitempty"`
+	Markdown *MarkdownTemplateConfig `mapstructure:"markdown" json:"markdown,omitempty" yaml:"markdown,omitempty"`
 }
 
 // MarkdownTemplateConfig represents Markdown export template configuration
 type MarkdownTemplateConfig struct {
-	Memory    *MemoryTemplateConfig    `mapstructure:"memory" json:"memory,omitempty"`
-	Synthesis *SynthesisTemplateConfig `mapstructure:"synthesis" json:"synthesis,omitempty"`
+	Memory    *MemoryTemplateConfig    `mapstructure:"memory" json:"memory,omitempty" yaml:"memory,omitempty"`
+	Synthesis *SynthesisTemplateConfig `mapstructure:"synthesis" json:"synthesis,omitempty" yaml:"synthesis,omitempty"`
 }
 
 // MemoryTemplateConfig represents the template config for single memory export
 type MemoryTemplateConfig struct {
-	Frontmatter *FrontmatterTemplateConfig `mapstructure:"frontmatter" json:"frontmatter,omitempty"`
-	Body        string                     `mapstructure:"body" json:"body,omitempty"`
+	Frontmatter *FrontmatterTemplateConfig `mapstructure:"frontmatter" json:"frontmatter,omitempty" yaml:"frontmatter,omitempty"`
+	Body        string                     `mapstructure:"body" json:"body,omitempty" yaml:"body,omitempty"`
 }
 
 // FrontmatterTemplateConfig represents frontmatter template options
 type FrontmatterTemplateConfig struct {
-	IncludeID       *bool  `mapstructure:"include_id" json:"include_id,omitempty"`
-	IncludeDates    *bool  `mapstructure:"include_dates" json:"include_dates,omitempty"`
-	IncludeMetadata *bool  `mapstructure:"include_metadata" json:"include_metadata,omitempty"`
-	DateFormat      string `mapstructure:"date_format" json:"date_format,omitempty"`
+	IncludeID       *bool  `mapstructure:"include_id" json:"include_id,omitempty" yaml:"include_id,omitempty"`
+	IncludeDates    *bool  `mapstructure:"include_dates" json:"include_dates,omitempty" yaml:"include_dates,omitempty"`
+	IncludeMetadata *bool  `mapstructure:"include_metadata" json:"include_metadata,omitempty" yaml:"include_metadata,omitempty"`
+	DateFormat      string `mapstructure:"date_format" json:"date_format,omitempty" yaml:"date_format,omitempty"`
 }
 
 // SynthesisTemplateConfig represents the template config for synthesis export
 type SynthesisTemplateConfig struct {
-	Frontmatter      *FrontmatterTemplateConfig `mapstructure:"frontmatter" json:"frontmatter,omitempty"`
-	Header           string                     `mapstructure:"header" json:"header,omitempty"`
-	SummarySection   *SectionTemplateConfig     `mapstructure:"summary_section" json:"summary_section,omitempty"`
-	LearningsSection *LearningsTemplateConfig   `mapstructure:"learnings_section" json:"learnings_section,omitempty"`
-	Footer           string                     `mapstructure:"footer" json:"footer,omitempty"`
+	Frontmatter      *FrontmatterTemplateConfig `mapstructure:"frontmatter" json:"frontmatter,omitempty" yaml:"frontmatter,omitempty"`
+	Header           string                     `mapstructure:"header" json:"header,omitempty" yaml:"header,omitempty"`
+	SummarySection   *SectionTemplateConfig     `mapstructure:"summary_section" json:"summary_section,omitempty" yaml:"summary_section,omitempty"`
+	LearningsSection *LearningsTemplateConfig   `mapstructure:"learnings_section" json:"learnings_section,omitempty" yaml:"learnings_section,omitempty"`
+	Footer           string                     `mapstructure:"footer" json:"footer,omitempty" yaml:"footer,omitempty"`
 }
 
 // SectionTemplateConfig represents a template section
 type SectionTemplateConfig struct {
-	Title   string `mapstructure:"title" json:"title,omitempty"`
-	Content string `mapstructure:"content" json:"content,omitempty"`
+	Title   string `mapstructure:"title" json:"title,omitempty" yaml:"title,omitempty"`
+	Content string `mapstructure:"content" json:"content,omitempty" yaml:"content,omitempty"`
 }
 
 // LearningsTemplateConfig represents the learnings section config
 type LearningsTemplateConfig struct {
-	Title                string `mapstructure:"title" json:"title,omitempty"`
-	ItemTemplate         string `mapstructure:"item_template" json:"item_template,omitempty"`
-	ContentPreviewLength int    `mapstructure:"content_preview_length" json:"content_preview_length,omitempty"`
+	Title                string `mapstructure:"title" json:"title,omitempty" yaml:"title,omitempty"`
+	ItemTemplate         string `mapstructure:"item_template" json:"item_template,omitempty" yaml:"item_template,omitempty"`
+	ContentPreviewLength int    `mapstructure:"content_preview_length" json:"content_preview_length,omitempty" yaml:"content_preview_length,omitempty"`
 }
 
 // DefaultMarkdownTemplateConfig returns the default Markdown template configuration

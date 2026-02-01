@@ -1,0 +1,28 @@
+# Detailed Memory Template
+# Shows all available options and custom formatting
+
+frontmatter:
+  include_id: true
+  include_dates: true
+  include_metadata: true
+  date_format: "2006-01-02 15:04:05"
+
+body: |
+  # {{.Title}}
+  
+  {{if .Tags}}
+  **Tags:** {{range $i, $tag := .Tags}}{{if $i}}, {{end}}#{{$tag}}{{end}}
+  {{end}}
+  
+  ---
+  
+  {{.Content}}
+  
+  ---
+  
+  {{if .Metadata}}
+  ## Metadata
+  {{range $key, $value := .Metadata}}
+  - **{{$key}}:** {{$value}}
+  {{end}}
+  {{end}}
