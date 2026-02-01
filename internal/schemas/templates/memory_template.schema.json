@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortex-ai.github.io/schemas/memory-template.schema.json",
+  "title": "Cortex AI Memory Template Schema",
+  "description": "Schema for customizing memory export templates in Cortex AI",
+  "type": "object",
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "description": "YAML frontmatter structure",
+      "properties": {
+        "include_id": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include memory ID in frontmatter"
+        },
+        "include_dates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include created_at and updated_at"
+        },
+        "include_metadata": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include custom metadata"
+        },
+        "date_format": {
+          "type": "string",
+          "default": "2006-01-02T15:04:05Z07:00",
+          "description": "Go time format for dates"
+        }
+      }
+    },
+    "body": {
+      "type": "string",
+      "description": "Go template for the body content. Available variables: .Title, .Content, .Types, .Tags, .CreatedAt, .UpdatedAt, .Metadata",
+      "default": "{{.Content}}"
+    }
+  }
+}

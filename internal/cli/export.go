@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/cortex-ai/cortex-ai/pkg/markdown"
@@ -32,10 +34,12 @@ Examples:
 }
 
 var (
-	exportOutput string
-	exportAll    bool
-	exportIntent string
-	exportFormat string
+	exportOutput         string
+	exportAll            bool
+	exportIntent         string
+	exportFormat         string
+	exportMemoryTemplate string
+	exportSynthTemplate  string
 )
 
 func init() {
@@ -43,6 +47,8 @@ func init() {
 	exportCmd.Flags().BoolVar(&exportAll, "all", false, "Export all memories")
 	exportCmd.Flags().StringVar(&exportIntent, "intent", "", "Export synthesis based on semantic search")
 	exportCmd.Flags().StringVarP(&exportFormat, "format", "f", "json", "Export format (json|markdown)")
+	exportCmd.Flags().StringVar(&exportMemoryTemplate, "memory-template", "", "Custom template file for memory export (.yaml, .json, or .tmpl)")
+	exportCmd.Flags().StringVar(&exportSynthTemplate, "synthesis-template", "", "Custom template file for synthesis export (.yaml or .json)")
 
 	rootCmd.AddCommand(exportCmd)
 }
@@ -91,8 +97,14 @@ func exportSingleMemory(ctx context.Context, store storage.Storage, id string) e
 	var path string
 
 	if exportFormat == "markdown" {
+		// Load template configuration
+		tmplCfg, err := loadTemplateConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load template config: %w", err)
+		}
+
 		// Export as Markdown with YAML frontmatter
-		exporter := markdown.NewExporter(exportOutput)
+		exporter := markdown.NewExporterWithConfig(exportOutput, tmplCfg)
 		path, err = exporter.ExportMemory(mem)
 		if err != nil {
 			return fmt.Errorf("failed to export memory: %w", err)
@@ -134,8 +146,14 @@ func exportAllMemories(ctx context.Context, store storage.Storage) error {
 	var paths []string
 
 	if exportFormat == "markdown" {
+		// Load template configuration
+		tmplCfg, err := loadTemplateConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load template config: %w", err)
+		}
+
 		// Export as Markdown with YAML frontmatter
-		exporter := markdown.NewExporter(exportOutput)
+		exporter := markdown.NewExporterWithConfig(exportOutput, tmplCfg)
 		paths, err = exporter.ExportAll(memories)
 		if err != nil {
 			return fmt.Errorf("failed to export memories: %w", err)
@@ -188,8 +206,14 @@ func exportSynthesis(ctx context.Context, store storage.Storage) error {
 	var path string
 
 	if exportFormat == "markdown" {
+		// Load template configuration
+		tmplCfg, err := loadTemplateConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load template config: %w", err)
+		}
+
 		// Export as Markdown
-		exporter := markdown.NewExporter(exportOutput)
+		exporter := markdown.NewExporterWithConfig(exportOutput, tmplCfg)
 		path, err = exporter.ExportSynthesis(exportIntent, results)
 		if err != nil {
 			return fmt.Errorf("failed to export synthesis: %w", err)
@@ -222,4 +246,76 @@ func exportSynthesis(ctx context.Context, store storage.Storage) error {
 	}
 
 	return nil
+}
+
+// loadTemplateConfig loads template configuration from files or config
+func loadTemplateConfig() (*config.MarkdownTemplateConfig, error) {
+var tmplCfg *config.MarkdownTemplateConfig
+
+// Start with defaults
+tmplCfg = config.DefaultMarkdownTemplateConfig()
+
+// Load from config file if templates are configured
+globalCfg := config.Global()
+if globalCfg.Templates.Markdown != nil {
+// Merge with config from file
+if globalCfg.Templates.Markdown.Memory != nil && tmplCfg.Memory != nil {
+if globalCfg.Templates.Markdown.Memory.Body != "" {
+tmplCfg.Memory.Body = globalCfg.Templates.Markdown.Memory.Body
+}
+if globalCfg.Templates.Markdown.Memory.Frontmatter != nil {
+// Merge frontmatter settings
+if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID != nil {
+tmplCfg.Memory.Frontmatter.IncludeID = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeID
+}
+if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates != nil {
+tmplCfg.Memory.Frontmatter.IncludeDates = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeDates
+}
+if globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata != nil {
+tmplCfg.Memory.Frontmatter.IncludeMetadata = globalCfg.Templates.Markdown.Memory.Frontmatter.IncludeMetadata
+}
+if globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat != "" {
+tmplCfg.Memory.Frontmatter.DateFormat = globalCfg.Templates.Markdown.Memory.Frontmatter.DateFormat
+}
+}
+}
+if globalCfg.Templates.Markdown.Synthesis != nil {
+tmplCfg.Synthesis = globalCfg.Templates.Markdown.Synthesis
+}
+}
+
+// Override with command-line template files
+if exportMemoryTemplate != "" {
+memTmpl, err := schemas.LoadMemoryTemplateFromFile(exportMemoryTemplate)
+if err != nil {
+return nil, fmt.Errorf("failed to load memory template: %w", err)
+}
+// Validate the template
+result, err := schemas.ValidateMemoryTemplateFile(exportMemoryTemplate)
+if err != nil {
+return nil, fmt.Errorf("failed to validate memory template: %w", err)
+}
+if !result.Valid {
+return nil, fmt.Errorf("invalid memory template: %v", result.Errors)
+}
+tmplCfg.Memory = memTmpl
+}
+
+if exportSynthTemplate != "" {
+synthTmpl, err := schemas.LoadSynthesisTemplateFromFile(exportSynthTemplate)
+if err != nil {
+return nil, fmt.Errorf("failed to load synthesis template: %w", err)
+}
+// Validate the template
+result, err := schemas.ValidateSynthesisTemplateFile(exportSynthTemplate)
+if err != nil {
+return nil, fmt.Errorf("failed to validate synthesis template: %w", err)
+}
+if !result.Valid {
+return nil, fmt.Errorf("invalid synthesis template: %v", result.Errors)
+}
+tmplCfg.Synthesis = synthTmpl
+}
+
+return tmplCfg, nil
 }

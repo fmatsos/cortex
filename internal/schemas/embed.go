@@ -90,3 +90,9 @@ func LoadTemplateSchema(name string) ([]byte, error) {
 
 // MarkdownTemplateSchemaFile is the filename for the Markdown template schema.
 const MarkdownTemplateSchemaFile = "markdown_template.schema.json"
+
+// MemoryTemplateSchemaFile is the filename for the Memory template schema.
+const MemoryTemplateSchemaFile = "memory_template.schema.json"
+
+// SynthesisTemplateSchemaFile is the filename for the Synthesis template schema.
+const SynthesisTemplateSchemaFile = "synthesis_template.schema.json"
