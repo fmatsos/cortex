@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,10 +22,15 @@ func TestGobStorage_NewGobStorage(t *testing.T) {
 		t.Fatal("NewGobStorage() returned nil storage")
 	}
 
-	// Verify directories were created
-	memoriesDir := tmpDir + "/memories"
-	if _, err := os.Stat(memoriesDir); err != nil {
-		t.Errorf("Memories directory not created: %v", err)
+	// Verify base directory was created
+	if _, err := os.Stat(tmpDir); err != nil {
+		t.Errorf("Base directory not created: %v", err)
+	}
+
+	// Verify FilePath returns expected path
+	expectedPath := filepath.Join(tmpDir, "cortex.gob")
+	if storage.FilePath() != expectedPath {
+		t.Errorf("FilePath() = %v, want %v", storage.FilePath(), expectedPath)
 	}
 }
 
@@ -48,6 +54,11 @@ func TestGobStorage_SaveAndGet(t *testing.T) {
 	err := storage.Save(context.Background(), m)
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Verify storage file was created
+	if _, err := os.Stat(storage.FilePath()); err != nil {
+		t.Errorf("Storage file not created: %v", err)
 	}
 
 	// Get memory
@@ -91,6 +102,22 @@ func TestGobStorage_Delete(t *testing.T) {
 	if err == nil {
 		t.Error("Get() should return error for deleted memory")
 	}
+
+	// Verify memory count is 0
+	if storage.MemoryCount() != 0 {
+		t.Errorf("MemoryCount() = %d, want 0", storage.MemoryCount())
+	}
+}
+
+func TestGobStorage_DeleteNonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, _ := NewGobStorage(tmpDir)
+
+	// Try to delete non-existent memory
+	err := storage.Delete(context.Background(), "non-existent-id")
+	if err == nil {
+		t.Error("Delete() should return error for non-existent memory")
+	}
 }
 
 func TestGobStorage_List(t *testing.T) {
@@ -127,6 +154,11 @@ func TestGobStorage_List(t *testing.T) {
 
 	if len(memories) != 3 {
 		t.Errorf("List() returned %d memories, want 3", len(memories))
+	}
+
+	// Verify MemoryCount matches
+	if storage.MemoryCount() != 3 {
+		t.Errorf("MemoryCount() = %d, want 3", storage.MemoryCount())
 	}
 }
 
@@ -267,6 +299,46 @@ func TestGobStorage_List_FilterByType(t *testing.T) {
 	}
 }
 
+func TestGobStorage_List_FilterObsolete(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, _ := NewGobStorage(tmpDir)
+
+	m1 := &memory.Memory{
+		ID:        "m1",
+		Title:     "Active",
+		Content:   "Content",
+		Types:     []memory.MemoryType{memory.MemoryTypeSolution},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Obsolete:  false,
+	}
+
+	m2 := &memory.Memory{
+		ID:        "m2",
+		Title:     "Obsolete",
+		Content:   "Content",
+		Types:     []memory.MemoryType{memory.MemoryTypeSolution},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Obsolete:  true,
+	}
+
+	_ = storage.Save(context.Background(), m1)
+	_ = storage.Save(context.Background(), m2)
+
+	// List without obsolete (default)
+	memories, _ := storage.List(context.Background(), memory.ListOptions{})
+	if len(memories) != 1 {
+		t.Errorf("List() without obsolete returned %d memories, want 1", len(memories))
+	}
+
+	// List with obsolete
+	memories, _ = storage.List(context.Background(), memory.ListOptions{IncludeObsolete: true})
+	if len(memories) != 2 {
+		t.Errorf("List() with obsolete returned %d memories, want 2", len(memories))
+	}
+}
+
 func TestGobStorage_Close(t *testing.T) {
 	tmpDir := t.TempDir()
 	storage, _ := NewGobStorage(tmpDir)
@@ -277,7 +349,7 @@ func TestGobStorage_Close(t *testing.T) {
 	}
 }
 
-func TestGobStorage_IndexPersistence(t *testing.T) {
+func TestGobStorage_Persistence(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create storage and save a memory
@@ -294,11 +366,56 @@ func TestGobStorage_IndexPersistence(t *testing.T) {
 	_ = storage1.Save(context.Background(), m)
 	_ = storage1.Close()
 
-	// Create new storage instance and verify index is loaded
+	// Create new storage instance and verify data is loaded
 	storage2, _ := NewGobStorage(tmpDir)
-	matches, _ := storage2.SearchByVector(context.Background(), []float64{0.1, 0.2, 0.3}, 10)
 
+	// Verify memory is retrievable
+	retrieved, err := storage2.Get(context.Background(), m.ID)
+	if err != nil {
+		t.Fatalf("Memory persistence failed: %v", err)
+	}
+	if retrieved.Title != m.Title {
+		t.Errorf("Persisted Title = %v, want %v", retrieved.Title, m.Title)
+	}
+
+	// Verify vector search works
+	matches, _ := storage2.SearchByVector(context.Background(), []float64{0.1, 0.2, 0.3}, 10)
 	if len(matches) != 1 {
 		t.Errorf("Index persistence failed: expected 1 match, got %d", len(matches))
+	}
+
+	// Verify memory count
+	if storage2.MemoryCount() != 1 {
+		t.Errorf("MemoryCount() = %d, want 1", storage2.MemoryCount())
+	}
+}
+
+func TestGobStorage_SingleFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	storage, _ := NewGobStorage(tmpDir)
+
+	// Save multiple memories
+	for i := 0; i < 5; i++ {
+		m := &memory.Memory{
+			ID:        "mem-" + string(rune('a'+i)),
+			Title:     "Memory",
+			Content:   "Content",
+			Types:     []memory.MemoryType{memory.MemoryTypeSolution},
+			Embedding: []float64{float64(i), 0, 0},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		_ = storage.Save(context.Background(), m)
+	}
+	_ = storage.Close()
+
+	// Verify only one file exists (cortex.gob)
+	entries, _ := os.ReadDir(tmpDir)
+	if len(entries) != 1 {
+		t.Errorf("Expected 1 file, got %d", len(entries))
+	}
+
+	if entries[0].Name() != "cortex.gob" {
+		t.Errorf("Expected cortex.gob, got %s", entries[0].Name())
 	}
 }

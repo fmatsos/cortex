@@ -13,39 +13,36 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/search"
 )
 
-// VectorIndex stores in-memory index of vectors
-type VectorIndex struct {
-	vectors map[string][]float64
-	mu      sync.RWMutex
+// StorageData represents all data stored in the single Gob file
+type StorageData struct {
+	Memories map[string]*memory.Memory // map[ID]Memory
+	Index    map[string][]float64      // map[ID]Embedding (vector index)
 }
 
-// GobStorage implements Storage interface using Gob encoding
+// GobStorage implements Storage interface using a single Gob file
 type GobStorage struct {
-	basePath string
-	index    *VectorIndex
+	filePath string
+	data     *StorageData
 	mu       sync.RWMutex
 }
 
-// NewGobStorage creates a new Gob storage backend
+// NewGobStorage creates a new Gob storage backend with a single file
 func NewGobStorage(basePath string) (*GobStorage, error) {
 	// Create base directory if it doesn't exist
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
 
-	// Create memories subdirectory
-	memoriesPath := filepath.Join(basePath, "memories")
-	if err := os.MkdirAll(memoriesPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create memories directory: %w", err)
-	}
-
 	gs := &GobStorage{
-		basePath: basePath,
-		index:    &VectorIndex{vectors: make(map[string][]float64)},
+		filePath: filepath.Join(basePath, "cortex.gob"),
+		data: &StorageData{
+			Memories: make(map[string]*memory.Memory),
+			Index:    make(map[string][]float64),
+		},
 	}
 
-	// Load existing index if it exists (ignore error if it doesn't exist yet)
-	_ = gs.loadIndex()
+	// Load existing data if file exists (ignore error if it doesn't exist yet)
+	_ = gs.load()
 
 	return gs, nil
 }
@@ -55,26 +52,13 @@ func (gs *GobStorage) Save(ctx context.Context, m *memory.Memory) error {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	path := filepath.Join(gs.basePath, "memories", m.ID+".gob")
+	// Store memory and its embedding
+	gs.data.Memories[m.ID] = m
+	gs.data.Index[m.ID] = m.Embedding
 
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create memory file: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-
-	if err := gob.NewEncoder(file).Encode(m); err != nil {
-		return fmt.Errorf("failed to encode memory: %w", err)
-	}
-
-	// Update vector index
-	gs.index.mu.Lock()
-	gs.index.vectors[m.ID] = m.Embedding
-	gs.index.mu.Unlock()
-
-	// Save index
-	if err := gs.saveIndex(); err != nil {
-		return fmt.Errorf("failed to save index: %w", err)
+	// Persist to disk
+	if err := gs.persist(); err != nil {
+		return fmt.Errorf("failed to persist storage: %w", err)
 	}
 
 	return nil
@@ -83,52 +67,23 @@ func (gs *GobStorage) Save(ctx context.Context, m *memory.Memory) error {
 // Get retrieves a memory by ID
 func (gs *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
 	gs.mu.RLock()
-	path := filepath.Join(gs.basePath, "memories", id+".gob")
-	gs.mu.RUnlock()
+	defer gs.mu.RUnlock()
 
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("memory not found: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-
-	var m memory.Memory
-	if err := gob.NewDecoder(file).Decode(&m); err != nil {
-		return nil, fmt.Errorf("failed to decode memory: %w", err)
+	m, exists := gs.data.Memories[id]
+	if !exists {
+		return nil, fmt.Errorf("memory not found: %s", id)
 	}
 
-	return &m, nil
+	return m, nil
 }
 
 // List lists all memories
 func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*memory.Memory, error) {
 	gs.mu.RLock()
-	memoriesPath := filepath.Join(gs.basePath, "memories")
-	gs.mu.RUnlock()
-
-	dir, err := os.Open(memoriesPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open memories directory: %w", err)
-	}
-	defer dir.Close()
-
-	files, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read memories directory: %w", err)
-	}
+	defer gs.mu.RUnlock()
 
 	var memories []*memory.Memory
-	for _, file := range files {
-		if filepath.Ext(file) != ".gob" {
-			continue
-		}
-
-		id := file[:len(file)-4] // Remove .gob extension
-		m, err := gs.Get(ctx, id)
-		if err != nil {
-			continue
-		}
-
+	for _, m := range gs.data.Memories {
 		if !opts.IncludeObsolete && m.Obsolete {
 			continue
 		}
@@ -162,21 +117,18 @@ func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*mem
 // Delete deletes a memory
 func (gs *GobStorage) Delete(ctx context.Context, id string) error {
 	gs.mu.Lock()
-	path := filepath.Join(gs.basePath, "memories", id+".gob")
-	gs.mu.Unlock()
+	defer gs.mu.Unlock()
 
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("failed to delete memory: %w", err)
+	if _, exists := gs.data.Memories[id]; !exists {
+		return fmt.Errorf("memory not found: %s", id)
 	}
 
-	// Update vector index
-	gs.index.mu.Lock()
-	delete(gs.index.vectors, id)
-	gs.index.mu.Unlock()
+	delete(gs.data.Memories, id)
+	delete(gs.data.Index, id)
 
-	// Save index
-	if err := gs.saveIndex(); err != nil {
-		return fmt.Errorf("failed to save index: %w", err)
+	// Persist to disk
+	if err := gs.persist(); err != nil {
+		return fmt.Errorf("failed to persist storage: %w", err)
 	}
 
 	return nil
@@ -189,11 +141,11 @@ func (gs *GobStorage) Update(ctx context.Context, m *memory.Memory) error {
 
 // SearchByVector searches memories by vector similarity
 func (gs *GobStorage) SearchByVector(ctx context.Context, vector []float64, topK int) ([]*memory.VectorMatch, error) {
-	gs.index.mu.RLock()
-	defer gs.index.mu.RUnlock()
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
 
 	var matches []*memory.VectorMatch
-	for id, stored := range gs.index.vectors {
+	for id, stored := range gs.data.Index {
 		score := search.CosineSimilarity(vector, stored)
 		matches = append(matches, &memory.VectorMatch{
 			MemoryID: id,
@@ -219,49 +171,48 @@ func (gs *GobStorage) Close() error {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	return gs.saveIndex()
+	return gs.persist()
 }
 
 // Helper methods
 
-// saveIndex saves the vector index to disk
-func (gs *GobStorage) saveIndex() error {
-	indexPath := filepath.Join(gs.basePath, "index.gob")
-
-	file, err := os.Create(indexPath)
+// persist saves all data to the single Gob file
+func (gs *GobStorage) persist() error {
+	file, err := os.Create(gs.filePath)
 	if err != nil {
-		return fmt.Errorf("failed to create index file: %w", err)
+		return fmt.Errorf("failed to create storage file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
-	gs.index.mu.RLock()
-	defer gs.index.mu.RUnlock()
-
-	if err := gob.NewEncoder(file).Encode(gs.index.vectors); err != nil {
-		return fmt.Errorf("failed to encode index: %w", err)
+	if err := gob.NewEncoder(file).Encode(gs.data); err != nil {
+		return fmt.Errorf("failed to encode storage data: %w", err)
 	}
 
 	return nil
 }
 
-// loadIndex loads the vector index from disk
-func (gs *GobStorage) loadIndex() error {
-	indexPath := filepath.Join(gs.basePath, "index.gob")
-
-	file, err := os.Open(indexPath)
+// load loads all data from the single Gob file
+func (gs *GobStorage) load() error {
+	file, err := os.Open(gs.filePath)
 	if err != nil {
-		return fmt.Errorf("index not found: %w", err)
+		return fmt.Errorf("storage file not found: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
-	vectors := make(map[string][]float64)
-	if err := gob.NewDecoder(file).Decode(&vectors); err != nil {
-		return fmt.Errorf("failed to decode index: %w", err)
+	var data StorageData
+	if err := gob.NewDecoder(file).Decode(&data); err != nil {
+		return fmt.Errorf("failed to decode storage data: %w", err)
 	}
 
-	gs.index.mu.Lock()
-	gs.index.vectors = vectors
-	gs.index.mu.Unlock()
+	gs.data = &data
+
+	// Ensure maps are initialized even if they were nil in the file
+	if gs.data.Memories == nil {
+		gs.data.Memories = make(map[string]*memory.Memory)
+	}
+	if gs.data.Index == nil {
+		gs.data.Index = make(map[string][]float64)
+	}
 
 	return nil
 }
@@ -276,4 +227,16 @@ func containsType(memoryTypes []memory.MemoryType, filterTypes []memory.MemoryTy
 		}
 	}
 	return false
+}
+
+// FilePath returns the path to the storage file (useful for sharing)
+func (gs *GobStorage) FilePath() string {
+	return gs.filePath
+}
+
+// MemoryCount returns the number of memories in storage
+func (gs *GobStorage) MemoryCount() int {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return len(gs.data.Memories)
 }

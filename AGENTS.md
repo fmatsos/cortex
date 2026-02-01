@@ -222,8 +222,8 @@ func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error)
 3. Call Ollama API for embedding
 4. Normalize vector to unit length
 5. Generate UUID
-6. Save memory file (uuid.gob)
-7. Update vector index (index.gob)
+6. Add memory to in-memory store
+7. Persist to single Gob file (cortex.gob)
 
 ### Search Memory
 
@@ -242,11 +242,10 @@ func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error)
 
 ```
 ~/.local/share/cortex-ai/
-├── memories/
-│   ├── <uuid-1>.gob
-│   └── <uuid-2>.gob
-└── index.gob
+└── cortex.gob          # Single file containing all memories and vector index
 ```
+
+The storage uses a single Gob file (`cortex.gob`) that contains all memories and the vector index. This makes it easy to share with team members or back up.
 
 ### Configuration
 
