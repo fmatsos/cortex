@@ -239,32 +239,30 @@ func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error)
 
 ## File Locations
 
-### Runtime Data
-
-The storage mode is configurable via `storage.mode` in the config file:
-
-**Single mode (default)** - All memories in one file:
-```
-~/.local/share/cortex-ai/
-└── cortex.gob          # Single file containing all memories and vector index
-```
-
-**Multi mode** - One file per memory (for team sharing):
-```
-~/.local/share/cortex-ai/
-├── memories/
-│   ├── <uuid-1>.gob    # Individual memory files
-│   └── <uuid-2>.gob
-└── index.gob           # Vector index
-```
-
-- **single**: Best for solo developers. All data in one portable file.
-- **multi**: Best for teams. Individual memory files can be shared across projects or team members via version control.
-
-### Configuration
+All Cortex files are stored in `.ai/cortex/` (project-local by default):
 
 ```
-~/.config/cortex-ai/config.yaml
+.ai/cortex/
+├── config.yaml         # Configuration file
+├── cortex.gob          # Single mode: all memories + index
+└── memories/           # Multi mode: individual files
+    ├── <uuid-1>.gob
+    └── index.gob
+```
+
+### Storage Modes
+
+Configurable via `storage.mode` in the config file:
+
+- **single** (default): All memories in one `cortex.gob` file. Best for solo developers.
+- **multi**: One `{uuid}.gob` file per memory + `index.gob`. Best for team sharing via version control.
+
+### Environment Variable
+
+Override the base path with `CORTEX_BASE_PATH`:
+
+```bash
+export CORTEX_BASE_PATH=/custom/path
 ```
 
 ---
