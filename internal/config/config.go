@@ -23,6 +23,7 @@ type Config struct {
 type StorageConfig struct {
 	Backend string `mapstructure:"backend"` // gob | sqlite
 	Path    string `mapstructure:"path"`    // data directory path
+	Mode    string `mapstructure:"mode"`    // single | multi (single file vs one file per memory)
 }
 
 // EmbeddingsConfig contains embedding provider configuration
@@ -52,6 +53,7 @@ func DefaultConfig() *Config {
 		Storage: StorageConfig{
 			Backend: "gob",
 			Path:    defaultDataPath(),
+			Mode:    "single",
 		},
 		Embeddings: EmbeddingsConfig{
 			Provider: "ollama",
@@ -175,6 +177,7 @@ func (m *Manager) bindEnvVars() {
 	// Storage
 	_ = m.v.BindEnv("storage.backend", "CORTEX_STORAGE_BACKEND")
 	_ = m.v.BindEnv("storage.path", "CORTEX_STORAGE_PATH")
+	_ = m.v.BindEnv("storage.mode", "CORTEX_STORAGE_MODE")
 
 	// Embeddings
 	_ = m.v.BindEnv("embeddings.provider", "CORTEX_EMBEDDINGS_PROVIDER")
@@ -199,6 +202,7 @@ func (m *Manager) setDefaults() {
 	// Storage defaults
 	m.v.SetDefault("storage.backend", defaults.Storage.Backend)
 	m.v.SetDefault("storage.path", defaults.Storage.Path)
+	m.v.SetDefault("storage.mode", defaults.Storage.Mode)
 
 	// Embeddings defaults
 	m.v.SetDefault("embeddings.provider", defaults.Embeddings.Provider)
@@ -291,6 +295,7 @@ func WriteDefaultConfig() error {
 storage:
   backend: gob                              # gob | sqlite
   path: ~/.local/share/cortex-ai
+  mode: single                              # single | multi (single file vs one file per memory)
 
 embeddings:
   provider: ollama
