@@ -9,27 +9,29 @@ import (
 
 // CreateOutput represents the output of the create command.
 type CreateOutput struct {
-	ID      string              `json:"id"`
-	Title   string              `json:"title"`
-	Types   []memory.MemoryType `json:"types"`
-	Created time.Time           `json:"created"`
+	ID      string    `json:"id"`
+	Title   string    `json:"title"`
+	Level   string    `json:"level"`
+	Created time.Time `json:"created"`
 }
 
 // ListItem represents a single memory in list output.
 type ListItem struct {
-	ID        string              `json:"id"`
-	Title     string              `json:"title"`
-	Types     []memory.MemoryType `json:"types"`
-	CreatedAt time.Time           `json:"created"`
-	Obsolete  bool                `json:"obsolete"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Level     string    `json:"level"`
+	Tags      []string  `json:"tags,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	Obsolete  bool      `json:"obsolete"`
 }
 
 // SearchItem represents a single search result.
 type SearchItem struct {
-	ID    string              `json:"id"`
-	Title string              `json:"title"`
-	Types []memory.MemoryType `json:"types"`
-	Score float64             `json:"score"`
+	ID    string   `json:"id"`
+	Title string   `json:"title"`
+	Level string   `json:"level"`
+	Score float64  `json:"score"`
+	Tags  []string `json:"tags,omitempty"`
 }
 
 // SearchResultForTemplate represents a search result for template rendering.
@@ -88,13 +90,11 @@ type ExportSynthesisOutput struct {
 // StatsOutput represents the output of the stats command.
 type StatsOutput struct {
 	TotalMemories   int            `json:"total_memories"`
-	MemoriesByType  map[string]int `json:"memories_by_type"`
-	TotalChunks     int            `json:"total_chunks"`
+	MemoriesByLevel map[string]int `json:"memories_by_level"`
 	DatabaseCreated *time.Time     `json:"database_created,omitempty"`
 	LastRecordDate  *time.Time     `json:"last_record_date,omitempty"`
 	ObsoleteCount   int            `json:"obsolete_count"`
 	ActiveCount     int            `json:"active_count"`
-	StorageMode     string         `json:"storage_mode"`
 	StoragePath     string         `json:"storage_path"`
 	ConfigFile      string         `json:"config_file,omitempty"`
 	// Extra fields for template rendering

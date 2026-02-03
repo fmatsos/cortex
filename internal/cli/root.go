@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"path/filepath"
+
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
@@ -31,7 +33,7 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Path to config file")
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "Path to config file")
 	rootCmd.PersistentFlags().StringVar(&storageBackend, "storage", "gob", "Storage backend (gob|sqlite)")
 }
 
@@ -43,13 +45,8 @@ func GetConfigPath() string {
 // initStorage initializes storage from the global configuration
 func initStorage() (*storage.GobStorage, error) {
 	cfg := config.Global()
-	return storage.NewGobStorage(cfg.Storage.Path)
-}
-
-// initConsolidatedStorage initializes consolidated storage from the global configuration
-func initConsolidatedStorage() (*storage.GobConsolidatedStorage, error) {
-	cfg := config.Global()
-	return storage.NewGobConsolidatedStorage(cfg.Storage.Path)
+	path := filepath.Join(cfg.Storage.Path, "memories.gob")
+	return storage.NewGobStorage(path)
 }
 
 // initEmbedder initializes the embedder from the global configuration

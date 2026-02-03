@@ -122,15 +122,14 @@ func (i *Importer) ValidateBytes(data []byte) error {
 	if mj.Title == "" {
 		return fmt.Errorf("title is required")
 	}
-	if len(mj.Types) == 0 {
-		return fmt.Errorf("at least one type is required")
+	if mj.Level == "" {
+		return fmt.Errorf("level is required")
 	}
-
-	// Validate types
-	for _, t := range mj.Types {
-		if !memory.IsValidType(t) {
-			return fmt.Errorf("invalid type: %s (must be solution|issue|analysis|rule|any)", t)
-		}
+	if !memory.IsValidLevel(mj.Level) {
+		return fmt.Errorf("invalid level: %s (must be working|episodic|semantic)", mj.Level)
+	}
+	if memory.MemoryLevel(mj.Level) == memory.MemoryLevelWorking && mj.Context.SessionID == "" {
+		return fmt.Errorf("session_id is required for working level")
 	}
 
 	return nil

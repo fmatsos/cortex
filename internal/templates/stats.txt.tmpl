@@ -5,9 +5,9 @@ Active memories:	{{.ActiveCount}}
 Obsolete memories:	{{.ObsoleteCount}}
 Vector chunks:	{{.TotalChunks}}
 
-Memories by type:
-{{- range $type, $count := .MemoriesByType}}
-  {{$type}}:	{{$count}}
+Memories by level:
+{{- range $level, $count := .MemoriesByLevel}}
+  {{$level}}:	{{$count}}
 {{- end}}
 
 Database created:	{{if .DatabaseCreated}}{{.DatabaseCreated.Format "2006-01-02 15:04:05"}}{{else}}-{{end}}

@@ -13,15 +13,16 @@ import (
 
 // MemoryJSON represents a memory in JSON format for handoffs
 type MemoryJSON struct {
-	ID        string            `json:"id"`
-	Title     string            `json:"title"`
-	Content   string            `json:"content"`
-	Types     []string          `json:"types"`
-	Tags      []string          `json:"tags,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
-	Obsolete  bool              `json:"obsolete,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
+	ID         string               `json:"id"`
+	Title      string               `json:"title"`
+	Content    string               `json:"content"`
+	Level      string               `json:"level"`
+	Tags       []string             `json:"tags,omitempty"`
+	Context    memory.MemoryContext `json:"context"`
+	CreatedAt  time.Time            `json:"created_at"`
+	UpdatedAt  time.Time            `json:"updated_at"`
+	MergedFrom []string             `json:"merged_from,omitempty"`
+	Obsolete   bool                 `json:"obsolete,omitempty"`
 }
 
 // SearchResultJSON represents a search result in JSON format
@@ -56,21 +57,17 @@ type BatchExportJSON struct {
 
 // ToMemoryJSON converts a Memory to MemoryJSON
 func ToMemoryJSON(m *memory.Memory) MemoryJSON {
-	types := make([]string, len(m.Types))
-	for i, t := range m.Types {
-		types[i] = string(t)
-	}
-
 	return MemoryJSON{
-		ID:        m.ID,
-		Title:     m.Title,
-		Content:   m.Content,
-		Types:     types,
-		Tags:      m.Tags,
-		CreatedAt: m.CreatedAt,
-		UpdatedAt: m.UpdatedAt,
-		Obsolete:  m.Obsolete,
-		Metadata:  m.Metadata,
+		ID:         m.ID,
+		Title:      m.Title,
+		Content:    m.Content,
+		Level:      string(m.Level),
+		Tags:       m.Tags,
+		Context:    m.Context,
+		CreatedAt:  m.CreatedAt,
+		UpdatedAt:  m.UpdatedAt,
+		MergedFrom: m.MergedFrom,
+		Obsolete:   m.Obsolete,
 	}
 }
 
@@ -88,27 +85,22 @@ func (mj *MemoryJSON) ToMemory() (*memory.Memory, error) {
 	if mj.Title == "" {
 		return nil, fmt.Errorf("title is required")
 	}
-	if len(mj.Types) == 0 {
-		return nil, fmt.Errorf("at least one type is required")
+	if mj.Level == "" {
+		return nil, fmt.Errorf("level is required")
 	}
-
-	// Validate types
-	types := make([]memory.MemoryType, len(mj.Types))
-	for i, t := range mj.Types {
-		if !memory.IsValidType(t) {
-			return nil, fmt.Errorf("invalid type: %s (must be solution|issue|analysis|rule|any)", t)
-		}
-		types[i] = memory.MemoryType(t)
+	if !memory.IsValidLevel(mj.Level) {
+		return nil, fmt.Errorf("invalid level: %s (must be working|episodic|semantic)", mj.Level)
 	}
 
 	m := &memory.Memory{
-		ID:       mj.ID,
-		Title:    mj.Title,
-		Content:  mj.Content,
-		Types:    types,
-		Tags:     mj.Tags,
-		Obsolete: mj.Obsolete,
-		Metadata: mj.Metadata,
+		ID:         mj.ID,
+		Title:      mj.Title,
+		Content:    mj.Content,
+		Level:      memory.MemoryLevel(mj.Level),
+		Tags:       mj.Tags,
+		Context:    mj.Context,
+		MergedFrom: mj.MergedFrom,
+		Obsolete:   mj.Obsolete,
 	}
 
 	// Generate ID if not provided
@@ -129,8 +121,12 @@ func (mj *MemoryJSON) ToMemory() (*memory.Memory, error) {
 		m.UpdatedAt = mj.UpdatedAt
 	}
 
+	if m.Context.Timestamp.IsZero() {
+		m.Context.Timestamp = m.CreatedAt
+	}
+
 	return m, nil
 }
 
-// ValidTypes for validation
-var ValidTypes = []string{"solution", "issue", "analysis", "rule", "any"}
+// ValidLevels for validation
+var ValidLevels = []string{"working", "episodic", "semantic"}

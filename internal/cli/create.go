@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/spf13/cobra"
 )
@@ -13,40 +13,51 @@ import (
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new memory",
-	Long: `Create a new memory with a title, content, and one or more types.
+	Long: `Create a new memory with a title, content, and a memory level.
 
-Types can be combined: solution, issue, analysis, rule, or any.
+Levels: working, episodic, semantic.
 
 Examples:
-  cortex create --title "JWT Fix" --type solution --content "How to refresh JWT tokens"
-  cortex create --title "Auth Bug" --type issue,solution --content "..." --tags auth,jwt`,
+  cortex create --title "JWT Fix" --level semantic --content "How to refresh JWT tokens"
+  cortex create --title "Auth Bug" --level episodic --content "..." --tags auth,jwt`,
 	RunE: runCreate,
 }
 
 var (
 	createTitle   string
 	createContent string
-	createTypes   []string
-	createTags    []string
-	createOutput  string
+	createLevel   string
+	createTags    string
+	createSession string
+	createSource  string
+	createJSON    bool
 )
 
 func init() {
 	createCmd.Flags().StringVarP(&createTitle, "title", "t", "", "Memory title (required)")
-	createCmd.Flags().StringVar(&createContent, "content", "", "Memory content (required)")
-	createCmd.Flags().StringSliceVar(&createTypes, "type", nil, "Memory types (required, can be combined): solution,issue,analysis,rule,any")
-	createCmd.Flags().StringSliceVar(&createTags, "tags", nil, "Memory tags")
-	createCmd.Flags().StringVar(&createOutput, "output", "text", "Output format (text|json)")
+	createCmd.Flags().StringVarP(&createContent, "content", "c", "", "Memory content (required)")
+	createCmd.Flags().StringVarP(&createLevel, "level", "l", "", "Memory level: working, episodic, semantic (required)")
+	createCmd.Flags().StringVar(&createTags, "tags", "", "Comma-separated tags")
+	createCmd.Flags().StringVar(&createSession, "session", "", "Session ID (required for working level)")
+	createCmd.Flags().StringVar(&createSource, "source", "manual", "Source: manual, auto, llm")
+	createCmd.Flags().BoolVar(&createJSON, "json", false, "Output as JSON")
 
 	_ = createCmd.MarkFlagRequired("title")
-	_ = createCmd.MarkFlagRequired("type")
 	_ = createCmd.MarkFlagRequired("content")
+	_ = createCmd.MarkFlagRequired("level")
 
 	rootCmd.AddCommand(createCmd)
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
+
+	if !memory.IsValidLevel(createLevel) {
+		return fmt.Errorf("invalid level: %s (must be working, episodic, or semantic)", createLevel)
+	}
+	if memory.MemoryLevel(createLevel) == memory.MemoryLevelWorking && createSession == "" {
+		return fmt.Errorf("--session is required for working level")
+	}
 
 	// Initialize embedder from config
 	embedder, err := initEmbedder()
@@ -64,21 +75,21 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
 
-	// Parse memory types
-	var types []memory.MemoryType
-	for _, t := range createTypes {
-		if !memory.IsValidType(t) {
-			return fmt.Errorf("invalid type: %s", t)
+	var tags []string
+	if createTags != "" {
+		for _, t := range strings.Split(createTags, ",") {
+			tags = append(tags, strings.TrimSpace(t))
 		}
-		types = append(types, memory.MemoryType(t))
 	}
 
 	// Create memory
 	input := memory.CreateInput{
-		Title:   createTitle,
-		Content: createContent,
-		Types:   types,
-		Tags:    createTags,
+		Title:     createTitle,
+		Content:   createContent,
+		Level:     memory.MemoryLevel(createLevel),
+		Tags:      tags,
+		SessionID: createSession,
+		Source:    createSource,
 	}
 
 	m, err := svc.Create(ctx, input)
@@ -87,19 +98,17 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Output
-	if createOutput == "json" {
-		out := output.CreateOutput{
-			ID:      m.ID,
-			Title:   m.Title,
-			Types:   m.Types,
-			Created: m.CreatedAt,
-		}
-		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+	if createJSON {
+		jsonBytes, _ := json.MarshalIndent(m, "", "  ")
 		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Memory created: %s\n", m.ID)
-		fmt.Printf("Title: %s\n", m.Title)
-		fmt.Printf("Types: %v\n", m.Types)
+		return nil
+	}
+
+	fmt.Printf("Created memory: %s\n", m.ID)
+	fmt.Printf("  Title: %s\n", m.Title)
+	fmt.Printf("  Level: %s\n", m.Level)
+	if len(m.Tags) > 0 {
+		fmt.Printf("  Tags: %v\n", m.Tags)
 	}
 
 	return nil

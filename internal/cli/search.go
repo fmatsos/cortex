@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/cortex-ai/cortex-ai/internal/cli/output"
@@ -19,7 +20,7 @@ var searchCmd = &cobra.Command{
 Examples:
   cortex search "authentication issues" --top 5
   cortex search "JWT tokens" --min-score 0.7
-  cortex search "bug fix" --type solution`,
+  cortex search "bug fix" --level episodic`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSearch,
 }
@@ -27,14 +28,18 @@ Examples:
 var (
 	searchTop      int
 	searchMinScore float64
-	searchType     string
+	searchLevel    string
+	searchSession  string
+	searchInclude  bool
 	searchJSON     bool
 )
 
 func init() {
 	searchCmd.Flags().IntVarP(&searchTop, "top", "n", 5, "Number of results to return")
 	searchCmd.Flags().Float64Var(&searchMinScore, "min-score", 0.5, "Minimum similarity score")
-	searchCmd.Flags().StringVar(&searchType, "type", "", "Filter by memory type")
+	searchCmd.Flags().StringVarP(&searchLevel, "level", "l", "", "Filter by memory level(s): working,episodic,semantic")
+	searchCmd.Flags().StringVar(&searchSession, "session", "", "Filter working by session ID")
+	searchCmd.Flags().BoolVar(&searchInclude, "include-obsolete", false, "Include obsolete memories")
 	searchCmd.Flags().BoolVar(&searchJSON, "json", false, "Output as JSON")
 
 	rootCmd.AddCommand(searchCmd)
@@ -60,20 +65,24 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Create service
 	svc := memory.NewMemoryService(storageBackend, embedder)
 
-	// Parse filter type if provided
-	var filterTypes []memory.MemoryType
-	if searchType != "" {
-		if !memory.IsValidType(searchType) {
-			return fmt.Errorf("invalid type: %s", searchType)
+	var filterLevels []memory.MemoryLevel
+	if searchLevel != "" {
+		for _, l := range strings.Split(searchLevel, ",") {
+			l = strings.TrimSpace(l)
+			if !memory.IsValidLevel(l) {
+				return fmt.Errorf("invalid level: %s", l)
+			}
+			filterLevels = append(filterLevels, memory.MemoryLevel(l))
 		}
-		filterTypes = append(filterTypes, memory.MemoryType(searchType))
 	}
 
 	// Search
 	opts := memory.SearchOptions{
-		TopK:        searchTop,
-		MinScore:    searchMinScore,
-		FilterTypes: filterTypes,
+		TopK:            searchTop,
+		MinScore:        searchMinScore,
+		FilterLevels:    filterLevels,
+		IncludeObsolete: searchInclude,
+		SessionID:       searchSession,
 	}
 
 	results, err := svc.Search(ctx, query, opts)
@@ -88,7 +97,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			items[i] = output.SearchItem{
 				ID:    result.Memory.ID,
 				Title: result.Memory.Title,
-				Types: result.Memory.Types,
+				Level: string(result.Memory.Level),
+				Tags:  result.Memory.Tags,
 				Score: result.Score,
 			}
 		}
@@ -101,13 +111,13 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(w, "SCORE\tID\tTITLE\tTYPES")
+		_, _ = fmt.Fprintln(w, "SCORE\tID\tTITLE\tLEVEL")
 		for _, result := range results {
 			_, _ = fmt.Fprintf(w, "%.2f\t%s\t%s\t%v\n",
 				result.Score,
 				result.Memory.ID[:8]+"...",
 				result.Memory.Title,
-				result.Memory.Types)
+				result.Memory.Level)
 		}
 		_ = w.Flush()
 	}

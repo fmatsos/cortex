@@ -2,6 +2,7 @@ package consolidation
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func setupTestAutopruneService(t *testing.T) (*AutopruneService, *storage.GobConsolidatedStorage, *mockEmbedder) {
+func setupTestAutopruneService(t *testing.T) (*AutopruneService, *storage.GobStorage, *mockEmbedder) {
 	t.Helper()
 
-	tempDir := t.TempDir()
-	store, err := storage.NewGobConsolidatedStorage(tempDir)
+	basePath := filepath.Join(t.TempDir(), "memories.gob")
+	store, err := storage.NewGobStorage(basePath)
 	if err != nil {
 		t.Fatalf("failed to create storage: %v", err)
 	}
@@ -31,26 +32,28 @@ func setupTestAutopruneService(t *testing.T) (*AutopruneService, *storage.GobCon
 	return svc, store, embedder
 }
 
-func createTestMemory(t *testing.T, store *storage.GobConsolidatedStorage, embedder *mockEmbedder, level memory.MemoryLevel, content string, createdAt time.Time) *memory.ConsolidatedMemory {
+func createTestMemory(t *testing.T, store *storage.GobStorage, embedder *mockEmbedder, level memory.MemoryLevel, content string, createdAt time.Time) *memory.Memory {
 	t.Helper()
 
 	ctx := context.Background()
 	embedding, _ := embedder.Embed(ctx, content)
 
-	mem := &memory.ConsolidatedMemory{
+	mem := &memory.Memory{
 		ID:        uuid.New().String(),
 		Level:     level,
+		Title:     "Test",
 		Content:   content,
 		Embedding: embedding,
-		Context: memory.ConsolidationContext{
+		Context: memory.MemoryContext{
 			SessionID: "test-session",
 			Source:    "manual",
+			Timestamp: createdAt,
 		},
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,
 	}
 
-	err := store.SaveConsolidated(ctx, mem)
+	err := store.Save(ctx, mem)
 	if err != nil {
 		t.Fatalf("failed to save test memory: %v", err)
 	}
@@ -62,10 +65,9 @@ func TestAutopruneService_Run_DryRun(t *testing.T) {
 	svc, store, embedder := setupTestAutopruneService(t)
 	defer func() { _ = store.Close() }()
 
-	// Create some test memories
 	now := time.Now()
 	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "test content 1", now)
-	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "test content 2", now.Add(-100*24*time.Hour)) // old
+	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "test content 2", now.Add(-100*24*time.Hour))
 
 	ctx := context.Background()
 	opts := AutopruneOptions{
@@ -79,12 +81,10 @@ func TestAutopruneService_Run_DryRun(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	// In dry run, no changes should be made
 	if result.EpisodicArchived != 1 {
 		t.Errorf("EpisodicArchived = %d, want 1 (in dry run)", result.EpisodicArchived)
 	}
 
-	// Verify details contain dry-run prefix
 	hasDetails := false
 	for _, detail := range result.Details {
 		if len(detail) > 9 && detail[:9] == "[dry-run]" {
@@ -96,8 +96,7 @@ func TestAutopruneService_Run_DryRun(t *testing.T) {
 		t.Error("Dry run should include [dry-run] prefix in details")
 	}
 
-	// Verify memory still exists
-	memories, _ := store.ListByLevel(ctx, memory.MemoryLevelEpisodic)
+	memories, _ := store.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{memory.MemoryLevelEpisodic}})
 	if len(memories) != 2 {
 		t.Errorf("Memory count = %d, want 2 (dry run should not delete)", len(memories))
 	}
@@ -108,9 +107,7 @@ func TestAutopruneService_ArchiveEpisodic(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	now := time.Now()
-	// Create old memory
 	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "old content", now.Add(-100*24*time.Hour))
-	// Create recent memory
 	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "recent content", now)
 
 	ctx := context.Background()
@@ -129,8 +126,7 @@ func TestAutopruneService_ArchiveEpisodic(t *testing.T) {
 		t.Errorf("EpisodicArchived = %d, want 1", result.EpisodicArchived)
 	}
 
-	// Verify only recent memory remains
-	memories, _ := store.ListByLevel(ctx, memory.MemoryLevelEpisodic)
+	memories, _ := store.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{memory.MemoryLevelEpisodic}})
 	if len(memories) != 1 {
 		t.Errorf("Memory count = %d, want 1", len(memories))
 	}
@@ -141,12 +137,10 @@ func TestAutopruneService_RunAll(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	now := time.Now()
-	// Create various memories
 	createTestMemory(t, store, embedder, memory.MemoryLevelEpisodic, "episodic content", now)
 	createTestMemory(t, store, embedder, memory.MemoryLevelSemantic, "semantic content", now)
 
 	ctx := context.Background()
-	// No specific options = run all
 	opts := AutopruneOptions{
 		DryRun: true,
 	}
@@ -156,7 +150,6 @@ func TestAutopruneService_RunAll(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	// Should complete without error
 	if result == nil {
 		t.Error("Result should not be nil")
 	}
@@ -188,7 +181,7 @@ func TestCosineSimilarity(t *testing.T) {
 			name:     "similar vectors",
 			a:        []float64{1, 1, 0},
 			b:        []float64{1, 0, 0},
-			expected: 0.707, // sqrt(2)/2
+			expected: 0.707,
 			delta:    0.01,
 		},
 		{
@@ -231,7 +224,7 @@ func TestSqrt(t *testing.T) {
 		{9.0, 3.0, 0.001},
 		{2.0, 1.414, 0.01},
 		{0.0, 0.0, 0.001},
-		{-1.0, 0.0, 0.001}, // negative returns 0
+		{-1.0, 0.0, 0.001},
 	}
 
 	for _, tt := range tests {

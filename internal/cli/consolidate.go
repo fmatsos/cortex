@@ -71,8 +71,8 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize consolidated storage
-	store, err := initConsolidatedStorage()
+	// Initialize storage
+	store, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -85,7 +85,7 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 	svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
 
 	// Build context
-	consolidationCtx := memory.ConsolidationContext{
+	consolidationCtx := memory.MemoryContext{
 		SessionID: consolidateSessionID,
 		Timestamp: time.Now(),
 		Source:    consolidateSource,
@@ -99,7 +99,7 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 
 	// Parse additional context if provided
 	if consolidateContext != "" {
-		var extraCtx memory.ConsolidationContext
+		var extraCtx memory.MemoryContext
 		if err := json.Unmarshal([]byte(consolidateContext), &extraCtx); err != nil {
 			return fmt.Errorf("invalid context JSON: %w", err)
 		}
@@ -150,11 +150,11 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// ListConsolidatedCmd lists consolidated memories
+// ListConsolidatedCmd lists memories by level
 var listConsolidatedCmd = &cobra.Command{
 	Use:   "list-consolidated",
-	Short: "List consolidated memories by level",
-	Long: `List consolidated memories filtered by memory level.
+	Short: "List memories by level",
+	Long: `List memories filtered by memory level.
 
 Examples:
   cortex list-consolidated --level working
@@ -189,8 +189,8 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize consolidated storage
-	store, err := initConsolidatedStorage()
+	// Initialize storage
+	store, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -203,7 +203,7 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 	svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
 
 	// List memories
-	var memories []*memory.ConsolidatedMemory
+	var memories []*memory.Memory
 	if listConsolidatedLevel == "" {
 		// List all levels
 		for _, level := range memory.ValidMemoryLevels {
@@ -226,11 +226,11 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 		fmt.Println(string(jsonBytes))
 	} else {
 		if len(memories) == 0 {
-			fmt.Println("No consolidated memories found.")
+			fmt.Println("No memories found.")
 			return nil
 		}
 
-		fmt.Printf("Found %d consolidated memories:\n\n", len(memories))
+		fmt.Printf("Found %d memories:\n\n", len(memories))
 		for _, m := range memories {
 			fmt.Printf("ID: %s\n", m.ID)
 			fmt.Printf("Level: %s\n", m.Level)
@@ -284,8 +284,8 @@ func runTransferWorking(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize consolidated storage
-	store, err := initConsolidatedStorage()
+	// Initialize storage
+	store, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}

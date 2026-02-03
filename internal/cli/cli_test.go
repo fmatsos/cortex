@@ -37,11 +37,11 @@ func TestCreateCommandValidation(t *testing.T) {
 		},
 		{
 			name:    "missing title",
-			args:    []string{"create", "--type", "solution", "--content", "test"},
+			args:    []string{"create", "--level", "episodic", "--content", "test"},
 			wantErr: true,
 		},
 		{
-			name:    "missing type",
+			name:    "missing level",
 			args:    []string{"create", "--title", "test", "--content", "test"},
 			wantErr: true,
 		},

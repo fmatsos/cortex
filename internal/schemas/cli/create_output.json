@@ -12,13 +12,10 @@
       "type": "string",
       "description": "Memory title"
     },
-    "types": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "enum": ["solution", "issue", "analysis", "rule", "any"]
-      },
-      "description": "Memory types"
+    "level": {
+      "type": "string",
+      "enum": ["working", "episodic", "semantic"],
+      "description": "Memory level"
     },
     "created": {
       "type": "string",
@@ -26,5 +23,5 @@
       "description": "Creation timestamp"
     }
   },
-  "required": ["id", "title", "types", "created"]
+  "required": ["id", "title", "level", "created"]
 }

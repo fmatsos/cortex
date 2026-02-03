@@ -9,18 +9,13 @@
       "minimum": 0,
       "description": "Total number of memories"
     },
-    "memories_by_type": {
+    "memories_by_level": {
       "type": "object",
       "additionalProperties": {
         "type": "integer",
         "minimum": 0
       },
-      "description": "Count of memories by type"
-    },
-    "total_chunks": {
-      "type": "integer",
-      "minimum": 0,
-      "description": "Total vector chunks"
+      "description": "Count of memories by level"
     },
     "database_created": {
       "type": "string",
@@ -42,11 +37,6 @@
       "minimum": 0,
       "description": "Number of active memories"
     },
-    "storage_mode": {
-      "type": "string",
-      "enum": ["single", "multi"],
-      "description": "Storage mode"
-    },
     "storage_path": {
       "type": "string",
       "description": "Path to storage"
@@ -56,5 +46,5 @@
       "description": "Path to config file"
     }
   },
-  "required": ["total_memories", "memories_by_type", "total_chunks", "obsolete_count", "active_count", "storage_mode", "storage_path"]
+  "required": ["total_memories", "memories_by_level", "obsolete_count", "active_count", "storage_path"]
 }

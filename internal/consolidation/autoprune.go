@@ -12,13 +12,13 @@ import (
 
 // AutopruneService handles automatic memory cleanup and optimization
 type AutopruneService struct {
-	storage  storage.ConsolidatedStorage
+	storage  storage.Storage
 	embedder Embedder
 	config   *config.AutopruneConfig
 }
 
 // NewAutopruneService creates a new autoprune service
-func NewAutopruneService(store storage.ConsolidatedStorage, embedder Embedder, cfg *config.AutopruneConfig) *AutopruneService {
+func NewAutopruneService(store storage.Storage, embedder Embedder, cfg *config.AutopruneConfig) *AutopruneService {
 	return &AutopruneService{
 		storage:  store,
 		embedder: embedder,
@@ -91,14 +91,12 @@ func (s *AutopruneService) removeDuplicates(ctx context.Context, dryRun bool) (i
 	var details []string
 	removed := 0
 
-	// Check each level
 	for _, level := range memory.ValidMemoryLevels {
-		memories, err := s.storage.ListByLevel(ctx, level)
+		memories, err := s.storage.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{level}})
 		if err != nil {
 			continue
 		}
 
-		// Find duplicates using embedding similarity
 		seen := make(map[string]bool)
 		for i, m1 := range memories {
 			if seen[m1.ID] {
@@ -111,13 +109,12 @@ func (s *AutopruneService) removeDuplicates(ctx context.Context, dryRun bool) (i
 					continue
 				}
 
-				// Calculate similarity
 				similarity := cosineSimilarity(m1.Embedding, m2.Embedding)
 				if similarity >= s.config.DuplicatesThreshold {
 					if dryRun {
 						details = append(details, fmt.Sprintf("[dry-run] would remove duplicate: %s (similar to %s, score: %.3f)", m2.ID[:8], m1.ID[:8], similarity))
 					} else {
-						if err := s.storage.DeleteConsolidated(ctx, m2.ID); err == nil {
+						if err := s.storage.Delete(ctx, m2.ID); err == nil {
 							details = append(details, fmt.Sprintf("removed duplicate: %s (similar to %s)", m2.ID[:8], m1.ID[:8]))
 							removed++
 						}
@@ -136,29 +133,26 @@ func (s *AutopruneService) archiveEpisodic(ctx context.Context, olderThan time.D
 	var details []string
 	before := time.Now().Add(-olderThan)
 
-	if dryRun {
-		// Count what would be archived
-		memories, err := s.storage.ListByLevel(ctx, memory.MemoryLevelEpisodic)
-		if err != nil {
-			return 0, nil, err
-		}
-
-		count := 0
-		for _, m := range memories {
-			if m.CreatedAt.Before(before) {
-				details = append(details, fmt.Sprintf("[dry-run] would archive: %s (created: %s)", m.ID[:8], m.CreatedAt.Format("2006-01-02")))
-				count++
-			}
-		}
-		return count, details, nil
-	}
-
-	count, err := s.storage.ArchiveOlderThan(ctx, memory.MemoryLevelEpisodic, before)
+	memories, err := s.storage.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{memory.MemoryLevelEpisodic}})
 	if err != nil {
 		return 0, nil, err
 	}
 
-	if count > 0 {
+	count := 0
+	for _, m := range memories {
+		if m.CreatedAt.Before(before) {
+			if dryRun {
+				details = append(details, fmt.Sprintf("[dry-run] would archive: %s (created: %s)", m.ID[:8], m.CreatedAt.Format("2006-01-02")))
+				count++
+				continue
+			}
+			if err := s.storage.Delete(ctx, m.ID); err == nil {
+				count++
+			}
+		}
+	}
+
+	if count > 0 && !dryRun {
 		details = append(details, fmt.Sprintf("archived %d episodic memories older than %v", count, olderThan))
 	}
 
@@ -170,12 +164,11 @@ func (s *AutopruneService) mergeSemantic(ctx context.Context, dryRun bool) (int,
 	var details []string
 	merged := 0
 
-	memories, err := s.storage.ListByLevel(ctx, memory.MemoryLevelSemantic)
+	memories, err := s.storage.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{memory.MemoryLevelSemantic}})
 	if err != nil {
 		return 0, nil, err
 	}
 
-	// Track which memories have been merged
 	mergedIDs := make(map[string]bool)
 
 	for i, m1 := range memories {
@@ -183,7 +176,7 @@ func (s *AutopruneService) mergeSemantic(ctx context.Context, dryRun bool) (int,
 			continue
 		}
 
-		var toMerge []*memory.ConsolidatedMemory
+		var toMerge []*memory.Memory
 		for j := i + 1; j < len(memories); j++ {
 			m2 := memories[j]
 			if mergedIDs[m2.ID] {
@@ -204,33 +197,57 @@ func (s *AutopruneService) mergeSemantic(ctx context.Context, dryRun bool) (int,
 					ids[i] = m.ID[:8]
 				}
 				details = append(details, fmt.Sprintf("[dry-run] would merge %d memories into %s", len(toMerge), m1.ID[:8]))
-			} else {
-				// Merge content from all memories
-				mergedContent := m1.Content
-				sourceIDs := make([]string, 0, len(toMerge))
-				for _, m := range toMerge {
-					mergedContent += "\n\n---\n\n" + m.Content
-					sourceIDs = append(sourceIDs, m.ID)
-				}
-
-				// Generate new embedding for merged content
-				newEmbedding, err := s.embedder.Embed(ctx, mergedContent)
-				if err != nil {
-					continue
-				}
-
-				// Perform the merge
-				if err := s.storage.Merge(ctx, m1.ID, sourceIDs, mergedContent, newEmbedding); err != nil {
-					continue
-				}
-
-				details = append(details, fmt.Sprintf("merged %d memories into %s", len(toMerge), m1.ID[:8]))
-				merged += len(toMerge)
+				continue
 			}
+
+			mergedContent := m1.Content
+			sourceIDs := make([]string, 0, len(toMerge))
+			for _, m := range toMerge {
+				mergedContent += "\n\n---\n\n" + m.Content
+				sourceIDs = append(sourceIDs, m.ID)
+			}
+
+			newEmbedding, err := s.embedder.Embed(ctx, mergedContent)
+			if err != nil {
+				continue
+			}
+
+			m1.Content = mergedContent
+			m1.Embedding = newEmbedding
+			m1.UpdatedAt = time.Now()
+			m1.MergedFrom = append(m1.MergedFrom, sourceIDs...)
+			m1.Tags = mergeTags(m1.Tags, collectTags(toMerge))
+			m1.Context.Tags = mergeTags(m1.Context.Tags, collectContextTags(toMerge))
+
+			if err := s.storage.Update(ctx, m1); err != nil {
+				continue
+			}
+			for _, m := range toMerge {
+				_ = s.storage.Delete(ctx, m.ID)
+			}
+
+			details = append(details, fmt.Sprintf("merged %d memories into %s", len(toMerge), m1.ID[:8]))
+			merged += len(toMerge)
 		}
 	}
 
 	return merged, details, nil
+}
+
+func collectTags(memories []*memory.Memory) []string {
+	var tags []string
+	for _, m := range memories {
+		tags = append(tags, m.Tags...)
+	}
+	return tags
+}
+
+func collectContextTags(memories []*memory.Memory) []string {
+	var tags []string
+	for _, m := range memories {
+		tags = append(tags, m.Context.Tags...)
+	}
+	return tags
 }
 
 // cosineSimilarity calculates cosine similarity between two vectors

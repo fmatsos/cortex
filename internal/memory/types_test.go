@@ -61,7 +61,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "test synthesis",
 				Level:     MemoryLevelWorking,
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "session123",
 					Source:    "manual",
 				},
@@ -73,7 +73,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "",
 				Level:     MemoryLevelWorking,
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "session123",
 				},
 			},
@@ -84,7 +84,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "test",
 				Level:     MemoryLevel("invalid"),
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "session123",
 				},
 			},
@@ -95,7 +95,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "test",
 				Level:     MemoryLevelWorking,
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "",
 				},
 			},
@@ -106,7 +106,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "test",
 				Level:     MemoryLevelWorking,
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "session123",
 					Source:    "invalid",
 				},
@@ -118,7 +118,7 @@ func TestConsolidateInput_Validate(t *testing.T) {
 			input: ConsolidateInput{
 				Synthesis: "test",
 				Level:     MemoryLevelEpisodic,
-				Context: ConsolidationContext{
+				Context: MemoryContext{
 					SessionID: "session123",
 					Source:    "",
 				},
@@ -149,13 +149,14 @@ func TestValidationError_Error(t *testing.T) {
 	}
 }
 
-func TestConsolidatedMemory(t *testing.T) {
+func TestMemory(t *testing.T) {
 	now := time.Now()
-	mem := &ConsolidatedMemory{
+	mem := &Memory{
 		ID:      "test-id",
 		Level:   MemoryLevelSemantic,
+		Title:   "test title",
 		Content: "test content",
-		Context: ConsolidationContext{
+		Context: MemoryContext{
 			SessionID: "session123",
 			Timestamp: now,
 			Source:    "manual",

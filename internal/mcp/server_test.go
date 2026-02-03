@@ -182,7 +182,7 @@ func TestToolInputSchemas(t *testing.T) {
 			}
 		case "cortex_create":
 			if len(tool.InputSchema.Required) != 3 {
-				t.Errorf("cortex_create should require title, content, type")
+				t.Errorf("cortex_create should require title, content, level")
 			}
 		case "cortex_get":
 			if len(tool.InputSchema.Required) != 1 || tool.InputSchema.Required[0] != "id" {
