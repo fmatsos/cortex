@@ -9,6 +9,33 @@ Cortex provides an MCP (Model Context Protocol) server that exposes memory opera
 - Search for relevant memories semantically
 - Create new memories to store solutions, issues, and analyses
 - List and retrieve existing memories
+- Consolidate information into multi-level memory system
+
+```mermaid
+graph LR
+    subgraph "AI Assistants"
+        Claude["Claude Code"]
+        Cursor["Cursor"]
+        Other["Other MCP Clients"]
+    end
+
+    subgraph "Cortex MCP Server"
+        Server["MCP Server<br/>(JSON-RPC 2.0)"]
+        Tools["Tools"]
+    end
+
+    subgraph "Storage"
+        Memories["Traditional Memories"]
+        Consolidated["Consolidated Memories"]
+    end
+
+    Claude --> Server
+    Cursor --> Server
+    Other --> Server
+    Server --> Tools
+    Tools --> Memories
+    Tools --> Consolidated
+```
 
 ## Installation
 
@@ -139,6 +166,34 @@ Add to your Cursor MCP settings:
 
 ## Available Tools
 
+```mermaid
+graph TB
+    subgraph "Traditional Memory Tools"
+        Search["cortex_search<br/>Semantic search"]
+        Create["cortex_create<br/>Create memory"]
+        List["cortex_list<br/>List memories"]
+        Get["cortex_get<br/>Get by ID"]
+    end
+
+    subgraph "Consolidation Tools"
+        Consolidate["cortex_consolidate<br/>Multi-level storage"]
+    end
+
+    Search --> Results["Search Results"]
+    Create --> Memory["New Memory"]
+    List --> AllMemories["All Memories"]
+    Get --> SingleMemory["Single Memory"]
+    Consolidate --> ConsolidatedMemory["Consolidated Memory"]
+```
+
+| Tool | Purpose | Key Parameters |
+|------|---------|----------------|
+| `cortex_search` | Find memories by meaning | `query`, `top_k`, `min_score`, `type` |
+| `cortex_create` | Create traditional memory | `title`, `content`, `type`, `tags` |
+| `cortex_list` | List all memories | `type`, `include_obsolete` |
+| `cortex_get` | Get memory by ID | `id` |
+| `cortex_consolidate` | Multi-level memory storage | `level`, `content`, `session_id`, `tags` |
+
 ### cortex_search
 
 Search memories using semantic similarity.
@@ -219,11 +274,134 @@ Get a specific memory by ID.
 }
 ```
 
+### cortex_consolidate
+
+Consolidate information into the multi-level memory system. This tool enables AI assistants to store information at different memory levels based on its nature and intended persistence.
+
+```mermaid
+graph TB
+    subgraph "Memory Levels"
+        Working["Working Memory<br/>🕐 Session-scoped"]
+        Episodic["Episodic Memory<br/>📅 Time-bound historical"]
+        Semantic["Semantic Memory<br/>📚 Permanent knowledge"]
+    end
+
+    Input["New Information"] --> Decision{Level?}
+    Decision -->|"Temporary context"| Working
+    Decision -->|"Event/decision"| Episodic
+    Decision -->|"General knowledge"| Semantic
+
+    Working -.->|"Session end"| Episodic
+    Episodic -.->|"Abstraction"| Semantic
+```
+
+**Parameters:**
+- `level` (required): Memory level - `working`, `episodic`, or `semantic`
+- `content` (required): Content to consolidate
+- `session_id` (optional): Session identifier (auto-generated if not provided)
+- `tags` (optional): Array of tags for categorization
+- `source` (optional): Source of content - `manual`, `auto`, or `llm` (default: `llm`)
+- `context` (optional): Additional context object with custom metadata
+- `force` (optional): Bypass duplicate detection (default: false)
+
+**Memory Level Selection:**
+
+| Level | When to Use | Retention |
+|-------|-------------|-----------|
+| `working` | Current session context, temporary notes | Until session ends |
+| `episodic` | Events, decisions, incidents, meeting notes | Configurable (default 90 days) |
+| `semantic` | Patterns, conventions, permanent knowledge | Permanent |
+
+**Example - Working Memory:**
+```json
+{
+  "name": "cortex_consolidate",
+  "arguments": {
+    "level": "working",
+    "content": "Currently investigating auth timeout in module X",
+    "session_id": "dev-session-2024-01-15",
+    "tags": ["debugging", "auth"]
+  }
+}
+```
+
+**Example - Episodic Memory:**
+```json
+{
+  "name": "cortex_consolidate",
+  "arguments": {
+    "level": "episodic",
+    "content": "Fixed race condition in auth middleware by adding mutex lock. Issue was caused by concurrent token refresh requests.",
+    "tags": ["bugfix", "auth", "concurrency"],
+    "source": "llm"
+  }
+}
+```
+
+**Example - Semantic Memory:**
+```json
+{
+  "name": "cortex_consolidate",
+  "arguments": {
+    "level": "semantic",
+    "content": "All database queries must use context with timeout to enable proper cancellation and prevent hanging queries.",
+    "tags": ["convention", "database", "context"]
+  }
+}
+```
+
+**Response:**
+
+The tool returns a result indicating whether a new memory was created or merged with an existing similar memory:
+
+```json
+{
+  "action": "created",
+  "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+  "level": "episodic",
+  "message": "Memory consolidated successfully"
+}
+```
+
+Or when merged with existing:
+
+```json
+{
+  "action": "merged",
+  "memory_id": "existing-memory-id",
+  "level": "semantic",
+  "similarity": 0.89,
+  "message": "Content merged with existing similar memory"
+}
+```
+
+**Duplicate Detection:**
+
+The consolidation system automatically detects similar content (similarity threshold: 0.85) and merges it with existing memories to avoid redundancy. Use `force: true` to bypass this check.
+
+```mermaid
+flowchart LR
+    A[New Content] --> B[Generate Embedding]
+    B --> C{Find Similar?}
+    C -->|"Yes (>= 0.85)"| D[Merge Content]
+    C -->|"No"| E[Create New]
+    D --> F[Update Memory]
+    E --> F
+    F --> G[Return Result]
+```
+
 ## Environment Variables
 
+**Storage:**
 - `CORTEX_STORAGE_PATH`: Path to the storage directory (default: `~/.local/share/cortex-ai`)
+
+**Embeddings:**
 - `CORTEX_EMBEDDINGS_ENDPOINT`: Ollama endpoint (default: `http://localhost:11434`)
 - `CORTEX_EMBEDDINGS_MODEL`: Embedding model (default: `nomic-embed-text`)
+
+**Consolidation:**
+- `CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD`: Duplicate detection threshold (default: `0.85`)
+- `CORTEX_CONSOLIDATION_AUTO_TRANSFER`: Auto-transfer working memories on session end (default: `true`)
 
 ## Protocol
 
@@ -268,3 +446,70 @@ The MCP server logs to stderr. To capture logs:
 ```bash
 cortex start-mcp-server 2>mcp.log
 ```
+
+## Best Practices for LLM Integration
+
+### When to Use Each Memory Level
+
+```mermaid
+flowchart TD
+    A[Information to Store] --> B{Is it temporary<br/>session context?}
+    B -->|Yes| C[Use Working Memory]
+    B -->|No| D{Is it a specific<br/>event or decision?}
+    D -->|Yes| E[Use Episodic Memory]
+    D -->|No| F{Is it reusable<br/>knowledge?}
+    F -->|Yes| G[Use Semantic Memory]
+    F -->|No| E
+```
+
+### Recommended Patterns
+
+**During Active Development Sessions:**
+```
+1. Use working memory for current task context
+2. At the end of a session, important findings automatically transfer to episodic
+3. Extract general patterns into semantic memory
+```
+
+**Bug Fix Documentation:**
+```
+1. Store the fix details in episodic memory (includes timestamp context)
+2. If the fix reveals a general pattern, also store in semantic memory
+```
+
+**Convention/Rule Documentation:**
+```
+1. Store directly in semantic memory for permanent retention
+2. Include rationale and examples in the content
+```
+
+### Content Quality Guidelines
+
+| Level | Content Style | Example |
+|-------|---------------|---------|
+| Working | Brief, action-oriented | "Debugging auth timeout - tried X, next: Y" |
+| Episodic | Complete context with outcome | "Fixed auth timeout by adding retry logic. Root cause was network instability." |
+| Semantic | Documentation-quality, self-contained | "Network requests should include retry logic with exponential backoff. Default: 3 retries, base delay 1s." |
+
+### Session Management
+
+For working memory, use consistent session IDs across related work:
+
+```json
+{
+  "level": "working",
+  "session_id": "feature-auth-improvement-2024",
+  "content": "..."
+}
+```
+
+This allows all related context to be transferred together when the session ends.
+
+---
+
+## Related Documentation
+
+- [CONFIGURATION.md](./CONFIGURATION.md) - Configuration reference
+- [CLI_REFERENCE.md](./CLI_REFERENCE.md) - CLI command reference
+- [MEMORY_MODEL.md](./MEMORY_MODEL.md) - Memory model documentation
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture

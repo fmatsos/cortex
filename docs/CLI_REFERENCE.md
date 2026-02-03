@@ -16,6 +16,10 @@ Complete reference for all Cortex command-line commands.
 - [config](#config)
 - [start-mcp-server](#start-mcp-server)
 - [completion](#completion)
+- [consolidate](#consolidate)
+- [list-consolidated](#list-consolidated)
+- [transfer-working](#transfer-working)
+- [autoprune](#autoprune)
 
 ---
 
@@ -421,6 +425,165 @@ cortex completion zsh >> ~/.zshrc
 
 # Fish completion (add to ~/.config/fish/completions)
 cortex completion fish > ~/.config/fish/completions/cortex.fish
+```
+
+---
+
+## consolidate
+
+Consolidate information into the multi-level memory system.
+
+**Usage:**
+```bash
+cortex consolidate --level <level> --content "..."
+```
+
+**Required Flags:**
+- `--level, -l <level>` - Memory level: working, episodic, semantic
+- `--content <string>` - Content to consolidate
+
+**Optional Flags:**
+- `--session <string>` - Session ID (auto-generated if not provided)
+- `--tags <tags>` - Comma-separated tags
+- `--source <source>` - Source: manual, auto, llm (default: manual)
+- `--context <json>` - Additional context as JSON
+- `--force, -f` - Bypass duplicate detection
+- `--output, -o <format>` - Output format: text, json (default: text)
+
+**Examples:**
+```bash
+# Working memory for current session
+cortex consolidate --level working --session "dev-session" \
+  --content "Currently debugging auth timeout issue"
+
+# Episodic memory with tags
+cortex consolidate --level episodic \
+  --content "Fixed race condition in auth middleware" \
+  --tags "bugfix,auth,concurrency"
+
+# Semantic memory (permanent knowledge)
+cortex consolidate --level semantic \
+  --content "All database queries must use context with timeout"
+
+# Force create (skip duplicate check)
+cortex consolidate --level episodic --force \
+  --content "Another approach to the same problem"
+
+# With full context JSON
+cortex consolidate --level episodic \
+  --content "Deployment completed" \
+  --context '{"task_id": "TASK-123", "author": "ci-bot"}'
+```
+
+---
+
+## list-consolidated
+
+List consolidated memories filtered by level.
+
+**Usage:**
+```bash
+cortex list-consolidated [flags]
+```
+
+**Optional Flags:**
+- `--level, -l <level>` - Filter by level: working, episodic, semantic
+- `--output, -o <format>` - Output format: text, json (default: text)
+
+**Examples:**
+```bash
+# List all consolidated memories
+cortex list-consolidated
+
+# List only working memories
+cortex list-consolidated --level working
+
+# List episodic as JSON
+cortex list-consolidated --level episodic --output json
+
+# List semantic memories
+cortex list-consolidated --level semantic
+```
+
+---
+
+## transfer-working
+
+Transfer working memories from a session to episodic level.
+
+**Usage:**
+```bash
+cortex transfer-working --session <session-id>
+```
+
+**Required Flags:**
+- `--session <string>` - Session ID to transfer
+
+**Optional Flags:**
+- `--output, -o <format>` - Output format: text, json (default: text)
+
+**Examples:**
+```bash
+# Transfer session memories to episodic
+cortex transfer-working --session "dev-session-2024"
+
+# JSON output
+cortex transfer-working --session "my-session" --output json
+```
+
+---
+
+## autoprune
+
+Clean and optimize the consolidated memory database.
+
+**Usage:**
+```bash
+cortex autoprune [flags]
+```
+
+**Optional Flags:**
+- `--duplicates` - Remove duplicate memories (similarity >= 0.92)
+- `--archive-episodic` - Archive old episodic memories
+- `--merge-semantic` - Merge similar semantic memories (similarity >= 0.88)
+- `--older-than <duration>` - Age threshold for archiving (default: 90d)
+- `--dry-run` - Preview changes without executing
+- `--output, -o <format>` - Output format: text, json (default: text)
+
+**Note:** If no operation flags are specified, all operations are performed.
+
+**Examples:**
+```bash
+# Preview all cleanup operations
+cortex autoprune --dry-run
+
+# Run all cleanup operations
+cortex autoprune
+
+# Only remove duplicates
+cortex autoprune --duplicates
+
+# Archive episodic older than 30 days
+cortex autoprune --archive-episodic --older-than 30d
+
+# Merge similar semantic memories
+cortex autoprune --merge-semantic
+
+# Full cleanup with specific retention
+cortex autoprune --duplicates --archive-episodic --merge-semantic --older-than 60d
+```
+
+**Autoprune Operations:**
+
+```mermaid
+flowchart LR
+    A[autoprune] --> B[Duplicates<br/>Remove similar memories]
+    A --> C[Archive Episodic<br/>Clean old records]
+    A --> D[Merge Semantic<br/>Consolidate knowledge]
+
+    B --> E[Threshold: 0.92]
+    C --> F[Default: 90 days]
+    D --> G[Threshold: 0.88]
 ```
 
 ---

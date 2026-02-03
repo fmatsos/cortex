@@ -42,6 +42,16 @@ search:
 output:
   format: text
   colors: true
+
+consolidation:
+  similarity_threshold: 0.85
+  prompt_template: default
+  auto_transfer_on_session_end: true
+
+autoprune:
+  duplicates_threshold: 0.92
+  episodic_retention_days: 90
+  semantic_merge_threshold: 0.88
 ```
 
 ---
@@ -113,6 +123,67 @@ graph LR
 |--------|------|---------|-------------|
 | `output.format` | string | `text` | Output format (`text` or `json`) |
 | `output.colors` | boolean | `true` | Enable colored output |
+
+### Consolidation Section
+
+Configuration for the multi-level memory consolidation system.
+
+```mermaid
+graph LR
+    Consolidation["consolidation"]
+    Consolidation --> SimilarityThreshold["similarity_threshold"]
+    Consolidation --> PromptTemplate["prompt_template"]
+    Consolidation --> AutoTransfer["auto_transfer_on_session_end"]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `consolidation.similarity_threshold` | float | `0.85` | Similarity threshold for duplicate detection (0.0-1.0) |
+| `consolidation.prompt_template` | string | `default` | Template name for LLM-assisted consolidation |
+| `consolidation.auto_transfer_on_session_end` | boolean | `true` | Automatically transfer working memories to episodic on session end |
+
+**Similarity Threshold Guide:**
+
+| Value | Behavior |
+|-------|----------|
+| 0.95+ | Only merge nearly identical content |
+| 0.85 (default) | Merge very similar content |
+| 0.75 | Merge moderately similar content |
+| < 0.7 | Not recommended (too aggressive) |
+
+### Autoprune Section
+
+Configuration for automatic memory cleanup and optimization.
+
+```mermaid
+graph LR
+    Autoprune["autoprune"]
+    Autoprune --> DuplicatesThreshold["duplicates_threshold"]
+    Autoprune --> EpisodicRetention["episodic_retention_days"]
+    Autoprune --> SemanticMerge["semantic_merge_threshold"]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `autoprune.duplicates_threshold` | float | `0.92` | Similarity threshold for duplicate detection |
+| `autoprune.episodic_retention_days` | integer | `90` | Days to retain episodic memories before archiving |
+| `autoprune.semantic_merge_threshold` | float | `0.88` | Similarity threshold for merging semantic memories |
+
+**Retention Strategy:**
+
+```mermaid
+graph TB
+    subgraph "Memory Lifecycle"
+        Working["Working Memory<br/>Session-scoped"]
+        Episodic["Episodic Memory<br/>90 days default"]
+        Semantic["Semantic Memory<br/>Permanent"]
+    end
+
+    Working -->|"Session End"| Episodic
+    Episodic -->|"After retention"| Archive["Archive/Delete"]
+    Episodic -->|"Abstraction"| Semantic
+    Semantic -->|"Merge similar"| Semantic
+```
 
 ### Templates Section
 
@@ -211,6 +282,12 @@ graph TB
 | `CORTEX_SEARCH_INCLUDE_OBSOLETE` | `search.include_obsolete` |
 | `CORTEX_OUTPUT_FORMAT` | `output.format` |
 | `CORTEX_OUTPUT_COLORS` | `output.colors` |
+| `CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD` | `consolidation.similarity_threshold` |
+| `CORTEX_CONSOLIDATION_PROMPT_TEMPLATE` | `consolidation.prompt_template` |
+| `CORTEX_CONSOLIDATION_AUTO_TRANSFER` | `consolidation.auto_transfer_on_session_end` |
+| `CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD` | `autoprune.duplicates_threshold` |
+| `CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS` | `autoprune.episodic_retention_days` |
+| `CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD` | `autoprune.semantic_merge_threshold` |
 
 ### Example
 

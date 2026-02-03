@@ -1,0 +1,67 @@
+{
+  "name": "cortex_consolidate",
+  "description": "Consolidate a synthesis into memory (working, episodic, semantic). Automatically detects duplicates and merges similar memories.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "synthesis": {
+        "type": "string",
+        "description": "The synthesis or content to consolidate into memory"
+      },
+      "memory_level": {
+        "type": "string",
+        "description": "Target memory level",
+        "enum": ["working", "episodic", "semantic"]
+      },
+      "context": {
+        "type": "object",
+        "description": "Consolidation context",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "description": "Optional task identifier"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session identifier (required)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the consolidation"
+          },
+          "author": {
+            "type": "string",
+            "description": "Author or source of the memory"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags for categorization"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["manual", "auto", "llm"],
+            "description": "Source of the consolidation"
+          },
+          "related_memories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "IDs of related memories"
+          }
+        },
+        "required": ["session_id", "source"]
+      },
+      "force": {
+        "type": "boolean",
+        "default": false,
+        "description": "Bypass duplicate detection and force creation of new memory"
+      }
+    },
+    "required": ["synthesis", "memory_level", "context"]
+  }
+}

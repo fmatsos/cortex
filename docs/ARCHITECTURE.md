@@ -99,6 +99,10 @@ graph LR
         Root --> Config["config"]
         Root --> MCP["start-mcp-server"]
         Root --> Completion["completion"]
+        Root --> Consolidate["consolidate"]
+        Root --> ListConsolidated["list-consolidated"]
+        Root --> TransferWorking["transfer-working"]
+        Root --> Autoprune["autoprune"]
     end
 ```
 
@@ -115,6 +119,10 @@ graph LR
 | `config` | View/edit config | `--show`, `--edit` |
 | `start-mcp-server` | Start MCP server | `--transport`, `--address` |
 | `completion` | Generate shell completions | `bash`, `zsh`, `fish` |
+| `consolidate` | Consolidate into multi-level memory | `--level`, `--content`, `--session` |
+| `list-consolidated` | List consolidated memories | `--level`, `--output` |
+| `transfer-working` | Transfer working to episodic | `--session` |
+| `autoprune` | Clean and optimize database | `--duplicates`, `--archive-episodic`, `--dry-run` |
 
 ### Memory Service
 
@@ -192,6 +200,104 @@ graph TB
     Solution --> Combined2
     Rule --> Combined3
     Analysis --> Combined3
+```
+
+### Multi-Level Memory System
+
+Cortex supports a three-tier memory consolidation system inspired by cognitive memory models:
+
+```mermaid
+graph TB
+    subgraph "Memory Levels"
+        Working["Working Memory<br/>Session-scoped, temporary"]
+        Episodic["Episodic Memory<br/>Historical events, decisions"]
+        Semantic["Semantic Memory<br/>General knowledge, conventions"]
+    end
+
+    subgraph "Consolidation Flow"
+        Input["New Information"] --> Working
+        Working -->|"Session End<br/>transfer-working"| Episodic
+        Episodic -->|"Abstraction<br/>promote"| Semantic
+        Working -->|"Direct Store"| Episodic
+        Working -->|"Direct Store"| Semantic
+    end
+
+    subgraph "Autoprune Operations"
+        Duplicates["Remove Duplicates<br/>similarity >= 0.92"]
+        Archive["Archive Old Episodic<br/>retention days"]
+        Merge["Merge Similar Semantic<br/>similarity >= 0.88"]
+    end
+
+    Episodic --> Duplicates
+    Episodic --> Archive
+    Semantic --> Duplicates
+    Semantic --> Merge
+```
+
+| Level | Purpose | Lifecycle | Use Case |
+|-------|---------|-----------|----------|
+| `working` | Temporary session context | Auto-deleted or transferred | Current task notes, in-progress work |
+| `episodic` | Historical record | Archived after retention period | Bug fixes, decisions, incidents |
+| `semantic` | Reusable knowledge | Permanent, may be merged | Patterns, conventions, architecture |
+
+### Consolidation Service
+
+The consolidation service handles intelligent memory storage with duplicate detection and merge capabilities:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant CS as ConsolidationService
+    participant E as Embedder
+    participant S as ConsolidatedStorage
+
+    C->>CS: Consolidate(input)
+    CS->>E: Embed(synthesis)
+    E-->>CS: embedding
+
+    alt Force = false
+        CS->>S: FindSimilar(embedding, level, threshold)
+        S-->>CS: similar memories
+        alt Similar Found
+            CS->>CS: Merge content
+            CS->>E: Embed(merged content)
+            E-->>CS: new embedding
+            CS->>S: SaveConsolidated(merged)
+            CS-->>C: Result{action: "merged"}
+        else No Similar
+            CS->>S: SaveConsolidated(new)
+            CS-->>C: Result{action: "created"}
+        end
+    else Force = true
+        CS->>S: SaveConsolidated(new)
+        CS-->>C: Result{action: "created"}
+    end
+```
+
+### Autoprune Service
+
+The autoprune service maintains database health through automatic cleanup:
+
+```mermaid
+flowchart TD
+    A[autoprune] --> B{Options?}
+
+    B -->|--duplicates| C[Find Duplicate Pairs]
+    C --> D{Similarity >= 0.92?}
+    D -->|Yes| E[Remove Newer Duplicate]
+    D -->|No| F[Skip]
+
+    B -->|--archive-episodic| G[Find Old Episodic]
+    G --> H{Age > retention days?}
+    H -->|Yes| I[Archive/Delete]
+    H -->|No| J[Keep]
+
+    B -->|--merge-semantic| K[Find Similar Semantic]
+    K --> L{Similarity >= 0.88?}
+    L -->|Yes| M[Merge into Oldest]
+    L -->|No| N[Skip]
+
+    B -->|--dry-run| O[Report Actions Only]
 ```
 
 ### Embedding System
@@ -455,6 +561,7 @@ graph TB
         search["search/<br/>Similarity Algorithms"]
         config["config/<br/>Configuration"]
         mcp["mcp/<br/>MCP Protocol"]
+        consolidation["consolidation/<br/>Multi-level Memory"]
     end
 
     subgraph "pkg/"
@@ -466,12 +573,17 @@ graph TB
     cli --> memory
     cli --> config
     cli --> mcp
+    cli --> consolidation
 
     memory --> storage
     memory --> embeddings
     memory --> search
 
+    consolidation --> storage
+    consolidation --> embeddings
+
     mcp --> memory
+    mcp --> consolidation
 
     cli --> markdown
     cli --> json
