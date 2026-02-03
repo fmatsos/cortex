@@ -7,7 +7,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
+	"github.com/cortex-ai/cortex-ai/internal/consolidation"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
@@ -22,10 +25,13 @@ const (
 
 // Server represents the MCP server
 type Server struct {
-	transport Transport
-	service   memory.Service
-	storage   storage.Storage
-	logger    *log.Logger
+	transport            Transport
+	service              memory.Service
+	storage              storage.Storage
+	consolidatedStorage  *storage.GobConsolidatedStorage
+	consolidationService *consolidation.Service
+	embedder             memory.Embedder
+	logger               *log.Logger
 }
 
 // NewServer creates a new MCP server with the given transport
@@ -47,6 +53,8 @@ func (s *Server) Initialize(storagePath string, embedder memory.Embedder) error 
 		return fmt.Errorf("embedder is required")
 	}
 
+	s.embedder = embedder
+
 	// Initialize storage
 	store, err := storage.NewGobStorage(storagePath)
 	if err != nil {
@@ -56,6 +64,17 @@ func (s *Server) Initialize(storagePath string, embedder memory.Embedder) error 
 
 	// Create service
 	s.service = memory.NewMemoryService(store, embedder)
+
+	// Initialize consolidated storage
+	consolidatedStore, err := storage.NewGobConsolidatedStorage(storagePath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize consolidated storage: %w", err)
+	}
+	s.consolidatedStorage = consolidatedStore
+
+	// Create consolidation service
+	cfg := config.Global()
+	s.consolidationService = consolidation.NewService(consolidatedStore, embedder, &cfg.Consolidation)
 
 	return nil
 }
@@ -73,6 +92,12 @@ func (s *Server) Close() error {
 	if s.storage != nil {
 		if err := s.storage.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("storage close: %w", err))
+		}
+	}
+
+	if s.consolidatedStorage != nil {
+		if err := s.consolidatedStorage.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("consolidated storage close: %w", err))
 		}
 	}
 
@@ -221,6 +246,8 @@ func (s *Server) handleCallTool(req *Request) *Response {
 		return s.handleList(ctx, req.ID, params.Arguments)
 	case "cortex_get":
 		return s.handleGet(ctx, req.ID, params.Arguments)
+	case "cortex_consolidate":
+		return s.handleConsolidate(ctx, req.ID, params.Arguments)
 	default:
 		return NewErrorResponse(req.ID, InvalidParams, "Unknown tool", params.Name)
 	}
@@ -382,6 +409,101 @@ func (s *Server) handleGet(ctx context.Context, id interface{}, args json.RawMes
 	jsonBytes, err := pkgjson.MarshalMemory(mem, false)
 	if err != nil {
 		return s.toolError(id, fmt.Sprintf("Failed to marshal memory: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+// Consolidate arguments
+type consolidateArgs struct {
+	Synthesis   string                `json:"synthesis"`
+	MemoryLevel string                `json:"memory_level"`
+	Context     consolidateContextArg `json:"context"`
+	Force       bool                  `json:"force"`
+}
+
+type consolidateContextArg struct {
+	TaskID          string   `json:"task_id"`
+	SessionID       string   `json:"session_id"`
+	Timestamp       string   `json:"timestamp"`
+	Author          string   `json:"author"`
+	Tags            []string `json:"tags"`
+	Source          string   `json:"source"`
+	RelatedMemories []string `json:"related_memories"`
+}
+
+func (s *Server) handleConsolidate(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a consolidateArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid consolidate arguments", err.Error())
+	}
+
+	if a.Synthesis == "" {
+		return NewErrorResponse(id, InvalidParams, "synthesis is required", nil)
+	}
+
+	if a.MemoryLevel == "" {
+		return NewErrorResponse(id, InvalidParams, "memory_level is required", nil)
+	}
+
+	if !memory.IsValidLevel(a.MemoryLevel) {
+		return NewErrorResponse(id, InvalidParams, "invalid memory_level: must be working|episodic|semantic", nil)
+	}
+
+	if a.Context.SessionID == "" {
+		return NewErrorResponse(id, InvalidParams, "context.session_id is required", nil)
+	}
+
+	if a.Context.Source == "" {
+		a.Context.Source = "llm"
+	}
+
+	// Parse timestamp
+	var timestamp time.Time
+	if a.Context.Timestamp != "" {
+		var err error
+		timestamp, err = time.Parse(time.RFC3339, a.Context.Timestamp)
+		if err != nil {
+			timestamp = time.Now()
+		}
+	} else {
+		timestamp = time.Now()
+	}
+
+	// Build consolidation input
+	input := memory.ConsolidateInput{
+		Synthesis: a.Synthesis,
+		Level:     memory.MemoryLevel(a.MemoryLevel),
+		Context: memory.ConsolidationContext{
+			TaskID:          a.Context.TaskID,
+			SessionID:       a.Context.SessionID,
+			Timestamp:       timestamp,
+			Author:          a.Context.Author,
+			Tags:            a.Context.Tags,
+			Source:          a.Context.Source,
+			RelatedMemories: a.Context.RelatedMemories,
+		},
+		Force: a.Force,
+	}
+
+	// Consolidate
+	result, err := s.consolidationService.Consolidate(ctx, input)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Consolidation failed: %v", err))
+	}
+
+	// Return JSON response
+	response := struct {
+		Success bool                       `json:"success"`
+		Result  *memory.ConsolidateResult `json:"result"`
+	}{
+		Success: true,
+		Result:  result,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
 	}
 
 	return s.toolResult(id, string(jsonBytes))

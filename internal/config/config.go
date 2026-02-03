@@ -13,11 +13,27 @@ import (
 
 // Config represents the complete configuration for Cortex
 type Config struct {
-	Storage    StorageConfig    `mapstructure:"storage"`
-	Embeddings EmbeddingsConfig `mapstructure:"embeddings"`
-	Search     SearchConfig     `mapstructure:"search"`
-	Output     OutputConfig     `mapstructure:"output"`
-	Templates  TemplatesConfig  `mapstructure:"templates"`
+	Storage       StorageConfig       `mapstructure:"storage"`
+	Embeddings    EmbeddingsConfig    `mapstructure:"embeddings"`
+	Search        SearchConfig        `mapstructure:"search"`
+	Output        OutputConfig        `mapstructure:"output"`
+	Templates     TemplatesConfig     `mapstructure:"templates"`
+	Consolidation ConsolidationConfig `mapstructure:"consolidation"`
+	Autoprune     AutopruneConfig     `mapstructure:"autoprune"`
+}
+
+// ConsolidationConfig contains configuration for memory consolidation
+type ConsolidationConfig struct {
+	SimilarityThreshold      float64 `mapstructure:"similarity_threshold"`       // threshold for duplicate detection
+	PromptTemplate           string  `mapstructure:"prompt_template"`            // template name for LLM consolidation
+	AutoTransferOnSessionEnd bool    `mapstructure:"auto_transfer_on_session_end"` // auto-transfer working to episodic
+}
+
+// AutopruneConfig contains configuration for automatic memory cleanup
+type AutopruneConfig struct {
+	DuplicatesThreshold    float64 `mapstructure:"duplicates_threshold"`     // similarity threshold for duplicate detection
+	EpisodicRetentionDays  int     `mapstructure:"episodic_retention_days"`  // days to retain episodic memories
+	SemanticMergeThreshold float64 `mapstructure:"semantic_merge_threshold"` // threshold for merging semantic memories
 }
 
 // TemplatesConfig contains template customization options
@@ -150,6 +166,16 @@ func DefaultConfig() *Config {
 			Format: "text",
 			Colors: true,
 		},
+		Consolidation: ConsolidationConfig{
+			SimilarityThreshold:      0.85,
+			PromptTemplate:           "default",
+			AutoTransferOnSessionEnd: true,
+		},
+		Autoprune: AutopruneConfig{
+			DuplicatesThreshold:    0.92,
+			EpisodicRetentionDays:  90,
+			SemanticMergeThreshold: 0.88,
+		},
 	}
 }
 
@@ -261,6 +287,16 @@ func (m *Manager) bindEnvVars() {
 	// Output
 	_ = m.v.BindEnv("output.format", "CORTEX_OUTPUT_FORMAT")
 	_ = m.v.BindEnv("output.colors", "CORTEX_OUTPUT_COLORS")
+
+	// Consolidation
+	_ = m.v.BindEnv("consolidation.similarity_threshold", "CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD")
+	_ = m.v.BindEnv("consolidation.prompt_template", "CORTEX_CONSOLIDATION_PROMPT_TEMPLATE")
+	_ = m.v.BindEnv("consolidation.auto_transfer_on_session_end", "CORTEX_CONSOLIDATION_AUTO_TRANSFER")
+
+	// Autoprune
+	_ = m.v.BindEnv("autoprune.duplicates_threshold", "CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD")
+	_ = m.v.BindEnv("autoprune.episodic_retention_days", "CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS")
+	_ = m.v.BindEnv("autoprune.semantic_merge_threshold", "CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD")
 }
 
 // setDefaults sets default values
@@ -286,6 +322,16 @@ func (m *Manager) setDefaults() {
 	// Output defaults
 	m.v.SetDefault("output.format", defaults.Output.Format)
 	m.v.SetDefault("output.colors", defaults.Output.Colors)
+
+	// Consolidation defaults
+	m.v.SetDefault("consolidation.similarity_threshold", defaults.Consolidation.SimilarityThreshold)
+	m.v.SetDefault("consolidation.prompt_template", defaults.Consolidation.PromptTemplate)
+	m.v.SetDefault("consolidation.auto_transfer_on_session_end", defaults.Consolidation.AutoTransferOnSessionEnd)
+
+	// Autoprune defaults
+	m.v.SetDefault("autoprune.duplicates_threshold", defaults.Autoprune.DuplicatesThreshold)
+	m.v.SetDefault("autoprune.episodic_retention_days", defaults.Autoprune.EpisodicRetentionDays)
+	m.v.SetDefault("autoprune.semantic_merge_threshold", defaults.Autoprune.SemanticMergeThreshold)
 }
 
 // Get returns the current configuration

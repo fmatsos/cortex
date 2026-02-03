@@ -77,6 +77,7 @@ var MCPToolNames = []string{
 	"cortex_create",
 	"cortex_list",
 	"cortex_get",
+	"cortex_consolidate",
 }
 
 // LoadTemplateSchema loads a template JSON schema by name.

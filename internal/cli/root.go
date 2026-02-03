@@ -46,6 +46,12 @@ func initStorage() (*storage.GobStorage, error) {
 	return storage.NewGobStorage(cfg.Storage.Path)
 }
 
+// initConsolidatedStorage initializes consolidated storage from the global configuration
+func initConsolidatedStorage() (*storage.GobConsolidatedStorage, error) {
+	cfg := config.Global()
+	return storage.NewGobConsolidatedStorage(cfg.Storage.Path)
+}
+
 // initEmbedder initializes the embedder from the global configuration
 func initEmbedder() (embeddings.Embedder, error) {
 	cfg := config.Global()
