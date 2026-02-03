@@ -22,11 +22,11 @@ type ConsolidatedStorageData struct {
 
 // GobConsolidatedStorage implements ConsolidatedStorage interface using Gob encoding
 type GobConsolidatedStorage struct {
-	basePath     string
-	data         *ConsolidatedStorageData
-	workingData  map[string]*ConsolidatedStorageData // map[sessionID]data for working memories
-	mu           sync.RWMutex
-	workingMu    sync.RWMutex
+	basePath    string
+	data        *ConsolidatedStorageData
+	workingData map[string]*ConsolidatedStorageData // map[sessionID]data for working memories
+	mu          sync.RWMutex
+	workingMu   sync.RWMutex
 }
 
 // NewGobConsolidatedStorage creates a new consolidated storage backend

@@ -494,7 +494,7 @@ func (s *Server) handleConsolidate(ctx context.Context, id interface{}, args jso
 
 	// Return JSON response
 	response := struct {
-		Success bool                       `json:"success"`
+		Success bool                      `json:"success"`
 		Result  *memory.ConsolidateResult `json:"result"`
 	}{
 		Success: true,

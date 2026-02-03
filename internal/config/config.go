@@ -24,8 +24,8 @@ type Config struct {
 
 // ConsolidationConfig contains configuration for memory consolidation
 type ConsolidationConfig struct {
-	SimilarityThreshold      float64 `mapstructure:"similarity_threshold"`       // threshold for duplicate detection
-	PromptTemplate           string  `mapstructure:"prompt_template"`            // template name for LLM consolidation
+	SimilarityThreshold      float64 `mapstructure:"similarity_threshold"`         // threshold for duplicate detection
+	PromptTemplate           string  `mapstructure:"prompt_template"`              // template name for LLM consolidation
 	AutoTransferOnSessionEnd bool    `mapstructure:"auto_transfer_on_session_end"` // auto-transfer working to episodic
 }
 

@@ -31,14 +31,14 @@ Examples:
 }
 
 var (
-	consolidateLevel      string
-	consolidateContent    string
-	consolidateContext    string
-	consolidateForce      bool
-	consolidateOutput     string
-	consolidateSessionID  string
-	consolidateTags       []string
-	consolidateSource     string
+	consolidateLevel     string
+	consolidateContent   string
+	consolidateContext   string
+	consolidateForce     bool
+	consolidateOutput    string
+	consolidateSessionID string
+	consolidateTags      []string
+	consolidateSource    string
 )
 
 func init() {
