@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"text/tabwriter"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
-	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -21,8 +21,7 @@ var statsCmd = &cobra.Command{
 
 Shows:
   - Total number of memories
-  - Number of memories by type
-  - Number of vector chunks (embeddings)
+  - Number of memories by level
   - Database creation date
   - Date of the last record
 
@@ -43,13 +42,11 @@ func init() {
 // Statistics represents the statistics data
 type Statistics struct {
 	TotalMemories   int            `json:"total_memories"`
-	MemoriesByType  map[string]int `json:"memories_by_type"`
-	TotalChunks     int            `json:"total_chunks"`
+	MemoriesByLevel map[string]int `json:"memories_by_level"`
 	DatabaseCreated *time.Time     `json:"database_created,omitempty"`
 	LastRecordDate  *time.Time     `json:"last_record_date,omitempty"`
 	ObsoleteCount   int            `json:"obsolete_count"`
 	ActiveCount     int            `json:"active_count"`
-	StorageMode     string         `json:"storage_mode"`
 	StoragePath     string         `json:"storage_path"`
 	ConfigFile      string         `json:"config_file,omitempty"`
 }
@@ -76,7 +73,8 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	// Calculate statistics
-	stats := calculateStats(memories, storageBackend)
+	cfg := config.Global()
+	stats := calculateStats(memories, filepath.Join(cfg.Storage.Path, "memories.gob"))
 
 	// Add config file info
 	stats.ConfigFile = config.GlobalConfigFileUsed()
@@ -88,27 +86,23 @@ func runStats(cmd *cobra.Command, args []string) error {
 	return outputStatsText(cmd, stats)
 }
 
-func calculateStats(memories []*memory.Memory, storageBackend *storage.GobStorage) Statistics {
+func calculateStats(memories []*memory.Memory, storagePath string) Statistics {
 	stats := Statistics{
-		TotalMemories:  len(memories),
-		MemoriesByType: make(map[string]int),
-		TotalChunks:    storageBackend.MemoryCount(),
-		StorageMode:    string(storageBackend.Mode()),
-		StoragePath:    storageBackend.FilePath(),
+		TotalMemories:   len(memories),
+		MemoriesByLevel: make(map[string]int),
+		StoragePath:     storagePath,
 	}
 
-	// Initialize type counts to 0 for all types
-	for _, t := range memory.ValidMemoryTypes {
-		stats.MemoriesByType[string(t)] = 0
+	// Initialize level counts to 0 for all levels
+	for _, level := range memory.ValidMemoryLevels {
+		stats.MemoriesByLevel[string(level)] = 0
 	}
 
 	var oldestCreated, newestUpdated time.Time
 
 	for _, m := range memories {
-		// Count by type
-		for _, t := range m.Types {
-			stats.MemoriesByType[string(t)]++
-		}
+		// Count by level
+		stats.MemoriesByLevel[string(m.Level)]++
 
 		// Count obsolete vs active
 		if m.Obsolete {
@@ -155,14 +149,13 @@ func outputStatsText(cmd *cobra.Command, stats Statistics) error {
 	_, _ = fmt.Fprintf(w, "Total memories:\t%d\n", stats.TotalMemories)
 	_, _ = fmt.Fprintf(w, "Active memories:\t%d\n", stats.ActiveCount)
 	_, _ = fmt.Fprintf(w, "Obsolete memories:\t%d\n", stats.ObsoleteCount)
-	_, _ = fmt.Fprintf(w, "Vector chunks:\t%d\n", stats.TotalChunks)
 	_, _ = fmt.Fprintln(w)
 
-	// Memories by type
-	_, _ = fmt.Fprintln(w, "Memories by type:")
-	for _, t := range memory.ValidMemoryTypes {
-		count := stats.MemoriesByType[string(t)]
-		_, _ = fmt.Fprintf(w, "  %s:\t%d\n", t, count)
+	// Memories by level
+	_, _ = fmt.Fprintln(w, "Memories by level:")
+	for _, level := range memory.ValidMemoryLevels {
+		count := stats.MemoriesByLevel[string(level)]
+		_, _ = fmt.Fprintf(w, "  %s:\t%d\n", level, count)
 	}
 	_, _ = fmt.Fprintln(w)
 
@@ -181,7 +174,6 @@ func outputStatsText(cmd *cobra.Command, stats Statistics) error {
 	_, _ = fmt.Fprintln(w)
 
 	// Storage info
-	_, _ = fmt.Fprintf(w, "Storage mode:\t%s\n", stats.StorageMode)
 	_, _ = fmt.Fprintf(w, "Storage path:\t%s\n", stats.StoragePath)
 
 	// Check if storage file exists

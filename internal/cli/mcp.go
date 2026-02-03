@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
@@ -107,7 +108,8 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize with storage path from config
-	if err := server.Initialize(cfg.Storage.Path, embedder); err != nil {
+	storagePath := filepath.Join(cfg.Storage.Path, "memories.gob")
+	if err := server.Initialize(storagePath, embedder); err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer func() { _ = server.Close() }()

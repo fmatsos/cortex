@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/cortex-ai/cortex-ai/internal/cli/output"
@@ -18,20 +19,24 @@ var listCmd = &cobra.Command{
 
 Examples:
   cortex list
-  cortex list --type solution
+  cortex list --level semantic
   cortex list --include-obsolete`,
 	RunE: runList,
 }
 
 var (
-	listType            string
+	listLevel           string
+	listLimit           int
 	listIncludeObsolete bool
 	listJSON            bool
+	listReverse         bool
 )
 
 func init() {
-	listCmd.Flags().StringVar(&listType, "type", "", "Filter by memory type")
+	listCmd.Flags().StringVarP(&listLevel, "level", "l", "", "Filter by level(s): working,episodic,semantic")
+	listCmd.Flags().IntVar(&listLimit, "limit", 0, "Limit number of results")
 	listCmd.Flags().BoolVar(&listIncludeObsolete, "include-obsolete", false, "Include obsolete memories")
+	listCmd.Flags().BoolVar(&listReverse, "reverse", false, "Reverse sort order")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output as JSON")
 
 	rootCmd.AddCommand(listCmd)
@@ -40,12 +45,6 @@ func init() {
 func runList(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize embedder from config
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
 	// Initialize storage from config
 	storageBackend, err := initStorage()
 	if err != nil {
@@ -53,26 +52,26 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = storageBackend.Close() }()
 
-	// Create service
-	svc := memory.NewMemoryService(storageBackend, embedder)
-
-	// Parse filter type if provided
-	var filterTypes []memory.MemoryType
-	if listType != "" {
-		if !memory.IsValidType(listType) {
-			return fmt.Errorf("invalid type: %s", listType)
+	var filterLevels []memory.MemoryLevel
+	if listLevel != "" {
+		for _, l := range strings.Split(listLevel, ",") {
+			l = strings.TrimSpace(l)
+			if !memory.IsValidLevel(l) {
+				return fmt.Errorf("invalid level: %s", l)
+			}
+			filterLevels = append(filterLevels, memory.MemoryLevel(l))
 		}
-		filterTypes = append(filterTypes, memory.MemoryType(listType))
 	}
 
 	// List
 	opts := memory.ListOptions{
+		FilterLevels:    filterLevels,
 		IncludeObsolete: listIncludeObsolete,
-		FilterTypes:     filterTypes,
-		SortBy:          "created",
+		Limit:           listLimit,
+		Reverse:         listReverse,
 	}
 
-	memories, err := svc.List(ctx, opts)
+	memories, err := storageBackend.List(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("failed to list memories: %w", err)
 	}
@@ -84,7 +83,8 @@ func runList(cmd *cobra.Command, args []string) error {
 			items[i] = output.ListItem{
 				ID:        m.ID,
 				Title:     m.Title,
-				Types:     m.Types,
+				Level:     string(m.Level),
+				Tags:      m.Tags,
 				CreatedAt: m.CreatedAt,
 				Obsolete:  m.Obsolete,
 			}
@@ -98,18 +98,13 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(w, "ID\tTITLE\tTYPES\tCREATED")
+		_, _ = fmt.Fprintln(w, "LEVEL\tID\tTITLE\tCREATED")
 		for _, m := range memories {
-			status := ""
-			if m.Obsolete {
-				status = " (obsolete)"
-			}
-			_, _ = fmt.Fprintf(w, "%s\t%s%s\t%v\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				m.Level,
 				m.ID[:8]+"...",
 				m.Title,
-				status,
-				m.Types,
-				m.CreatedAt.Format("2006-01-02"))
+				m.CreatedAt.Format("2006-01-02 15:04"))
 		}
 		_ = w.Flush()
 	}

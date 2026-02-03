@@ -44,20 +44,18 @@ func (i *Importer) ImportFile(path string) (*memory.Memory, error) {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Convert types
-	types := make([]memory.MemoryType, len(result.Frontmatter.Types))
-	for j, t := range result.Frontmatter.Types {
-		types[j] = memory.MemoryType(t)
-	}
-
 	// Build memory
 	m := &memory.Memory{
-		ID:       result.Frontmatter.ID,
-		Title:    result.Frontmatter.Title,
-		Content:  result.Body,
-		Types:    types,
-		Tags:     result.Frontmatter.Tags,
-		Metadata: result.Frontmatter.Metadata,
+		ID:      result.Frontmatter.ID,
+		Title:   result.Frontmatter.Title,
+		Content: result.Body,
+		Level:   memory.MemoryLevel(result.Frontmatter.Level),
+		Tags:    result.Frontmatter.Tags,
+		Context: memory.MemoryContext{
+			SessionID: result.Frontmatter.SessionID,
+			Tags:      result.Frontmatter.Tags,
+			Source:    "manual",
+		},
 		Obsolete: result.Frontmatter.Obsolete,
 	}
 
@@ -77,6 +75,12 @@ func (i *Importer) ImportFile(path string) (*memory.Memory, error) {
 		m.UpdatedAt = time.Now().UTC()
 	} else {
 		m.UpdatedAt = result.Frontmatter.UpdatedAt
+	}
+
+	if result.Frontmatter.CreatedAt.IsZero() {
+		m.Context.Timestamp = m.CreatedAt
+	} else {
+		m.Context.Timestamp = result.Frontmatter.CreatedAt
 	}
 
 	return m, nil

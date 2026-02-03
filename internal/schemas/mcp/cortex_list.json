@@ -4,10 +4,10 @@
   "inputSchema": {
     "type": "object",
     "properties": {
-      "type": {
+      "level": {
         "type": "string",
-        "description": "Filter by memory type",
-        "enum": ["solution", "issue", "analysis", "rule", "any"]
+        "description": "Filter by memory level",
+        "enum": ["working", "episodic", "semantic"]
       },
       "include_obsolete": {
         "type": "boolean",

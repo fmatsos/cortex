@@ -14,15 +14,19 @@
         "type": "string",
         "description": "Memory title"
       },
-      "types": {
+      "level": {
+        "type": "string",
+        "enum": ["working", "episodic", "semantic"],
+        "description": "Memory level"
+      },
+      "tags": {
         "type": "array",
         "items": {
-          "type": "string",
-          "enum": ["solution", "issue", "analysis", "rule", "any"]
+          "type": "string"
         },
-        "description": "Memory types"
+        "description": "Memory tags"
       },
-      "created": {
+      "created_at": {
         "type": "string",
         "format": "date-time",
         "description": "Creation timestamp"
@@ -32,6 +36,6 @@
         "description": "Whether memory is obsolete"
       }
     },
-    "required": ["id", "title", "types", "created", "obsolete"]
+    "required": ["id", "title", "level", "created_at", "obsolete"]
   }
 }

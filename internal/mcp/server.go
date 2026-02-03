@@ -26,9 +26,8 @@ const (
 // Server represents the MCP server
 type Server struct {
 	transport            Transport
-	service              memory.Service
+	service              *memory.MemoryService
 	storage              storage.Storage
-	consolidatedStorage  *storage.GobConsolidatedStorage
 	consolidationService *consolidation.Service
 	embedder             memory.Embedder
 	logger               *log.Logger
@@ -65,16 +64,9 @@ func (s *Server) Initialize(storagePath string, embedder memory.Embedder) error 
 	// Create service
 	s.service = memory.NewMemoryService(store, embedder)
 
-	// Initialize consolidated storage
-	consolidatedStore, err := storage.NewGobConsolidatedStorage(storagePath)
-	if err != nil {
-		return fmt.Errorf("failed to initialize consolidated storage: %w", err)
-	}
-	s.consolidatedStorage = consolidatedStore
-
 	// Create consolidation service
 	cfg := config.Global()
-	s.consolidationService = consolidation.NewService(consolidatedStore, embedder, &cfg.Consolidation)
+	s.consolidationService = consolidation.NewService(store, embedder, &cfg.Consolidation)
 
 	return nil
 }
@@ -92,12 +84,6 @@ func (s *Server) Close() error {
 	if s.storage != nil {
 		if err := s.storage.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("storage close: %w", err))
-		}
-	}
-
-	if s.consolidatedStorage != nil {
-		if err := s.consolidatedStorage.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("consolidated storage close: %w", err))
 		}
 	}
 
@@ -255,10 +241,12 @@ func (s *Server) handleCallTool(req *Request) *Response {
 
 // Search arguments
 type searchArgs struct {
-	Query    string  `json:"query"`
-	TopK     int     `json:"top_k"`
-	MinScore float64 `json:"min_score"`
-	Type     string  `json:"type"`
+	Query           string  `json:"query"`
+	TopK            int     `json:"top_k"`
+	MinScore        float64 `json:"min_score"`
+	Level           string  `json:"level"`
+	SessionID       string  `json:"session_id"`
+	IncludeObsolete bool    `json:"include_obsolete"`
 }
 
 func (s *Server) handleSearch(ctx context.Context, id interface{}, args json.RawMessage) *Response {
@@ -280,12 +268,17 @@ func (s *Server) handleSearch(ctx context.Context, id interface{}, args json.Raw
 	}
 
 	opts := memory.SearchOptions{
-		TopK:     a.TopK,
-		MinScore: a.MinScore,
+		TopK:            a.TopK,
+		MinScore:        a.MinScore,
+		IncludeObsolete: a.IncludeObsolete,
+		SessionID:       a.SessionID,
 	}
 
-	if a.Type != "" {
-		opts.FilterTypes = []memory.MemoryType{memory.MemoryType(a.Type)}
+	if a.Level != "" {
+		if !memory.IsValidLevel(a.Level) {
+			return s.toolError(id, fmt.Sprintf("invalid level: %s", a.Level))
+		}
+		opts.FilterLevels = []memory.MemoryLevel{memory.MemoryLevel(a.Level)}
 	}
 
 	results, err := s.service.Search(ctx, a.Query, opts)
@@ -304,10 +297,14 @@ func (s *Server) handleSearch(ctx context.Context, id interface{}, args json.Raw
 
 // Create arguments
 type createArgs struct {
-	Title   string   `json:"title"`
-	Content string   `json:"content"`
-	Type    string   `json:"type"`
-	Tags    []string `json:"tags"`
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	Level     string   `json:"level"`
+	Tags      []string `json:"tags"`
+	SessionID string   `json:"session_id"`
+	Source    string   `json:"source"`
+	TaskID    string   `json:"task_id"`
+	Author    string   `json:"author"`
 }
 
 func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.RawMessage) *Response {
@@ -316,15 +313,25 @@ func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.Raw
 		return NewErrorResponse(id, InvalidParams, "Invalid create arguments", err.Error())
 	}
 
-	if a.Title == "" || a.Content == "" || a.Type == "" {
-		return NewErrorResponse(id, InvalidParams, "title, content, and type are required", nil)
+	if a.Title == "" || a.Content == "" || a.Level == "" {
+		return NewErrorResponse(id, InvalidParams, "title, content, and level are required", nil)
+	}
+	if !memory.IsValidLevel(a.Level) {
+		return NewErrorResponse(id, InvalidParams, "invalid level", a.Level)
+	}
+	if memory.MemoryLevel(a.Level) == memory.MemoryLevelWorking && a.SessionID == "" {
+		return NewErrorResponse(id, InvalidParams, "session_id is required for working level", nil)
 	}
 
 	input := memory.CreateInput{
-		Title:   a.Title,
-		Content: a.Content,
-		Types:   []memory.MemoryType{memory.MemoryType(a.Type)},
-		Tags:    a.Tags,
+		Title:     a.Title,
+		Content:   a.Content,
+		Level:     memory.MemoryLevel(a.Level),
+		Tags:      a.Tags,
+		SessionID: a.SessionID,
+		Source:    a.Source,
+		TaskID:    a.TaskID,
+		Author:    a.Author,
 	}
 
 	mem, err := s.service.Create(ctx, input)
@@ -351,7 +358,7 @@ func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.Raw
 
 // List arguments
 type listArgs struct {
-	Type            string `json:"type"`
+	Level           string `json:"level"`
 	IncludeObsolete bool   `json:"include_obsolete"`
 }
 
@@ -367,8 +374,11 @@ func (s *Server) handleList(ctx context.Context, id interface{}, args json.RawMe
 		IncludeObsolete: a.IncludeObsolete,
 	}
 
-	if a.Type != "" {
-		opts.FilterTypes = []memory.MemoryType{memory.MemoryType(a.Type)}
+	if a.Level != "" {
+		if !memory.IsValidLevel(a.Level) {
+			return s.toolError(id, fmt.Sprintf("invalid level: %s", a.Level))
+		}
+		opts.FilterLevels = []memory.MemoryLevel{memory.MemoryLevel(a.Level)}
 	}
 
 	memories, err := s.service.List(ctx, opts)
@@ -450,7 +460,7 @@ func (s *Server) handleConsolidate(ctx context.Context, id interface{}, args jso
 		return NewErrorResponse(id, InvalidParams, "invalid memory_level: must be working|episodic|semantic", nil)
 	}
 
-	if a.Context.SessionID == "" {
+	if memory.MemoryLevel(a.MemoryLevel) == memory.MemoryLevelWorking && a.Context.SessionID == "" {
 		return NewErrorResponse(id, InvalidParams, "context.session_id is required", nil)
 	}
 
@@ -474,7 +484,7 @@ func (s *Server) handleConsolidate(ctx context.Context, id interface{}, args jso
 	input := memory.ConsolidateInput{
 		Synthesis: a.Synthesis,
 		Level:     memory.MemoryLevel(a.MemoryLevel),
-		Context: memory.ConsolidationContext{
+		Context: memory.MemoryContext{
 			TaskID:          a.Context.TaskID,
 			SessionID:       a.Context.SessionID,
 			Timestamp:       timestamp,

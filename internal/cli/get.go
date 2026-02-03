@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -79,12 +78,9 @@ func outputGetText(cmd *cobra.Command, m *memory.Memory) error {
 
 	_, _ = fmt.Fprintf(w, "ID:\t%s\n", m.ID)
 	_, _ = fmt.Fprintf(w, "Title:\t%s\n", m.Title)
-	_, _ = fmt.Fprintf(w, "Types:\t%v\n", m.Types)
+	_, _ = fmt.Fprintf(w, "Level:\t%s\n", m.Level)
 	if len(m.Tags) > 0 {
 		_, _ = fmt.Fprintf(w, "Tags:\t%s\n", strings.Join(m.Tags, ", "))
-	}
-	if len(m.Metadata) > 0 {
-		_, _ = fmt.Fprintf(w, "Metadata:\t%s\n", formatMetadata(m.Metadata))
 	}
 	_, _ = fmt.Fprintf(w, "Created:\t%s\n", m.CreatedAt.Format(time.RFC3339))
 	_, _ = fmt.Fprintf(w, "Updated:\t%s\n", m.UpdatedAt.Format(time.RFC3339))
@@ -98,13 +94,4 @@ func outputGetText(cmd *cobra.Command, m *memory.Memory) error {
 	_, _ = fmt.Fprintln(out, m.Content)
 
 	return nil
-}
-
-func formatMetadata(metadata map[string]string) string {
-	pairs := make([]string, 0, len(metadata))
-	for k, v := range metadata {
-		pairs = append(pairs, fmt.Sprintf("%s=%s", k, v))
-	}
-	sort.Strings(pairs)
-	return strings.Join(pairs, ", ")
 }

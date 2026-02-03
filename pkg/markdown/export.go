@@ -144,22 +144,16 @@ func (e *Exporter) ExportMemory(m *memory.Memory) (string, error) {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Convert memory types to string slice
-	types := make([]string, len(m.Types))
-	for i, t := range m.Types {
-		types[i] = string(t)
-	}
-
 	// Build frontmatter
 	fm := &Frontmatter{
 		ID:        m.ID,
 		Title:     m.Title,
-		Types:     types,
+		Level:     string(m.Level),
 		Tags:      m.Tags,
+		SessionID: m.Context.SessionID,
 		CreatedAt: m.CreatedAt,
 		UpdatedAt: m.UpdatedAt,
 		Obsolete:  m.Obsolete,
-		Metadata:  m.Metadata,
 	}
 
 	// Format frontmatter

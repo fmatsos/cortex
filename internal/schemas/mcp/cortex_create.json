@@ -12,10 +12,10 @@
         "type": "string",
         "description": "Memory content"
       },
-      "type": {
+      "level": {
         "type": "string",
-        "description": "Memory type",
-        "enum": ["solution", "issue", "analysis", "rule", "any"]
+        "description": "Memory level",
+        "enum": ["working", "episodic", "semantic"]
       },
       "tags": {
         "type": "array",
@@ -23,8 +23,25 @@
         "items": {
           "type": "string"
         }
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Session ID (required for working level)"
+      },
+      "source": {
+        "type": "string",
+        "description": "Source (manual|auto|llm)",
+        "enum": ["manual", "auto", "llm"]
+      },
+      "task_id": {
+        "type": "string",
+        "description": "Optional task ID"
+      },
+      "author": {
+        "type": "string",
+        "description": "Optional author"
       }
     },
-    "required": ["title", "content", "type"]
+    "required": ["title", "content", "level"]
   }
 }

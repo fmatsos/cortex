@@ -30,10 +30,10 @@ func (e ValidationErrors) Error() string {
 	return fmt.Sprintf("validation failed: %s", strings.Join(msgs, "; "))
 }
 
-// IsValidType checks if a type string is valid
-func IsValidType(t string) bool {
-	for _, valid := range ValidTypes {
-		if t == valid {
+// IsValidLevel checks if a level string is valid
+func IsValidLevel(level string) bool {
+	for _, valid := range ValidLevels {
+		if level == valid {
 			return true
 		}
 	}
@@ -53,21 +53,23 @@ func ValidateFrontmatter(fm *Frontmatter) error {
 		})
 	}
 
-	if len(fm.Types) == 0 {
+	if strings.TrimSpace(fm.Level) == "" {
 		errs = append(errs, ValidationError{
-			Field:   "type",
-			Message: "at least one type is required",
+			Field:   "level",
+			Message: "level is required",
 		})
-	} else {
-		// Validate each type
-		for _, t := range fm.Types {
-			if !IsValidType(t) {
-				errs = append(errs, ValidationError{
-					Field:   "type",
-					Message: fmt.Sprintf("invalid type '%s' (must be solution|issue|analysis|rule|any)", t),
-				})
-			}
-		}
+	} else if !IsValidLevel(fm.Level) {
+		errs = append(errs, ValidationError{
+			Field:   "level",
+			Message: fmt.Sprintf("invalid level '%s' (must be working|episodic|semantic)", fm.Level),
+		})
+	}
+
+	if fm.Level == "working" && strings.TrimSpace(fm.SessionID) == "" {
+		errs = append(errs, ValidationError{
+			Field:   "session_id",
+			Message: "session_id is required for working memories",
+		})
 	}
 
 	if len(errs) > 0 {
@@ -100,17 +102,13 @@ func ValidateForImport(result *ParseResult) error {
 	return nil
 }
 
-// ValidateTypes validates a slice of type strings
-func ValidateTypes(types []string) error {
-	if len(types) == 0 {
-		return fmt.Errorf("at least one type is required")
+// ValidateLevel validates a level string.
+func ValidateLevel(level string) error {
+	if strings.TrimSpace(level) == "" {
+		return fmt.Errorf("level is required")
 	}
-
-	for _, t := range types {
-		if !IsValidType(t) {
-			return fmt.Errorf("invalid type '%s' (must be solution|issue|analysis|rule|any)", t)
-		}
+	if !IsValidLevel(level) {
+		return fmt.Errorf("invalid level '%s' (must be working|episodic|semantic)", level)
 	}
-
 	return nil
 }

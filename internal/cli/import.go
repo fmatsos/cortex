@@ -18,7 +18,7 @@ var importCmd = &cobra.Command{
 	Long: `Import memories from JSON or Markdown files.
 JSON files (.json) are the default format. Markdown files (.md) with YAML frontmatter are also supported.
 
-Files must have required fields: title and types.
+Files must have required fields: title and level.
 If no ID is provided, one will be generated.
 
 Examples:
@@ -230,11 +230,14 @@ func runRealImport(ctx context.Context, files []string) error {
 
 		// Save the memory (this will generate embedding)
 		input := memory.CreateInput{
-			Title:    mem.Title,
-			Content:  mem.Content,
-			Types:    mem.Types,
-			Tags:     mem.Tags,
-			Metadata: mem.Metadata,
+			Title:     mem.Title,
+			Content:   mem.Content,
+			Level:     mem.Level,
+			Tags:      mem.Tags,
+			SessionID: mem.Context.SessionID,
+			Source:    mem.Context.Source,
+			TaskID:    mem.Context.TaskID,
+			Author:    mem.Context.Author,
 		}
 
 		// If we're forcing overwrite and memory exists, delete first

@@ -7,14 +7,14 @@ import (
 
 // Frontmatter represents the YAML frontmatter in a memory Markdown file
 type Frontmatter struct {
-	ID        string            `yaml:"id,omitempty"`         // Optional on import (generated if missing)
-	Title     string            `yaml:"title"`                // Required
-	Types     []string          `yaml:"type"`                 // Required: solution|issue|analysis|rule|any
-	Tags      []string          `yaml:"tags,omitempty"`       // Optional
-	CreatedAt time.Time         `yaml:"created_at,omitempty"` // Optional on import
-	UpdatedAt time.Time         `yaml:"updated_at,omitempty"` // Optional on import
-	Obsolete  bool              `yaml:"obsolete,omitempty"`   // Default false
-	Metadata  map[string]string `yaml:"metadata,omitempty"`   // Optional custom metadata
+	ID        string    `yaml:"id,omitempty"`         // Optional on import (generated if missing)
+	Title     string    `yaml:"title"`                // Required
+	Level     string    `yaml:"level"`                // Required: working|episodic|semantic
+	Tags      []string  `yaml:"tags,omitempty"`       // Optional
+	SessionID string    `yaml:"session_id,omitempty"` // Required for working level
+	CreatedAt time.Time `yaml:"created_at,omitempty"` // Optional on import
+	UpdatedAt time.Time `yaml:"updated_at,omitempty"` // Optional on import
+	Obsolete  bool      `yaml:"obsolete,omitempty"`   // Default false
 }
 
 // SynthesisFrontmatter represents the frontmatter for synthesis exports
@@ -32,8 +32,8 @@ type SourceMemory struct {
 	Score float64 `yaml:"score"`
 }
 
-// ValidTypes for validation
-var ValidTypes = []string{"solution", "issue", "analysis", "rule", "any"}
+// ValidLevels for validation
+var ValidLevels = []string{"working", "episodic", "semantic"}
 
 // RequiredFields lists fields that must be present on import
-var RequiredFields = []string{"title", "type"}
+var RequiredFields = []string{"title", "level"}

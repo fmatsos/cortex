@@ -14,7 +14,7 @@ import (
 var autopruneCmd = &cobra.Command{
 	Use:   "autoprune",
 	Short: "Clean and optimize the memory database",
-	Long: `Autoprune cleans and optimizes the consolidated memory database.
+	Long: `Autoprune cleans and optimizes the memory database.
 
 Operations:
   --duplicates       Remove duplicate memories (similarity >= 0.92)
@@ -66,8 +66,8 @@ func runAutoprune(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize consolidated storage
-	store, err := initConsolidatedStorage()
+	// Initialize storage
+	store, err := initStorage()
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}

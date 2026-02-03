@@ -14,13 +14,17 @@
         "type": "string",
         "description": "Memory title"
       },
-      "types": {
+      "level": {
+        "type": "string",
+        "enum": ["working", "episodic", "semantic"],
+        "description": "Memory level"
+      },
+      "tags": {
         "type": "array",
         "items": {
-          "type": "string",
-          "enum": ["solution", "issue", "analysis", "rule", "any"]
+          "type": "string"
         },
-        "description": "Memory types"
+        "description": "Memory tags"
       },
       "score": {
         "type": "number",
@@ -29,6 +33,6 @@
         "description": "Similarity score"
       }
     },
-    "required": ["id", "title", "types", "score"]
+    "required": ["id", "title", "level", "score"]
   }
 }

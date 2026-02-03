@@ -4,6 +4,7 @@ package consolidation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
@@ -19,13 +20,13 @@ type Embedder interface {
 
 // Service handles memory consolidation operations
 type Service struct {
-	storage  storage.ConsolidatedStorage
+	storage  storage.Storage
 	embedder Embedder
 	config   *config.ConsolidationConfig
 }
 
 // NewService creates a new consolidation service
-func NewService(store storage.ConsolidatedStorage, embedder Embedder, cfg *config.ConsolidationConfig) *Service {
+func NewService(store storage.Storage, embedder Embedder, cfg *config.ConsolidationConfig) *Service {
 	return &Service{
 		storage:  store,
 		embedder: embedder,
@@ -58,16 +59,20 @@ func (s *Service) Consolidate(ctx context.Context, input memory.ConsolidateInput
 
 	// If force is set, skip duplicate check
 	if !input.Force {
-		// Search for similar memories
-		similar, err := s.storage.FindSimilar(ctx, embedding, input.Level, s.config.SimilarityThreshold)
+		searchOpts := memory.SearchOptions{
+			TopK:         1,
+			MinScore:     s.config.SimilarityThreshold,
+			FilterLevels: []memory.MemoryLevel{input.Level},
+		}
+		if input.Level == memory.MemoryLevelWorking {
+			searchOpts.SessionID = input.Context.SessionID
+		}
+		results, err := s.storage.SearchAllLayers(ctx, embedding, searchOpts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find similar memories: %w", err)
 		}
-
-		// If similar memory found, merge
-		if len(similar) > 0 {
-			mostSimilar := similar[0]
-			return s.mergeWithExisting(ctx, mostSimilar, input, embedding)
+		if len(results) > 0 {
+			return s.mergeWithExisting(ctx, results[0].Memory, input, embedding)
 		}
 	}
 
@@ -77,17 +82,24 @@ func (s *Service) Consolidate(ctx context.Context, input memory.ConsolidateInput
 
 func (s *Service) createNew(ctx context.Context, input memory.ConsolidateInput, embedding []float64) (*memory.ConsolidateResult, error) {
 	now := time.Now()
-	mem := &memory.ConsolidatedMemory{
+	mem := &memory.Memory{
 		ID:        uuid.New().String(),
 		Level:     input.Level,
+		Title:     deriveTitle(input.Synthesis),
 		Content:   input.Synthesis,
+		Tags:      input.Context.Tags,
 		Embedding: embedding,
 		Context:   input.Context,
 		CreatedAt: now,
 		UpdatedAt: now,
+		Obsolete:  false,
 	}
 
-	if err := s.storage.SaveConsolidated(ctx, mem); err != nil {
+	if err := mem.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid memory: %w", err)
+	}
+
+	if err := s.storage.Save(ctx, mem); err != nil {
 		return nil, fmt.Errorf("failed to save memory: %w", err)
 	}
 
@@ -98,7 +110,7 @@ func (s *Service) createNew(ctx context.Context, input memory.ConsolidateInput, 
 	}, nil
 }
 
-func (s *Service) mergeWithExisting(ctx context.Context, existing *memory.ConsolidatedMemory, input memory.ConsolidateInput, newEmbedding []float64) (*memory.ConsolidateResult, error) {
+func (s *Service) mergeWithExisting(ctx context.Context, existing *memory.Memory, input memory.ConsolidateInput, newEmbedding []float64) (*memory.ConsolidateResult, error) {
 	// Merge content - append new synthesis to existing
 	mergedContent := existing.Content + "\n\n---\n\n" + input.Synthesis
 
@@ -114,17 +126,16 @@ func (s *Service) mergeWithExisting(ctx context.Context, existing *memory.Consol
 	existing.Embedding = mergedEmbedding
 	existing.UpdatedAt = time.Now()
 
-	// Add context tags
 	if len(input.Context.Tags) > 0 {
+		existing.Tags = mergeTags(existing.Tags, input.Context.Tags)
 		existing.Context.Tags = mergeTags(existing.Context.Tags, input.Context.Tags)
 	}
 
-	// Add related memories
 	if len(input.Context.RelatedMemories) > 0 {
 		existing.Context.RelatedMemories = mergeSlices(existing.Context.RelatedMemories, input.Context.RelatedMemories)
 	}
 
-	if err := s.storage.SaveConsolidated(ctx, existing); err != nil {
+	if err := s.storage.Update(ctx, existing); err != nil {
 		return nil, fmt.Errorf("failed to update memory: %w", err)
 	}
 
@@ -138,48 +149,12 @@ func (s *Service) mergeWithExisting(ctx context.Context, existing *memory.Consol
 
 // TransferWorkingToEpisodic transfers working memories to episodic level
 func (s *Service) TransferWorkingToEpisodic(ctx context.Context, sessionID string) (int, error) {
-	// Get all working memories for the session
-	workingMemories, err := s.storage.ListWorkingBySession(ctx, sessionID)
-	if err != nil {
-		return 0, fmt.Errorf("failed to list working memories: %w", err)
-	}
-
-	if len(workingMemories) == 0 {
-		return 0, nil
-	}
-
-	transferred := 0
-	for _, wm := range workingMemories {
-		// Create episodic memory from working
-		episodic := &memory.ConsolidatedMemory{
-			ID:        uuid.New().String(),
-			Level:     memory.MemoryLevelEpisodic,
-			Content:   wm.Content,
-			Embedding: wm.Embedding,
-			Context:   wm.Context,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		episodic.Context.Source = "auto"
-
-		if err := s.storage.SaveConsolidated(ctx, episodic); err != nil {
-			continue // Skip failed transfers
-		}
-		transferred++
-	}
-
-	// Delete working memories for this session
-	if err := s.storage.DeleteWorkingBySession(ctx, sessionID); err != nil {
-		return transferred, fmt.Errorf("transferred %d memories but failed to clean working: %w", transferred, err)
-	}
-
-	return transferred, nil
+	return s.storage.TransferWorkingToEpisodic(ctx, sessionID)
 }
 
 // PromoteToSemantic promotes an episodic memory to semantic level
 func (s *Service) PromoteToSemantic(ctx context.Context, memoryID string, newContent string) (*memory.ConsolidateResult, error) {
-	// Get the episodic memory
-	existing, err := s.storage.GetConsolidated(ctx, memoryID)
+	existing, err := s.storage.Get(ctx, memoryID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get memory: %w", err)
 	}
@@ -193,26 +168,27 @@ func (s *Service) PromoteToSemantic(ctx context.Context, memoryID string, newCon
 		content = existing.Content
 	}
 
-	// Generate new embedding
 	embedding, err := s.embedder.Embed(ctx, content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
-	// Create semantic memory
-	semantic := &memory.ConsolidatedMemory{
+	semantic := &memory.Memory{
 		ID:         uuid.New().String(),
 		Level:      memory.MemoryLevelSemantic,
+		Title:      existing.Title,
 		Content:    content,
+		Tags:       existing.Tags,
 		Embedding:  embedding,
 		Context:    existing.Context,
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 		MergedFrom: []string{memoryID},
+		Obsolete:   false,
 	}
 	semantic.Context.Source = "manual"
 
-	if err := s.storage.SaveConsolidated(ctx, semantic); err != nil {
+	if err := s.storage.Save(ctx, semantic); err != nil {
 		return nil, fmt.Errorf("failed to save semantic memory: %w", err)
 	}
 
@@ -224,48 +200,63 @@ func (s *Service) PromoteToSemantic(ctx context.Context, memoryID string, newCon
 	}, nil
 }
 
-// Get retrieves a consolidated memory by ID
-func (s *Service) Get(ctx context.Context, id string) (*memory.ConsolidatedMemory, error) {
-	return s.storage.GetConsolidated(ctx, id)
+// Get retrieves a memory by ID
+func (s *Service) Get(ctx context.Context, id string) (*memory.Memory, error) {
+	return s.storage.Get(ctx, id)
 }
 
-// List lists consolidated memories by level
-func (s *Service) List(ctx context.Context, level memory.MemoryLevel) ([]*memory.ConsolidatedMemory, error) {
-	return s.storage.ListByLevel(ctx, level)
+// List lists memories by level
+func (s *Service) List(ctx context.Context, level memory.MemoryLevel) ([]*memory.Memory, error) {
+	opts := memory.ListOptions{FilterLevels: []memory.MemoryLevel{level}}
+	return s.storage.List(ctx, opts)
 }
 
-// Delete deletes a consolidated memory
+// Delete deletes a memory
 func (s *Service) Delete(ctx context.Context, id string) error {
-	return s.storage.DeleteConsolidated(ctx, id)
+	return s.storage.Delete(ctx, id)
 }
 
 // Search searches for similar memories
-func (s *Service) Search(ctx context.Context, query string, level memory.MemoryLevel, topK int, minScore float64) ([]*memory.ConsolidatedMemory, []float64, error) {
+func (s *Service) Search(ctx context.Context, query string, level memory.MemoryLevel, topK int, minScore float64) ([]*memory.Memory, []float64, error) {
 	embedding, err := s.embedder.Embed(ctx, query)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to embed query: %w", err)
 	}
 
-	matches, err := s.storage.SearchConsolidatedByVector(ctx, embedding, level, topK)
+	results, err := s.storage.SearchAllLayers(ctx, embedding, memory.SearchOptions{
+		TopK:         topK,
+		MinScore:     minScore,
+		FilterLevels: []memory.MemoryLevel{level},
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to search: %w", err)
 	}
 
-	var memories []*memory.ConsolidatedMemory
-	var scores []float64
-	for _, match := range matches {
-		if match.Score < minScore {
-			continue
-		}
-		mem, err := s.storage.GetConsolidated(ctx, match.MemoryID)
-		if err != nil {
-			continue
-		}
-		memories = append(memories, mem)
-		scores = append(scores, match.Score)
+	memories := make([]*memory.Memory, 0, len(results))
+	scores := make([]float64, 0, len(results))
+	for _, result := range results {
+		memories = append(memories, result.Memory)
+		scores = append(scores, result.Score)
 	}
 
 	return memories, scores, nil
+}
+
+func deriveTitle(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return "Memory"
+	}
+	line := strings.SplitN(trimmed, "\n", 2)[0]
+	line = strings.TrimSpace(line)
+	if len(line) < 3 {
+		return "Memory"
+	}
+	const max = 60
+	if len(line) > max {
+		return strings.TrimSpace(line[:max]) + "..."
+	}
+	return line
 }
 
 // Helper functions

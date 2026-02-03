@@ -18,10 +18,19 @@
         "description": "Minimum similarity score (0-1)",
         "default": 0.5
       },
-      "type": {
+      "level": {
         "type": "string",
-        "description": "Filter by memory type",
-        "enum": ["solution", "issue", "analysis", "rule", "any"]
+        "description": "Filter by memory level",
+        "enum": ["working", "episodic", "semantic"]
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Filter working memories by session ID"
+      },
+      "include_obsolete": {
+        "type": "boolean",
+        "description": "Include obsolete memories",
+        "default": false
       }
     },
     "required": ["query"]

@@ -33,7 +33,7 @@
     },
     "body": {
       "type": "string",
-      "description": "Go template for the body content. Available variables: .Title, .Content, .Types, .Tags, .CreatedAt, .UpdatedAt, .Metadata",
+      "description": "Go template for the body content. Available variables: .Title, .Content, .Level, .Tags, .CreatedAt, .UpdatedAt",
       "default": "{{.Content}}"
     }
   }
