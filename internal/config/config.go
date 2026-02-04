@@ -149,10 +149,13 @@ type StorageConfig struct {
 
 // EmbeddingsConfig contains embedding provider configuration
 type EmbeddingsConfig struct {
-	Provider string        `mapstructure:"provider"` // ollama
-	Model    string        `mapstructure:"model"`    // nomic-embed-text
-	Endpoint string        `mapstructure:"endpoint"` // http://localhost:11434
-	Timeout  time.Duration `mapstructure:"timeout"`  // request timeout
+	Provider      string        `mapstructure:"provider"`       // ollama
+	Model         string        `mapstructure:"model"`          // nomic-embed-text
+	Endpoint      string        `mapstructure:"endpoint"`       // http://localhost:11434
+	Timeout       time.Duration `mapstructure:"timeout"`        // request timeout
+	ChunkSize     int           `mapstructure:"chunk_size"`     // max chars per chunk (0 = no chunking)
+	ChunkOverlap  int           `mapstructure:"chunk_overlap"`  // overlap between chunks
+	ChunkStrategy string        `mapstructure:"chunk_strategy"` // how to combine embeddings: average, first, max_pool
 }
 
 // SearchConfig contains search defaults
@@ -177,10 +180,13 @@ func DefaultConfig() *Config {
 			Mode:    "single",
 		},
 		Embeddings: EmbeddingsConfig{
-			Provider: "ollama",
-			Model:    "nomic-embed-text",
-			Endpoint: "http://localhost:11434",
-			Timeout:  30 * time.Second,
+			Provider:      "ollama",
+			Model:         "nomic-embed-text",
+			Endpoint:      "http://localhost:11434",
+			Timeout:       30 * time.Second,
+			ChunkSize:     8000,      // ~2000 tokens for nomic-embed-text
+			ChunkOverlap:  200,       // 200 char overlap to preserve context
+			ChunkStrategy: "average", // average embeddings across chunks
 		},
 		Search: SearchConfig{
 			TopK:            5,
@@ -343,6 +349,9 @@ func (m *Manager) bindEnvVars() {
 	_ = m.v.BindEnv("embeddings.model", "CORTEX_EMBEDDINGS_MODEL")
 	_ = m.v.BindEnv("embeddings.endpoint", "CORTEX_EMBEDDINGS_ENDPOINT")
 	_ = m.v.BindEnv("embeddings.timeout", "CORTEX_EMBEDDINGS_TIMEOUT")
+	_ = m.v.BindEnv("embeddings.chunk_size", "CORTEX_EMBEDDINGS_CHUNK_SIZE")
+	_ = m.v.BindEnv("embeddings.chunk_overlap", "CORTEX_EMBEDDINGS_CHUNK_OVERLAP")
+	_ = m.v.BindEnv("embeddings.chunk_strategy", "CORTEX_EMBEDDINGS_CHUNK_STRATEGY")
 
 	// Search
 	_ = m.v.BindEnv("search.top_k", "CORTEX_SEARCH_TOP_K")
@@ -388,6 +397,9 @@ func (m *Manager) setDefaults() {
 	m.v.SetDefault("embeddings.model", defaults.Embeddings.Model)
 	m.v.SetDefault("embeddings.endpoint", defaults.Embeddings.Endpoint)
 	m.v.SetDefault("embeddings.timeout", defaults.Embeddings.Timeout)
+	m.v.SetDefault("embeddings.chunk_size", defaults.Embeddings.ChunkSize)
+	m.v.SetDefault("embeddings.chunk_overlap", defaults.Embeddings.ChunkOverlap)
+	m.v.SetDefault("embeddings.chunk_strategy", defaults.Embeddings.ChunkStrategy)
 
 	// Search defaults
 	m.v.SetDefault("search.top_k", defaults.Search.TopK)
@@ -505,6 +517,9 @@ embeddings:
   model: nomic-embed-text
   endpoint: http://localhost:11434
   timeout: 30s
+  chunk_size: 8000                          # max chars per chunk (0 = no chunking)
+  chunk_overlap: 200                        # overlap between chunks for context
+  chunk_strategy: average                   # average | first | max_pool
 
 search:
   top_k: 5

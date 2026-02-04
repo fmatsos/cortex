@@ -56,5 +56,8 @@ func initEmbedder() (embeddings.Embedder, error) {
 		cfg.Embeddings.Endpoint,
 		cfg.Embeddings.Model,
 		cfg.Embeddings.Timeout,
+		cfg.Embeddings.ChunkSize,
+		cfg.Embeddings.ChunkOverlap,
+		cfg.Embeddings.ChunkStrategy,
 	)
 }

@@ -360,17 +360,17 @@ DEVELOPMENT.md (Development)
 |----------|--------|--------------|
 | [README.md](../README.md) | ✅ Current | 2024-01 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | ✅ Current | 2024-01 |
-| [CONFIGURATION.md](./CONFIGURATION.md) | ✅ Current | 2024-01 |
+| [CONFIGURATION.md](./CONFIGURATION.md) | ✅ Updated | 2025-02 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | ✅ Current | 2024-01 |
 | [MCP.md](./MCP.md) | ✅ Current | 2024-01 |
 | [CLI_REFERENCE.md](./CLI_REFERENCE.md) | ✅ New | 2024-01 |
 | [MEMORY_MODEL.md](./MEMORY_MODEL.md) | ✅ New | 2024-01 |
 | [MARKDOWN_FORMAT.md](./MARKDOWN_FORMAT.md) | ✅ New | 2024-01 |
 | [STORAGE.md](./STORAGE.md) | ✅ New | 2024-01 |
-| [EMBEDDINGS.md](./EMBEDDINGS.md) | ✅ New | 2024-01 |
+| [EMBEDDINGS.md](./EMBEDDINGS.md) | ✅ Updated | 2025-02 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | ✅ New | 2024-01 |
 | [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | ✅ New | 2024-01 |
-| [INDEX.md](./INDEX.md) | ✅ New | 2024-01 |
+| [INDEX.md](./INDEX.md) | ✅ Updated | 2025-02 |
 
 ---
 

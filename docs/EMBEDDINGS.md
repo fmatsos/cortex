@@ -7,6 +7,7 @@ Documentation for the embeddings system and vector generation.
 - [Overview](#overview)
 - [Embedder Interface](#embedder-interface)
 - [Ollama Integration](#ollama-integration)
+- [Text Chunking](#text-chunking)
 - [Vector Normalization](#vector-normalization)
 - [Models](#models)
 - [Configuration](#configuration)
@@ -190,6 +191,230 @@ CORTEX_EMBEDDINGS_MODEL=all-minilm-l6-v2
 
 # Custom timeout
 CORTEX_EMBEDDINGS_TIMEOUT=60s
+
+# Chunking configuration
+CORTEX_EMBEDDINGS_CHUNK_SIZE=8000
+CORTEX_EMBEDDINGS_CHUNK_OVERLAP=200
+CORTEX_EMBEDDINGS_CHUNK_STRATEGY=average
+```
+
+---
+
+## Text Chunking
+
+Cortex automatically handles long text content by chunking it into smaller pieces that fit within embedding model context limits.
+
+### Why Chunking?
+
+Embedding models have context size limits:
+- **nomic-embed-text**: ~8192 tokens (~2048 tokens context)
+- **all-minilm-l6-v2**: ~512 tokens
+- **all-mpnet-base-v2**: ~512 tokens
+
+When content exceeds these limits, Cortex automatically:
+1. Splits text into overlapping chunks
+2. Embeds each chunk separately
+3. Combines embeddings using a configurable strategy
+
+### How It Works
+
+```
+Long Text Input (15,000 chars)
+  ↓
+Check if > chunk_size (8000 chars)
+  ↓ YES
+Split into chunks with overlap
+  ↓
+Chunk 1: chars 0-8000
+Chunk 2: chars 7800-15800 (200 char overlap)
+  ↓
+Embed each chunk separately
+  ↓
+Chunk 1 → [0.1, 0.2, ..., 0.9]
+Chunk 2 → [0.3, 0.1, ..., 0.8]
+  ↓
+Combine using strategy (average/first/max_pool)
+  ↓
+Final embedding → [0.2, 0.15, ..., 0.85]
+  ↓
+Normalize to unit vector
+  ↓
+Store and index
+```
+
+### Configuration
+
+```yaml
+embeddings:
+  chunk_size: 8000          # Max chars per chunk (0 = no chunking)
+  chunk_overlap: 200        # Overlap between chunks for context
+  chunk_strategy: average   # How to combine: average, first, max_pool
+```
+
+**Environment variables:**
+```bash
+CORTEX_EMBEDDINGS_CHUNK_SIZE=8000
+CORTEX_EMBEDDINGS_CHUNK_OVERLAP=200
+CORTEX_EMBEDDINGS_CHUNK_STRATEGY=average
+```
+
+### Chunk Strategies
+
+#### Average (Default)
+
+Averages embeddings across all chunks. Best for most use cases.
+
+```
+Chunk 1: [0.2, 0.4, 0.6]
+Chunk 2: [0.4, 0.2, 0.8]
+         ↓
+Average: [(0.2+0.4)/2, (0.4+0.2)/2, (0.6+0.8)/2]
+       = [0.3, 0.3, 0.7]
+         ↓
+Normalize to unit vector
+```
+
+**Pros:**
+- Balanced representation of entire text
+- Good semantic coverage
+- Works well for diverse content
+
+**Use when:**
+- Content spans multiple topics
+- Full document understanding needed
+- General purpose (recommended default)
+
+#### First
+
+Uses only the first chunk's embedding. Fastest but loses information.
+
+```
+Chunk 1: [0.2, 0.4, 0.6] ← Use this
+Chunk 2: [0.4, 0.2, 0.8] ← Ignore
+         ↓
+Result:  [0.2, 0.4, 0.6]
+```
+
+**Pros:**
+- Fast (stops after first chunk)
+- Emphasizes beginning of text
+- Good for title/summary-heavy content
+
+**Cons:**
+- Loses later content information
+- May miss important details
+
+**Use when:**
+- Most important info is at the start
+- Performance is critical
+- Content has strong opening summary
+
+#### Max Pool
+
+Takes maximum value for each dimension across all chunks.
+
+```
+Chunk 1: [0.2, 0.4, 0.6]
+Chunk 2: [0.4, 0.2, 0.8]
+         ↓
+Max:     [max(0.2,0.4), max(0.4,0.2), max(0.6,0.8)]
+       = [0.4, 0.4, 0.8]
+         ↓
+Normalize to unit vector
+```
+
+**Pros:**
+- Preserves strongest signals
+- Good for keyword-rich content
+- Emphasizes distinct features
+
+**Cons:**
+- May over-emphasize outliers
+- Less balanced than average
+
+**Use when:**
+- Looking for specific features/keywords
+- Content has distinct sections
+- Need to preserve strong signals
+
+### Overlap Importance
+
+Overlap preserves context at chunk boundaries:
+
+```
+Without overlap:
+Chunk 1: "...authentication uses JWT tokens."
+Chunk 2: "The token payload contains user..."
+         ↑ Context lost between chunks
+
+With overlap (200 chars):
+Chunk 1: "...authentication uses JWT tokens. The token..."
+Chunk 2: "...JWT tokens. The token payload contains user..."
+         ↑ Context preserved
+```
+
+**Recommended overlap:** 200-400 characters (~50-100 tokens)
+
+### Performance Implications
+
+**Small chunk size (< 4000 chars):**
+- ✅ Better memory efficiency
+- ✅ Handles longer documents
+- ❌ More API calls
+- ❌ Slower embedding
+
+**Large chunk size (> 12000 chars):**
+- ✅ Fewer API calls
+- ✅ Faster embedding
+- ❌ May exceed model limits
+- ❌ Higher memory usage
+
+**Recommended:** 8000 chars (~2000 tokens for nomic-embed-text)
+
+### Disabling Chunking
+
+Set `chunk_size` to 0 to disable:
+
+```yaml
+embeddings:
+  chunk_size: 0  # No chunking, embed full text
+```
+
+**Warning:** Disabling chunking may cause errors with long content that exceeds model context limits.
+
+### Best Practices
+
+1. **Default configuration works well** for most use cases
+2. **Increase chunk_size** if you have mostly short content (< 8000 chars)
+3. **Decrease chunk_size** if hitting memory limits or timeouts
+4. **Use "first" strategy** for content with strong opening summaries
+5. **Use "max_pool" strategy** for keyword-focused search
+6. **Keep overlap** at 200-400 chars to preserve context
+
+### Example Configuration by Use Case
+
+**Long technical documents:**
+```yaml
+embeddings:
+  chunk_size: 6000          # Smaller chunks for reliability
+  chunk_overlap: 300        # More overlap for context
+  chunk_strategy: average   # Balanced representation
+```
+
+**Short code snippets:**
+```yaml
+embeddings:
+  chunk_size: 12000         # Larger chunks (rarely split)
+  chunk_overlap: 100        # Less overlap needed
+  chunk_strategy: average   # Standard approach
+```
+
+**Performance-critical:**
+```yaml
+embeddings:
+  chunk_size: 10000         # Larger chunks = fewer calls
+  chunk_overlap: 100        # Minimal overlap
+  chunk_strategy: first     # Fastest strategy
 ```
 
 ---
