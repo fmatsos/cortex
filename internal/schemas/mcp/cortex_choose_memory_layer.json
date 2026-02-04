@@ -1,6 +1,6 @@
 {
   "name": "cortex_choose_memory_layer",
-  "description": "Generate a prompt and context payload to help choose the correct memory layer for a new memory.",
+  "description": "Return a decision prompt to help choose the correct memory layer for a new memory.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -22,10 +22,6 @@
       "session_id": {
         "type": "string",
         "description": "Optional session ID if the memory might be working-level"
-      },
-      "prompt": {
-        "type": "string",
-        "description": "Optional custom prompt to replace the bundled guidance"
       }
     },
     "required": ["content"]

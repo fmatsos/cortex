@@ -199,8 +199,8 @@ graph TB
 | `cortex_list` | List memories | `level`, `include_obsolete` |
 | `cortex_get` | Get memory by ID | `id` |
 | `cortex_consolidate` | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
-| `cortex_choose_memory_layer` | Provide a layer-selection prompt | `content`, `prompt` |
-| `cortex_choose_working_consolidation` | Provide a consolidation-selection prompt | `working_memories`, `prompt` |
+| `cortex_choose_memory_layer` | Ask the model to choose a memory layer | `content` |
+| `cortex_choose_working_consolidation` | Ask the model to pick working memories to consolidate | `working_memories` |
 
 ### cortex_search
 
@@ -414,14 +414,13 @@ flowchart LR
 
 ### cortex_choose_memory_layer
 
-Generate a bundled prompt to help select the correct memory layer for a new memory. Provide a custom prompt to override the bundled guidance.
+Ask the model to select the correct memory layer for a new memory using the bundled prompt. The bundled prompt can be overridden in the Cortex config file.
 
 **Parameters:**
 - `content` (required): Memory content to classify
 - `title` (optional): Memory title
 - `tags` (optional): Tags
 - `session_id` (optional): Session ID if working-level is likely
-- `prompt` (optional): Custom prompt that replaces the bundled guidance
 
 **Example:**
 ```json
@@ -437,12 +436,11 @@ Generate a bundled prompt to help select the correct memory layer for a new memo
 
 ### cortex_choose_working_consolidation
 
-Generate a bundled prompt to help select which working memories should be consolidated. Provide a custom prompt to override the bundled guidance.
+Ask the model to select which working memories should be consolidated using the bundled prompt. The bundled prompt can be overridden in the Cortex config file.
 
 **Parameters:**
 - `working_memories` (required): Working memory candidates to review
 - `selection_goal` (optional): Optional focus for consolidation
-- `prompt` (optional): Custom prompt that replaces the bundled guidance
 
 **Example:**
 ```json
@@ -464,6 +462,19 @@ Generate a bundled prompt to help select which working memories should be consol
     ]
   }
 }
+```
+
+## Prompt Overrides
+
+To override the bundled prompts, set the following keys in the Cortex config file:
+
+```yaml
+mcp:
+  prompts:
+    choose_memory_layer: |-
+      Your custom prompt here...
+    choose_working_consolidation: |-
+      Your custom prompt here...
 ```
 
 ## Environment Variables

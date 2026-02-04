@@ -24,28 +24,6 @@ const (
 	MCPVersion    = "2024-11-05"
 )
 
-const (
-	defaultMemoryLayerPrompt = `You are selecting the correct Cortex memory layer for a new memory.
-
-Choose exactly one: working, episodic, semantic.
-
-Guidelines:
-- working: temporary session context, active tasks, scratch notes. Requires session_id.
-- episodic: time-bound events/decisions/outcomes useful for historical recall.
-- semantic: durable, reusable knowledge or conventions that should persist.
-
-Return JSON only:
-{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}`
-
-	defaultWorkingConsolidationPrompt = `You are selecting which working memories should be consolidated.
-
-Pick entries that capture completed work, decisions, or knowledge that should persist.
-Exclude transient notes that are only useful during the session.
-
-Return JSON only:
-{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`
-)
-
 // Server represents the MCP server
 type Server struct {
 	transport            Transport
@@ -551,18 +529,6 @@ type chooseMemoryLayerArgs struct {
 	Content   string   `json:"content"`
 	Tags      []string `json:"tags"`
 	SessionID string   `json:"session_id"`
-	Prompt    string   `json:"prompt"`
-}
-
-type chooseMemoryLayerResponse struct {
-	Prompt       string `json:"prompt"`
-	OutputFormat string `json:"output_format"`
-	Memory       struct {
-		Title     string   `json:"title"`
-		Content   string   `json:"content"`
-		Tags      []string `json:"tags,omitempty"`
-		SessionID string   `json:"session_id,omitempty"`
-	} `json:"memory"`
 }
 
 func (s *Server) handleChooseMemoryLayer(ctx context.Context, id interface{}, args json.RawMessage) *Response {
@@ -575,26 +541,30 @@ func (s *Server) handleChooseMemoryLayer(ctx context.Context, id interface{}, ar
 		return NewErrorResponse(id, InvalidParams, "content is required", nil)
 	}
 
-	prompt := strings.TrimSpace(a.Prompt)
+	prompt := strings.TrimSpace(config.Global().MCP.Prompts.ChooseMemoryLayer)
 	if prompt == "" {
-		prompt = defaultMemoryLayerPrompt
+		prompt = config.DefaultConfig().MCP.Prompts.ChooseMemoryLayer
 	}
 
-	response := chooseMemoryLayerResponse{
-		Prompt:       prompt,
-		OutputFormat: `{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}`,
+	payload := struct {
+		Title     string   `json:"title,omitempty"`
+		Content   string   `json:"content"`
+		Tags      []string `json:"tags,omitempty"`
+		SessionID string   `json:"session_id,omitempty"`
+	}{
+		Title:     a.Title,
+		Content:   a.Content,
+		Tags:      a.Tags,
+		SessionID: a.SessionID,
 	}
-	response.Memory.Title = a.Title
-	response.Memory.Content = a.Content
-	response.Memory.Tags = a.Tags
-	response.Memory.SessionID = a.SessionID
 
-	jsonBytes, err := json.Marshal(response)
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
 	}
 
-	return s.toolResult(id, string(jsonBytes))
+	finalPrompt := fmt.Sprintf("%s\n\nMemory to classify:\n%s", prompt, string(jsonBytes))
+	return s.toolResult(id, finalPrompt)
 }
 
 type workingMemoryCandidate struct {
@@ -609,14 +579,6 @@ type workingMemoryCandidate struct {
 type chooseWorkingConsolidationArgs struct {
 	WorkingMemories []workingMemoryCandidate `json:"working_memories"`
 	SelectionGoal   string                   `json:"selection_goal"`
-	Prompt          string                   `json:"prompt"`
-}
-
-type chooseWorkingConsolidationResponse struct {
-	Prompt          string                   `json:"prompt"`
-	OutputFormat    string                   `json:"output_format"`
-	SelectionGoal   string                   `json:"selection_goal,omitempty"`
-	WorkingMemories []workingMemoryCandidate `json:"working_memories"`
 }
 
 func (s *Server) handleChooseWorkingConsolidation(ctx context.Context, id interface{}, args json.RawMessage) *Response {
@@ -629,24 +591,26 @@ func (s *Server) handleChooseWorkingConsolidation(ctx context.Context, id interf
 		return NewErrorResponse(id, InvalidParams, "working_memories is required", nil)
 	}
 
-	prompt := strings.TrimSpace(a.Prompt)
+	prompt := strings.TrimSpace(config.Global().MCP.Prompts.ChooseWorkingConsolidation)
 	if prompt == "" {
-		prompt = defaultWorkingConsolidationPrompt
+		prompt = config.DefaultConfig().MCP.Prompts.ChooseWorkingConsolidation
 	}
 
-	response := chooseWorkingConsolidationResponse{
-		Prompt:          prompt,
-		OutputFormat:    `{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`,
+	payload := struct {
+		SelectionGoal   string                   `json:"selection_goal,omitempty"`
+		WorkingMemories []workingMemoryCandidate `json:"working_memories"`
+	}{
 		SelectionGoal:   a.SelectionGoal,
 		WorkingMemories: a.WorkingMemories,
 	}
 
-	jsonBytes, err := json.Marshal(response)
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
 	}
 
-	return s.toolResult(id, string(jsonBytes))
+	finalPrompt := fmt.Sprintf("%s\n\nWorking memories to review:\n%s", prompt, string(jsonBytes))
+	return s.toolResult(id, finalPrompt)
 }
 
 // toolResult creates a successful tool result
