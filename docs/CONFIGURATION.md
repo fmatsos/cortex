@@ -33,6 +33,9 @@ embeddings:
   model: nomic-embed-text
   endpoint: http://localhost:11434
   timeout: 30s
+  chunk_size: 8000
+  chunk_overlap: 200
+  chunk_strategy: average
 
 search:
   top_k: 5
@@ -92,6 +95,9 @@ graph LR
     Embeddings --> Model["model"]
     Embeddings --> Endpoint["endpoint"]
     Embeddings --> Timeout["timeout"]
+    Embeddings --> ChunkSize["chunk_size"]
+    Embeddings --> ChunkOverlap["chunk_overlap"]
+    Embeddings --> ChunkStrategy["chunk_strategy"]
 ```
 
 | Option | Type | Default | Description |
@@ -100,6 +106,40 @@ graph LR
 | `embeddings.model` | string | `nomic-embed-text` | Embedding model name |
 | `embeddings.endpoint` | string | `http://localhost:11434` | API endpoint URL |
 | `embeddings.timeout` | duration | `30s` | Request timeout |
+| `embeddings.chunk_size` | integer | `8000` | Max characters per chunk (0 = no chunking) |
+| `embeddings.chunk_overlap` | integer | `200` | Overlap between chunks for context preservation |
+| `embeddings.chunk_strategy` | string | `average` | How to combine chunk embeddings: `average`, `first`, or `max_pool` |
+
+#### Text Chunking
+
+Text chunking automatically handles long content that exceeds embedding model context limits.
+
+**When chunking activates:**
+- Content length > `chunk_size` characters
+- Automatically splits into overlapping chunks
+- Embeds each chunk separately
+- Combines using selected strategy
+
+**Chunk Strategies:**
+
+| Strategy | Description | Best For |
+|----------|-------------|----------|
+| `average` | Averages embeddings across all chunks (default) | General purpose, balanced representation |
+| `first` | Uses only first chunk's embedding | Content with strong opening, performance |
+| `max_pool` | Takes max value per dimension | Keyword-focused search, distinct features |
+
+**Recommended values:**
+- **chunk_size**: 8000 chars (~2000 tokens for nomic-embed-text)
+- **chunk_overlap**: 200-400 chars to preserve context at boundaries
+- **chunk_strategy**: `average` for most use cases
+
+**Disable chunking:**
+```yaml
+embeddings:
+  chunk_size: 0  # No chunking
+```
+
+**Note:** See [EMBEDDINGS.md](./EMBEDDINGS.md#text-chunking) for detailed chunking documentation.
 
 #### Recommended Embedding Models
 
@@ -365,6 +405,9 @@ graph TB
 | `CORTEX_EMBEDDINGS_MODEL` | `embeddings.model` |
 | `CORTEX_EMBEDDINGS_ENDPOINT` | `embeddings.endpoint` |
 | `CORTEX_EMBEDDINGS_TIMEOUT` | `embeddings.timeout` |
+| `CORTEX_EMBEDDINGS_CHUNK_SIZE` | `embeddings.chunk_size` |
+| `CORTEX_EMBEDDINGS_CHUNK_OVERLAP` | `embeddings.chunk_overlap` |
+| `CORTEX_EMBEDDINGS_CHUNK_STRATEGY` | `embeddings.chunk_strategy` |
 | `CORTEX_SEARCH_TOP_K` | `search.top_k` |
 | `CORTEX_SEARCH_MIN_SCORE` | `search.min_score` |
 | `CORTEX_SEARCH_INCLUDE_OBSOLETE` | `search.include_obsolete` |
@@ -501,6 +544,9 @@ embeddings:
   model: nomic-embed-text
   endpoint: http://localhost:11434
   timeout: 60s
+  chunk_size: 8000
+  chunk_overlap: 200
+  chunk_strategy: average
 
 search:
   top_k: 10
@@ -524,6 +570,9 @@ embeddings:
   model: mxbai-embed-large
   endpoint: http://ollama-server:11434
   timeout: 30s
+  chunk_size: 8000
+  chunk_overlap: 200
+  chunk_strategy: average
 
 search:
   top_k: 5
@@ -547,6 +596,9 @@ embeddings:
   model: nomic-embed-text
   endpoint: http://host.docker.internal:11434
   timeout: 30s
+  chunk_size: 8000
+  chunk_overlap: 200
+  chunk_strategy: average
 ```
 
 ---
