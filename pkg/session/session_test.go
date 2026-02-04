@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
@@ -242,7 +243,7 @@ func TestDeriveOrUseProvided(t *testing.T) {
 
 	// Test with provided session ID
 	provided := "my-custom-session"
-	got, err := d.DeriveOrUseProvided(nil, provided)
+	got, err := d.DeriveOrUseProvided(context.TODO(), provided)
 	if err != nil {
 		t.Errorf("DeriveOrUseProvided() error = %v", err)
 	}
@@ -255,7 +256,7 @@ func TestDeriveOrUseProvided(t *testing.T) {
 		AutoDerive: false,
 	}
 	dNoAuto := NewDeriver(cfgNoAuto)
-	got, err = dNoAuto.DeriveOrUseProvided(nil, "")
+	got, err = dNoAuto.DeriveOrUseProvided(context.TODO(), "")
 	if err != nil {
 		t.Errorf("DeriveOrUseProvided() error = %v", err)
 	}
