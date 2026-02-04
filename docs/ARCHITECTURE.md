@@ -645,6 +645,8 @@ graph TB
         T3[cortex_consolidate]
         T4[cortex_list]
         T5[cortex_get]
+        T6[cortex_choose_memory_layer]
+        T7[cortex_choose_working_consolidation]
     end
 
     subgraph "Services"
@@ -666,6 +668,8 @@ graph TB
     Tools --> T3
     Tools --> T4
     Tools --> T5
+    Tools --> T6
+    Tools --> T7
 
     T1 --> MS
     T2 --> MS

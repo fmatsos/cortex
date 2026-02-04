@@ -113,18 +113,20 @@ func TestServerListTools(t *testing.T) {
 		t.Fatal("Result should be ListToolsResult")
 	}
 
-	// Should have 5 tools
-	if len(result.Tools) != 5 {
-		t.Errorf("Tools count = %d, want 5", len(result.Tools))
+	// Should have 7 tools
+	if len(result.Tools) != 7 {
+		t.Errorf("Tools count = %d, want 7", len(result.Tools))
 	}
 
 	// Verify tool names
 	expectedTools := map[string]bool{
-		"cortex_search":      false,
-		"cortex_create":      false,
-		"cortex_list":        false,
-		"cortex_get":         false,
-		"cortex_consolidate": false,
+		"cortex_search":                       false,
+		"cortex_create":                       false,
+		"cortex_list":                         false,
+		"cortex_get":                          false,
+		"cortex_consolidate":                  false,
+		"cortex_choose_memory_layer":          false,
+		"cortex_choose_working_consolidation": false,
 	}
 
 	for _, tool := range result.Tools {

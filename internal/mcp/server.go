@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
@@ -21,6 +22,28 @@ const (
 	ServerName    = "cortex-ai"
 	ServerVersion = "1.0.0"
 	MCPVersion    = "2024-11-05"
+)
+
+const (
+	defaultMemoryLayerPrompt = `You are selecting the correct Cortex memory layer for a new memory.
+
+Choose exactly one: working, episodic, semantic.
+
+Guidelines:
+- working: temporary session context, active tasks, scratch notes. Requires session_id.
+- episodic: time-bound events/decisions/outcomes useful for historical recall.
+- semantic: durable, reusable knowledge or conventions that should persist.
+
+Return JSON only:
+{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}`
+
+	defaultWorkingConsolidationPrompt = `You are selecting which working memories should be consolidated.
+
+Pick entries that capture completed work, decisions, or knowledge that should persist.
+Exclude transient notes that are only useful during the session.
+
+Return JSON only:
+{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`
 )
 
 // Server represents the MCP server
@@ -234,6 +257,10 @@ func (s *Server) handleCallTool(req *Request) *Response {
 		return s.handleGet(ctx, req.ID, params.Arguments)
 	case "cortex_consolidate":
 		return s.handleConsolidate(ctx, req.ID, params.Arguments)
+	case "cortex_choose_memory_layer":
+		return s.handleChooseMemoryLayer(ctx, req.ID, params.Arguments)
+	case "cortex_choose_working_consolidation":
+		return s.handleChooseWorkingConsolidation(ctx, req.ID, params.Arguments)
 	default:
 		return NewErrorResponse(req.ID, InvalidParams, "Unknown tool", params.Name)
 	}
@@ -509,6 +536,109 @@ func (s *Server) handleConsolidate(ctx context.Context, id interface{}, args jso
 	}{
 		Success: true,
 		Result:  result,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+type chooseMemoryLayerArgs struct {
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	Tags      []string `json:"tags"`
+	SessionID string   `json:"session_id"`
+	Prompt    string   `json:"prompt"`
+}
+
+type chooseMemoryLayerResponse struct {
+	Prompt       string `json:"prompt"`
+	OutputFormat string `json:"output_format"`
+	Memory       struct {
+		Title     string   `json:"title"`
+		Content   string   `json:"content"`
+		Tags      []string `json:"tags,omitempty"`
+		SessionID string   `json:"session_id,omitempty"`
+	} `json:"memory"`
+}
+
+func (s *Server) handleChooseMemoryLayer(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a chooseMemoryLayerArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid choose memory layer arguments", err.Error())
+	}
+
+	if strings.TrimSpace(a.Content) == "" {
+		return NewErrorResponse(id, InvalidParams, "content is required", nil)
+	}
+
+	prompt := strings.TrimSpace(a.Prompt)
+	if prompt == "" {
+		prompt = defaultMemoryLayerPrompt
+	}
+
+	response := chooseMemoryLayerResponse{
+		Prompt:       prompt,
+		OutputFormat: `{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}`,
+	}
+	response.Memory.Title = a.Title
+	response.Memory.Content = a.Content
+	response.Memory.Tags = a.Tags
+	response.Memory.SessionID = a.SessionID
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+type workingMemoryCandidate struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Content   string   `json:"content"`
+	Tags      []string `json:"tags,omitempty"`
+	CreatedAt string   `json:"created_at,omitempty"`
+	SessionID string   `json:"session_id,omitempty"`
+}
+
+type chooseWorkingConsolidationArgs struct {
+	WorkingMemories []workingMemoryCandidate `json:"working_memories"`
+	SelectionGoal   string                   `json:"selection_goal"`
+	Prompt          string                   `json:"prompt"`
+}
+
+type chooseWorkingConsolidationResponse struct {
+	Prompt          string                   `json:"prompt"`
+	OutputFormat    string                   `json:"output_format"`
+	SelectionGoal   string                   `json:"selection_goal,omitempty"`
+	WorkingMemories []workingMemoryCandidate `json:"working_memories"`
+}
+
+func (s *Server) handleChooseWorkingConsolidation(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a chooseWorkingConsolidationArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid choose working consolidation arguments", err.Error())
+	}
+
+	if len(a.WorkingMemories) == 0 {
+		return NewErrorResponse(id, InvalidParams, "working_memories is required", nil)
+	}
+
+	prompt := strings.TrimSpace(a.Prompt)
+	if prompt == "" {
+		prompt = defaultWorkingConsolidationPrompt
+	}
+
+	response := chooseWorkingConsolidationResponse{
+		Prompt:          prompt,
+		OutputFormat:    `{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`,
+		SelectionGoal:   a.SelectionGoal,
+		WorkingMemories: a.WorkingMemories,
 	}
 
 	jsonBytes, err := json.Marshal(response)

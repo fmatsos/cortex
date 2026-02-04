@@ -987,6 +987,8 @@ Tools available:
   - cortex_list
   - cortex_get
   - cortex_consolidate
+  - cortex_choose_memory_layer
+  - cortex_choose_working_consolidation
 
 Server ready. Waiting for messages on stdin...
 ```
