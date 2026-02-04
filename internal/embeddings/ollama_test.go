@@ -28,7 +28,7 @@ func TestNewOllamaEmbedder(t *testing.T) {
 	}))
 	defer server.Close()
 
-	embedder, err := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+	embedder, err := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 8000, 200, "average")
 	if err != nil {
 		t.Fatalf("NewOllamaEmbedder() error = %v", err)
 	}
@@ -39,7 +39,7 @@ func TestNewOllamaEmbedder(t *testing.T) {
 }
 
 func TestNewOllamaEmbedder_ConnectionFailed(t *testing.T) {
-	embedder, err := NewOllamaEmbedder("http://invalid-host:99999", "nomic-embed-text", 1*time.Second)
+	embedder, err := NewOllamaEmbedder("http://invalid-host:99999", "nomic-embed-text", 1*time.Second, 8000, 200, "average")
 	if err == nil {
 		t.Error("NewOllamaEmbedder() should return error for unreachable host")
 	}
@@ -66,7 +66,7 @@ func TestOllamaEmbedder_Embed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 8000, 200, "average")
 
 	embedding, err := embedder.Embed(context.Background(), "test text")
 	if err != nil {
@@ -100,7 +100,7 @@ func TestOllamaEmbedder_EmbedBatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second)
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 8000, 200, "average")
 
 	texts := []string{"text1", "text2", "text3"}
 	embeddings, err := embedder.EmbedBatch(context.Background(), texts)
@@ -129,10 +129,13 @@ func TestOllamaEmbedder_APIError(t *testing.T) {
 	// Create embedder with custom endpoint that returns error
 	client := &http.Client{Timeout: 5 * time.Second}
 	embedder := &OllamaEmbedder{
-		endpoint:  server.URL,
-		model:     "nomic-embed-text",
-		client:    client,
-		dimension: 384,
+		endpoint:      server.URL,
+		model:         "nomic-embed-text",
+		client:        client,
+		dimension:     384,
+		chunkSize:     8000,
+		chunkOverlap:  200,
+		chunkStrategy: "average",
 	}
 
 	_, err := embedder.Embed(context.Background(), "test")
@@ -193,10 +196,13 @@ func TestOllamaEmbedder_ContextCancellation(t *testing.T) {
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	embedder := &OllamaEmbedder{
-		endpoint:  server.URL,
-		model:     "nomic-embed-text",
-		client:    client,
-		dimension: 384,
+		endpoint:      server.URL,
+		model:         "nomic-embed-text",
+		client:        client,
+		dimension:     384,
+		chunkSize:     8000,
+		chunkOverlap:  200,
+		chunkStrategy: "average",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -205,5 +211,154 @@ func TestOllamaEmbedder_ContextCancellation(t *testing.T) {
 	_, err := embedder.Embed(ctx, "test")
 	if err == nil {
 		t.Error("Embed() should return error when context is cancelled")
+	}
+}
+
+func TestOllamaEmbedder_ChunkingSmallText(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = 0.1
+		}
+		resp := OllamaResponse{Embedding: embedding}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Create embedder with small chunk size to force chunking
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 50, 10, "average")
+
+	// Small text should not be chunked
+	embedding, err := embedder.Embed(context.Background(), "Short text")
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+
+	if len(embedding) != 384 {
+		t.Errorf("Embedding length = %v, want 384", len(embedding))
+	}
+
+	// Check that embedding is normalized
+	norm := 0.0
+	for _, val := range embedding {
+		norm += val * val
+	}
+	norm = math.Sqrt(norm)
+
+	if math.Abs(norm-1.0) > 0.001 {
+		t.Errorf("Embedding norm = %v, want ~1.0", norm)
+	}
+}
+
+func TestOllamaEmbedder_ChunkingLongText(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = float64(callCount) * 0.1
+		}
+		resp := OllamaResponse{Embedding: embedding}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Create embedder with small chunk size to force chunking
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 50, 10, "average")
+
+	// Long text should be chunked (more than 50 characters)
+	longText := "This is a very long text that should definitely be chunked into multiple pieces because it exceeds the configured chunk size by quite a bit."
+	embedding, err := embedder.Embed(context.Background(), longText)
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+
+	if len(embedding) != 384 {
+		t.Errorf("Embedding length = %v, want 384", len(embedding))
+	}
+
+	// Verify that multiple API calls were made (one per chunk)
+	if callCount <= 1 {
+		t.Errorf("Expected multiple API calls for chunked text, got %d", callCount)
+	}
+
+	// Check that embedding is normalized
+	norm := 0.0
+	for _, val := range embedding {
+		norm += val * val
+	}
+	norm = math.Sqrt(norm)
+
+	if math.Abs(norm-1.0) > 0.001 {
+		t.Errorf("Embedding norm = %v, want ~1.0", norm)
+	}
+}
+
+func TestOllamaEmbedder_ChunkingStrategies(t *testing.T) {
+	strategies := []string{"average", "first", "max_pool"}
+
+	for _, strategy := range strategies {
+		t.Run(strategy, func(t *testing.T) {
+			callCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				callCount++
+				embedding := make([]float64, 384)
+				for i := 0; i < 384; i++ {
+					embedding[i] = float64(callCount) * 0.1
+				}
+				resp := OllamaResponse{Embedding: embedding}
+				_ = json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 50, 10, strategy)
+
+			longText := "This is a very long text that should definitely be chunked into multiple pieces because it exceeds the configured chunk size."
+			embedding, err := embedder.Embed(context.Background(), longText)
+			if err != nil {
+				t.Fatalf("Embed() error = %v", err)
+			}
+
+			if len(embedding) != 384 {
+				t.Errorf("Embedding length = %v, want 384", len(embedding))
+			}
+
+			// Check that embedding is normalized
+			norm := 0.0
+			for _, val := range embedding {
+				norm += val * val
+			}
+			norm = math.Sqrt(norm)
+
+			if math.Abs(norm-1.0) > 0.001 {
+				t.Errorf("Embedding norm = %v, want ~1.0 for strategy %s", norm, strategy)
+			}
+		})
+	}
+}
+
+func TestOllamaEmbedder_ChunkingDisabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		embedding := make([]float64, 384)
+		for i := 0; i < 384; i++ {
+			embedding[i] = 0.1
+		}
+		resp := OllamaResponse{Embedding: embedding}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Create embedder with chunk size 0 to disable chunking
+	embedder, _ := NewOllamaEmbedder(server.URL, "nomic-embed-text", 5*time.Second, 0, 0, "average")
+
+	// Even long text should not be chunked
+	longText := "This is a very long text that should definitely be chunked into multiple pieces because it exceeds the configured chunk size by quite a bit."
+	embedding, err := embedder.Embed(context.Background(), longText)
+	if err != nil {
+		t.Fatalf("Embed() error = %v", err)
+	}
+
+	if len(embedding) != 384 {
+		t.Errorf("Embedding length = %v, want 384", len(embedding))
 	}
 }
