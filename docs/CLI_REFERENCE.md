@@ -163,12 +163,14 @@ cortex create --title "<title>" --level <level> --content "<content>" [flags]
 **Optional Flags**:
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--session` | | string | - | Session ID (required for working level) |
+| `--session` | | string | auto-derived | Session ID (required for working level, auto-derived from git branch by default) |
 | `--tags` | | string | - | Comma-separated tags |
 | `--source` | | string | manual | Source: manual, auto, llm |
 | `--task-id` | | string | - | Associated task/ticket ID |
 | `--author` | | string | - | Author name |
 | `--json` | | bool | false | Output as JSON |
+
+> **Note:** Session IDs are automatically derived from your git branch name when `session.auto_derive: true` (default). For example, branch `fix/sil-123/auth` becomes session `session-fix-sil-123`. See [Configuration](CONFIGURATION.md#session-section) for details.
 
 **Examples**:
 ```bash
@@ -513,12 +515,14 @@ cortex consolidate --level <level> --content "<content>" [flags]
 **Optional Flags**:
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--session` | string | auto-generated | Session ID (for working level) |
+| `--session` | string | auto-derived | Session ID (auto-derived from git branch, falls back to UUID) |
 | `--tags` | string | - | Comma-separated tags |
 | `--source` | string | llm | Source: manual, auto, llm |
 | `--force` | bool | false | Bypass duplicate detection |
 | `--threshold` | float | 0.85 | Similarity threshold for merging |
 | `--json` | bool | false | Output as JSON |
+
+> **Note:** Session IDs are automatically derived from your git branch when `session.auto_derive: true` (default). See [Configuration](CONFIGURATION.md#session-section) for pattern configuration.
 
 **Examples**:
 ```bash

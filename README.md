@@ -323,8 +323,17 @@ cortex search "database timeout pattern" --level semantic
 
 ### Session Management
 
+Cortex can **automatically derive session IDs** from your git branch name, making it easy to track work across development sessions without manual session ID management.
+
 ```bash
-# Track work during a feature development session
+# With auto-derivation enabled (default), session ID is derived from git branch
+# Branch: fix/sil-123/auth-timeout → Session: session-fix-sil-123
+cortex create \
+  --level working \
+  --title "OAuth implementation notes" \
+  --content "Using auth0 library. Need to handle refresh tokens."
+
+# Or manually specify a session ID
 cortex create \
   --level working \
   --session feature-oauth-2024 \
@@ -332,8 +341,29 @@ cortex create \
   --content "Using auth0 library. Need to handle refresh tokens."
 
 # Transfer all session memories to episodic at end
-cortex transfer-working --session feature-oauth-2024
+cortex transfer-working --session session-fix-sil-123
 ```
+
+**Auto-Derivation Patterns:**
+
+| Git Branch | Pattern Type | Session ID |
+|------------|--------------|------------|
+| `fix/sil-123/auth-timeout` | `prefix` (default, 2 segments) | `session-fix-sil-123` |
+| `feature/JIRA-456/oauth` | `regex: ([A-Z]+-\d+)` | `session-JIRA-456` |
+| `hotfix/prod/db-leak` | `full` | `session-hotfix-prod-db-leak` |
+
+Configure via `~/.config/cortex-ai/config.yaml`:
+
+```yaml
+session:
+  auto_derive: true          # Enable auto-derivation
+  pattern_type: prefix       # prefix, regex, or full
+  max_segments: 2           # First 2 segments for prefix mode
+  prefix: "session-"        # Prefix for session IDs
+  separator: "-"            # Separator for branch parts
+```
+
+> **📖 Details:** See [Configuration Reference](docs/CONFIGURATION.md#session-section) for all session options.
 
 ---
 
