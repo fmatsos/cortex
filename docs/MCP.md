@@ -477,6 +477,36 @@ mcp:
       Your custom prompt here...
 ```
 
+## Default Prompt Content
+
+If you do not override prompts in the config file, Cortex uses the following defaults:
+
+**Default `mcp.prompts.choose_memory_layer`:**
+```
+You are selecting the correct Cortex memory layer for a new memory.
+
+Choose exactly one: working, episodic, semantic.
+
+Guidelines:
+- working: temporary session context, active tasks, scratch notes. Requires session_id.
+- episodic: time-bound events/decisions/outcomes useful for historical recall.
+- semantic: durable, reusable knowledge or conventions that should persist.
+
+Return JSON only:
+{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}
+```
+
+**Default `mcp.prompts.choose_working_consolidation`:**
+```
+You are selecting which working memories should be consolidated.
+
+Pick entries that capture completed work, decisions, or knowledge that should persist.
+Exclude transient notes that are only useful during the session.
+
+Return JSON only:
+{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}
+```
+
 ## Environment Variables
 
 **Storage:**
