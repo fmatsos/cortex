@@ -9,6 +9,7 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/consolidation"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/pkg/session"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -92,9 +93,16 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		Tags:      consolidateTags,
 	}
 
-	// Generate session ID if not provided
+	// Auto-derive or generate session ID if not provided
 	if consolidationCtx.SessionID == "" {
-		consolidationCtx.SessionID = uuid.New().String()
+		deriver := session.NewDeriver(&cfg.Session)
+		derivedSession, err := deriver.DeriveOrUseProvided(ctx, "")
+		if err == nil && derivedSession != "" {
+			consolidationCtx.SessionID = derivedSession
+		} else {
+			// Fallback to UUID if derivation fails or is disabled
+			consolidationCtx.SessionID = uuid.New().String()
+		}
 	}
 
 	// Parse additional context if provided

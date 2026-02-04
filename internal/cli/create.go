@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/pkg/session"
 	"github.com/spf13/cobra"
 )
 
@@ -55,8 +57,19 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	if !memory.IsValidLevel(createLevel) {
 		return fmt.Errorf("invalid level: %s (must be working, episodic, or semantic)", createLevel)
 	}
-	if memory.MemoryLevel(createLevel) == memory.MemoryLevelWorking && createSession == "" {
-		return fmt.Errorf("--session is required for working level")
+
+	// Auto-derive session ID if needed
+	if memory.MemoryLevel(createLevel) == memory.MemoryLevelWorking {
+		cfg := config.Global()
+		deriver := session.NewDeriver(&cfg.Session)
+		derivedSession, err := deriver.DeriveOrUseProvided(ctx, createSession)
+		if err != nil {
+			return fmt.Errorf("failed to derive session ID: %w", err)
+		}
+		if derivedSession == "" {
+			return fmt.Errorf("--session is required for working level (or enable session.auto_derive in config)")
+		}
+		createSession = derivedSession
 	}
 
 	// Initialize embedder from config

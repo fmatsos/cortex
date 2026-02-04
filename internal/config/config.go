@@ -20,6 +20,7 @@ type Config struct {
 	Templates     TemplatesConfig     `mapstructure:"templates"`
 	Consolidation ConsolidationConfig `mapstructure:"consolidation"`
 	Autoprune     AutopruneConfig     `mapstructure:"autoprune"`
+	Session       SessionConfig       `mapstructure:"session"`
 }
 
 // ConsolidationConfig contains configuration for memory consolidation
@@ -34,6 +35,18 @@ type AutopruneConfig struct {
 	DuplicatesThreshold    float64 `mapstructure:"duplicates_threshold"`     // similarity threshold for duplicate detection
 	EpisodicRetentionDays  int     `mapstructure:"episodic_retention_days"`  // days to retain episodic memories
 	SemanticMergeThreshold float64 `mapstructure:"semantic_merge_threshold"` // threshold for merging semantic memories
+}
+
+// SessionConfig contains session ID derivation configuration
+type SessionConfig struct {
+	AutoDerive      bool   `mapstructure:"auto_derive"`       // automatically derive session ID from git branch
+	PatternType     string `mapstructure:"pattern_type"`      // pattern type: prefix, regex, full
+	Pattern         string `mapstructure:"pattern"`           // pattern to extract session ID from branch name
+	Prefix          string `mapstructure:"prefix"`            // prefix to add to derived session ID (default: "session-")
+	Separator       string `mapstructure:"separator"`         // separator to use when transforming branch name (default: "-")
+	MaxSegments     int    `mapstructure:"max_segments"`      // max number of segments to include (0 = all)
+	StripPrefix     string `mapstructure:"strip_prefix"`      // optional prefix to strip from branch name before processing
+	FallbackToUUID  bool   `mapstructure:"fallback_to_uuid"`  // fallback to UUID if pattern doesn't match
 }
 
 // TemplatesConfig contains template customization options
@@ -176,6 +189,16 @@ func DefaultConfig() *Config {
 			EpisodicRetentionDays:  90,
 			SemanticMergeThreshold: 0.88,
 		},
+		Session: SessionConfig{
+			AutoDerive:     true,
+			PatternType:    "prefix",
+			Pattern:        "",
+			Prefix:         "session-",
+			Separator:      "-",
+			MaxSegments:    2,
+			StripPrefix:    "",
+			FallbackToUUID: true,
+		},
 	}
 }
 
@@ -297,6 +320,16 @@ func (m *Manager) bindEnvVars() {
 	_ = m.v.BindEnv("autoprune.duplicates_threshold", "CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD")
 	_ = m.v.BindEnv("autoprune.episodic_retention_days", "CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS")
 	_ = m.v.BindEnv("autoprune.semantic_merge_threshold", "CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD")
+
+	// Session
+	_ = m.v.BindEnv("session.auto_derive", "CORTEX_SESSION_AUTO_DERIVE")
+	_ = m.v.BindEnv("session.pattern_type", "CORTEX_SESSION_PATTERN_TYPE")
+	_ = m.v.BindEnv("session.pattern", "CORTEX_SESSION_PATTERN")
+	_ = m.v.BindEnv("session.prefix", "CORTEX_SESSION_PREFIX")
+	_ = m.v.BindEnv("session.separator", "CORTEX_SESSION_SEPARATOR")
+	_ = m.v.BindEnv("session.max_segments", "CORTEX_SESSION_MAX_SEGMENTS")
+	_ = m.v.BindEnv("session.strip_prefix", "CORTEX_SESSION_STRIP_PREFIX")
+	_ = m.v.BindEnv("session.fallback_to_uuid", "CORTEX_SESSION_FALLBACK_TO_UUID")
 }
 
 // setDefaults sets default values
@@ -332,6 +365,16 @@ func (m *Manager) setDefaults() {
 	m.v.SetDefault("autoprune.duplicates_threshold", defaults.Autoprune.DuplicatesThreshold)
 	m.v.SetDefault("autoprune.episodic_retention_days", defaults.Autoprune.EpisodicRetentionDays)
 	m.v.SetDefault("autoprune.semantic_merge_threshold", defaults.Autoprune.SemanticMergeThreshold)
+
+	// Session defaults
+	m.v.SetDefault("session.auto_derive", defaults.Session.AutoDerive)
+	m.v.SetDefault("session.pattern_type", defaults.Session.PatternType)
+	m.v.SetDefault("session.pattern", defaults.Session.Pattern)
+	m.v.SetDefault("session.prefix", defaults.Session.Prefix)
+	m.v.SetDefault("session.separator", defaults.Session.Separator)
+	m.v.SetDefault("session.max_segments", defaults.Session.MaxSegments)
+	m.v.SetDefault("session.strip_prefix", defaults.Session.StripPrefix)
+	m.v.SetDefault("session.fallback_to_uuid", defaults.Session.FallbackToUUID)
 }
 
 // Get returns the current configuration
@@ -425,6 +468,16 @@ search:
 output:
   format: text                              # text | json
   colors: true
+
+session:
+  auto_derive: true                         # automatically derive session ID from git branch
+  pattern_type: prefix                      # pattern type: prefix, regex, full
+  pattern: ""                               # regex pattern (only for pattern_type: regex)
+  prefix: "session-"                        # prefix to add to derived session ID
+  separator: "-"                            # separator for branch name parts
+  max_segments: 2                           # max number of branch segments (0 = all)
+  strip_prefix: ""                          # optional prefix to strip from branch
+  fallback_to_uuid: true                    # fallback to UUID if pattern doesn't match
 `
 
 	return os.WriteFile(configFile, []byte(content), 0644)
