@@ -25,16 +25,18 @@ graph LR
     end
 
     subgraph "Storage"
-        Memories["Traditional Memories"]
-        Consolidated["Consolidated Memories"]
+        Working["Working Memories"]
+        Episodic["Episodic Memories"]
+        Semantic["Semantic Memories"]
     end
 
     Claude --> Server
     Cursor --> Server
     Other --> Server
     Server --> Tools
-    Tools --> Memories
-    Tools --> Consolidated
+    Tools --> Working
+    Tools --> Episodic
+    Tools --> Semantic
 ```
 
 ## Installation
@@ -168,15 +170,17 @@ Add to your Cursor MCP settings:
 
 ```mermaid
 graph TB
-    subgraph "Traditional Memory Tools"
+    subgraph "Memory Tools"
         Search["cortex_search<br/>Semantic search"]
         Create["cortex_create<br/>Create memory"]
         List["cortex_list<br/>List memories"]
         Get["cortex_get<br/>Get by ID"]
+        Consolidate["cortex_consolidate<br/>Consolidate memory"]
     end
 
-    subgraph "Consolidation Tools"
-        Consolidate["cortex_consolidate<br/>Multi-level storage"]
+    subgraph "Decision Support Tools"
+        ChooseLayer["cortex_choose_memory_layer<br/>Pick memory level"]
+        ChooseWorking["cortex_choose_working_consolidation<br/>Pick working memories"]
     end
 
     Search --> Results["Search Results"]
@@ -184,15 +188,19 @@ graph TB
     List --> AllMemories["All Memories"]
     Get --> SingleMemory["Single Memory"]
     Consolidate --> ConsolidatedMemory["Consolidated Memory"]
+    ChooseLayer --> Decisions["Layer Decision Prompt"]
+    ChooseWorking --> Selections["Consolidation Selection Prompt"]
 ```
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `cortex_search` | Find memories by meaning | `query`, `top_k`, `min_score`, `type` |
-| `cortex_create` | Create traditional memory | `title`, `content`, `type`, `tags` |
-| `cortex_list` | List all memories | `type`, `include_obsolete` |
+| `cortex_search` | Find memories by meaning | `query`, `top_k`, `min_score`, `level` |
+| `cortex_create` | Create a memory in a layer | `title`, `content`, `level`, `tags` |
+| `cortex_list` | List memories | `level`, `include_obsolete` |
 | `cortex_get` | Get memory by ID | `id` |
-| `cortex_consolidate` | Multi-level memory storage | `level`, `content`, `session_id`, `tags` |
+| `cortex_consolidate` | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
+| `cortex_choose_memory_layer` | Ask the model to choose a memory layer | `content` |
+| `cortex_choose_working_consolidation` | Ask the model to pick working memories to consolidate | `working_memories` |
 
 ### cortex_search
 
@@ -202,7 +210,7 @@ Search memories using semantic similarity.
 - `query` (required): The search query
 - `top_k` (optional): Maximum results (default: 5)
 - `min_score` (optional): Minimum similarity score 0-1 (default: 0.5)
-- `type` (optional): Filter by type (solution|issue|analysis|rule|any)
+- `level` (optional): Filter by memory level (working|episodic|semantic)
 
 **Example:**
 ```json
@@ -211,7 +219,7 @@ Search memories using semantic similarity.
   "arguments": {
     "query": "authentication error handling",
     "top_k": 3,
-    "type": "solution"
+    "level": "semantic"
   }
 }
 ```
@@ -223,7 +231,7 @@ Create a new memory.
 **Parameters:**
 - `title` (required): Memory title
 - `content` (required): Memory content (Markdown supported)
-- `type` (required): Memory type (solution|issue|analysis|rule|any)
+- `level` (required): Memory level (working|episodic|semantic)
 - `tags` (optional): Array of tags for categorization
 
 **Example:**
@@ -233,7 +241,7 @@ Create a new memory.
   "arguments": {
     "title": "JWT Token Refresh Pattern",
     "content": "## Problem\nTokens expire...\n\n## Solution\nImplement refresh...",
-    "type": "solution",
+    "level": "semantic",
     "tags": ["authentication", "jwt", "security"]
   }
 }
@@ -244,7 +252,7 @@ Create a new memory.
 List all memories.
 
 **Parameters:**
-- `type` (optional): Filter by type
+- `level` (optional): Filter by level
 - `include_obsolete` (optional): Include obsolete memories (default: false)
 
 **Example:**
@@ -252,7 +260,7 @@ List all memories.
 {
   "name": "cortex_list",
   "arguments": {
-    "type": "issue"
+    "level": "episodic"
   }
 }
 ```
@@ -296,13 +304,19 @@ graph TB
 ```
 
 **Parameters:**
-- `level` (required): Memory level - `working`, `episodic`, or `semantic`
-- `content` (required): Content to consolidate
-- `session_id` (optional): Session identifier (auto-generated if not provided)
-- `tags` (optional): Array of tags for categorization
-- `source` (optional): Source of content - `manual`, `auto`, or `llm` (default: `llm`)
-- `context` (optional): Additional context object with custom metadata
+- `synthesis` (required): Content to consolidate
+- `memory_level` (required): Memory level - `working`, `episodic`, or `semantic`
+- `context` (optional): Context object with task/session/tags metadata
 - `force` (optional): Bypass duplicate detection (default: false)
+
+**Context Fields:**
+- `session_id` (required for working level): Session identifier
+- `task_id` (optional): Task identifier
+- `timestamp` (optional): RFC3339 timestamp
+- `author` (optional): Author or source
+- `tags` (optional): Tags for categorization
+- `source` (optional): Source of content - `manual`, `auto`, or `llm` (default: `llm`)
+- `related_memories` (optional): Related memory IDs
 
 **Memory Level Selection:**
 
@@ -317,10 +331,13 @@ graph TB
 {
   "name": "cortex_consolidate",
   "arguments": {
-    "level": "working",
-    "content": "Currently investigating auth timeout in module X",
-    "session_id": "dev-session-2024-01-15",
-    "tags": ["debugging", "auth"]
+    "synthesis": "Currently investigating auth timeout in module X",
+    "memory_level": "working",
+    "context": {
+      "session_id": "dev-session-2024-01-15",
+      "tags": ["debugging", "auth"],
+      "source": "llm"
+    }
   }
 }
 ```
@@ -330,10 +347,12 @@ graph TB
 {
   "name": "cortex_consolidate",
   "arguments": {
-    "level": "episodic",
-    "content": "Fixed race condition in auth middleware by adding mutex lock. Issue was caused by concurrent token refresh requests.",
-    "tags": ["bugfix", "auth", "concurrency"],
-    "source": "llm"
+    "synthesis": "Fixed race condition in auth middleware by adding mutex lock. Issue was caused by concurrent token refresh requests.",
+    "memory_level": "episodic",
+    "context": {
+      "tags": ["bugfix", "auth", "concurrency"],
+      "source": "llm"
+    }
   }
 }
 ```
@@ -343,9 +362,12 @@ graph TB
 {
   "name": "cortex_consolidate",
   "arguments": {
-    "level": "semantic",
-    "content": "All database queries must use context with timeout to enable proper cancellation and prevent hanging queries.",
-    "tags": ["convention", "database", "context"]
+    "synthesis": "All database queries must use context with timeout to enable proper cancellation and prevent hanging queries.",
+    "memory_level": "semantic",
+    "context": {
+      "tags": ["convention", "database", "context"],
+      "source": "llm"
+    }
   }
 }
 ```
@@ -388,6 +410,101 @@ flowchart LR
     D --> F[Update Memory]
     E --> F
     F --> G[Return Result]
+```
+
+### cortex_choose_memory_layer
+
+Ask the model to select the correct memory layer for a new memory using the bundled prompt. The bundled prompt can be overridden in the Cortex config file.
+
+**Parameters:**
+- `content` (required): Memory content to classify
+- `title` (optional): Memory title
+- `tags` (optional): Tags
+- `session_id` (optional): Session ID if working-level is likely
+
+**Example:**
+```json
+{
+  "name": "cortex_choose_memory_layer",
+  "arguments": {
+    "title": "Cache invalidation decision",
+    "content": "We decided to expire cache entries after 10 minutes to reduce stale data.",
+    "tags": ["cache", "decision"]
+  }
+}
+```
+
+### cortex_choose_working_consolidation
+
+Ask the model to select which working memories should be consolidated using the bundled prompt. The bundled prompt can be overridden in the Cortex config file.
+
+**Parameters:**
+- `working_memories` (required): Working memory candidates to review
+- `selection_goal` (optional): Optional focus for consolidation
+
+**Example:**
+```json
+{
+  "name": "cortex_choose_working_consolidation",
+  "arguments": {
+    "selection_goal": "Keep only completed decisions and outcomes.",
+    "working_memories": [
+      {
+        "id": "mem-1",
+        "title": "Investigating auth timeout",
+        "content": "Hypothesis: retry logic missing in auth module."
+      },
+      {
+        "id": "mem-2",
+        "title": "Fix implemented",
+        "content": "Added exponential backoff and jitter to auth retries."
+      }
+    ]
+  }
+}
+```
+
+## Prompt Overrides
+
+To override the bundled prompts, set the following keys in the Cortex config file:
+
+```yaml
+mcp:
+  prompts:
+    choose_memory_layer: |-
+      Your custom prompt here...
+    choose_working_consolidation: |-
+      Your custom prompt here...
+```
+
+## Default Prompt Content
+
+If you do not override prompts in the config file, Cortex uses the following defaults:
+
+**Default `mcp.prompts.choose_memory_layer`:**
+```
+You are selecting the correct Cortex memory layer for a new memory.
+
+Choose exactly one: working, episodic, semantic.
+
+Guidelines:
+- working: temporary session context, active tasks, scratch notes. Requires session_id.
+- episodic: time-bound events/decisions/outcomes useful for historical recall.
+- semantic: durable, reusable knowledge or conventions that should persist.
+
+Return JSON only:
+{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}
+```
+
+**Default `mcp.prompts.choose_working_consolidation`:**
+```
+You are selecting which working memories should be consolidated.
+
+Pick entries that capture completed work, decisions, or knowledge that should persist.
+Exclude transient notes that are only useful during the session.
+
+Return JSON only:
+{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}
 ```
 
 ## Environment Variables
@@ -469,6 +586,8 @@ flowchart TD
 1. Use working memory for current task context
 2. At the end of a session, important findings automatically transfer to episodic
 3. Extract general patterns into semantic memory
+4. Use `cortex_choose_memory_layer` when unsure which layer fits best
+5. Use `cortex_choose_working_consolidation` to pick working memories worth preserving
 ```
 
 **Bug Fix Documentation:**

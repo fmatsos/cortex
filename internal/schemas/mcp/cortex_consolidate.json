@@ -54,7 +54,7 @@
             "description": "IDs of related memories"
           }
         },
-        "required": ["session_id", "source"]
+        "required": []
       },
       "force": {
         "type": "boolean",
@@ -62,6 +62,6 @@
         "description": "Bypass duplicate detection and force creation of new memory"
       }
     },
-    "required": ["synthesis", "memory_level", "context"]
+    "required": ["synthesis", "memory_level"]
   }
 }

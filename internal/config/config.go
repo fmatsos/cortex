@@ -19,6 +19,7 @@ type Config struct {
 	Output        OutputConfig        `mapstructure:"output"`
 	Templates     TemplatesConfig     `mapstructure:"templates"`
 	Consolidation ConsolidationConfig `mapstructure:"consolidation"`
+	MCP           MCPConfig           `mapstructure:"mcp"`
 	Autoprune     AutopruneConfig     `mapstructure:"autoprune"`
 	Session       SessionConfig       `mapstructure:"session"`
 }
@@ -28,6 +29,17 @@ type ConsolidationConfig struct {
 	SimilarityThreshold      float64 `mapstructure:"similarity_threshold"`         // threshold for duplicate detection
 	PromptTemplate           string  `mapstructure:"prompt_template"`              // template name for LLM consolidation
 	AutoTransferOnSessionEnd bool    `mapstructure:"auto_transfer_on_session_end"` // auto-transfer working to episodic
+}
+
+// MCPConfig contains configuration for MCP tools.
+type MCPConfig struct {
+	Prompts MCPPromptConfig `mapstructure:"prompts"`
+}
+
+// MCPPromptConfig contains prompt overrides for MCP decision-support tools.
+type MCPPromptConfig struct {
+	ChooseMemoryLayer          string `mapstructure:"choose_memory_layer"`
+	ChooseWorkingConsolidation string `mapstructure:"choose_working_consolidation"`
 }
 
 // AutopruneConfig contains configuration for automatic memory cleanup
@@ -184,6 +196,12 @@ func DefaultConfig() *Config {
 			PromptTemplate:           "default",
 			AutoTransferOnSessionEnd: true,
 		},
+		MCP: MCPConfig{
+			Prompts: MCPPromptConfig{
+				ChooseMemoryLayer:          defaultChooseMemoryLayerPrompt(),
+				ChooseWorkingConsolidation: defaultChooseWorkingConsolidationPrompt(),
+			},
+		},
 		Autoprune: AutopruneConfig{
 			DuplicatesThreshold:    0.92,
 			EpisodicRetentionDays:  90,
@@ -200,6 +218,30 @@ func DefaultConfig() *Config {
 			FallbackToUUID: true,
 		},
 	}
+}
+
+func defaultChooseMemoryLayerPrompt() string {
+	return `You are selecting the correct Cortex memory layer for a new memory.
+
+Choose exactly one: working, episodic, semantic.
+
+Guidelines:
+- working: temporary session context, active tasks, scratch notes. Requires session_id.
+- episodic: time-bound events/decisions/outcomes useful for historical recall.
+- semantic: durable, reusable knowledge or conventions that should persist.
+
+Return JSON only:
+{"level":"working|episodic|semantic","rationale":"short reason","needs_session_id":true|false}`
+}
+
+func defaultChooseWorkingConsolidationPrompt() string {
+	return `You are selecting which working memories should be consolidated.
+
+Pick entries that capture completed work, decisions, or knowledge that should persist.
+Exclude transient notes that are only useful during the session.
+
+Return JSON only:
+{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`
 }
 
 // defaultBasePath returns the default base directory for all Cortex data
@@ -360,6 +402,10 @@ func (m *Manager) setDefaults() {
 	m.v.SetDefault("consolidation.similarity_threshold", defaults.Consolidation.SimilarityThreshold)
 	m.v.SetDefault("consolidation.prompt_template", defaults.Consolidation.PromptTemplate)
 	m.v.SetDefault("consolidation.auto_transfer_on_session_end", defaults.Consolidation.AutoTransferOnSessionEnd)
+
+	// MCP defaults
+	m.v.SetDefault("mcp.prompts.choose_memory_layer", defaults.MCP.Prompts.ChooseMemoryLayer)
+	m.v.SetDefault("mcp.prompts.choose_working_consolidation", defaults.MCP.Prompts.ChooseWorkingConsolidation)
 
 	// Autoprune defaults
 	m.v.SetDefault("autoprune.duplicates_threshold", defaults.Autoprune.DuplicatesThreshold)
