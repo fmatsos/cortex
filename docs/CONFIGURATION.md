@@ -52,6 +52,14 @@ autoprune:
   duplicates_threshold: 0.92
   episodic_retention_days: 90
   semantic_merge_threshold: 0.88
+
+session:
+  auto_derive: true
+  pattern_type: prefix
+  prefix: "session-"
+  separator: "-"
+  max_segments: 2
+  fallback_to_uuid: true
 ```
 
 ---
@@ -185,6 +193,86 @@ graph TB
     Semantic -->|"Merge similar"| Semantic
 ```
 
+### Session Section
+
+Configuration for automatic session ID derivation from git branch names.
+
+```mermaid
+graph LR
+    Session["session"]
+    Session --> AutoDerive["auto_derive"]
+    Session --> PatternType["pattern_type"]
+    Session --> Pattern["pattern"]
+    Session --> Prefix["prefix"]
+    Session --> Separator["separator"]
+    Session --> MaxSegments["max_segments"]
+    Session --> StripPrefix["strip_prefix"]
+    Session --> FallbackToUUID["fallback_to_uuid"]
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `session.auto_derive` | boolean | `true` | Automatically derive session ID from git branch |
+| `session.pattern_type` | string | `prefix` | Pattern type: `prefix`, `regex`, or `full` |
+| `session.pattern` | string | `""` | Regex pattern (only used when pattern_type is `regex`) |
+| `session.prefix` | string | `"session-"` | Prefix to add to derived session ID |
+| `session.separator` | string | `"-"` | Separator to use when transforming branch name |
+| `session.max_segments` | integer | `2` | Max number of branch segments to include (0 = all) |
+| `session.strip_prefix` | string | `""` | Optional prefix to strip from branch name before processing |
+| `session.fallback_to_uuid` | boolean | `true` | Fallback to UUID if pattern doesn't match |
+
+**Pattern Types:**
+
+1. **prefix** (default) - Extracts first N segments from branch name
+   - Example: `fix/sil-123/implementation` → `session-fix-sil-123` (with max_segments=2)
+   - Example: `feature/auth/jwt/impl` → `session-feature-auth` (with max_segments=2)
+
+2. **regex** - Uses custom regex pattern with capture group
+   - Example pattern: `^[^/]+/([\w-]+)` matches second segment
+   - Branch `fix/sil-123/impl` → `session-sil-123`
+   - Example pattern: `([A-Z]+-\d+)` extracts JIRA ticket
+   - Branch `feature/JIRA-456/auth` → `session-JIRA-456`
+
+3. **full** - Uses entire branch name
+   - Example: `fix/sil-123/implementation` → `session-fix-sil-123-implementation`
+
+**Common Configuration Examples:**
+
+```yaml
+# Default: First 2 segments with dash separator
+session:
+  auto_derive: true
+  pattern_type: prefix
+  max_segments: 2
+  prefix: "session-"
+  separator: "-"
+
+# Extract JIRA ticket from branch
+session:
+  auto_derive: true
+  pattern_type: regex
+  pattern: '([A-Z]+-\d+)'
+  prefix: "session-"
+
+# Use full branch name
+session:
+  auto_derive: true
+  pattern_type: full
+  separator: "_"
+  prefix: "session-"
+
+# Disable auto-derivation
+session:
+  auto_derive: false
+```
+
+**Behavior:**
+
+- When `--session` flag is provided, it takes precedence over auto-derivation
+- When `--session` is not provided and `auto_derive: true`, session ID is derived from current git branch
+- When `--session` is not provided and `auto_derive: false`, an error is returned (for working level) or UUID is used (for consolidate)
+- If git command fails or pattern doesn't match and `fallback_to_uuid: true`, a UUID is generated
+
 ### Templates Section
 
 The templates section allows customization of Markdown export templates.
@@ -288,6 +376,14 @@ graph TB
 | `CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD` | `autoprune.duplicates_threshold` |
 | `CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS` | `autoprune.episodic_retention_days` |
 | `CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD` | `autoprune.semantic_merge_threshold` |
+| `CORTEX_SESSION_AUTO_DERIVE` | `session.auto_derive` |
+| `CORTEX_SESSION_PATTERN_TYPE` | `session.pattern_type` |
+| `CORTEX_SESSION_PATTERN` | `session.pattern` |
+| `CORTEX_SESSION_PREFIX` | `session.prefix` |
+| `CORTEX_SESSION_SEPARATOR` | `session.separator` |
+| `CORTEX_SESSION_MAX_SEGMENTS` | `session.max_segments` |
+| `CORTEX_SESSION_STRIP_PREFIX` | `session.strip_prefix` |
+| `CORTEX_SESSION_FALLBACK_TO_UUID` | `session.fallback_to_uuid` |
 
 ### Example
 

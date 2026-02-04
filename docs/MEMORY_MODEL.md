@@ -358,12 +358,43 @@ graph TB
 
 **Example**:
 ```bash
+# Auto-derived session from git branch (recommended)
+# Branch: fix/auth-2024/timeout → Session: session-fix-auth-2024
+cortex create \
+  --title "Debugging auth timeout" \
+  --level working \
+  --content "Reproduced issue after 30s. Checking middleware next."
+
+# Or manually specify session ID
 cortex create \
   --title "Debugging auth timeout" \
   --level working \
   --session bug-auth-2024 \
   --content "Reproduced issue after 30s. Checking middleware next."
 ```
+
+**Session Configuration**:
+
+Cortex automatically derives session IDs from your git branch name, making session management seamless:
+
+| Git Branch Convention | Pattern Type | Config Example | Result |
+|----------------------|--------------|----------------|--------|
+| `fix/TICKET-123/feature` | `prefix` (default) | `max_segments: 2` | `session-fix-TICKET-123` |
+| `feature/JIRA-456/auth` | `regex` | `pattern: '([A-Z]+-\d+)'` | `session-JIRA-456` |
+| `hotfix/prod/db-leak` | `full` | All segments | `session-hotfix-prod-db-leak` |
+
+Configure in `~/.config/cortex-ai/config.yaml`:
+```yaml
+session:
+  auto_derive: true          # Enable auto-derivation (default)
+  pattern_type: prefix       # prefix, regex, or full
+  max_segments: 2           # Number of segments for prefix mode
+  prefix: "session-"        # Prefix for all session IDs
+  separator: "-"            # Separator for branch parts
+  fallback_to_uuid: true    # Use UUID if pattern fails
+```
+
+> **💡 Tip:** Match your team's git branch naming convention for consistent session IDs across your team.
 
 **When to Transfer**:
 - End of work session
@@ -589,8 +620,9 @@ flowchart TD
 ### 4. Include Context
 
 **For Working Memory**:
-- Always specify `--session`
-- Use consistent session IDs
+- Session IDs are auto-derived from git branch by default (e.g., `fix/sil-123/auth` → `session-fix-sil-123`)
+- Or manually specify `--session` for custom session IDs
+- Use consistent session naming patterns for your team
 - Include current investigation status
 
 **For Episodic Memory**:
@@ -749,17 +781,28 @@ cortex create --level episodic \
 
 ### ❌ Anti-Pattern 3: Not Using Sessions for Working Memory
 
-**Bad**:
+> **Note:** As of v2.0, session IDs are auto-derived from git branches by default, making this less of a concern. However, understanding session management is still important.
+
+**Automatic (Recommended)**:
 ```bash
+# Session ID is auto-derived from git branch
+# Branch: fix/auth-2024/timeout → Session: session-fix-auth-2024
 cortex create --level working \
-  --title "Debug note"  # No session!
+  --title "Auth timeout debug findings"
 ```
 
-**Good**:
+**Manual (When Needed)**:
 ```bash
+# Explicitly specify session ID if needed
 cortex create --level working --session bug-auth-2024 \
   --title "Auth timeout debug findings"
 ```
+
+**How Auto-Derivation Works**:
+- Current branch `fix/sil-123/auth-timeout` → Session ID `session-fix-sil-123`
+- Configurable patterns via `session.pattern_type` (prefix, regex, full)
+- Falls back to UUID if not in a git repository
+- See [Configuration](CONFIGURATION.md#session-section) for customization
 
 ### ❌ Anti-Pattern 4: Never Transferring Working Memory
 

@@ -70,12 +70,15 @@ cortex/
     │   ├── memory.go
     │   ├── export.go
     │   └── import.go
-    └── markdown/                     # Markdown import/export
-        ├── parser.go                 # Markdown parser
-        ├── frontmatter.go            # YAML frontmatter
-        ├── export.go                 # Export to Markdown
-        ├── import.go                 # Import from Markdown
-        └── validate.go               # Validation
+    ├── markdown/                     # Markdown import/export
+    │   ├── parser.go                 # Markdown parser
+    │   ├── frontmatter.go            # YAML frontmatter
+    │   ├── export.go                 # Export to Markdown
+    │   ├── import.go                 # Import from Markdown
+    │   └── validate.go               # Validation
+    └── session/                      # Session ID derivation
+        ├── session.go                # Git branch-based session ID
+        └── session_test.go           # Session derivation tests
 ```
 
 ## Three-Layer Memory System
@@ -459,6 +462,13 @@ CORTEX_CONSOLIDATION_AUTO_TRANSFER=true
 CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD=0.92
 CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS=90
 CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD=0.88
+
+# Session
+CORTEX_SESSION_AUTO_DERIVE=true
+CORTEX_SESSION_PATTERN_TYPE=prefix
+CORTEX_SESSION_MAX_SEGMENTS=2
+CORTEX_SESSION_PREFIX=session-
+CORTEX_SESSION_SEPARATOR=-
 ```
 
 ## Troubleshooting Common Issues
