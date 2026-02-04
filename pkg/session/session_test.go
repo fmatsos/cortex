@@ -8,11 +8,11 @@ import (
 
 func TestDeriveFromBranch_Prefix(t *testing.T) {
 	tests := []struct {
-		name        string
-		cfg         *config.SessionConfig
-		branch      string
-		want        string
-		wantErr     bool
+		name    string
+		cfg     *config.SessionConfig
+		branch  string
+		want    string
+		wantErr bool
 	}{
 		{
 			name: "standard branch with two segments",

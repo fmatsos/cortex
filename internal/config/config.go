@@ -39,14 +39,14 @@ type AutopruneConfig struct {
 
 // SessionConfig contains session ID derivation configuration
 type SessionConfig struct {
-	AutoDerive      bool   `mapstructure:"auto_derive"`       // automatically derive session ID from git branch
-	PatternType     string `mapstructure:"pattern_type"`      // pattern type: prefix, regex, full
-	Pattern         string `mapstructure:"pattern"`           // pattern to extract session ID from branch name
-	Prefix          string `mapstructure:"prefix"`            // prefix to add to derived session ID (default: "session-")
-	Separator       string `mapstructure:"separator"`         // separator to use when transforming branch name (default: "-")
-	MaxSegments     int    `mapstructure:"max_segments"`      // max number of segments to include (0 = all)
-	StripPrefix     string `mapstructure:"strip_prefix"`      // optional prefix to strip from branch name before processing
-	FallbackToUUID  bool   `mapstructure:"fallback_to_uuid"`  // fallback to UUID if pattern doesn't match
+	AutoDerive     bool   `mapstructure:"auto_derive"`      // automatically derive session ID from git branch
+	PatternType    string `mapstructure:"pattern_type"`     // pattern type: prefix, regex, full
+	Pattern        string `mapstructure:"pattern"`          // pattern to extract session ID from branch name
+	Prefix         string `mapstructure:"prefix"`           // prefix to add to derived session ID (default: "session-")
+	Separator      string `mapstructure:"separator"`        // separator to use when transforming branch name (default: "-")
+	MaxSegments    int    `mapstructure:"max_segments"`     // max number of segments to include (0 = all)
+	StripPrefix    string `mapstructure:"strip_prefix"`     // optional prefix to strip from branch name before processing
+	FallbackToUUID bool   `mapstructure:"fallback_to_uuid"` // fallback to UUID if pattern doesn't match
 }
 
 // TemplatesConfig contains template customization options
