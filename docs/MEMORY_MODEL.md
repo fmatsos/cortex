@@ -323,7 +323,7 @@ graph TB
     end
 
     subgraph "Storage"
-        F[working/session-{id}.gob]
+        F["working/session-{id}.gob"]
     end
 
     subgraph "Lifecycle"
