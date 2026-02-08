@@ -16,6 +16,7 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/schemas"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
+	"github.com/google/uuid"
 )
 
 const (
@@ -239,6 +240,18 @@ func (s *Server) handleCallTool(req *Request) *Response {
 		return s.handleChooseMemoryLayer(ctx, req.ID, params.Arguments)
 	case "cortex_choose_working_consolidation":
 		return s.handleChooseWorkingConsolidation(ctx, req.ID, params.Arguments)
+	case "cortex_promote_memory":
+		return s.handlePromoteMemory(ctx, req.ID, params.Arguments)
+	case "cortex_update_memory":
+		return s.handleUpdateMemory(ctx, req.ID, params.Arguments)
+	case "cortex_mark_obsolete":
+		return s.handleMarkObsolete(ctx, req.ID, params.Arguments)
+	case "cortex_review_session":
+		return s.handleReviewSession(ctx, req.ID, params.Arguments)
+	case "cortex_think_about_memory_maintenance":
+		return s.handleThinkMemoryMaintenance(ctx, req.ID, params.Arguments)
+	case "cortex_think_about_task_completion":
+		return s.handleThinkTaskCompletion(ctx, req.ID, params.Arguments)
 	default:
 		return NewErrorResponse(req.ID, InvalidParams, "Unknown tool", params.Name)
 	}
@@ -611,6 +624,508 @@ func (s *Server) handleChooseWorkingConsolidation(ctx context.Context, id interf
 
 	finalPrompt := fmt.Sprintf("%s\n\nWorking memories to review:\n%s", prompt, string(jsonBytes))
 	return s.toolResult(id, finalPrompt)
+}
+
+// Promote memory arguments
+type promoteMemoryArgs struct {
+	MemoryID       string   `json:"memory_id"`
+	RevisedContent string   `json:"revised_content"`
+	RevisedTitle   string   `json:"revised_title"`
+	Tags           []string `json:"tags"`
+}
+
+func (s *Server) handlePromoteMemory(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a promoteMemoryArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid promote memory arguments", err.Error())
+	}
+
+	if a.MemoryID == "" {
+		return NewErrorResponse(id, InvalidParams, "memory_id is required", nil)
+	}
+
+	mem, err := s.service.Get(ctx, a.MemoryID)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to get memory: %v", err))
+	}
+
+	var targetLevel memory.MemoryLevel
+	switch mem.Level {
+	case memory.MemoryLevelWorking:
+		targetLevel = memory.MemoryLevelEpisodic
+	case memory.MemoryLevelEpisodic:
+		targetLevel = memory.MemoryLevelSemantic
+	case memory.MemoryLevelSemantic:
+		return s.toolError(id, "semantic memories cannot be promoted further")
+	default:
+		return s.toolError(id, fmt.Sprintf("unknown memory level: %s", mem.Level))
+	}
+
+	content := mem.Content
+	if a.RevisedContent != "" {
+		content = a.RevisedContent
+	}
+	title := mem.Title
+	if a.RevisedTitle != "" {
+		title = a.RevisedTitle
+	}
+	tags := mem.Tags
+	if len(a.Tags) > 0 {
+		tags = a.Tags
+	}
+
+	text := fmt.Sprintf("Title: %s\n\nContent: %s", title, content)
+	embedding, err := s.embedder.Embed(ctx, text)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to generate embedding: %v", err))
+	}
+
+	now := time.Now()
+	promoted := &memory.Memory{
+		ID:         generateID(),
+		Level:      targetLevel,
+		Title:      title,
+		Content:    content,
+		Tags:       tags,
+		Embedding:  embedding,
+		Context:    mem.Context,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		MergedFrom: []string{a.MemoryID},
+		Obsolete:   false,
+	}
+	promoted.Context.Source = "llm"
+
+	if err := promoted.Validate(); err != nil {
+		return s.toolError(id, fmt.Sprintf("Validation failed: %v", err))
+	}
+
+	if err := s.storage.Save(ctx, promoted); err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to save promoted memory: %v", err))
+	}
+
+	response := struct {
+		Success   bool               `json:"success"`
+		Action    string             `json:"action"`
+		FromLevel string             `json:"from_level"`
+		ToLevel   string             `json:"to_level"`
+		SourceID  string             `json:"source_id"`
+		Memory    pkgjson.MemoryJSON `json:"memory"`
+	}{
+		Success:   true,
+		Action:    "promoted",
+		FromLevel: string(mem.Level),
+		ToLevel:   string(targetLevel),
+		SourceID:  a.MemoryID,
+		Memory:    pkgjson.ToMemoryJSON(promoted),
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+// Update memory arguments
+type updateMemoryArgs struct {
+	MemoryID string   `json:"memory_id"`
+	Title    *string  `json:"title"`
+	Content  *string  `json:"content"`
+	Tags     []string `json:"tags"`
+}
+
+func (s *Server) handleUpdateMemory(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a updateMemoryArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid update memory arguments", err.Error())
+	}
+
+	if a.MemoryID == "" {
+		return NewErrorResponse(id, InvalidParams, "memory_id is required", nil)
+	}
+
+	mem, err := s.service.Get(ctx, a.MemoryID)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to get memory: %v", err))
+	}
+
+	needsReembed := false
+
+	if a.Title != nil && *a.Title != mem.Title {
+		mem.Title = *a.Title
+		needsReembed = true
+	}
+	if a.Content != nil && *a.Content != mem.Content {
+		mem.Content = *a.Content
+		needsReembed = true
+	}
+	if a.Tags != nil {
+		mem.Tags = a.Tags
+		mem.Context.Tags = a.Tags
+	}
+
+	if err := mem.Validate(); err != nil {
+		return s.toolError(id, fmt.Sprintf("Validation failed: %v", err))
+	}
+
+	if needsReembed {
+		text := fmt.Sprintf("Title: %s\n\nContent: %s", mem.Title, mem.Content)
+		embedding, err := s.embedder.Embed(ctx, text)
+		if err != nil {
+			return s.toolError(id, fmt.Sprintf("Failed to generate embedding: %v", err))
+		}
+		mem.Embedding = embedding
+	}
+
+	mem.UpdatedAt = time.Now()
+
+	if err := s.storage.Update(ctx, mem); err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to update memory: %v", err))
+	}
+
+	response := struct {
+		Success    bool               `json:"success"`
+		Action     string             `json:"action"`
+		ReEmbedded bool               `json:"re_embedded"`
+		Memory     pkgjson.MemoryJSON `json:"memory"`
+	}{
+		Success:    true,
+		Action:     "updated",
+		ReEmbedded: needsReembed,
+		Memory:     pkgjson.ToMemoryJSON(mem),
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+// Mark obsolete arguments
+type markObsoleteArgs struct {
+	MemoryID string `json:"memory_id"`
+	Reason   string `json:"reason"`
+}
+
+func (s *Server) handleMarkObsolete(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a markObsoleteArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid mark obsolete arguments", err.Error())
+	}
+
+	if a.MemoryID == "" {
+		return NewErrorResponse(id, InvalidParams, "memory_id is required", nil)
+	}
+
+	if err := s.service.MarkObsolete(ctx, a.MemoryID); err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to mark obsolete: %v", err))
+	}
+
+	response := struct {
+		Success  bool   `json:"success"`
+		Action   string `json:"action"`
+		MemoryID string `json:"memory_id"`
+		Reason   string `json:"reason,omitempty"`
+	}{
+		Success:  true,
+		Action:   "marked_obsolete",
+		MemoryID: a.MemoryID,
+		Reason:   a.Reason,
+	}
+
+	jsonBytes, err := json.Marshal(response)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal response: %v", err))
+	}
+
+	return s.toolResult(id, string(jsonBytes))
+}
+
+// Review session arguments
+type reviewSessionArgs struct {
+	SessionID   string `json:"session_id"`
+	TaskSummary string `json:"task_summary"`
+}
+
+func (s *Server) handleReviewSession(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a reviewSessionArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid review session arguments", err.Error())
+	}
+
+	if a.SessionID == "" {
+		return NewErrorResponse(id, InvalidParams, "session_id is required", nil)
+	}
+
+	memories, err := s.service.List(ctx, memory.ListOptions{
+		FilterLevels: []memory.MemoryLevel{memory.MemoryLevelWorking},
+	})
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to list working memories: %v", err))
+	}
+
+	var sessionMemories []*memory.Memory
+	for _, m := range memories {
+		if m.Context.SessionID == a.SessionID {
+			sessionMemories = append(sessionMemories, m)
+		}
+	}
+
+	if len(sessionMemories) == 0 {
+		return s.toolResult(id, fmt.Sprintf("No working memories found for session %q. Nothing to review.", a.SessionID))
+	}
+
+	prompt := strings.TrimSpace(config.Global().MCP.Prompts.ReviewSession)
+	if prompt == "" {
+		prompt = config.DefaultConfig().MCP.Prompts.ReviewSession
+	}
+
+	type memoryEntry struct {
+		ID        string   `json:"id"`
+		Title     string   `json:"title"`
+		Content   string   `json:"content"`
+		Tags      []string `json:"tags,omitempty"`
+		CreatedAt string   `json:"created_at"`
+	}
+
+	entries := make([]memoryEntry, 0, len(sessionMemories))
+	for _, m := range sessionMemories {
+		entries = append(entries, memoryEntry{
+			ID:        m.ID,
+			Title:     m.Title,
+			Content:   m.Content,
+			Tags:      m.Tags,
+			CreatedAt: m.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	payload := struct {
+		SessionID       string        `json:"session_id"`
+		TaskSummary     string        `json:"task_summary,omitempty"`
+		MemoryCount     int           `json:"memory_count"`
+		WorkingMemories []memoryEntry `json:"working_memories"`
+	}{
+		SessionID:       a.SessionID,
+		TaskSummary:     a.TaskSummary,
+		MemoryCount:     len(entries),
+		WorkingMemories: entries,
+	}
+
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal payload: %v", err))
+	}
+
+	finalPrompt := fmt.Sprintf("%s\n\nSession data:\n%s", prompt, string(jsonBytes))
+	return s.toolResult(id, finalPrompt)
+}
+
+// Think about memory maintenance arguments
+type thinkMemoryMaintenanceArgs struct {
+	FocusLevel string   `json:"focus_level"`
+	FocusTags  []string `json:"focus_tags"`
+}
+
+func (s *Server) handleThinkMemoryMaintenance(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a thinkMemoryMaintenanceArgs
+	if args != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
+			return NewErrorResponse(id, InvalidParams, "Invalid memory maintenance arguments", err.Error())
+		}
+	}
+
+	if a.FocusLevel != "" && !memory.IsValidLevel(a.FocusLevel) {
+		return NewErrorResponse(id, InvalidParams, "invalid focus_level", a.FocusLevel)
+	}
+
+	opts := memory.ListOptions{IncludeObsolete: true}
+	if a.FocusLevel != "" {
+		opts.FilterLevels = []memory.MemoryLevel{memory.MemoryLevel(a.FocusLevel)}
+	}
+
+	memories, err := s.service.List(ctx, opts)
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to list memories: %v", err))
+	}
+
+	// Filter by tags if specified
+	if len(a.FocusTags) > 0 {
+		tagSet := make(map[string]bool)
+		for _, t := range a.FocusTags {
+			tagSet[t] = true
+		}
+		var filtered []*memory.Memory
+		for _, m := range memories {
+			for _, t := range m.Tags {
+				if tagSet[t] {
+					filtered = append(filtered, m)
+					break
+				}
+			}
+		}
+		memories = filtered
+	}
+
+	// Compute statistics
+	var workingCount, episodicCount, semanticCount, obsoleteCount int
+
+	type memoryEntry struct {
+		ID        string   `json:"id"`
+		Title     string   `json:"title"`
+		Level     string   `json:"level"`
+		Tags      []string `json:"tags,omitempty"`
+		CreatedAt string   `json:"created_at"`
+		Obsolete  bool     `json:"obsolete,omitempty"`
+		Preview   string   `json:"preview"`
+	}
+
+	entries := make([]memoryEntry, 0, len(memories))
+	for _, m := range memories {
+		switch m.Level {
+		case memory.MemoryLevelWorking:
+			workingCount++
+		case memory.MemoryLevelEpisodic:
+			episodicCount++
+		case memory.MemoryLevelSemantic:
+			semanticCount++
+		}
+		if m.Obsolete {
+			obsoleteCount++
+		}
+
+		preview := m.Content
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+
+		entries = append(entries, memoryEntry{
+			ID:        m.ID,
+			Title:     m.Title,
+			Level:     string(m.Level),
+			Tags:      m.Tags,
+			CreatedAt: m.CreatedAt.Format(time.RFC3339),
+			Obsolete:  m.Obsolete,
+			Preview:   preview,
+		})
+	}
+
+	prompt := strings.TrimSpace(config.Global().MCP.Prompts.MemoryMaintenance)
+	if prompt == "" {
+		prompt = config.DefaultConfig().MCP.Prompts.MemoryMaintenance
+	}
+
+	stats := struct {
+		Total    int `json:"total"`
+		Working  int `json:"working"`
+		Episodic int `json:"episodic"`
+		Semantic int `json:"semantic"`
+		Obsolete int `json:"obsolete"`
+	}{
+		Total:    len(memories),
+		Working:  workingCount,
+		Episodic: episodicCount,
+		Semantic: semanticCount,
+		Obsolete: obsoleteCount,
+	}
+
+	payload := struct {
+		Stats      interface{}   `json:"stats"`
+		FocusLevel string        `json:"focus_level,omitempty"`
+		FocusTags  []string      `json:"focus_tags,omitempty"`
+		Memories   []memoryEntry `json:"memories"`
+	}{
+		Stats:      stats,
+		FocusLevel: a.FocusLevel,
+		FocusTags:  a.FocusTags,
+		Memories:   entries,
+	}
+
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal payload: %v", err))
+	}
+
+	finalPrompt := fmt.Sprintf("%s\n\nMemory store data:\n%s", prompt, string(jsonBytes))
+	return s.toolResult(id, finalPrompt)
+}
+
+// Think about task completion arguments
+type thinkTaskCompletionArgs struct {
+	TaskDescription  string   `json:"task_description"`
+	Outcome          string   `json:"outcome"`
+	SessionID        string   `json:"session_id"`
+	RelatedMemoryIDs []string `json:"related_memory_ids"`
+}
+
+func (s *Server) handleThinkTaskCompletion(ctx context.Context, id interface{}, args json.RawMessage) *Response {
+	var a thinkTaskCompletionArgs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return NewErrorResponse(id, InvalidParams, "Invalid task completion arguments", err.Error())
+	}
+
+	if a.TaskDescription == "" {
+		return NewErrorResponse(id, InvalidParams, "task_description is required", nil)
+	}
+	if a.Outcome == "" {
+		return NewErrorResponse(id, InvalidParams, "outcome is required", nil)
+	}
+
+	prompt := strings.TrimSpace(config.Global().MCP.Prompts.TaskCompletion)
+	if prompt == "" {
+		prompt = config.DefaultConfig().MCP.Prompts.TaskCompletion
+	}
+
+	type relatedMemory struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Level   string `json:"level"`
+		Preview string `json:"preview"`
+	}
+
+	var relatedMemories []relatedMemory
+	for _, memID := range a.RelatedMemoryIDs {
+		if m, err := s.service.Get(ctx, memID); err == nil {
+			preview := m.Content
+			if len(preview) > 200 {
+				preview = preview[:200] + "..."
+			}
+			relatedMemories = append(relatedMemories, relatedMemory{
+				ID:      m.ID,
+				Title:   m.Title,
+				Level:   string(m.Level),
+				Preview: preview,
+			})
+		}
+	}
+
+	payload := struct {
+		TaskDescription string          `json:"task_description"`
+		Outcome         string          `json:"outcome"`
+		SessionID       string          `json:"session_id,omitempty"`
+		RelatedMemories []relatedMemory `json:"related_memories,omitempty"`
+	}{
+		TaskDescription: a.TaskDescription,
+		Outcome:         a.Outcome,
+		SessionID:       a.SessionID,
+		RelatedMemories: relatedMemories,
+	}
+
+	jsonBytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return s.toolError(id, fmt.Sprintf("Failed to marshal payload: %v", err))
+	}
+
+	finalPrompt := fmt.Sprintf("%s\n\nTask data:\n%s", prompt, string(jsonBytes))
+	return s.toolResult(id, finalPrompt)
+}
+
+// generateID creates a new UUID string
+func generateID() string {
+	return uuid.New().String()
 }
 
 // toolResult creates a successful tool result

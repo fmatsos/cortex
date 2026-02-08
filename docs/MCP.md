@@ -10,6 +10,8 @@ Cortex provides an MCP (Model Context Protocol) server that exposes memory opera
 - Create new memories to store solutions, issues, and analyses
 - List and retrieve existing memories
 - Consolidate information into multi-level memory system
+- Self-maintain memory quality through workflow tools (promote, update, mark obsolete)
+- Reflect on completed work and session outcomes via thinking checkpoints
 
 ```mermaid
 graph LR
@@ -178,29 +180,39 @@ graph TB
         Consolidate["cortex_consolidate<br/>Consolidate memory"]
     end
 
+    subgraph "Workflow Action Tools"
+        Promote["cortex_promote_memory<br/>Promote to higher layer"]
+        Update["cortex_update_memory<br/>Update memory"]
+        MarkObs["cortex_mark_obsolete<br/>Soft-delete memory"]
+    end
+
+    subgraph "Workflow Thinking Tools"
+        ReviewSession["cortex_review_session<br/>Review session memories"]
+        ThinkMaint["cortex_think_about_memory_maintenance<br/>Maintenance checkpoint"]
+        ThinkTask["cortex_think_about_task_completion<br/>Post-task reflection"]
+    end
+
     subgraph "Decision Support Tools"
         ChooseLayer["cortex_choose_memory_layer<br/>Pick memory level"]
         ChooseWorking["cortex_choose_working_consolidation<br/>Pick working memories"]
     end
-
-    Search --> Results["Search Results"]
-    Create --> Memory["New Memory"]
-    List --> AllMemories["All Memories"]
-    Get --> SingleMemory["Single Memory"]
-    Consolidate --> ConsolidatedMemory["Consolidated Memory"]
-    ChooseLayer --> Decisions["Layer Decision Prompt"]
-    ChooseWorking --> Selections["Consolidation Selection Prompt"]
 ```
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `cortex_search` | Find memories by meaning | `query`, `top_k`, `min_score`, `level` |
-| `cortex_create` | Create a memory in a layer | `title`, `content`, `level`, `tags` |
-| `cortex_list` | List memories | `level`, `include_obsolete` |
-| `cortex_get` | Get memory by ID | `id` |
-| `cortex_consolidate` | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
-| `cortex_choose_memory_layer` | Ask the model to choose a memory layer | `content` |
-| `cortex_choose_working_consolidation` | Ask the model to pick working memories to consolidate | `working_memories` |
+| Tool | Category | Purpose | Key Parameters |
+|------|----------|---------|----------------|
+| `cortex_search` | Memory | Find memories by meaning | `query`, `top_k`, `min_score`, `level` |
+| `cortex_create` | Memory | Create a memory in a layer | `title`, `content`, `level`, `tags` |
+| `cortex_list` | Memory | List memories | `level`, `include_obsolete` |
+| `cortex_get` | Memory | Get memory by ID | `id` |
+| `cortex_consolidate` | Memory | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
+| `cortex_promote_memory` | Workflow | Promote memory to a higher layer | `memory_id`, `revised_content`, `tags` |
+| `cortex_update_memory` | Workflow | Update memory content/title/tags | `memory_id`, `title`, `content`, `tags` |
+| `cortex_mark_obsolete` | Workflow | Soft-delete a memory | `memory_id`, `reason` |
+| `cortex_review_session` | Workflow | Review session memories for actions | `session_id`, `task_summary` |
+| `cortex_think_about_memory_maintenance` | Workflow | Periodic memory health review | `focus_level`, `focus_tags` |
+| `cortex_think_about_task_completion` | Workflow | Post-task reflection for knowledge capture | `task_description`, `outcome` |
+| `cortex_choose_memory_layer` | Decision | Ask the model to choose a memory layer | `content` |
+| `cortex_choose_working_consolidation` | Decision | Ask the model to pick working memories to consolidate | `working_memories` |
 
 ### cortex_search
 
@@ -412,6 +424,167 @@ flowchart LR
     F --> G[Return Result]
 ```
 
+### cortex_promote_memory
+
+Promote a memory to a higher layer: working to episodic, or episodic to semantic. Creates a new memory at the target level, tracking lineage via `merged_from`. Optionally provide revised content for the promoted memory.
+
+**Parameters:**
+- `memory_id` (required): ID of the memory to promote
+- `revised_content` (optional): Revised content for the promoted memory
+- `revised_title` (optional): Revised title for the promoted memory
+- `tags` (optional): Tags to set on the promoted memory
+
+**Example:**
+```json
+{
+  "name": "cortex_promote_memory",
+  "arguments": {
+    "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+    "revised_title": "Database connection pooling best practice",
+    "tags": ["database", "performance", "convention"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "action": "promoted",
+  "from_level": "episodic",
+  "to_level": "semantic",
+  "source_id": "550e8400-e29b-41d4-a716-446655440000",
+  "memory": { ... }
+}
+```
+
+### cortex_update_memory
+
+Update an existing memory's title, content, or tags. Re-generates the embedding if content or title changes. Use this for memory maintenance: fixing errors, improving descriptions, or updating tags.
+
+**Parameters:**
+- `memory_id` (required): ID of the memory to update
+- `title` (optional): New title
+- `content` (optional): New content
+- `tags` (optional): New tags (replaces existing)
+
+**Example:**
+```json
+{
+  "name": "cortex_update_memory",
+  "arguments": {
+    "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+    "content": "Updated and corrected content with new findings.",
+    "tags": ["updated", "database"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "action": "updated",
+  "re_embedded": true,
+  "memory": { ... }
+}
+```
+
+### cortex_mark_obsolete
+
+Soft-delete a memory by marking it as obsolete. Obsolete memories are excluded from search results by default but can still be retrieved with `include_obsolete: true`.
+
+**Parameters:**
+- `memory_id` (required): ID of the memory to mark as obsolete
+- `reason` (optional): Reason for marking obsolete
+
+**Example:**
+```json
+{
+  "name": "cortex_mark_obsolete",
+  "arguments": {
+    "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+    "reason": "Superseded by newer database convention"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "action": "marked_obsolete",
+  "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+  "reason": "Superseded by newer database convention"
+}
+```
+
+### cortex_review_session
+
+End-of-session memory review. Call this when a task or session is complete. It fetches all working memories from the session and returns a decision prompt asking the LLM to evaluate each memory: promote to episodic/semantic, mark obsolete, or leave as working.
+
+**Parameters:**
+- `session_id` (required): Session ID to review
+- `task_summary` (optional): Summary of what was accomplished
+
+**Example:**
+```json
+{
+  "name": "cortex_review_session",
+  "arguments": {
+    "session_id": "feature-auth-2024",
+    "task_summary": "Implemented JWT refresh token flow with exponential backoff"
+  }
+}
+```
+
+**Returns:** A structured prompt with all session working memories, asking the LLM to decide actions for each.
+
+### cortex_think_about_memory_maintenance
+
+Periodic memory maintenance checkpoint. Call this to review the overall health of the memory store. Returns a prompt with memory statistics and all memories, asking the LLM to identify maintenance actions: mark obsolete, promote, update, or merge.
+
+**Parameters:**
+- `focus_level` (optional): Focus on a specific level (working|episodic|semantic)
+- `focus_tags` (optional): Focus on memories with specific tags
+
+**Example:**
+```json
+{
+  "name": "cortex_think_about_memory_maintenance",
+  "arguments": {
+    "focus_level": "episodic",
+    "focus_tags": ["database"]
+  }
+}
+```
+
+**Returns:** A structured prompt with memory statistics and data, asking the LLM to identify maintenance actions.
+
+### cortex_think_about_task_completion
+
+Post-task reflection checkpoint. Call this after completing a significant task. Returns a prompt asking the LLM to reflect on what was learned and what knowledge should be recorded as new memories.
+
+**Parameters:**
+- `task_description` (required): Description of the completed task
+- `outcome` (required): What was the outcome
+- `session_id` (optional): Session ID for context
+- `related_memory_ids` (optional): IDs of memories relevant during the task
+
+**Example:**
+```json
+{
+  "name": "cortex_think_about_task_completion",
+  "arguments": {
+    "task_description": "Migrated authentication from session cookies to JWT tokens",
+    "outcome": "Successfully migrated. All tests passing. 20% latency reduction.",
+    "related_memory_ids": ["mem-1", "mem-2"]
+  }
+}
+```
+
+**Returns:** A structured prompt asking the LLM to identify knowledge worth preserving from the completed task.
+
 ### cortex_choose_memory_layer
 
 Ask the model to select the correct memory layer for a new memory using the bundled prompt. The bundled prompt can be overridden in the Cortex config file.
@@ -466,7 +639,7 @@ Ask the model to select which working memories should be consolidated using the 
 
 ## Prompt Overrides
 
-To override the bundled prompts, set the following keys in the Cortex config file:
+All thinking/decision tools use configurable prompts. To override the bundled prompts, set the following keys in the Cortex config file:
 
 ```yaml
 mcp:
@@ -475,6 +648,12 @@ mcp:
       Your custom prompt here...
     choose_working_consolidation: |-
       Your custom prompt here...
+    review_session: |-
+      Your custom session review prompt...
+    memory_maintenance: |-
+      Your custom maintenance prompt...
+    task_completion: |-
+      Your custom task completion prompt...
 ```
 
 ## Default Prompt Content
@@ -584,22 +763,62 @@ flowchart TD
 **During Active Development Sessions:**
 ```
 1. Use working memory for current task context
-2. At the end of a session, important findings automatically transfer to episodic
-3. Extract general patterns into semantic memory
-4. Use `cortex_choose_memory_layer` when unsure which layer fits best
-5. Use `cortex_choose_working_consolidation` to pick working memories worth preserving
+2. Use `cortex_choose_memory_layer` when unsure which layer fits best
+3. Use `cortex_choose_working_consolidation` to pick working memories worth preserving
+```
+
+**End of Session (Workflow):**
+```
+1. Call `cortex_review_session` to review all working memories
+2. Based on the returned prompt, use `cortex_promote_memory` for valuable findings
+3. Use `cortex_mark_obsolete` for outdated/irrelevant memories
+4. Call `cortex_think_about_task_completion` to capture final insights
+```
+
+**Periodic Maintenance:**
+```
+1. Call `cortex_think_about_memory_maintenance` to review memory health
+2. Use `cortex_update_memory` to fix inaccurate content
+3. Use `cortex_promote_memory` to elevate proven episodic knowledge to semantic
+4. Use `cortex_mark_obsolete` for outdated information
 ```
 
 **Bug Fix Documentation:**
 ```
 1. Store the fix details in episodic memory (includes timestamp context)
 2. If the fix reveals a general pattern, also store in semantic memory
+3. Call `cortex_think_about_task_completion` to capture additional insights
 ```
 
 **Convention/Rule Documentation:**
 ```
 1. Store directly in semantic memory for permanent retention
 2. Include rationale and examples in the content
+```
+
+### Self-Maintenance Workflow
+
+The workflow tools enable Cortex to improve and maintain its own memory quality through LLM-guided reflection:
+
+```mermaid
+flowchart TD
+    A[Task Completed] --> B["cortex_think_about_task_completion<br/>Reflect on what was learned"]
+    B --> C{Create memories?}
+    C -->|Yes| D["cortex_consolidate<br/>Store new knowledge"]
+    C -->|No| E[Done]
+
+    F[Session Ending] --> G["cortex_review_session<br/>Review working memories"]
+    G --> H{For each memory}
+    H -->|Promote| I["cortex_promote_memory"]
+    H -->|Obsolete| J["cortex_mark_obsolete"]
+    H -->|Keep| K[Leave as working]
+
+    L[Periodic Check] --> M["cortex_think_about_memory_maintenance<br/>Review memory health"]
+    M --> N{Actions needed?}
+    N -->|Update| O["cortex_update_memory"]
+    N -->|Promote| I
+    N -->|Obsolete| J
+    N -->|No action| P[Done]
 ```
 
 ### Content Quality Guidelines

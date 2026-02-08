@@ -1,0 +1,21 @@
+{
+  "name": "cortex_think_about_memory_maintenance",
+  "description": "Periodic memory maintenance checkpoint. Call this to review the overall health of the memory store. Returns a prompt with memory statistics and a sample of memories from each layer, asking you to identify maintenance actions: mark obsolete outdated memories, promote valuable episodic to semantic, merge related memories, or update inaccurate content. Call this periodically or when the user requests memory cleanup.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "focus_level": {
+        "type": "string",
+        "description": "Optional: focus review on a specific memory level",
+        "enum": ["working", "episodic", "semantic"]
+      },
+      "focus_tags": {
+        "type": "array",
+        "description": "Optional: focus review on memories with specific tags",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

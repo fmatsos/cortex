@@ -308,7 +308,7 @@ Located in `internal/mcp/`:
 - **Protocol**: JSON-RPC 2.0
 - **MCP Version**: 2024-11-05
 - **Transports**: stdio (default) and SSE (HTTP)
-- **Tools**: `cortex_search`, `cortex_create`, `cortex_list`, `cortex_get`, `cortex_consolidate`
+- **Tools**: 13 tools across memory, workflow, and decision categories
 
 ### MCP Server Features
 
@@ -318,14 +318,32 @@ Located in `internal/mcp/`:
 - Memory creation with all metadata
 - Three-level consolidation support
 - Duplicate detection and merging
+- Workflow tools for memory self-maintenance (promote, update, mark obsolete)
+- Thinking checkpoint tools for LLM-guided reflection (session review, maintenance, task completion)
+- Configurable prompts for all thinking/decision tools
 
 ### Tool Names (keep stable!)
 
+**Memory Tools:**
 - `cortex_search` - Semantic search
 - `cortex_create` - Create memory (legacy, without dedup)
 - `cortex_list` - List all memories
 - `cortex_get` - Get by ID
 - `cortex_consolidate` - Multi-level storage with dedup
+
+**Workflow Action Tools:**
+- `cortex_promote_memory` - Promote memory to higher layer (working→episodic→semantic)
+- `cortex_update_memory` - Update memory title/content/tags with re-embedding
+- `cortex_mark_obsolete` - Soft-delete a memory
+
+**Workflow Thinking Tools:**
+- `cortex_review_session` - End-of-session review prompt
+- `cortex_think_about_memory_maintenance` - Maintenance checkpoint prompt
+- `cortex_think_about_task_completion` - Post-task reflection prompt
+
+**Decision Support Tools:**
+- `cortex_choose_memory_layer` - Layer selection prompt
+- `cortex_choose_working_consolidation` - Working memory consolidation prompt
 
 > **Important**: Keep tool names stable; update docs if you add or rename tools.
 
@@ -388,9 +406,11 @@ Located in `internal/schemas/` and `internal/templates/`:
 
 1. Define schema in `internal/schemas/mcp/`
 2. Add tool handler in `internal/mcp/server.go`
-3. Register tool in `listTools()` method
-4. Update `docs/MCP.md`
-5. Add tests in `server_test.go`
+3. Register tool name in `internal/schemas/embed.go` (`MCPToolNames`)
+4. Add dispatch case in `handleCallTool()` switch
+5. For thinking tools: add configurable prompt in `internal/config/config.go`
+6. Update `docs/MCP.md`
+7. Add tests in `server_test.go`
 
 ### Updating Embeddings Model
 
