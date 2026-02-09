@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for Go template syntax with variables and functions
   - Template configuration in YAML or JSON format
 
+- **Verbose CLI Output**
+  - `--verbose` / `-v` supports `-v`, `-vv`, and `-vvv` for progressively detailed logging
+
 - **Template Management Commands**
   - `cortex config schema markdown` - Display JSON schema for templates
   - `cortex config schema markdown -o <file>` - Export schema to file

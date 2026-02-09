@@ -53,8 +53,9 @@ Available for all commands:
 |------|-------|---------|-------------|
 | `--config` | `-c` | `~/.config/cortex-ai/config.yaml` | Configuration file path |
 | `--output` | `-o` | `text` | Output format: `text` or `json` |
+| `--verbose` | `-v` | `0` | Verbose output (repeat for more detail: `-vvv`) |
 | `--help` | `-h` | - | Show command help |
-| `--version` | `-v` | - | Show version information |
+| `--version` | - | - | Show version information |
 
 **Example**:
 ```bash
