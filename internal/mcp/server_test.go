@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -250,8 +251,8 @@ func TestJSONRPCMarshal(t *testing.T) {
 }
 
 func TestStdioTransportReceive(t *testing.T) {
-	input := `{"jsonrpc":"2.0","id":1,"method":"initialize"}
-`
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize"}`
+	input := fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(body), body)
 	transport := NewStdioTransport(strings.NewReader(input), &bytes.Buffer{})
 
 	ctx := context.Background()
@@ -282,6 +283,9 @@ func TestStdioTransportSend(t *testing.T) {
 
 	// Verify output contains JSON
 	outStr := output.String()
+	if !strings.Contains(outStr, "Content-Length:") {
+		t.Errorf("Output should contain Content-Length header")
+	}
 	if !strings.Contains(outStr, `"jsonrpc":"2.0"`) {
 		t.Errorf("Output should contain jsonrpc version")
 	}
