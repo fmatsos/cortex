@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -43,18 +44,57 @@ func (t *StdioTransport) Receive(ctx context.Context) (*Request, error) {
 				return
 			}
 
-			line = strings.TrimSpace(line)
-			if line == "" {
+			line = strings.TrimRight(line, "\r\n")
+			if strings.TrimSpace(line) == "" {
 				continue
 			}
 
-			var req Request
-			if err := json.Unmarshal([]byte(line), &req); err != nil {
-				ch <- result{nil, fmt.Errorf("parse error: %w", err)}
+			if strings.HasPrefix(strings.ToLower(line), "content-length:") {
+				length, err := parseContentLength(line)
+				if err != nil {
+					ch <- result{nil, fmt.Errorf("parse error: %w", err)}
+					return
+				}
+
+				for {
+					headerLine, err := t.reader.ReadString('\n')
+					if err != nil {
+						ch <- result{nil, err}
+						return
+					}
+					if strings.TrimSpace(headerLine) == "" {
+						break
+					}
+				}
+
+				body := make([]byte, length)
+				if _, err := io.ReadFull(t.reader, body); err != nil {
+					ch <- result{nil, err}
+					return
+				}
+
+				var req Request
+				if err := json.Unmarshal(body, &req); err != nil {
+					ch <- result{nil, fmt.Errorf("parse error: %w", err)}
+					return
+				}
+
+				ch <- result{&req, nil}
 				return
 			}
 
-			ch <- result{&req, nil}
+			if strings.HasPrefix(strings.TrimSpace(line), "{") {
+				var req Request
+				if err := json.Unmarshal([]byte(line), &req); err != nil {
+					ch <- result{nil, fmt.Errorf("parse error: %w", err)}
+					return
+				}
+
+				ch <- result{&req, nil}
+				return
+			}
+
+			ch <- result{nil, fmt.Errorf("parse error: unsupported header: %s", line)}
 			return
 		}
 	}()
@@ -81,7 +121,10 @@ func (t *StdioTransport) Send(ctx context.Context, resp *Response) error {
 		return fmt.Errorf("failed to marshal response: %w", err)
 	}
 
-	_, err = fmt.Fprintln(t.writer, string(data))
+	if _, err := fmt.Fprintf(t.writer, "Content-Length: %d\r\n\r\n", len(data)); err != nil {
+		return err
+	}
+	_, err = t.writer.Write(data)
 	return err
 }
 
@@ -91,4 +134,17 @@ func (t *StdioTransport) Close() error {
 	defer t.mu.Unlock()
 	t.closed = true
 	return nil
+}
+
+func parseContentLength(line string) (int, error) {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid content-length header")
+	}
+	value := strings.TrimSpace(parts[1])
+	length, err := strconv.Atoi(value)
+	if err != nil || length <= 0 {
+		return 0, fmt.Errorf("invalid content-length value")
+	}
+	return length, nil
 }
