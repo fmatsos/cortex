@@ -143,7 +143,7 @@ make clean          # Remove build artifacts
 **ALWAYS** run the following commands in this exact order before each commit:
 
 1. `make fmt` - Format code (fixes formatting issues)
-2. `make lint` - Check linting (identifies code quality issues)
+2. `make lint` (**keep version 2** in config file) - Check linting (identifies code quality issues)
 3. `make test` - Run all tests (ensures functionality)
 4. `make build` - Build the project (verifies compilation)
 
