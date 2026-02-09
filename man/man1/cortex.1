@@ -20,16 +20,16 @@ Create a new memory with title, type, and content.
 Memory title (required)
 .TP
 .BI \-\-type " " \fItype\fR
-Memory type: solution, issue, analysis, rule, any (required)
+Memory types (repeatable or comma-separated): solution, issue, analysis, rule, any (required)
 .TP
-.BI \-c ", " \-\-content " " \fIstring\fR
+.BI \-\-content " " \fIstring\fR
 Memory content (required)
 .TP
 .BI \-\-tags " " \fItags\fR
-Comma-separated tags
+Memory tags (repeatable or comma-separated)
 .TP
-.BI \-\-metadata " " \fIkey=value\fR
-Metadata key-value pairs (repeatable)
+.BI \-\-output " " \fIformat\fR
+Output format: text, json (default: text)
 .RE
 .TP
 .B search \fIquery\fR
@@ -45,11 +45,8 @@ Minimum similarity score 0-1 (default: 0.5)
 .BI \-\-type " " \fItype\fR
 Filter by memory type
 .TP
-.B \-\-include\-obsolete
-Include soft-deleted memories
-.TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
+.B \-\-json
+Output as JSON
 .RE
 .TP
 .B list
@@ -62,35 +59,23 @@ Filter by memory type
 .B \-\-include\-obsolete
 Include soft-deleted memories
 .TP
-.BI \-\-limit " " \fIint\fR
-Limit number of results
-.TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
-.TP
-.BI \-\-sort " " \fIfield\fR
-Sort by: id, title, created, updated (default: created)
-.TP
-.B \-\-reverse
-Reverse sort order
+.B \-\-json
+Output as JSON
 .RE
 .TP
-.B get \fImemory-id\fR
-Get a specific memory by ID (UUID).
+.B delete \fIid\fR
+Permanently delete a memory by ID.
 .RS
 .TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
+.B \-\-obsolete
+Delete all obsolete memories
+.TP
+.BR \-f ", " \-\-force
+Skip confirmation prompt
 .RE
 .TP
-.B delete \fImemory-id\fR
-Permanently delete a memory by ID.
-.TP
-.B mark\-obsolete \fImemory-id\fR
-Soft delete a memory (mark as obsolete without permanent deletion).
-.TP
-.B export
-Export memories to Markdown format.
+.B export [\fIid\fR]
+Export memories to JSON (default) or Markdown files.
 .RS
 .TP
 .BI \-o ", " \-\-output " " \fIpath\fR
@@ -100,32 +85,35 @@ Output directory or file path
 Export all memories
 .TP
 .BI \-\-intent " " \fIstring\fR
-Generate synthesis by intent query
+Export a synthesis based on semantic search
 .TP
-.BI \-\-type " " \fItype\fR
-Filter by type before export
-.TP
-.B \-\-include\-obsolete
-Include soft-deleted memories
+.BI \-f ", " \-\-format " " \fIformat\fR
+Export format: json, markdown (default: json)
 .RE
 .TP
 .B import \fIfiles...\fR
-Import memories from Markdown files.
+Import memories from JSON or Markdown files.
 .RS
 .TP
-.BI \-f ", " \-\-force
+.B \-\-force
 Overwrite existing memories
 .TP
 .B \-\-dry\-run
 Validate without importing
 .TP
-.BI \-\-format " " \fIformat\fR
-Input format: markdown (default: markdown)
+.BI \-\-output " " \fIformat\fR
+Output format: text, json (default: text)
+.TP
+.BI \-f ", " \-\-format " " \fIformat\fR
+File format: json, markdown (auto-detected if omitted)
 .RE
 .TP
 .B config
 View and manage configuration.
 .RS
+.TP
+.BI \-\-output " " \fIformat\fR
+Output format: yaml, json, text (default: yaml)
 .TP
 .B init
 Create default configuration file
@@ -138,6 +126,9 @@ Get a configuration value
 .TP
 .BI "schema " \fItype\fR
 Show or export JSON schema for templates
+.TP
+.BI "schema " \fItype\fR " \-o " \fIfile\fR
+Export schema to file
 .TP
 .BI "template validate " \fIfile\fR
 Validate a custom template file
@@ -152,16 +143,18 @@ Transport mode: stdio, sse (default: stdio)
 .TP
 .BI \-\-address " " \fIaddr\fR
 Server address for SSE transport (default: :8080)
-.TP
-.BI \-\-log " " \fIlevel\fR
-Log level: debug, info, warn, error (default: info)
 .RE
 .TP
 .B completion \fIshell\fR
-Generate shell completion scripts for bash, zsh, or fish.
+Generate shell completion scripts for bash, zsh, fish, or powershell.
 .TP
-.B statistics
+.B stats
 Display database metrics and storage statistics.
+.RS
+.TP
+.B \-\-json
+Output as JSON
+.RE
 .TP
 .B install\-man
 Install the cortex man page to the system.
@@ -210,6 +203,9 @@ Storage backend (gob)
 .B CORTEX_STORAGE_PATH
 Storage directory path
 .TP
+.B CORTEX_STORAGE_MODE
+Storage mode (single, multi)
+.TP
 .B CORTEX_EMBEDDINGS_PROVIDER
 Embeddings provider (ollama)
 .TP
@@ -218,6 +214,9 @@ Ollama model name (default: nomic-embed-text)
 .TP
 .B CORTEX_EMBEDDINGS_ENDPOINT
 Ollama API endpoint (default: http://localhost:11434)
+.TP
+.B CORTEX_EMBEDDINGS_TIMEOUT
+Ollama request timeout (default: 30s)
 .TP
 .B CORTEX_SEARCH_TOP_K
 Default number of search results (default: 5)
@@ -255,7 +254,7 @@ List all memories:
 .PP
 .RS
 .nf
-cortex list \-\-format json
+cortex list \-\-json
 .fi
 .RE
 .PP
@@ -263,7 +262,7 @@ Export all memories to Markdown:
 .PP
 .RS
 .nf
-cortex export \-\-all \-\-output ./memories/
+cortex export \-\-all \-\-format markdown \-\-output ./memories/
 .fi
 .RE
 .PP
@@ -272,6 +271,14 @@ Start MCP server for AI agent integration:
 .RS
 .nf
 cortex start\-mcp\-server \-\-transport stdio
+.fi
+.RE
+.PP
+Show database stats as JSON:
+.PP
+.RS
+.nf
+cortex stats \-\-json
 .fi
 .RE
 .PP
