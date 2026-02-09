@@ -80,6 +80,12 @@ var MCPToolNames = []string{
 	"cortex_consolidate",
 	"cortex_choose_memory_layer",
 	"cortex_choose_working_consolidation",
+	"cortex_promote_memory",
+	"cortex_update_memory",
+	"cortex_mark_obsolete",
+	"cortex_review_session",
+	"cortex_think_about_memory_maintenance",
+	"cortex_think_about_task_completion",
 }
 
 // LoadTemplateSchema loads a template JSON schema by name.

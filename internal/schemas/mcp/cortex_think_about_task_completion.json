@@ -1,0 +1,29 @@
+{
+  "name": "cortex_think_about_task_completion",
+  "description": "Post-task reflection checkpoint. Call this after completing a significant task. It returns a prompt asking you to reflect on what was learned, what decisions were made, and what knowledge should be recorded as new memories. Helps capture valuable insights that might otherwise be lost. ALWAYS call this after completing non-trivial work.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "task_description": {
+        "type": "string",
+        "description": "Description of the task that was completed"
+      },
+      "outcome": {
+        "type": "string",
+        "description": "What was the outcome or result of the task"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "Optional session ID for context"
+      },
+      "related_memory_ids": {
+        "type": "array",
+        "description": "Optional IDs of memories that were relevant during the task",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": ["task_description", "outcome"]
+  }
+}

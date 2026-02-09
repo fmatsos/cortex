@@ -40,6 +40,9 @@ type MCPConfig struct {
 type MCPPromptConfig struct {
 	ChooseMemoryLayer          string `mapstructure:"choose_memory_layer"`
 	ChooseWorkingConsolidation string `mapstructure:"choose_working_consolidation"`
+	ReviewSession              string `mapstructure:"review_session"`
+	MemoryMaintenance          string `mapstructure:"memory_maintenance"`
+	TaskCompletion             string `mapstructure:"task_completion"`
 }
 
 // AutopruneConfig contains configuration for automatic memory cleanup
@@ -206,6 +209,9 @@ func DefaultConfig() *Config {
 			Prompts: MCPPromptConfig{
 				ChooseMemoryLayer:          defaultChooseMemoryLayerPrompt(),
 				ChooseWorkingConsolidation: defaultChooseWorkingConsolidationPrompt(),
+				ReviewSession:              defaultReviewSessionPrompt(),
+				MemoryMaintenance:          defaultMemoryMaintenancePrompt(),
+				TaskCompletion:             defaultTaskCompletionPrompt(),
 			},
 		},
 		Autoprune: AutopruneConfig{
@@ -248,6 +254,64 @@ Exclude transient notes that are only useful during the session.
 
 Return JSON only:
 {"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`
+}
+
+func defaultReviewSessionPrompt() string {
+	return `You are reviewing working memories from a completed session.
+For each memory, decide what action to take:
+
+- promote_episodic: Valuable time-bound event, decision, or outcome worth keeping in history.
+- promote_semantic: Durable knowledge, pattern, or convention that should persist permanently.
+- mark_obsolete: Outdated, incorrect, or no longer relevant.
+- keep: Still active/relevant for ongoing work, leave as working.
+
+Consider:
+1. Does this capture a reusable insight or just a transient note?
+2. Is the information still accurate and relevant?
+3. Would this be useful for future sessions?
+
+Return JSON only:
+{"actions":[{"memory_id":"id","action":"promote_episodic|promote_semantic|mark_obsolete|keep","rationale":"short reason"}],"session_summary":"brief summary of session outcomes"}`
+}
+
+func defaultMemoryMaintenancePrompt() string {
+	return `You are performing maintenance on the Cortex memory store.
+Review the memories below and identify actions to improve memory quality:
+
+Possible actions:
+- mark_obsolete: Memory is outdated, superseded, or no longer accurate.
+- promote: Episodic memory that has proven to be durable knowledge; promote to semantic.
+- update: Memory content is partially correct but needs revision.
+- merge_candidate: Two or more memories cover the same topic and should be consolidated.
+- no_action: Memory is fine as-is.
+
+Priorities:
+1. Accuracy: Flag memories with outdated or incorrect information.
+2. Deduplication: Identify memories that overlap significantly.
+3. Promotion: Find episodic memories that represent lasting knowledge.
+4. Cleanup: Mark truly obsolete memories.
+
+Return JSON only:
+{"actions":[{"memory_id":"id","action":"mark_obsolete|promote|update|merge_candidate|no_action","rationale":"short reason","merge_with":"other_id (only for merge_candidate)","suggested_content":"new content (only for update)"}],"summary":"brief maintenance summary"}`
+}
+
+func defaultTaskCompletionPrompt() string {
+	return `You have just completed a task. Reflect on what was accomplished and identify knowledge worth preserving.
+
+Consider:
+1. What decisions were made and why?
+2. What problems were encountered and how were they solved?
+3. What patterns, conventions, or best practices were discovered?
+4. What would be useful to remember for similar future tasks?
+
+For each piece of knowledge, suggest:
+- level: episodic (time-bound event/decision) or semantic (durable knowledge/pattern).
+- title: concise title for the memory.
+- content: detailed content to store.
+- tags: relevant tags for categorization.
+
+Return JSON only:
+{"memories_to_create":[{"level":"episodic|semantic","title":"concise title","content":"detailed content","tags":["tag1","tag2"]}],"rationale":"why these memories are valuable"}`
 }
 
 // defaultBasePath returns the default base directory for all Cortex data
@@ -418,6 +482,9 @@ func (m *Manager) setDefaults() {
 	// MCP defaults
 	m.v.SetDefault("mcp.prompts.choose_memory_layer", defaults.MCP.Prompts.ChooseMemoryLayer)
 	m.v.SetDefault("mcp.prompts.choose_working_consolidation", defaults.MCP.Prompts.ChooseWorkingConsolidation)
+	m.v.SetDefault("mcp.prompts.review_session", defaults.MCP.Prompts.ReviewSession)
+	m.v.SetDefault("mcp.prompts.memory_maintenance", defaults.MCP.Prompts.MemoryMaintenance)
+	m.v.SetDefault("mcp.prompts.task_completion", defaults.MCP.Prompts.TaskCompletion)
 
 	// Autoprune defaults
 	m.v.SetDefault("autoprune.duplicates_threshold", defaults.Autoprune.DuplicatesThreshold)
