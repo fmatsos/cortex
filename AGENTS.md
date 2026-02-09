@@ -138,6 +138,17 @@ make deps           # Run go mod download + tidy
 make clean          # Remove build artifacts
 ```
 
+### Pre-Commit Workflow
+
+**ALWAYS** run the following commands in this exact order before each commit:
+
+1. `make fmt` - Format code (fixes formatting issues)
+2. `make lint` (**keep version 2** in config file) - Check linting (identifies code quality issues)
+3. `make test` - Run all tests (ensures functionality)
+4. `make build` - Build the project (verifies compilation)
+
+If any step fails, fix the issues and repeat the workflow from the beginning until all steps pass (green). **Do not commit** until all four steps complete successfully.
+
 Run tests for a single package:
 
 ```bash
