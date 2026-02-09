@@ -124,17 +124,17 @@ func TestServerListTools(t *testing.T) {
 
 	// Verify tool names
 	expectedTools := map[string]bool{
-		"cortex_search":                        false,
-		"cortex_create":                        false,
-		"cortex_list":                          false,
-		"cortex_get":                           false,
-		"cortex_consolidate":                   false,
-		"cortex_choose_memory_layer":           false,
-		"cortex_choose_working_consolidation":  false,
-		"cortex_promote_memory":                false,
-		"cortex_update_memory":                 false,
-		"cortex_mark_obsolete":                 false,
-		"cortex_review_session":                false,
+		"cortex_search":                         false,
+		"cortex_create":                         false,
+		"cortex_list":                           false,
+		"cortex_get":                            false,
+		"cortex_consolidate":                    false,
+		"cortex_choose_memory_layer":            false,
+		"cortex_choose_working_consolidation":   false,
+		"cortex_promote_memory":                 false,
+		"cortex_update_memory":                  false,
+		"cortex_mark_obsolete":                  false,
+		"cortex_review_session":                 false,
 		"cortex_think_about_memory_maintenance": false,
 		"cortex_think_about_task_completion":    false,
 	}
@@ -400,9 +400,9 @@ func TestHandlePromoteMemory_EpisodicToSemantic(t *testing.T) {
 	memID := createTestMemory(t, server, "episodic", "")
 
 	args, _ := json.Marshal(map[string]interface{}{
-		"memory_id":      memID,
-		"revised_title":  "Promoted Title",
-		"tags":           []string{"promoted"},
+		"memory_id":     memID,
+		"revised_title": "Promoted Title",
+		"tags":          []string{"promoted"},
 	})
 
 	resp := server.handlePromoteMemory(context.Background(), 1, args)

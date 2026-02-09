@@ -1,4 +1,4 @@
-version: "2"
+# version: "2"  # Temporarily commented for v1 compatibility
 run:
   timeout: 5m
   tests: true
