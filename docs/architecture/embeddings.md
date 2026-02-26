@@ -731,7 +731,7 @@ ollama list
 
 ## Related Documentation
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Embeddings architecture
-- [CONFIGURATION.md](./CONFIGURATION.md) - Configuration options
-- [STORAGE.md](./STORAGE.md) - Vector storage and indexing
-- [DEVELOPMENT.md](./DEVELOPMENT.md) - Development setup
+- [ARCHITECTURE.md](overview.md) - Embeddings architecture
+- [CONFIGURATION.md](../guides/configuration.md) - Configuration options
+- [STORAGE.md](storage.md) - Vector storage and indexing
+- [DEVELOPMENT.md](../contributing/development.md) - Development setup

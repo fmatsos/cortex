@@ -802,7 +802,7 @@ cortex create --level working --session bug-auth-2024 \
 - Current branch `fix/sil-123/auth-timeout` → Session ID `session-fix-sil-123`
 - Configurable patterns via `session.pattern_type` (prefix, regex, full)
 - Falls back to UUID if not in a git repository
-- See [Configuration](CONFIGURATION.md#session-section) for customization
+- See [Configuration](../guides/configuration.md#session-section) for customization
 
 ### ❌ Anti-Pattern 4: Never Transferring Working Memory
 
@@ -847,10 +847,10 @@ cortex create --level semantic \
 
 ## Related Documentation
 
-- **[CLI Reference](./CLI_REFERENCE.md)** - Commands for managing memories
-- **[Architecture](./ARCHITECTURE.md)** - System design and implementation
-- **[MCP Integration](./MCP.md)** - Using with AI assistants
-- **[Configuration](./CONFIGURATION.md)** - Configuring retention and thresholds
+- **[CLI Reference](../cli/reference.md)** - Commands for managing memories
+- **[Architecture](overview.md)** - System design and implementation
+- **[MCP Integration](../cli/mcp.md)** - Using with AI assistants
+- **[Configuration](../guides/configuration.md)** - Configuring retention and thresholds
 
 ---
 

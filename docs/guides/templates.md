@@ -451,7 +451,7 @@ If you encounter issues:
 
 ## Related Documentation
 
-- [Markdown Format Specification](./MARKDOWN_FORMAT.md)
-- [Configuration Reference](./CONFIGURATION.md)
-- [CLI Reference](./CLI_REFERENCE.md)
+- [Markdown Format Specification](markdown-format.md)
+- [Configuration Reference](configuration.md)
+- [CLI Reference](../cli/reference.md)
 - [Example Templates](./examples/templates/)

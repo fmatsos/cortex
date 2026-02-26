@@ -593,6 +593,6 @@ templates:
 
 ## Related Documentation
 
-- [MEMORY_MODEL.md](./MEMORY_MODEL.md) - Memory structure and fields
-- [CLI_REFERENCE.md](./CLI_REFERENCE.md) - Import/export commands
-- [CONFIGURATION.md](./CONFIGURATION.md) - Full configuration reference
+- [MEMORY_MODEL.md](../architecture/memory-model.md) - Memory structure and fields
+- [CLI_REFERENCE.md](../cli/reference.md) - Import/export commands
+- [CONFIGURATION.md](configuration.md) - Full configuration reference

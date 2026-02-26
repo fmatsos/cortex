@@ -837,11 +837,11 @@ sequenceDiagram
 
 ## Related Documentation
 
-- **[Storage Implementation](./STORAGE.md)** - Detailed storage design
-- **[Embeddings System](./EMBEDDINGS.md)** - Vector generation details
-- **[Memory Model](./MEMORY_MODEL.md)** - Domain model specification
-- **[MCP Integration](./MCP.md)** - MCP server implementation
-- **[Development Guide](./DEVELOPMENT.md)** - Contributing to architecture
+- **[Storage Implementation](storage.md)** - Detailed storage design
+- **[Embeddings System](embeddings.md)** - Vector generation details
+- **[Memory Model](memory-model.md)** - Domain model specification
+- **[MCP Integration](../cli/mcp.md)** - MCP server implementation
+- **[Development Guide](../contributing/development.md)** - Contributing to architecture
 
 ---
 

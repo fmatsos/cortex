@@ -484,5 +484,5 @@ graph LR
 ## Related Documentation
 
 - [README.md](../README.md) - Getting started
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System design
-- [CONFIGURATION.md](./CONFIGURATION.md) - Configuration reference
+- [ARCHITECTURE.md](../architecture/overview.md) - System design
+- [CONFIGURATION.md](../guides/configuration.md) - Configuration reference
