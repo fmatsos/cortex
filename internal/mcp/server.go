@@ -132,7 +132,7 @@ func (s *Server) RunWithContext(ctx context.Context) error {
 
 // isParseError checks if the error is a JSON parse error
 func isParseError(err error) bool {
-	return err != nil && err.Error() != "" && len(err.Error()) > 6 && err.Error()[:5] == "parse"
+	return err != nil && strings.HasPrefix(err.Error(), "parse")
 }
 
 // handleRequest processes a JSON-RPC request
@@ -378,6 +378,8 @@ func (s *Server) handleCreate(ctx context.Context, id interface{}, args json.Raw
 type listArgs struct {
 	Level           string `json:"level"`
 	IncludeObsolete bool   `json:"include_obsolete"`
+	Limit           int    `json:"limit"`
+	Offset          int    `json:"offset"`
 }
 
 func (s *Server) handleList(ctx context.Context, id interface{}, args json.RawMessage) *Response {
@@ -390,6 +392,7 @@ func (s *Server) handleList(ctx context.Context, id interface{}, args json.RawMe
 
 	opts := memory.ListOptions{
 		IncludeObsolete: a.IncludeObsolete,
+		Limit:           a.Limit,
 	}
 
 	if a.Level != "" {
@@ -402,6 +405,19 @@ func (s *Server) handleList(ctx context.Context, id interface{}, args json.RawMe
 	memories, err := s.service.List(ctx, opts)
 	if err != nil {
 		return s.toolError(id, fmt.Sprintf("List failed: %v", err))
+	}
+
+	// Apply offset pagination
+	if a.Offset > 0 {
+		if a.Offset >= len(memories) {
+			memories = nil
+		} else {
+			memories = memories[a.Offset:]
+		}
+		// Re-apply limit after offset if limit was specified
+		if a.Limit > 0 && len(memories) > a.Limit {
+			memories = memories[:a.Limit]
+		}
 	}
 
 	// Return JSON structured results for better LLM parsing
