@@ -23,8 +23,7 @@ type OllamaEmbedder struct {
 	chunkSize     int
 	chunkOverlap  int
 	chunkStrategy string
-	dimOnce       sync.Once
-	dimErr        error
+	dimMu         sync.Mutex
 }
 
 // OllamaRequest is the request format for Ollama API
@@ -71,16 +70,21 @@ func NewOllamaEmbedder(endpoint, model string, timeout time.Duration, chunkSize,
 }
 
 // ensureDimension detects the embedding dimension on first use.
+// Uses a mutex instead of sync.Once so transient failures (network blip,
+// canceled context) are retried on the next Embed call rather than being
+// cached for the process lifetime.
 func (o *OllamaEmbedder) ensureDimension(ctx context.Context) error {
-	o.dimOnce.Do(func() {
-		testEmbedding, err := o.embedSingle(ctx, "test")
-		if err != nil {
-			o.dimErr = fmt.Errorf("failed to connect to Ollama: %w", err)
-			return
-		}
-		o.dimension = len(testEmbedding)
-	})
-	return o.dimErr
+	o.dimMu.Lock()
+	defer o.dimMu.Unlock()
+	if o.dimension > 0 {
+		return nil
+	}
+	testEmbedding, err := o.embedSingle(ctx, "test")
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ollama: %w", err)
+	}
+	o.dimension = len(testEmbedding)
+	return nil
 }
 
 // Embed generates an embedding for text with automatic chunking if needed
@@ -125,8 +129,10 @@ func (o *OllamaEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 	return embeddings, nil
 }
 
-// Dimension returns the embedding dimension
+// Dimension returns the embedding dimension (0 until first successful Embed call).
 func (o *OllamaEmbedder) Dimension() int {
+	o.dimMu.Lock()
+	defer o.dimMu.Unlock()
 	return o.dimension
 }
 

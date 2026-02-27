@@ -24,7 +24,17 @@ func (s *Server) handleList(ctx context.Context, req mcpgo.CallToolRequest) (*mc
 
 	opts := memory.ListOptions{
 		IncludeObsolete: a.IncludeObsolete,
-		Limit:           a.Limit,
+	}
+
+	// When offset is used, fetch offset+limit rows from storage so the
+	// subsequent slice produces the correct page (fetching only `limit` rows
+	// first would leave nothing to offset into).
+	if a.Limit > 0 {
+		if a.Offset > 0 {
+			opts.Limit = a.Offset + a.Limit
+		} else {
+			opts.Limit = a.Limit
+		}
 	}
 
 	if a.Level != "" {
@@ -45,9 +55,10 @@ func (s *Server) handleList(ctx context.Context, req mcpgo.CallToolRequest) (*mc
 		} else {
 			memories = memories[a.Offset:]
 		}
-		if a.Limit > 0 && len(memories) > a.Limit {
-			memories = memories[:a.Limit]
-		}
+	}
+
+	if a.Limit > 0 && len(memories) > a.Limit {
+		memories = memories[:a.Limit]
 	}
 
 	jsonBytes, err := pkgjson.MarshalMemories(memories, false)
