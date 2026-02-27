@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 	"time"
 
+	charmlog "github.com/charmbracelet/log"
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/consolidation"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
@@ -32,16 +32,23 @@ type Server struct {
 	storage              storage.Storage
 	consolidationService *consolidation.Service
 	embedder             memory.Embedder
-	logger               *log.Logger
+	logger               *charmlog.Logger
+	verboseLevel         int
 }
 
 // NewServer creates a new MCP server with the given transport
 func NewServer(transport Transport) *Server {
 	return &Server{
 		transport: transport,
-		logger:    log.New(os.Stderr, "[mcp] ", log.LstdFlags),
+		logger:    charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp"}),
 	}
 }
+
+// SetLogger replaces the server's logger.
+func (s *Server) SetLogger(l *charmlog.Logger) { s.logger = l }
+
+// SetVerboseLevel sets verbosity (0=default, 1=--v, 2=--vv, 3=--vvv).
+func (s *Server) SetVerboseLevel(level int) { s.verboseLevel = level }
 
 // NewServerWithStdio creates a new MCP server using stdio transport (convenience function)
 func NewServerWithStdio(reader io.Reader, writer io.Writer) *Server {
@@ -102,14 +109,14 @@ func (s *Server) Run() error {
 
 // RunWithContext starts the MCP server main loop with context support
 func (s *Server) RunWithContext(ctx context.Context) error {
-	s.logger.Println("Starting MCP server...")
+	s.logger.Info("starting MCP server")
 
 	for {
 		// Receive request from transport
 		req, err := s.transport.Receive(ctx)
 		if err != nil {
 			if err == io.EOF || ctx.Err() != nil {
-				s.logger.Println("Client disconnected")
+				s.logger.Info("client disconnected")
 				return nil
 			}
 			// Check for parse errors
@@ -120,11 +127,17 @@ func (s *Server) RunWithContext(ctx context.Context) error {
 			return fmt.Errorf("receive error: %w", err)
 		}
 
+		if s.verboseLevel >= 3 {
+			if b, err := json.Marshal(req); err == nil {
+				s.logger.Debug("request payload", "json", string(b))
+			}
+		}
+
 		// Handle request
 		resp := s.handleRequest(req)
 		if resp != nil {
 			if err := s.transport.Send(ctx, resp); err != nil {
-				s.logger.Printf("Failed to send response: %v", err)
+				s.logger.Error("failed to send response", "err", err)
 			}
 		}
 	}
@@ -137,7 +150,9 @@ func isParseError(err error) bool {
 
 // handleRequest processes a JSON-RPC request
 func (s *Server) handleRequest(req *Request) *Response {
-	s.logger.Printf("Received method: %s", req.Method)
+	if s.verboseLevel >= 1 {
+		s.logger.Debug("received method", "method", req.Method)
+	}
 
 	switch req.Method {
 	case "initialize":
@@ -179,7 +194,7 @@ func (s *Server) handleListTools(req *Request) *Response {
 	for _, name := range schemas.MCPToolNames {
 		schema, err := schemas.LoadMCPToolSchema(name)
 		if err != nil {
-			s.logger.Printf("Failed to load schema for %s: %v", name, err)
+			s.logger.Warn("failed to load schema", "tool", name, "err", err)
 			continue
 		}
 
@@ -221,6 +236,10 @@ func (s *Server) handleCallTool(req *Request) *Response {
 	var params CallToolParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return NewErrorResponse(req.ID, InvalidParams, "Invalid params", err.Error())
+	}
+
+	if s.verboseLevel >= 2 {
+		s.logger.Debug("tool call", "tool", params.Name)
 	}
 
 	ctx := context.Background()
@@ -1163,6 +1182,6 @@ func (s *Server) toolError(id interface{}, message string) *Response {
 func (s *Server) sendError(ctx context.Context, id interface{}, code int, message, data string) {
 	resp := NewErrorResponse(id, code, message, data)
 	if err := s.transport.Send(ctx, resp); err != nil {
-		s.logger.Printf("Error sending error response: %v", err)
+		s.logger.Error("failed to send error response", "err", err)
 	}
 }

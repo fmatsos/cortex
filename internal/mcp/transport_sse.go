@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
+	charmlog "github.com/charmbracelet/log"
 	"github.com/google/uuid"
 )
 
@@ -23,14 +23,15 @@ type SSETransport struct {
 	clients    map[string]http.ResponseWriter
 	sessionMap map[interface{}]string // request ID -> session ID mapping
 	mu         sync.RWMutex
-	logger     *log.Logger
+	logger     *charmlog.Logger
 	closed     bool
 	closedChan chan struct{}
 }
 
 // SSETransportConfig holds configuration for SSE transport
 type SSETransportConfig struct {
-	Address string // Address to listen on (e.g., ":8080" or "127.0.0.1:8080")
+	Address string           // Address to listen on (e.g., ":8080" or "127.0.0.1:8080")
+	Logger  *charmlog.Logger // nil = default charm logger to stderr
 }
 
 // NewSSETransport creates a new SSE transport
@@ -39,13 +40,18 @@ func NewSSETransport(config SSETransportConfig) *SSETransport {
 		config.Address = ":8080"
 	}
 
+	logger := config.Logger
+	if logger == nil {
+		logger = charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp-sse"})
+	}
+
 	return &SSETransport{
 		addr:       config.Address,
 		requests:   make(chan *Request, 100),
 		responses:  make(map[string]chan *Response),
 		clients:    make(map[string]http.ResponseWriter),
 		sessionMap: make(map[interface{}]string),
-		logger:     log.New(os.Stderr, "[mcp-sse] ", log.LstdFlags),
+		logger:     logger,
 		closedChan: make(chan struct{}),
 	}
 }
@@ -63,13 +69,13 @@ func (t *SSETransport) Start() error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	t.logger.Printf("Starting SSE transport on %s", t.addr)
-	t.logger.Printf("SSE endpoint: GET http://%s/sse", t.addr)
-	t.logger.Printf("Message endpoint: POST http://%s/message", t.addr)
+	t.logger.Info("starting SSE transport", "addr", t.addr)
+	t.logger.Info("SSE endpoint", "url", "http://"+t.addr+"/sse")
+	t.logger.Info("message endpoint", "url", "http://"+t.addr+"/message")
 
 	go func() {
 		if err := t.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			t.logger.Printf("HTTP server error: %v", err)
+			t.logger.Error("HTTP server error", "err", err)
 		}
 	}()
 
@@ -100,7 +106,7 @@ func (t *SSETransport) handleSSE(w http.ResponseWriter, r *http.Request) {
 	t.clients[sessionID] = w
 	t.mu.Unlock()
 
-	t.logger.Printf("Client connected: %s", sessionID)
+	t.logger.Info("client connected", "session", sessionID)
 
 	// Send endpoint event with message URL
 	messageEndpoint := fmt.Sprintf("http://%s/message?session_id=%s", r.Host, sessionID)
@@ -116,7 +122,7 @@ func (t *SSETransport) handleSSE(w http.ResponseWriter, r *http.Request) {
 		delete(t.clients, sessionID)
 		t.mu.Unlock()
 		close(respChan)
-		t.logger.Printf("Client disconnected: %s", sessionID)
+		t.logger.Info("client disconnected", "session", sessionID)
 	}()
 
 	for {
@@ -132,7 +138,7 @@ func (t *SSETransport) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 			data, err := json.Marshal(resp)
 			if err != nil {
-				t.logger.Printf("Failed to marshal response: %v", err)
+				t.logger.Error("failed to marshal response", "err", err)
 				continue
 			}
 
