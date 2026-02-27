@@ -21,6 +21,7 @@ type SSETransport struct {
 	requests   chan *Request
 	responses  map[string]chan *Response // sessionID -> response channel
 	clients    map[string]http.ResponseWriter
+	sessionMap map[interface{}]string // request ID -> session ID mapping
 	mu         sync.RWMutex
 	logger     *log.Logger
 	closed     bool
@@ -43,6 +44,7 @@ func NewSSETransport(config SSETransportConfig) *SSETransport {
 		requests:   make(chan *Request, 100),
 		responses:  make(map[string]chan *Response),
 		clients:    make(map[string]http.ResponseWriter),
+		sessionMap: make(map[interface{}]string),
 		logger:     log.New(os.Stderr, "[mcp-sse] ", log.LstdFlags),
 		closedChan: make(chan struct{}),
 	}
@@ -201,10 +203,7 @@ func (t *SSETransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	case t.requests <- wrappedReq:
 		// Store the session ID for this request
 		t.mu.Lock()
-		if sessionMap == nil {
-			sessionMap = make(map[interface{}]string)
-		}
-		sessionMap[req.ID] = sessionID
+		t.sessionMap[req.ID] = sessionID
 		t.mu.Unlock()
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -221,12 +220,6 @@ func (t *SSETransport) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
-
-// Package-level map to track request ID to session ID mapping
-var (
-	sessionMap   map[interface{}]string
-	sessionMapMu sync.RWMutex
-)
 
 // Receive reads a request from the message queue
 func (t *SSETransport) Receive(ctx context.Context) (*Request, error) {
@@ -246,9 +239,9 @@ func (t *SSETransport) Receive(ctx context.Context) (*Request, error) {
 // Send sends a response to the appropriate client
 func (t *SSETransport) Send(ctx context.Context, resp *Response) error {
 	// Find the session for this response
-	sessionMapMu.RLock()
-	sessionID, ok := sessionMap[resp.ID]
-	sessionMapMu.RUnlock()
+	t.mu.RLock()
+	sessionID, ok := t.sessionMap[resp.ID]
+	t.mu.RUnlock()
 
 	if !ok {
 		// Broadcast to all clients if no specific session
@@ -265,9 +258,9 @@ func (t *SSETransport) Send(ctx context.Context, resp *Response) error {
 	}
 
 	// Clean up the session mapping
-	sessionMapMu.Lock()
-	delete(sessionMap, resp.ID)
-	sessionMapMu.Unlock()
+	t.mu.Lock()
+	delete(t.sessionMap, resp.ID)
+	t.mu.Unlock()
 
 	t.mu.RLock()
 	respChan, exists := t.responses[sessionID]
