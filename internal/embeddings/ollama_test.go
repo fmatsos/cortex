@@ -33,19 +33,36 @@ func TestNewOllamaEmbedder(t *testing.T) {
 		t.Fatalf("NewOllamaEmbedder() error = %v", err)
 	}
 
+	// Dimension is lazy — 0 until first Embed call triggers ensureDimension
+	if embedder.Dimension() != 0 {
+		t.Errorf("Dimension() = %v, want 0 before first embed", embedder.Dimension())
+	}
+
+	// Trigger lazy init via Embed
+	_, embErr := embedder.Embed(context.Background(), "hello")
+	if embErr != nil {
+		t.Fatalf("Embed() error = %v", embErr)
+	}
+
 	if embedder.Dimension() != 384 {
-		t.Errorf("Dimension() = %v, want 384", embedder.Dimension())
+		t.Errorf("Dimension() = %v, want 384 after first embed", embedder.Dimension())
 	}
 }
 
 func TestNewOllamaEmbedder_ConnectionFailed(t *testing.T) {
+	// Constructor no longer connects — it always succeeds (lazy init)
 	embedder, err := NewOllamaEmbedder("http://invalid-host:99999", "nomic-embed-text", 1*time.Second, 8000, 200, "average")
-	if err == nil {
-		t.Error("NewOllamaEmbedder() should return error for unreachable host")
+	if err != nil {
+		t.Fatalf("NewOllamaEmbedder() should not return error (lazy): %v", err)
+	}
+	if embedder == nil {
+		t.Fatal("NewOllamaEmbedder() should return non-nil embedder (lazy)")
 	}
 
-	if embedder != nil {
-		t.Error("NewOllamaEmbedder() should return nil embedder on error")
+	// Connection failure surfaces on first Embed call
+	_, embErr := embedder.Embed(context.Background(), "test")
+	if embErr == nil {
+		t.Error("Embed() should fail for unreachable host")
 	}
 }
 

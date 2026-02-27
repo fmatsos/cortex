@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	charmlog "github.com/charmbracelet/log"
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 )
 
@@ -125,52 +127,24 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 	logger, verboseLevel := buildMCPLogger(mcpNoLogs, mcpVerboseV, mcpVerboseVV, mcpVerboseVVV)
 
 	// Validate transport
-	transportType := mcp.TransportType(mcpTransport)
-	if !mcp.IsValidTransport(transportType) {
+	if mcpTransport != "stdio" && mcpTransport != "sse" {
 		return fmt.Errorf("invalid transport: %s (valid: stdio, sse)", mcpTransport)
 	}
-	logger.Info("starting MCP server", "transport", transportType)
+	logger.Info("starting MCP server", "transport", mcpTransport)
 
-	// Load configuration
-	cfg := config.Global()
-
-	// Create transport based on mode
-	var transport mcp.Transport
-	switch transportType {
-	case mcp.TransportStdio:
-		transport = mcp.NewStdioTransport(os.Stdin, os.Stdout)
-	case mcp.TransportSSE:
-		// Derive SSE logger from main configuration — shares output writer and level
-		level, w, _ := buildMCPLogConfig(mcpNoLogs, mcpVerboseV, mcpVerboseVV, mcpVerboseVVV)
-		sseLogger := charmlog.NewWithOptions(w, charmlog.Options{
-			Level:           level,
-			Prefix:          "mcp-sse",
-			ReportTimestamp: true,
-		})
-		sseTransport := mcp.NewSSETransport(mcp.SSETransportConfig{
-			Address: mcpAddress,
-			Logger:  sseLogger,
-		})
-		logger.Info("starting SSE transport", "address", mcpAddress)
-		if err := sseTransport.Start(); err != nil {
-			return fmt.Errorf("failed to start SSE transport: %w", err)
-		}
-		transport = sseTransport
-	}
-
-	// Create MCP server with transport
-	server := mcp.NewServer(transport)
+	// Create cortex MCP server (registers tools, no heavy init yet)
+	server := mcp.NewServer()
 	server.SetLogger(logger)
 	server.SetVerboseLevel(verboseLevel)
 
+	// Load configuration and initialize storage + embedder
+	cfg := config.Global()
 	logger.Info("initializing embedder", "model", cfg.Embeddings.Model, "endpoint", cfg.Embeddings.Endpoint)
-	// Initialize embedder from config
 	embedder, err := initEmbedder()
 	if err != nil {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	// Initialize with storage path from config
 	storagePath := filepath.Join(cfg.Storage.Path, "memories.gob")
 	logger.Info("initializing storage", "path", storagePath)
 	if err := server.Initialize(storagePath, embedder); err != nil {
@@ -180,16 +154,32 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 
 	logger.Info("MCP server ready")
 
-	// Handle shutdown signals for SSE mode
-	if transportType == mcp.TransportSSE {
+	// Build stderr logger for mcp-go transport using charm log adapter
+	stdErrLogger := logger.StandardLog()
+
+	switch mcpTransport {
+	case "stdio":
+		return mcpserver.ServeStdio(server.MCPServer(), mcpserver.WithErrorLogger(stdErrLogger))
+
+	case "sse":
+		sseServer := mcpserver.NewSSEServer(server.MCPServer(),
+			mcpserver.WithSSEEndpoint("/sse"),
+			mcpserver.WithMessageEndpoint("/message"),
+		)
+		logger.Info("starting SSE transport", "address", mcpAddress)
+
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		go func() {
 			<-sigChan
 			_ = server.Close()
+			os.Exit(0)
 		}()
+
+		if err := http.ListenAndServe(mcpAddress, sseServer); err != nil {
+			return fmt.Errorf("SSE server error: %w", err)
+		}
 	}
 
-	// Run the server (blocks until client disconnects)
-	return server.Run()
+	return nil
 }

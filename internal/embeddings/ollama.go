@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/chunking"
@@ -22,6 +23,8 @@ type OllamaEmbedder struct {
 	chunkSize     int
 	chunkOverlap  int
 	chunkStrategy string
+	dimOnce       sync.Once
+	dimErr        error
 }
 
 // OllamaRequest is the request format for Ollama API
@@ -35,7 +38,9 @@ type OllamaResponse struct {
 	Embedding []float64 `json:"embedding"`
 }
 
-// NewOllamaEmbedder creates a new Ollama embedder
+// NewOllamaEmbedder creates a new Ollama embedder.
+// Dimension detection is deferred to the first Embed call to avoid blocking
+// during MCP server startup (which would cause client connection timeouts).
 func NewOllamaEmbedder(endpoint, model string, timeout time.Duration, chunkSize, chunkOverlap int, chunkStrategy string) (*OllamaEmbedder, error) {
 	if endpoint == "" {
 		endpoint = "http://localhost:11434"
@@ -62,18 +67,28 @@ func NewOllamaEmbedder(endpoint, model string, timeout time.Duration, chunkSize,
 		chunkStrategy: chunkStrategy,
 	}
 
-	// Test connection and get dimension
-	testEmbedding, err := embedder.embedSingle(context.Background(), "test")
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Ollama: %w", err)
-	}
-
-	embedder.dimension = len(testEmbedding)
 	return embedder, nil
+}
+
+// ensureDimension detects the embedding dimension on first use.
+func (o *OllamaEmbedder) ensureDimension(ctx context.Context) error {
+	o.dimOnce.Do(func() {
+		testEmbedding, err := o.embedSingle(ctx, "test")
+		if err != nil {
+			o.dimErr = fmt.Errorf("failed to connect to Ollama: %w", err)
+			return
+		}
+		o.dimension = len(testEmbedding)
+	})
+	return o.dimErr
 }
 
 // Embed generates an embedding for text with automatic chunking if needed
 func (o *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float64, error) {
+	if err := o.ensureDimension(ctx); err != nil {
+		return nil, err
+	}
+
 	// Check if chunking is needed
 	if !chunking.ShouldChunk(text, o.chunkSize) {
 		// Text is small enough, embed directly

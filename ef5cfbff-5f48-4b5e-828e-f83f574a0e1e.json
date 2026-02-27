@@ -1,0 +1,15 @@
+{
+  "id": "ef5cfbff-5f48-4b5e-828e-f83f574a0e1e",
+  "title": "Test Rule Memory",
+  "content": "This is a test rule memory created for verification purposes.\n\nRule: When running automated tests, ensure the test environment is isolated and deterministic.\n- Use deterministic seeds where possible.\n- Clean up temporary files and state after tests complete.\n- Avoid external network calls; mock dependencies.\n\nPurpose: Validate the memory creation and retrieval pipeline for rule-type memories.",
+  "types": [
+    "rule"
+  ],
+  "tags": [
+    "test",
+    "rule",
+    "ci"
+  ],
+  "created_at": "2026-02-01T22:19:11.118197395+01:00",
+  "updated_at": "2026-02-01T22:19:11.118197395+01:00"
+}
