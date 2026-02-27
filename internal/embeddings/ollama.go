@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/chunking"
@@ -22,6 +23,7 @@ type OllamaEmbedder struct {
 	chunkSize     int
 	chunkOverlap  int
 	chunkStrategy string
+	dimMu         sync.Mutex
 }
 
 // OllamaRequest is the request format for Ollama API
@@ -35,7 +37,9 @@ type OllamaResponse struct {
 	Embedding []float64 `json:"embedding"`
 }
 
-// NewOllamaEmbedder creates a new Ollama embedder
+// NewOllamaEmbedder creates a new Ollama embedder.
+// Dimension detection is deferred to the first Embed call to avoid blocking
+// during MCP server startup (which would cause client connection timeouts).
 func NewOllamaEmbedder(endpoint, model string, timeout time.Duration, chunkSize, chunkOverlap int, chunkStrategy string) (*OllamaEmbedder, error) {
 	if endpoint == "" {
 		endpoint = "http://localhost:11434"
@@ -62,18 +66,33 @@ func NewOllamaEmbedder(endpoint, model string, timeout time.Duration, chunkSize,
 		chunkStrategy: chunkStrategy,
 	}
 
-	// Test connection and get dimension
-	testEmbedding, err := embedder.embedSingle(context.Background(), "test")
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Ollama: %w", err)
-	}
-
-	embedder.dimension = len(testEmbedding)
 	return embedder, nil
+}
+
+// ensureDimension detects the embedding dimension on first use.
+// Uses a mutex instead of sync.Once so transient failures (network blip,
+// canceled context) are retried on the next Embed call rather than being
+// cached for the process lifetime.
+func (o *OllamaEmbedder) ensureDimension(ctx context.Context) error {
+	o.dimMu.Lock()
+	defer o.dimMu.Unlock()
+	if o.dimension > 0 {
+		return nil
+	}
+	testEmbedding, err := o.embedSingle(ctx, "test")
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ollama: %w", err)
+	}
+	o.dimension = len(testEmbedding)
+	return nil
 }
 
 // Embed generates an embedding for text with automatic chunking if needed
 func (o *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float64, error) {
+	if err := o.ensureDimension(ctx); err != nil {
+		return nil, err
+	}
+
 	// Check if chunking is needed
 	if !chunking.ShouldChunk(text, o.chunkSize) {
 		// Text is small enough, embed directly
@@ -110,8 +129,10 @@ func (o *OllamaEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 	return embeddings, nil
 }
 
-// Dimension returns the embedding dimension
+// Dimension returns the embedding dimension (0 until first successful Embed call).
 func (o *OllamaEmbedder) Dimension() int {
+	o.dimMu.Lock()
+	defer o.dimMu.Unlock()
 	return o.dimension
 }
 

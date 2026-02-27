@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -65,13 +66,21 @@ type CreateInput struct {
 
 // MemoryService provides memory operations.
 type MemoryService struct {
-	storage  Storage
-	embedder Embedder
+	storage       Storage
+	embedder      Embedder
+	embedCache    map[string][]float64
+	embedCacheMu  sync.RWMutex
+	embedCacheCap int
 }
 
 // NewMemoryService creates a new memory service.
 func NewMemoryService(storage Storage, embedder Embedder) *MemoryService {
-	return &MemoryService{storage: storage, embedder: embedder}
+	return &MemoryService{
+		storage:       storage,
+		embedder:      embedder,
+		embedCache:    make(map[string][]float64),
+		embedCacheCap: 128,
+	}
 }
 
 // Create creates a new memory.
@@ -116,9 +125,33 @@ func (s *MemoryService) Create(ctx context.Context, input CreateInput) (*Memory,
 	return m, nil
 }
 
+// cachedEmbed returns embeddings for a query string, using a cache to avoid redundant API calls.
+func (s *MemoryService) cachedEmbed(ctx context.Context, text string) ([]float64, error) {
+	s.embedCacheMu.RLock()
+	if v, ok := s.embedCache[text]; ok {
+		s.embedCacheMu.RUnlock()
+		return v, nil
+	}
+	s.embedCacheMu.RUnlock()
+
+	vec, err := s.embedder.Embed(ctx, text)
+	if err != nil {
+		return nil, err
+	}
+
+	s.embedCacheMu.Lock()
+	if len(s.embedCache) >= s.embedCacheCap {
+		s.embedCache = make(map[string][]float64) // evict all on overflow
+	}
+	s.embedCache[text] = vec
+	s.embedCacheMu.Unlock()
+
+	return vec, nil
+}
+
 // Search searches memories across all layers.
 func (s *MemoryService) Search(ctx context.Context, query string, opts SearchOptions) ([]*SearchResult, error) {
-	embedding, err := s.embedder.Embed(ctx, query)
+	embedding, err := s.cachedEmbed(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to embed query: %w", err)
 	}

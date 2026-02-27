@@ -41,3 +41,5 @@ go.work
 # Environment
 .env
 .env.local
+.grepai/
+*.gob
