@@ -719,10 +719,10 @@ cortex search "content from that session" --level episodic
 
 ## Related Documentation
 
-- **[Architecture](./ARCHITECTURE.md)** - Overall system design
-- **[Memory Model](./MEMORY_MODEL.md)** - Memory structure and levels
-- **[Configuration](./CONFIGURATION.md)** - Storage configuration options
-- **[Development](./DEVELOPMENT.md)** - Contributing to storage layer
+- **[Architecture](overview.md)** - Overall system design
+- **[Memory Model](memory-model.md)** - Memory structure and levels
+- **[Configuration](../guides/configuration.md)** - Storage configuration options
+- **[Development](../contributing/development.md)** - Contributing to storage layer
 
 ---
 

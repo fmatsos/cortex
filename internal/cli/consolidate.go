@@ -9,6 +9,7 @@ import (
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/consolidation"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	"github.com/cortex-ai/cortex-ai/pkg/session"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -61,31 +62,12 @@ func init() {
 func runConsolidate(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Validate level
 	if !memory.IsValidLevel(consolidateLevel) {
 		return fmt.Errorf("invalid level: %s (must be working|episodic|semantic)", consolidateLevel)
 	}
 
-	// Initialize embedder
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
-	// Initialize storage
-	store, err := initStorage()
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	// Get config
 	cfg := config.Global()
 
-	// Create service
-	svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
-
-	// Build context
 	consolidationCtx := memory.MemoryContext{
 		SessionID: consolidateSessionID,
 		Timestamp: time.Now(),
@@ -93,25 +75,21 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		Tags:      consolidateTags,
 	}
 
-	// Auto-derive or generate session ID if not provided
 	if consolidationCtx.SessionID == "" {
 		deriver := session.NewDeriver(&cfg.Session)
 		derivedSession, err := deriver.DeriveOrUseProvided(ctx, "")
 		if err == nil && derivedSession != "" {
 			consolidationCtx.SessionID = derivedSession
 		} else {
-			// Fallback to UUID if derivation fails or is disabled
 			consolidationCtx.SessionID = uuid.New().String()
 		}
 	}
 
-	// Parse additional context if provided
 	if consolidateContext != "" {
 		var extraCtx memory.MemoryContext
 		if err := json.Unmarshal([]byte(consolidateContext), &extraCtx); err != nil {
 			return fmt.Errorf("invalid context JSON: %w", err)
 		}
-		// Merge extra context
 		if extraCtx.TaskID != "" {
 			consolidationCtx.TaskID = extraCtx.TaskID
 		}
@@ -126,7 +104,6 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Build input
 	input := memory.ConsolidateInput{
 		Synthesis: consolidateContent,
 		Level:     memory.MemoryLevel(consolidateLevel),
@@ -134,27 +111,50 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		Force:     consolidateForce,
 	}
 
-	// Consolidate
-	result, err := svc.Consolidate(ctx, input)
-	if err != nil {
+	var result *memory.ConsolidateResult
+
+	if err := tui.RunWithSpinner("Consolidating memory…", func() error {
+		embedder, err := initEmbedder()
+		if err != nil {
+			return fmt.Errorf("failed to initialize embedder: %w", err)
+		}
+
+		store, err := initStorage()
+		if err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
+		}
+		defer func() { _ = store.Close() }()
+
+		svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
+		result, err = svc.Consolidate(ctx, input)
+		return err
+	}); err != nil {
 		return fmt.Errorf("consolidation failed: %w", err)
 	}
 
-	// Output
 	if consolidateOutput == "json" {
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Action: %s\n", result.Action)
-		fmt.Printf("Memory ID: %s\n", result.MemoryID)
-		if result.MergedWith != "" {
-			fmt.Printf("Merged with: %s\n", result.MergedWith)
-		}
-		if result.Reason != "" {
-			fmt.Printf("Reason: %s\n", result.Reason)
-		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return nil
 	}
 
+	actionStyle := tui.Success
+	if result.Action == "merged" {
+		actionStyle = tui.Warning
+	}
+
+	lines := [][2]string{
+		{"Action", actionStyle.Render(result.Action)},
+		{"Memory ID", result.MemoryID},
+	}
+	if result.MergedWith != "" {
+		lines = append(lines, [2]string{"Merged with", result.MergedWith})
+	}
+	if result.Reason != "" {
+		lines = append(lines, [2]string{"Reason", tui.Subtle.Render(result.Reason)})
+	}
+
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderDetail("Consolidation Result", lines))
 	return nil
 }
 
@@ -228,30 +228,35 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Output
 	if listConsolidatedOutput == "json" {
 		jsonBytes, _ := json.MarshalIndent(memories, "", "  ")
-		fmt.Println(string(jsonBytes))
-	} else {
-		if len(memories) == 0 {
-			fmt.Println("No memories found.")
-			return nil
-		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return nil
+	}
 
-		fmt.Printf("Found %d memories:\n\n", len(memories))
-		for _, m := range memories {
-			fmt.Printf("ID: %s\n", m.ID)
-			fmt.Printf("Level: %s\n", m.Level)
-			fmt.Printf("Content: %s\n", truncate(m.Content, 100))
-			fmt.Printf("Session: %s\n", m.Context.SessionID)
-			fmt.Printf("Created: %s\n", m.CreatedAt.Format(time.RFC3339))
-			if len(m.Context.Tags) > 0 {
-				fmt.Printf("Tags: %v\n", m.Context.Tags)
-			}
-			fmt.Println("---")
+	if len(memories) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.Subtle.Render("No memories found."))
+		return nil
+	}
+
+	rows := make([][]string, len(memories))
+	for i, m := range memories {
+		rows[i] = []string{
+			tui.FormatLevel(string(m.Level)),
+			tui.ShortID(m.ID),
+			truncate(m.Content, 60),
+			m.Context.SessionID,
+			m.CreatedAt.Format("2006-01-02 15:04"),
 		}
 	}
 
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderTable([]string{"LEVEL", "ID", "CONTENT", "SESSION", "CREATED"}, rows))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.Subtle.Render(fmt.Sprintf("%d memor%s", len(memories), func() string {
+		if len(memories) == 1 {
+			return "y"
+		}
+		return "ies"
+	}())))
 	return nil
 }
 
@@ -311,20 +316,22 @@ func runTransferWorking(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("transfer failed: %w", err)
 	}
 
-	// Output
-	result := map[string]interface{}{
+	jsonResult := map[string]interface{}{
 		"session_id":  transferSessionID,
 		"transferred": transferred,
 	}
 
 	if transferOutput == "json" {
-		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(jsonBytes))
-	} else {
-		fmt.Printf("Transferred %d working memories to episodic level\n", transferred)
-		fmt.Printf("Session: %s\n", transferSessionID)
+		jsonBytes, _ := json.MarshalIndent(jsonResult, "", "  ")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return nil
 	}
 
+	lines := [][2]string{
+		{"Transferred", tui.Success.Render(fmt.Sprintf("%d", transferred))},
+		{"Session", transferSessionID},
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderDetail("Transfer Complete", lines))
 	return nil
 }
 

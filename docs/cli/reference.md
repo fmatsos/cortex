@@ -170,7 +170,7 @@ cortex create --title "<title>" --level <level> --content "<content>" [flags]
 | `--author` | | string | - | Author name |
 | `--json` | | bool | false | Output as JSON |
 
-> **Note:** Session IDs are automatically derived from your git branch name when `session.auto_derive: true` (default). For example, branch `fix/sil-123/auth` becomes session `session-fix-sil-123`. See [Configuration](CONFIGURATION.md#session-section) for details.
+> **Note:** Session IDs are automatically derived from your git branch name when `session.auto_derive: true` (default). For example, branch `fix/sil-123/auth` becomes session `session-fix-sil-123`. See [Configuration](../guides/configuration.md#session-section) for details.
 
 **Examples**:
 ```bash
@@ -522,7 +522,7 @@ cortex consolidate --level <level> --content "<content>" [flags]
 | `--threshold` | float | 0.85 | Similarity threshold for merging |
 | `--json` | bool | false | Output as JSON |
 
-> **Note:** Session IDs are automatically derived from your git branch when `session.auto_derive: true` (default). See [Configuration](CONFIGURATION.md#session-section) for pattern configuration.
+> **Note:** Session IDs are automatically derived from your git branch when `session.auto_derive: true` (default). See [Configuration](../guides/configuration.md#session-section) for pattern configuration.
 
 **Examples**:
 ```bash
@@ -1159,10 +1159,10 @@ done
 
 ## Related Documentation
 
-- **[Memory Model](./MEMORY_MODEL.md)** - Understanding memory levels
-- **[MCP Integration](./MCP.md)** - Using Cortex with AI assistants
-- **[Configuration](./CONFIGURATION.md)** - Configuring Cortex
-- **[Troubleshooting](./TROUBLESHOOTING.md)** - Common issues
+- **[Memory Model](../architecture/memory-model.md)** - Understanding memory levels
+- **[MCP Integration](mcp.md)** - Using Cortex with AI assistants
+- **[Configuration](../guides/configuration.md)** - Configuring Cortex
+- **[Troubleshooting](../guides/troubleshooting.md)** - Common issues
 
 ---
 

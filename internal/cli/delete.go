@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +52,6 @@ func runDelete(cmd *cobra.Command, args []string) error {
 	svc := memory.NewMemoryService(storageBackend, embedder)
 
 	if deleteObsolete {
-		// Delete all obsolete memories
 		memories, err := svc.List(ctx, memory.ListOptions{IncludeObsolete: true})
 		if err != nil {
 			return fmt.Errorf("failed to list memories: %w", err)
@@ -61,13 +61,18 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		for _, m := range memories {
 			if m.Obsolete {
 				if err := svc.Delete(ctx, m.ID); err != nil {
-					fmt.Printf("Failed to delete %s: %v\n", m.ID, err)
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), tui.ErrMsg(fmt.Sprintf("failed to delete %s: %v", m.ID, err)))
 					continue
 				}
 				count++
 			}
 		}
-		fmt.Printf("Deleted %d obsolete memories\n", count)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.SuccessMsg(fmt.Sprintf("Deleted %d obsolete memor%s", count, func() string {
+			if count == 1 {
+				return "y"
+			}
+			return "ies"
+		}())))
 	} else {
 		if len(args) == 0 {
 			return fmt.Errorf("memory ID is required or use --obsolete flag")
@@ -75,12 +80,11 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 		id := args[0]
 
-		// Delete the memory
 		if err := svc.Delete(ctx, id); err != nil {
 			return fmt.Errorf("failed to delete memory: %w", err)
 		}
 
-		fmt.Printf("Deleted memory: %s\n", id)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.SuccessMsg(fmt.Sprintf("Deleted memory %s", tui.ShortID(id))))
 	}
 
 	return nil

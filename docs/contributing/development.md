@@ -479,6 +479,6 @@ View results on the GitHub Actions tab.
 
 ## Related Documentation
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contributing guidelines
-- [CLI_REFERENCE.md](./CLI_REFERENCE.md) - CLI reference
+- [ARCHITECTURE.md](../architecture/overview.md) - System architecture
+- [CONTRIBUTING.md](contributing.md) - Contributing guidelines
+- [CLI_REFERENCE.md](../cli/reference.md) - CLI reference

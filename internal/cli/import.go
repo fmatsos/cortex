@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/cortex-ai/cortex-ai/pkg/markdown"
 	"github.com/spf13/cobra"
@@ -165,12 +166,17 @@ func runDryRun(files []string) error {
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
-		fmt.Printf("Dry run validation: %d valid, %d invalid\n\n", valid, invalid)
+		fmt.Println(tui.SectionHeader("Dry Run Validation"))
+		fmt.Println()
+		fmt.Printf("  %s  %s\n\n",
+			tui.KeyValue("Valid", tui.Success.Render(fmt.Sprintf("%d", valid))),
+			tui.KeyValue("Invalid", tui.Error.Render(fmt.Sprintf("%d", invalid))),
+		)
 		for _, r := range results {
 			if r.Error != nil {
-				fmt.Printf("  ✗ %s: %s\n", r.Path, r.Error.Error())
+				fmt.Printf("  %s  %s\n", tui.FormatStatus(false), tui.Subtle.Render(r.Path)+": "+r.Error.Error())
 			} else {
-				fmt.Printf("  ✓ %s\n", r.Path)
+				fmt.Printf("  %s  %s\n", tui.FormatStatus(true), r.Path)
 			}
 		}
 	}
@@ -183,91 +189,86 @@ func runDryRun(files []string) error {
 }
 
 func runRealImport(ctx context.Context, files []string) error {
-	// Initialize embedder from config
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
-	// Initialize storage from config
-	storageBackend, err := initStorage()
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
-	}
-	defer func() { _ = storageBackend.Close() }()
-
-	// Create service
-	svc := memory.NewMemoryService(storageBackend, embedder)
-
 	var imported, failed, skipped int
 	var importResults []map[string]interface{}
 
-	for _, path := range files {
-		entry := map[string]interface{}{
-			"path": path,
-		}
-
-		// Import file based on format
-		mem, err := importFile(path)
+	if err := tui.RunWithSpinner(fmt.Sprintf("Importing %d file(s)…", len(files)), func() error {
+		embedder, err := initEmbedder()
 		if err != nil {
-			failed++
-			entry["status"] = "failed"
-			entry["error"] = err.Error()
-			importResults = append(importResults, entry)
-			continue
+			return fmt.Errorf("failed to initialize embedder: %w", err)
 		}
 
-		// Check if memory already exists
-		existing, _ := storageBackend.Get(ctx, mem.ID)
-		if existing != nil && !importForce {
-			skipped++
-			entry["status"] = "skipped"
-			entry["reason"] = "memory already exists (use --force to overwrite)"
-			entry["id"] = mem.ID
-			importResults = append(importResults, entry)
-			continue
+		storageBackend, err := initStorage()
+		if err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
 		}
+		defer func() { _ = storageBackend.Close() }()
 
-		// Save the memory (this will generate embedding)
-		input := memory.CreateInput{
-			Title:     mem.Title,
-			Content:   mem.Content,
-			Level:     mem.Level,
-			Tags:      mem.Tags,
-			SessionID: mem.Context.SessionID,
-			Source:    mem.Context.Source,
-			TaskID:    mem.Context.TaskID,
-			Author:    mem.Context.Author,
-		}
+		svc := memory.NewMemoryService(storageBackend, embedder)
 
-		// If we're forcing overwrite and memory exists, delete first
-		if existing != nil && importForce {
-			if err := storageBackend.Delete(ctx, mem.ID); err != nil {
+		for _, path := range files {
+			entry := map[string]interface{}{"path": path}
+
+			mem, err := importFile(path)
+			if err != nil {
 				failed++
 				entry["status"] = "failed"
-				entry["error"] = fmt.Sprintf("failed to delete existing: %v", err)
+				entry["error"] = err.Error()
 				importResults = append(importResults, entry)
 				continue
 			}
-		}
 
-		createdMem, err := svc.Create(ctx, input)
-		if err != nil {
-			failed++
-			entry["status"] = "failed"
-			entry["error"] = err.Error()
+			existing, _ := storageBackend.Get(ctx, mem.ID)
+			if existing != nil && !importForce {
+				skipped++
+				entry["status"] = "skipped"
+				entry["reason"] = "memory already exists (use --force to overwrite)"
+				entry["id"] = mem.ID
+				importResults = append(importResults, entry)
+				continue
+			}
+
+			input := memory.CreateInput{
+				Title:     mem.Title,
+				Content:   mem.Content,
+				Level:     mem.Level,
+				Tags:      mem.Tags,
+				SessionID: mem.Context.SessionID,
+				Source:    mem.Context.Source,
+				TaskID:    mem.Context.TaskID,
+				Author:    mem.Context.Author,
+			}
+
+			if existing != nil && importForce {
+				if err := storageBackend.Delete(ctx, mem.ID); err != nil {
+					failed++
+					entry["status"] = "failed"
+					entry["error"] = fmt.Sprintf("failed to delete existing: %v", err)
+					importResults = append(importResults, entry)
+					continue
+				}
+			}
+
+			createdMem, err := svc.Create(ctx, input)
+			if err != nil {
+				failed++
+				entry["status"] = "failed"
+				entry["error"] = err.Error()
+				importResults = append(importResults, entry)
+				continue
+			}
+
+			imported++
+			entry["status"] = "imported"
+			entry["id"] = createdMem.ID
+			entry["title"] = createdMem.Title
 			importResults = append(importResults, entry)
-			continue
 		}
-
-		imported++
-		entry["status"] = "imported"
-		entry["id"] = createdMem.ID
-		entry["title"] = createdMem.Title
-		importResults = append(importResults, entry)
+		return nil
+	}); err != nil {
+		return fmt.Errorf("import failed: %w", err)
 	}
 
-	// Output results
 	if importFormat == "json" {
 		output := map[string]interface{}{
 			"imported": imported,
@@ -278,15 +279,24 @@ func runRealImport(ctx context.Context, files []string) error {
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(jsonBytes))
 	} else {
-		fmt.Printf("Import complete: %d imported, %d skipped, %d failed\n\n", imported, skipped, failed)
+		fmt.Printf("\n  %s  %s  %s\n\n",
+			tui.KeyValue("Imported", tui.Success.Render(fmt.Sprintf("%d", imported))),
+			tui.KeyValue("Skipped", tui.Subtle.Render(fmt.Sprintf("%d", skipped))),
+			tui.KeyValue("Failed", func() string {
+				if failed > 0 {
+					return tui.Error.Render(fmt.Sprintf("%d", failed))
+				}
+				return fmt.Sprintf("%d", failed)
+			}()),
+		)
 		for _, r := range importResults {
 			switch r["status"] {
 			case "imported":
-				fmt.Printf("  ✓ %s -> %s\n", r["path"], r["id"])
+				fmt.Printf("  %s  %s → %s\n", tui.FormatStatus(true), r["path"], tui.Subtle.Render(fmt.Sprintf("%v", r["id"])))
 			case "skipped":
-				fmt.Printf("  - %s: %s\n", r["path"], r["reason"])
+				fmt.Printf("  %s  %s: %s\n", tui.SkipMsg(""), r["path"], r["reason"])
 			case "failed":
-				fmt.Printf("  ✗ %s: %s\n", r["path"], r["error"])
+				fmt.Printf("  %s  %s: %s\n", tui.FormatStatus(false), r["path"], r["error"])
 			}
 		}
 	}

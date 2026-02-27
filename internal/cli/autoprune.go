@@ -8,6 +8,7 @@ import (
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/consolidation"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -54,32 +55,13 @@ func init() {
 func runAutoprune(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Parse older-than duration
 	olderThan, err := parseDuration(autopruneOlderThan)
 	if err != nil {
 		return fmt.Errorf("invalid older-than value: %w", err)
 	}
 
-	// Initialize embedder
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
-	// Initialize storage
-	store, err := initStorage()
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	// Get config
 	cfg := config.Global()
 
-	// Create autoprune service
-	svc := consolidation.NewAutopruneService(store, embedder, &cfg.Autoprune)
-
-	// Build options
 	opts := consolidation.AutopruneOptions{
 		Duplicates:      autopruneDuplicates,
 		ArchiveEpisodic: autopruneArchiveEpisodic,
@@ -88,32 +70,55 @@ func runAutoprune(cmd *cobra.Command, args []string) error {
 		OlderThan:       olderThan,
 	}
 
-	// Run autoprune
-	result, err := svc.Run(ctx, opts)
-	if err != nil {
+	var result *consolidation.AutopruneResult
+
+	spinnerLabel := "Running autoprune…"
+	if autopruneDryRun {
+		spinnerLabel = "Running autoprune (dry run)…"
+	}
+
+	if err := tui.RunWithSpinner(spinnerLabel, func() error {
+		embedder, err := initEmbedder()
+		if err != nil {
+			return fmt.Errorf("failed to initialize embedder: %w", err)
+		}
+
+		store, err := initStorage()
+		if err != nil {
+			return fmt.Errorf("failed to initialize storage: %w", err)
+		}
+		defer func() { _ = store.Close() }()
+
+		svc := consolidation.NewAutopruneService(store, embedder, &cfg.Autoprune)
+		result, err = svc.Run(ctx, opts)
+		return err
+	}); err != nil {
 		return fmt.Errorf("autoprune failed: %w", err)
 	}
 
-	// Output
 	if autopruneOutput == "json" {
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(jsonBytes))
-	} else {
-		if autopruneDryRun {
-			fmt.Println("=== DRY RUN (no changes made) ===")
-			fmt.Println()
-		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return nil
+	}
 
-		fmt.Printf("Autoprune Results:\n")
-		fmt.Printf("  Duplicates removed:  %d\n", result.DuplicatesRemoved)
-		fmt.Printf("  Episodic archived:   %d\n", result.EpisodicArchived)
-		fmt.Printf("  Semantic merged:     %d\n", result.SemanticMerged)
+	title := "Autoprune Results"
+	if autopruneDryRun {
+		title = tui.Warning.Render("Autoprune Results") + tui.Subtle.Render("  (dry run – no changes made)")
+	}
 
-		if len(result.Details) > 0 {
-			fmt.Println("\nDetails:")
-			for _, detail := range result.Details {
-				fmt.Printf("  - %s\n", detail)
-			}
+	lines := [][2]string{
+		{"Duplicates removed", fmt.Sprintf("%d", result.DuplicatesRemoved)},
+		{"Episodic archived", fmt.Sprintf("%d", result.EpisodicArchived)},
+		{"Semantic merged", fmt.Sprintf("%d", result.SemanticMerged)},
+	}
+
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderDetail(title, lines))
+
+	if len(result.Details) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.SectionHeader("Details"))
+		for _, detail := range result.Details {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  "+tui.Subtle.Render("·")+" "+detail)
 		}
 	}
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	pkgjson "github.com/cortex-ai/cortex-ai/pkg/json"
 	"github.com/spf13/cobra"
 )
@@ -74,24 +74,24 @@ func outputGetJSON(cmd *cobra.Command, m *memory.Memory) error {
 }
 
 func outputGetText(cmd *cobra.Command, m *memory.Memory) error {
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-
-	_, _ = fmt.Fprintf(w, "ID:\t%s\n", m.ID)
-	_, _ = fmt.Fprintf(w, "Title:\t%s\n", m.Title)
-	_, _ = fmt.Fprintf(w, "Level:\t%s\n", m.Level)
-	if len(m.Tags) > 0 {
-		_, _ = fmt.Fprintf(w, "Tags:\t%s\n", strings.Join(m.Tags, ", "))
+	lines := [][2]string{
+		{"ID", m.ID},
+		{"Level", tui.FormatLevel(string(m.Level))},
+		{"Tags", tui.FormatTags(m.Tags)},
+		{"Created", m.CreatedAt.Format(time.RFC3339)},
+		{"Updated", m.UpdatedAt.Format(time.RFC3339)},
 	}
-	_, _ = fmt.Fprintf(w, "Created:\t%s\n", m.CreatedAt.Format(time.RFC3339))
-	_, _ = fmt.Fprintf(w, "Updated:\t%s\n", m.UpdatedAt.Format(time.RFC3339))
-	_, _ = fmt.Fprintf(w, "Obsolete:\t%v\n", m.Obsolete)
 
-	_ = w.Flush()
+	if len(m.MergedFrom) > 0 {
+		lines = append(lines, [2]string{"Merged from", strings.Join(m.MergedFrom, ", ")})
+	}
 
-	out := cmd.OutOrStdout()
-	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintln(out, "Content:")
-	_, _ = fmt.Fprintln(out, m.Content)
+	if m.Obsolete {
+		lines = append(lines, [2]string{"Status", tui.Warning.Render("obsolete")})
+	}
 
+	lines = append(lines, [2]string{"Content", "\n" + m.Content})
+
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderDetail(m.Title, lines))
 	return nil
 }

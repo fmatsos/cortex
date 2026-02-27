@@ -671,7 +671,7 @@ Submit issue to: https://github.com/cortex-ai/cortex-ai/issues
 
 ## Related Documentation
 
-- [CONFIGURATION.md](./CONFIGURATION.md) - Configuration reference
-- [EMBEDDINGS.md](./EMBEDDINGS.md) - Embeddings troubleshooting
-- [STORAGE.md](./STORAGE.md) - Storage details
-- [DEVELOPMENT.md](./DEVELOPMENT.md) - Development debugging
+- [CONFIGURATION.md](configuration.md) - Configuration reference
+- [EMBEDDINGS.md](../architecture/embeddings.md) - Embeddings troubleshooting
+- [STORAGE.md](../architecture/storage.md) - Storage details
+- [DEVELOPMENT.md](../contributing/development.md) - Development debugging

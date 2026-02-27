@@ -139,7 +139,7 @@ embeddings:
   chunk_size: 0  # No chunking
 ```
 
-**Note:** See [EMBEDDINGS.md](./EMBEDDINGS.md#text-chunking) for detailed chunking documentation.
+**Note:** See [EMBEDDINGS.md](../architecture/embeddings.md#text-chunking) for detailed chunking documentation.
 
 #### Recommended Embedding Models
 
@@ -631,5 +631,5 @@ cortex config --show  # Will use defaults
 ## Related Documentation
 
 - [README.md](../README.md) - Getting started guide
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
-- [MCP.md](./MCP.md) - MCP integration
+- [ARCHITECTURE.md](../architecture/overview.md) - System architecture
+- [MCP.md](../cli/mcp.md) - MCP integration

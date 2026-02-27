@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"text/tabwriter"
+	"strings"
 	"time"
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -140,58 +141,74 @@ func outputStatsJSON(stats Statistics) error {
 }
 
 func outputStatsText(cmd *cobra.Command, stats Statistics) error {
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	out := cmd.OutOrStdout()
 
-	_, _ = fmt.Fprintln(w, "=== Cortex Memory Statistics ===")
-	_, _ = fmt.Fprintln(w)
+	// Header
+	_, _ = fmt.Fprintln(out, tui.SectionHeader("Cortex Memory Statistics"))
+	_, _ = fmt.Fprintln(out)
 
-	// General stats
-	_, _ = fmt.Fprintf(w, "Total memories:\t%d\n", stats.TotalMemories)
-	_, _ = fmt.Fprintf(w, "Active memories:\t%d\n", stats.ActiveCount)
-	_, _ = fmt.Fprintf(w, "Obsolete memories:\t%d\n", stats.ObsoleteCount)
-	_, _ = fmt.Fprintln(w)
+	// Counts row
+	_, _ = fmt.Fprintf(out, "  %s  %s  %s\n",
+		tui.KeyValue("Total", fmt.Sprintf("%d", stats.TotalMemories)),
+		tui.KeyValue("Active", tui.Success.Render(fmt.Sprintf("%d", stats.ActiveCount))),
+		tui.KeyValue("Obsolete", tui.Warning.Render(fmt.Sprintf("%d", stats.ObsoleteCount))),
+	)
+	_, _ = fmt.Fprintln(out)
 
-	// Memories by level
-	_, _ = fmt.Fprintln(w, "Memories by level:")
+	// By level
+	_, _ = fmt.Fprintln(out, "  "+tui.Label.Render("By level:"))
 	for _, level := range memory.ValidMemoryLevels {
 		count := stats.MemoriesByLevel[string(level)]
-		_, _ = fmt.Fprintf(w, "  %s:\t%d\n", level, count)
+		bar := statsBar(count, stats.TotalMemories, 20)
+		_, _ = fmt.Fprintf(out, "    %s  %s  %d\n",
+			tui.FormatLevel(string(level)),
+			bar,
+			count,
+		)
 	}
-	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(out)
 
 	// Dates
+	createdStr := "-"
 	if stats.DatabaseCreated != nil {
-		_, _ = fmt.Fprintf(w, "Database created:\t%s\n", stats.DatabaseCreated.Format("2006-01-02 15:04:05"))
-	} else {
-		_, _ = fmt.Fprintf(w, "Database created:\t-\n")
+		createdStr = stats.DatabaseCreated.Format("2006-01-02 15:04:05")
 	}
-
+	lastStr := "-"
 	if stats.LastRecordDate != nil {
-		_, _ = fmt.Fprintf(w, "Last record:\t%s\n", stats.LastRecordDate.Format("2006-01-02 15:04:05"))
-	} else {
-		_, _ = fmt.Fprintf(w, "Last record:\t-\n")
+		lastStr = stats.LastRecordDate.Format("2006-01-02 15:04:05")
 	}
-	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(out, "  "+tui.KeyValue("Created", createdStr))
+	_, _ = fmt.Fprintln(out, "  "+tui.KeyValue("Last record", lastStr))
+	_, _ = fmt.Fprintln(out)
 
-	// Storage info
-	_, _ = fmt.Fprintf(w, "Storage path:\t%s\n", stats.StoragePath)
-
-	// Check if storage file exists
-	if _, err := os.Stat(stats.StoragePath); err == nil {
-		info, err := os.Stat(stats.StoragePath)
-		if err == nil {
-			_, _ = fmt.Fprintf(w, "Storage file modified:\t%s\n", info.ModTime().Format("2006-01-02 15:04:05"))
-		}
-	}
-	_, _ = fmt.Fprintln(w)
-
-	// Config info
-	if stats.ConfigFile != "" {
-		_, _ = fmt.Fprintf(w, "Config file:\t%s\n", stats.ConfigFile)
-	} else {
-		_, _ = fmt.Fprintf(w, "Config file:\t(using defaults)\n")
+	// Storage
+	_, _ = fmt.Fprintln(out, "  "+tui.KeyValue("Storage", stats.StoragePath))
+	if info, err := os.Stat(stats.StoragePath); err == nil {
+		_, _ = fmt.Fprintln(out, "  "+tui.KeyValue("Modified", info.ModTime().Format("2006-01-02 15:04:05")))
 	}
 
-	_ = w.Flush()
+	// Config
+	cfgFile := stats.ConfigFile
+	if cfgFile == "" {
+		cfgFile = tui.Subtle.Render("(using defaults)")
+	}
+	_, _ = fmt.Fprintln(out, "  "+tui.KeyValue("Config", cfgFile))
+
 	return nil
+}
+
+// statsBar renders a simple ASCII bar proportional to count/total.
+func statsBar(count, total, width int) string {
+	if total == 0 || width == 0 {
+		return strings.Repeat("░", width)
+	}
+	filled := count * width / total
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > width {
+		filled = width
+	}
+	return tui.Success.Render(strings.Repeat("█", filled)) +
+		tui.Subtle.Render(strings.Repeat("░", width-filled))
 }

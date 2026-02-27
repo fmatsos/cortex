@@ -847,7 +847,7 @@ This allows all related context to be transferred together when the session ends
 
 ## Related Documentation
 
-- [CONFIGURATION.md](./CONFIGURATION.md) - Configuration reference
-- [CLI_REFERENCE.md](./CLI_REFERENCE.md) - CLI command reference
-- [MEMORY_MODEL.md](./MEMORY_MODEL.md) - Memory model documentation
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - System architecture
+- [CONFIGURATION.md](../guides/configuration.md) - Configuration reference
+- [CLI_REFERENCE.md](reference.md) - CLI command reference
+- [MEMORY_MODEL.md](../architecture/memory-model.md) - Memory model documentation
+- [ARCHITECTURE.md](../architecture/overview.md) - System architecture

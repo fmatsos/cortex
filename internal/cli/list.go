@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/cortex-ai/cortex-ai/internal/cli/output"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -76,7 +76,6 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to list memories: %w", err)
 	}
 
-	// Output
 	if listJSON {
 		items := make([]output.ListItem, len(memories))
 		for i, m := range memories {
@@ -90,24 +89,36 @@ func runList(cmd *cobra.Command, args []string) error {
 			}
 		}
 		jsonBytes, _ := json.MarshalIndent(items, "", "  ")
-		fmt.Println(string(jsonBytes))
-	} else {
-		if len(memories) == 0 {
-			fmt.Println("No memories found")
-			return nil
-		}
-
-		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(w, "LEVEL\tID\tTITLE\tCREATED")
-		for _, m := range memories {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-				m.Level,
-				m.ID[:8]+"...",
-				m.Title,
-				m.CreatedAt.Format("2006-01-02 15:04"))
-		}
-		_ = w.Flush()
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
+		return nil
 	}
 
+	if len(memories) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.Subtle.Render("No memories found."))
+		return nil
+	}
+
+	rows := make([][]string, len(memories))
+	for i, m := range memories {
+		obsoleteFlag := ""
+		if m.Obsolete {
+			obsoleteFlag = tui.Warning.Render("obsolete")
+		}
+		rows[i] = []string{
+			tui.FormatLevel(string(m.Level)),
+			tui.ShortID(m.ID),
+			m.Title,
+			m.CreatedAt.Format("2006-01-02 15:04"),
+			obsoleteFlag,
+		}
+	}
+
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderTable([]string{"LEVEL", "ID", "TITLE", "CREATED", "FLAGS"}, rows))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.Subtle.Render(fmt.Sprintf("%d memor%s", len(memories), func() string {
+		if len(memories) == 1 {
+			return "y"
+		}
+		return "ies"
+	}())))
 	return nil
 }
