@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"container/heap"
 	"context"
 	"encoding/gob"
 	"fmt"
@@ -27,6 +28,27 @@ type workingData struct {
 	SessionID string
 	Memories  map[string]*memory.Memory
 	Index     map[string][]float64
+}
+
+// searchResultHeap is a min-heap of SearchResult by Score (smallest on top).
+// Used to efficiently track top-K results without a full sort.
+type searchResultHeap []*memory.SearchResult
+
+func (h searchResultHeap) Len() int           { return len(h) }
+func (h searchResultHeap) Less(i, j int) bool { return h[i].Score < h[j].Score } // min-heap
+func (h searchResultHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *searchResultHeap) Push(x interface{}) {
+	*h = append(*h, x.(*memory.SearchResult))
+}
+
+func (h *searchResultHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	old[n-1] = nil
+	*h = old[:n-1]
+	return x
 }
 
 // GobStorage implements Storage using Gob encoding.
@@ -109,6 +131,8 @@ func (gs *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error
 	}
 	gs.mu.RUnlock()
 
+	// gs.mu is released before acquiring workingMu to avoid lock ordering inversion
+	// with savePersistent which holds workingMu before acquiring gs.mu.
 	gs.workingMu.RLock()
 	defer gs.workingMu.RUnlock()
 	for _, wd := range gs.workingData {
@@ -246,12 +270,26 @@ func (gs *GobStorage) SearchAllLayers(ctx context.Context, vector []float64, opt
 	}
 	gs.mu.RUnlock()
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
-
+	// Use a min-heap for efficient top-K selection when TopK is set and we have many results
 	if opts.TopK > 0 && len(results) > opts.TopK {
-		results = results[:opts.TopK]
+		h := make(searchResultHeap, 0, opts.TopK+1)
+		heap.Init(&h)
+		for _, r := range results {
+			heap.Push(&h, r)
+			if h.Len() > opts.TopK {
+				heap.Pop(&h)
+			}
+		}
+		// Extract results from heap in descending order
+		results = make([]*memory.SearchResult, h.Len())
+		for i := len(results) - 1; i >= 0; i-- {
+			results[i] = heap.Pop(&h).(*memory.SearchResult)
+		}
+	} else {
+		// Sort all results in descending order
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].Score > results[j].Score
+		})
 	}
 
 	return results, nil
