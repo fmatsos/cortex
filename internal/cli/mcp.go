@@ -114,8 +114,9 @@ func buildMCPLogConfig(noLogs, v, vv, vvv bool) (charmlog.Level, io.Writer, int)
 func buildMCPLogger(noLogs, v, vv, vvv bool) (*charmlog.Logger, int) {
 	level, w, verboseLevel := buildMCPLogConfig(noLogs, v, vv, vvv)
 	logger := charmlog.NewWithOptions(w, charmlog.Options{
-		Level:  level,
-		Prefix: "mcp",
+		Level:           level,
+		Prefix:          "mcp",
+		ReportTimestamp: true,
 	})
 	return logger, verboseLevel
 }
@@ -142,8 +143,9 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 		// Derive SSE logger from main configuration — shares output writer and level
 		level, w, _ := buildMCPLogConfig(mcpNoLogs, mcpVerboseV, mcpVerboseVV, mcpVerboseVVV)
 		sseLogger := charmlog.NewWithOptions(w, charmlog.Options{
-			Level:  level,
-			Prefix: "mcp-sse",
+			Level:           level,
+			Prefix:          "mcp-sse",
+			ReportTimestamp: true,
 		})
 		sseTransport := mcp.NewSSETransport(mcp.SSETransportConfig{
 			Address: mcpAddress,

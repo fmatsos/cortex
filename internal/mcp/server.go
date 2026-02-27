@@ -40,7 +40,7 @@ type Server struct {
 func NewServer(transport Transport) *Server {
 	return &Server{
 		transport: transport,
-		logger:    charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp"}),
+		logger:    charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp", ReportTimestamp: true}),
 	}
 }
 

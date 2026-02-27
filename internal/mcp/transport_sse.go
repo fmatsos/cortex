@@ -42,7 +42,7 @@ func NewSSETransport(config SSETransportConfig) *SSETransport {
 
 	logger := config.Logger
 	if logger == nil {
-		logger = charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp-sse"})
+		logger = charmlog.NewWithOptions(os.Stderr, charmlog.Options{Prefix: "mcp-sse", ReportTimestamp: true})
 	}
 
 	return &SSETransport{
