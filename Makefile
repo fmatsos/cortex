@@ -1,4 +1,4 @@
-.PHONY: build test lint install clean help
+.PHONY: build test lint install clean help qa
 
 # Variables
 BINARY_NAME=cortex
@@ -12,6 +12,7 @@ help:
 	@echo "Cortex - CLI tool for persistent AI agent memory"
 	@echo ""
 	@echo "Available targets:"
+	@echo "  qa          - Run full QA workflow: fmt → lint → test → build"
 	@echo "  build       - Build the cortex binary"
 	@echo "  install     - Build and install cortex to GOBIN"
 	@echo "  test        - Run all tests"
@@ -71,3 +72,7 @@ deps:
 	@echo "Downloading dependencies..."
 	@go mod download
 	@go mod tidy
+
+# Run full QA workflow
+qa: fmt lint test build
+	@echo "✓ QA workflow complete: fmt → lint → test → build"
