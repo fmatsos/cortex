@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
 )
 
 // workDoneMsg signals the background work goroutine has finished.
@@ -80,18 +81,10 @@ func RunWithSpinner(label string, fn func() error) error {
 // IsInteractive returns true if stdin is connected to an interactive terminal.
 // Used to decide whether to show interactive forms.
 func IsInteractive() bool {
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	return term.IsTerminal(os.Stdin.Fd())
 }
 
 // IsStderrTerminal returns true if stderr is connected to an interactive terminal.
 func IsStderrTerminal() bool {
-	fi, err := os.Stderr.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
+	return term.IsTerminal(os.Stderr.Fd())
 }
