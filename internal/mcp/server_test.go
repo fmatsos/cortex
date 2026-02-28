@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/cortex-ai/cortex-ai/internal/storage"
 )
 
 // mockEmbedder implements memory.Embedder for testing
@@ -66,11 +68,15 @@ func resultText(t *testing.T, result *mcpgo.CallToolResult) string {
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	tmpDir := t.TempDir()
-	storagePath := filepath.Join(tmpDir, "memories.gob")
+	basePath := filepath.Join(tmpDir, "memories.gob")
+	store, err := storage.NewGobStorage(basePath)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
 
 	server := NewServer()
 	embedder := &mockEmbedder{dim: 8}
-	if err := server.Initialize(storagePath, embedder); err != nil {
+	if err := server.Initialize(store, embedder); err != nil {
 		t.Fatalf("Failed to initialize server: %v", err)
 	}
 	return server
@@ -133,8 +139,12 @@ func TestServerInitialize(t *testing.T) {
 func TestServerInitialize_NilEmbedder(t *testing.T) {
 	server := NewServer()
 	tmpDir := t.TempDir()
-	storagePath := filepath.Join(tmpDir, "memories.gob")
-	if err := server.Initialize(storagePath, nil); err == nil {
+	basePath := filepath.Join(tmpDir, "memories.gob")
+	store, err := storage.NewGobStorage(basePath)
+	if err != nil {
+		t.Fatalf("Failed to create storage: %v", err)
+	}
+	if err := server.Initialize(store, nil); err == nil {
 		t.Error("Initialize with nil embedder should fail")
 	}
 }

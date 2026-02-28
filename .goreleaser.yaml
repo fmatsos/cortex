@@ -46,6 +46,7 @@ archives:
       - LICENSE
       - CHANGELOG.md
       - docs/*
+      - bin/zvec-server.py
 
 checksum:
   name_template: 'checksums.txt'

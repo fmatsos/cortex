@@ -145,9 +145,11 @@ func DefaultMarkdownTemplateConfig() *MarkdownTemplateConfig {
 
 // StorageConfig contains storage backend configuration
 type StorageConfig struct {
-	Backend string `mapstructure:"backend"` // gob | sqlite
-	Path    string `mapstructure:"path"`    // data directory path
-	Mode    string `mapstructure:"mode"`    // single | multi (single file vs one file per memory)
+	Backend       string `mapstructure:"backend"`        // gob | zvec
+	Path          string `mapstructure:"path"`           // data directory path
+	Mode          string `mapstructure:"mode"`           // single | multi (single file vs one file per memory)
+	ZvecPort      int    `mapstructure:"zvec_port"`      // port for zvec sidecar (0 = auto)
+	ZvecDimension int    `mapstructure:"zvec_dimension"` // embedding dimension for zvec (default 768)
 }
 
 // EmbeddingsConfig contains embedding provider configuration
@@ -178,9 +180,11 @@ type OutputConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Storage: StorageConfig{
-			Backend: "gob",
-			Path:    defaultDataPath(),
-			Mode:    "single",
+			Backend:       "gob",
+			Path:          defaultDataPath(),
+			Mode:          "single",
+			ZvecPort:      0,
+			ZvecDimension: 768,
 		},
 		Embeddings: EmbeddingsConfig{
 			Provider:      "ollama",
@@ -407,6 +411,8 @@ func (m *Manager) bindEnvVars() {
 	_ = m.v.BindEnv("storage.backend", "CORTEX_STORAGE_BACKEND")
 	_ = m.v.BindEnv("storage.path", "CORTEX_STORAGE_PATH")
 	_ = m.v.BindEnv("storage.mode", "CORTEX_STORAGE_MODE")
+	_ = m.v.BindEnv("storage.zvec_port", "CORTEX_STORAGE_ZVEC_PORT")
+	_ = m.v.BindEnv("storage.zvec_dimension", "CORTEX_STORAGE_ZVEC_DIMENSION")
 
 	// Embeddings
 	_ = m.v.BindEnv("embeddings.provider", "CORTEX_EMBEDDINGS_PROVIDER")
@@ -455,6 +461,8 @@ func (m *Manager) setDefaults() {
 	m.v.SetDefault("storage.backend", defaults.Storage.Backend)
 	m.v.SetDefault("storage.path", defaults.Storage.Path)
 	m.v.SetDefault("storage.mode", defaults.Storage.Mode)
+	m.v.SetDefault("storage.zvec_port", defaults.Storage.ZvecPort)
+	m.v.SetDefault("storage.zvec_dimension", defaults.Storage.ZvecDimension)
 
 	// Embeddings defaults
 	m.v.SetDefault("embeddings.provider", defaults.Embeddings.Provider)
@@ -578,6 +586,8 @@ storage:
   backend: gob                              # gob | sqlite
   path: .agents/cortex                          # project-local storage
   mode: single                              # single | multi (single file vs one file per memory)
+  zvec_port: 0                              # zvec sidecar port (0 = auto-detect free port)
+  zvec_dimension: 768                       # embedding dimension for zvec (must match your embedder)
 
 embeddings:
   provider: ollama

@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"path/filepath"
-
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
@@ -43,10 +41,9 @@ func GetConfigPath() string {
 }
 
 // initStorage initializes storage from the global configuration
-func initStorage() (*storage.GobStorage, error) {
+func initStorage() (storage.Storage, error) {
 	cfg := config.Global()
-	path := filepath.Join(cfg.Storage.Path, "memories.gob")
-	return storage.NewGobStorage(path)
+	return storage.NewStorage(&cfg.Storage)
 }
 
 // initEmbedder initializes the embedder from the global configuration

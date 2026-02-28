@@ -51,18 +51,16 @@ func (s *Server) SetVerboseLevel(level int) { s.verboseLevel = level }
 // MCPServer returns the underlying mcp-go server for transport binding.
 func (s *Server) MCPServer() *mcpserver.MCPServer { return s.mcp }
 
-// Initialize sets up the memory service
-func (s *Server) Initialize(storagePath string, embedder memory.Embedder) error {
+// Initialize sets up the memory service with the provided storage and embedder.
+func (s *Server) Initialize(store storage.Storage, embedder memory.Embedder) error {
 	if embedder == nil {
 		return fmt.Errorf("embedder is required")
 	}
+	if store == nil {
+		return fmt.Errorf("storage is required")
+	}
 
 	s.embedder = embedder
-
-	store, err := storage.NewGobStorage(storagePath)
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
-	}
 	s.storage = store
 
 	s.service = memory.NewMemoryService(store, embedder)
