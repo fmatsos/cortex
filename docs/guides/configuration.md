@@ -18,15 +18,17 @@ This document provides a complete reference for configuring Cortex.
 The default configuration file location is:
 
 ```
-~/.config/cortex-ai/config.yaml
+.ai/cortex/config.yaml
 ```
+
+> Configuration is **project-local** by default. The `.ai/cortex/` directory is created in the current working directory when Cortex first runs. Override the location with `CORTEX_BASE_PATH` or the `--config` flag.
 
 ### Default Configuration
 
 ```yaml
 storage:
   backend: gob
-  path: ~/.local/share/cortex-ai
+  path: .ai/cortex
 
 embeddings:
   provider: ollama
@@ -78,13 +80,12 @@ graph LR
     Storage --> Path["path"]
 
     Backend --> Gob["gob (default)"]
-    Backend --> SQLite["sqlite (planned)"]
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `storage.backend` | string | `gob` | Storage backend to use (`gob` or `sqlite`) |
-| `storage.path` | string | `~/.local/share/cortex-ai` | Directory for storing memories |
+| `storage.backend` | string | `gob` | Storage backend to use (only `gob` is currently supported) |
+| `storage.path` | string | `.ai/cortex` | Directory for storing memories |
 
 ### Embeddings Section
 
@@ -458,9 +459,11 @@ cortex search "authentication issues"
 | Flag | Short | Required | Description |
 |------|-------|----------|-------------|
 | `--title` | `-t` | Yes | Memory title |
-| `--type` | | Yes | Memory type(s), comma-separated |
+| `--level` | `-l` | Yes | Memory level: `working`, `episodic`, `semantic` |
 | `--content` | `-c` | Yes | Memory content |
 | `--tags` | | No | Tags, comma-separated |
+| `--session` | | No | Session ID (required for working level) |
+| `--source` | | No | Source: `manual`, `auto`, `llm` (default: `manual`) |
 
 #### `cortex search`
 
@@ -468,14 +471,17 @@ cortex search "authentication issues"
 |------|-------|---------|-------------|
 | `--top` | `-n` | 5 | Maximum results |
 | `--min-score` | | 0.5 | Minimum similarity score |
-| `--type` | | | Filter by memory type |
+| `--level` | `-l` | | Filter by memory level(s), comma-separated |
+| `--session` | | | Filter working memories by session ID |
 
 #### `cortex list`
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--type` | | | Filter by memory type |
+| `--level` | `-l` | | Filter by memory level(s), comma-separated |
 | `--include-obsolete` | | false | Include obsolete memories |
+| `--limit` | | 0 | Limit number of results (0 = unlimited) |
+| `--reverse` | | false | Reverse sort order |
 
 #### `cortex export`
 
@@ -513,11 +519,10 @@ graph TB
 # CLI has: (none)
 
 # Result: mxbai-embed-large (from environment)
-cortex create --title "Test" --type solution --content "..."
+cortex create --title "Test" --level episodic --content "..."
 
-# But if CLI flag is used:
-# Result: all-minilm (from CLI flag)
-cortex create --title "Test" --type solution --content "..." --model all-minilm
+# But if CLI flag overrides:
+cortex search "auth" --level semantic
 ```
 
 ---
@@ -622,7 +627,7 @@ This opens the config file in your default editor (`$EDITOR` or `vim`).
 ### Reset to Defaults
 
 ```bash
-rm ~/.config/cortex-ai/config.yaml
+rm .ai/cortex/config.yaml
 cortex config --show  # Will use defaults
 ```
 

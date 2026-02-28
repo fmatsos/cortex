@@ -141,10 +141,10 @@ Create an issue with:
 
 Create default config:
 ```bash
-mkdir -p ~/.config/cortex-ai
+mkdir -p .ai/cortex
 
 # Copy default config
-cortex config --show > ~/.config/cortex-ai/config.yaml
+cortex config --show > .ai/cortex/config.yaml
 ```
 
 ### "Invalid configuration: unknown field"
@@ -166,7 +166,7 @@ Valid fields:
 ```yaml
 storage:
   backend: gob
-  path: ~/.local/share/cortex-ai
+  path: .ai/cortex
 
 embeddings:
   provider: ollama
@@ -324,8 +324,8 @@ embeddings:
 
 Fix permissions:
 ```bash
-chmod 700 ~/.local/share/cortex-ai/
-chmod 600 ~/.local/share/cortex-ai/*
+chmod 700 .ai/cortex/
+chmod 600 .ai/cortex/*
 ```
 
 ### "Disk full" error
@@ -349,7 +349,7 @@ chmod 600 ~/.local/share/cortex-ai/*
 3. Move storage directory:
    ```bash
    # Backup
-   cp -r ~/.local/share/cortex-ai/ /mnt/larger-disk/cortex-ai/
+   cp -r .ai/cortex/ /mnt/larger-disk/cortex-ai/
 
    # Update config
    storage:
@@ -366,7 +366,7 @@ chmod 600 ~/.local/share/cortex-ai/*
 
 1. **Backup first:**
    ```bash
-   cp -r ~/.local/share/cortex-ai/ ~/backup-cortex-ai/
+   cp -r .ai/cortex/ ~/backup-cortex-ai/
    ```
 
 2. **Identify the file:**
@@ -376,7 +376,7 @@ chmod 600 ~/.local/share/cortex-ai/*
 
 3. **Remove the corrupted file:**
    ```bash
-   rm ~/.local/share/cortex-ai/memories/<id>.gob
+   rm .ai/cortex/memories/<id>.gob
    ```
 
 4. **Restore from backup if needed:**
@@ -394,12 +394,12 @@ Rebuild the index:
 
 1. Backup the directory:
    ```bash
-   cp -r ~/.local/share/cortex-ai/ ~/backup/
+   cp -r .ai/cortex/ ~/backup/
    ```
 
 2. Delete index file:
    ```bash
-   rm ~/.local/share/cortex-ai/index.gob
+   rm .ai/cortex/index.gob
    ```
 
 3. Cortex will rebuild automatically on next operation
@@ -599,7 +599,7 @@ If much higher:
 1. **Check storage path:**
    ```bash
    cortex config --show | grep path
-   ls ~/.local/share/cortex-ai/memories/
+   ls .ai/cortex/memories/
    ```
 
 2. **Check if obsolete:**
@@ -609,7 +609,7 @@ If much higher:
 
 3. **Restore from backup:**
    ```bash
-   cp -r ~/backup-cortex-ai/* ~/.local/share/cortex-ai/
+   cp -r ~/backup-cortex-ai/* .ai/cortex/
    ```
 
 ---
@@ -643,8 +643,8 @@ ollama show nomic-embed-text
 cortex config --show
 
 # Storage info
-ls -lh ~/.local/share/cortex-ai/
-du -sh ~/.local/share/cortex-ai/
+ls -lh .ai/cortex/
+du -sh .ai/cortex/
 ```
 
 ### Report a Bug

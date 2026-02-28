@@ -550,7 +550,7 @@ stateDiagram-v2
 
 ```mermaid
 graph TB
-    subgraph "Storage Directory: ~/.local/share/cortex-ai/"
+    subgraph "Storage Directory: .ai/cortex/"
         Main[memories.gob<br/>Episodic + Semantic]
 
         subgraph "Working Directory"

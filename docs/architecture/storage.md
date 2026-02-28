@@ -162,7 +162,7 @@ sequenceDiagram
 ### Storage Directory Layout
 
 ```bash
-~/.local/share/cortex-ai/
+.ai/cortex/
 ├── memories.gob              # Persistent storage (episodic + semantic)
 ├── working/                  # Working memory directory
 │   ├── session-abc123.gob    # Session ABC123 memories
@@ -532,7 +532,7 @@ Gob files are compressed binary:
 
 ```bash
 # Backup entire storage directory
-cp -r ~/.local/share/cortex-ai ~/.local/share/cortex-ai.backup
+cp -r .ai/cortex .ai/cortex.backup
 ```
 
 #### Automated Backup
@@ -568,11 +568,11 @@ cortex export --all --output ./backup/
 pkill -f "cortex start-mcp-server"
 
 # Restore from tar backup
-tar -xzf ~/backups/cortex/cortex-20240115-143000.tar.gz -C ~/.local/share/cortex-ai
+tar -xzf ~/backups/cortex/cortex-20240115-143000.tar.gz -C .ai/cortex
 
 # Or restore from directory backup
-rm -rf ~/.local/share/cortex-ai
-cp -r ~/.local/share/cortex-ai.backup ~/.local/share/cortex-ai
+rm -rf .ai/cortex
+cp -r .ai/cortex.backup .ai/cortex
 ```
 
 ### Import from Markdown
@@ -601,10 +601,10 @@ Error: failed to load memories: gob: ...
 **Solutions**:
 ```bash
 # Option 1: Restore from backup
-cp ~/.local/share/cortex-ai.backup/memories.gob ~/.local/share/cortex-ai/
+cp .ai/cortex.backup/memories.gob .ai/cortex/
 
 # Option 2: Start fresh (WARNING: data loss)
-rm ~/.local/share/cortex-ai/memories.gob
+rm .ai/cortex/memories.gob
 
 # Option 3: Export to Markdown first (if partially readable)
 cortex list --json > memories.json
@@ -614,14 +614,14 @@ cortex list --json > memories.json
 
 **Symptoms**:
 ```
-Error: permission denied: ~/.local/share/cortex-ai/memories.gob
+Error: permission denied: .ai/cortex/memories.gob
 ```
 
 **Solutions**:
 ```bash
 # Fix permissions
-chmod 644 ~/.local/share/cortex-ai/memories.gob
-chmod 755 ~/.local/share/cortex-ai
+chmod 644 .ai/cortex/memories.gob
+chmod 755 .ai/cortex
 ```
 
 #### 3. Disk Space Issues
@@ -633,15 +633,15 @@ Error: no space left on device
 
 **Check Usage**:
 ```bash
-du -sh ~/.local/share/cortex-ai
-du -sh ~/.local/share/cortex-ai/working
+du -sh .ai/cortex
+du -sh .ai/cortex/working
 ```
 
 **Solutions**:
 ```bash
 # Remove old working memories
 cortex transfer-working --session old-session-id
-rm ~/.local/share/cortex-ai/working/session-old-session-id.gob
+rm .ai/cortex/working/session-old-session-id.gob
 
 # Run autoprune to clean up
 cortex autoprune --all
@@ -657,7 +657,7 @@ cortex autoprune --all
 cortex stats
 
 # Check file sizes
-ls -lh ~/.local/share/cortex-ai/
+ls -lh .ai/cortex/
 ```
 
 **Solutions**:
@@ -680,7 +680,7 @@ Error: working memory not found for session: dev-123
 **Check**:
 ```bash
 # List working files
-ls -la ~/.local/share/cortex-ai/working/
+ls -la .ai/cortex/working/
 
 # Search for memory in persistent storage
 cortex search "content from that session" --level episodic

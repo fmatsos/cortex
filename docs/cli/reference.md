@@ -22,7 +22,7 @@ Cortex provides a comprehensive CLI for managing your semantic memory system.
 graph LR
     User[User] --> CLI[cortex CLI]
 
-    CLI --> MO[Memory Ops<br/>create, search, list, get, delete]
+    CLI --> MO[Memory Ops<br/>create, search, list, list-consolidated, get, delete]
     CLI --> AO[Advanced Ops<br/>transfer, consolidate, autoprune, import, export]
     CLI --> SO[System Ops<br/>config, stats, completion, start-mcp-server]
 
@@ -39,7 +39,7 @@ graph LR
 
 | Category | Commands | Purpose |
 |----------|----------|---------|
-| **Memory Operations** | create, search, list, get, delete, mark-obsolete | Basic CRUD operations |
+| **Memory Operations** | create, search, list, list-consolidated, get, delete | Basic CRUD operations |
 | **Advanced Operations** | transfer-working, consolidate, autoprune, export, import | Memory lifecycle management |
 | **System Commands** | config, stats, completion, start-mcp-server | Configuration and utilities |
 
@@ -51,7 +51,7 @@ Available for all commands:
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--config` | `-c` | `~/.config/cortex-ai/config.yaml` | Configuration file path |
+| `--config` | `-c` | `.ai/cortex/config.yaml` | Configuration file path |
 | `--output` | `-o` | `text` | Output format: `text` or `json` |
 | `--help` | `-h` | - | Show command help |
 | `--version` | `-v` | - | Show version information |
@@ -383,38 +383,34 @@ Are you sure? (y/N): y
 
 ---
 
-### cortex mark-obsolete
+### cortex list-consolidated
 
-Soft-delete a memory (mark as obsolete).
+List memories filtered by a specific memory level.
 
 **Usage**:
 ```bash
-cortex mark-obsolete <id> [flags]
+cortex list-consolidated [flags]
 ```
 
-**Required Arguments**:
-- `<id>` - Memory ID (UUID)
-
 **Flags**:
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--json` | bool | false | Output as JSON |
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--level` | `-l` | string | - | Filter by level: `working`, `episodic`, `semantic` |
+| `--output` | `-o` | string | `text` | Output format: `text` or `json` |
 
 **Examples**:
 ```bash
-# Mark memory as obsolete
-cortex mark-obsolete 550e8400-e29b-41d4-a716-446655440000
+# List all working memories
+cortex list-consolidated --level working
+
+# List semantic memories as JSON
+cortex list-consolidated --level semantic --output json
+
+# List all episodic memories
+cortex list-consolidated --level episodic
 ```
 
-**Output**:
-```
-✓ Marked memory as obsolete: 550e8400-e29b-41d4-a716-446655440000
-
-Note: Obsolete memories are hidden by default but can be viewed with --include-obsolete flag.
-      Run 'cortex autoprune' to permanently remove obsolete memories.
-```
-
-> **Tip**: Obsolete memories can be restored by updating them. Use `delete` for permanent removal.
+> **Note**: Soft-deleting a memory (marking it as obsolete without permanent removal) is available via the `cortex_mark_obsolete` MCP tool. Use `cortex delete` for permanent removal from the CLI.
 
 ---
 
@@ -786,41 +782,51 @@ Manage configuration.
 cortex config [subcommand] [flags]
 ```
 
+Without a subcommand, displays the current configuration.
+
 **Subcommands**:
 | Subcommand | Description |
 |------------|-------------|
-| `show` | Display current configuration |
-| `edit` | Edit configuration in $EDITOR |
+| `init` | Create default configuration file |
 | `path` | Show configuration file path |
-| `schema <type>` | Export JSON schema |
-| `template validate <file>` | Validate template file |
+| `get <key>` | Get a specific configuration value by key |
+| `schema <type>` | Show or export JSON schema for a template type |
+| `template validate <file>` | Validate a template configuration file |
 
 **Examples**:
 ```bash
 # Show current configuration
-cortex config show
+cortex config
 
-# Edit configuration
-cortex config edit
+# Show configuration as JSON
+cortex config --json
+
+# Create default config file at .ai/cortex/config.yaml
+cortex config init
 
 # Show config file path
 cortex config path
 
+# Get a specific config value
+cortex config get storage.backend
+cortex config get embeddings.model
+
 # Export markdown template schema
+cortex config schema markdown
 cortex config schema markdown -o markdown-template.schema.json
 
 # Validate custom template
 cortex config template validate my-template.yaml
 ```
 
-**Output** (show):
+**Output** (default):
 ```
 Configuration:
 ──────────────
 
 Storage:
   Backend: gob
-  Path: /home/user/.local/share/cortex-ai
+  Path: .ai/cortex
 
 Embeddings:
   Provider: ollama

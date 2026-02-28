@@ -86,7 +86,6 @@ cortex start-mcp-server --transport sse --address :8080
 |----------|--------|-------------|
 | `/sse` | GET | SSE event stream for server messages |
 | `/message?session_id=<id>` | POST | Send JSON-RPC requests to the server |
-| `/health` | GET | Health check endpoint |
 
 **Connection Flow:**
 
@@ -167,6 +166,10 @@ Add to your Cursor MCP settings:
 |------|---------|-------------|
 | `--transport` | `stdio` | Transport mode: `stdio` or `sse` |
 | `--address` | `:8080` | Address for SSE transport (e.g., `:8080` or `127.0.0.1:8080`) |
+| `--no-logs` | `false` | Disable all logging output |
+| `--v` | `false` | Verbose logging (level 1: MCP methods) |
+| `--vv` | `false` | More verbose (level 2: tool calls) |
+| `--vvv` | `false` | Debug logging (level 3: full JSON payloads) |
 
 ## Available Tools
 
@@ -689,7 +692,7 @@ Return JSON only:
 ## Environment Variables
 
 **Storage:**
-- `CORTEX_STORAGE_PATH`: Path to the storage directory (default: `~/.local/share/cortex-ai`)
+- `CORTEX_STORAGE_PATH`: Path to the storage directory (default: `.ai/cortex`)
 
 **Embeddings:**
 - `CORTEX_EMBEDDINGS_ENDPOINT`: Ollama endpoint (default: `http://localhost:11434`)
@@ -732,7 +735,7 @@ ollama pull nomic-embed-text
 Ensure the storage directory exists and is writable:
 
 ```bash
-mkdir -p ~/.local/share/cortex-ai
+mkdir -p .ai/cortex
 ```
 
 ### Debug Logging

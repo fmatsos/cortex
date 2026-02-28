@@ -6,7 +6,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](docs/MCP.md)
+[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](docs/cli/mcp.md)
 
 *Never forget what your AI learned. Build persistent memory for your development workflow.*
 
@@ -170,7 +170,7 @@ cortex export --all --output ./memories/
 | `list` | List memories with filtering |
 | `get` | Get a specific memory by ID |
 | `delete` | Delete a memory permanently |
-| `mark-obsolete` | Soft-delete a memory |
+| `list-consolidated` | List memories by level |
 
 ### Advanced Operations
 
@@ -191,7 +191,7 @@ cortex export --all --output ./memories/
 | `completion` | Generate shell completions (bash/zsh/fish/powershell) |
 | `start-mcp-server` | Start MCP server for AI assistant integration |
 
-> **📖 Full Reference:** See [CLI Reference](docs/CLI_REFERENCE.md) for detailed command documentation.
+> **📖 Full Reference:** See [CLI Reference](docs/cli/reference.md) for detailed command documentation.
 
 ---
 
@@ -249,7 +249,7 @@ graph LR
     style G fill:#d3f9d8,stroke:#37b24d
 ```
 
-> **📖 Full Guide:** See [MCP Integration](docs/MCP.md) for complete setup and usage.
+> **📖 Full Guide:** See [MCP Integration](docs/cli/mcp.md) for complete setup and usage.
 
 ---
 
@@ -258,26 +258,26 @@ graph LR
 ### Getting Started
 
 - **[Documentation Index](docs/INDEX.md)** - Complete documentation guide
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - All commands and options
-- **[Memory Model](docs/MEMORY_MODEL.md)** - Understanding memory layers and best practices
+- **[CLI Reference](docs/cli/reference.md)** - All commands and options
+- **[Memory Model](docs/architecture/memory-model.md)** - Understanding memory layers and best practices
 
 ### Integration & Configuration
 
-- **[MCP Integration](docs/MCP.md)** - Connect with Claude Code/Cursor
-- **[Configuration](docs/CONFIGURATION.md)** - Configuration reference
-- **[Markdown Format](docs/MARKDOWN_FORMAT.md)** - Import/export format specification
+- **[MCP Integration](docs/cli/mcp.md)** - Connect with Claude Code/Cursor
+- **[Configuration](docs/guides/configuration.md)** - Configuration reference
+- **[Markdown Format](docs/guides/markdown-format.md)** - Import/export format specification
 
 ### Architecture & Development
 
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
-- **[Storage](docs/STORAGE.md)** - Storage implementation details
-- **[Embeddings](docs/EMBEDDINGS.md)** - Vector generation and Ollama integration
-- **[Development](docs/DEVELOPMENT.md)** - Development setup and contribution guide
+- **[Architecture](docs/architecture/overview.md)** - System design and components
+- **[Storage](docs/architecture/storage.md)** - Storage implementation details
+- **[Embeddings](docs/architecture/embeddings.md)** - Vector generation and Ollama integration
+- **[Development](docs/contributing/development.md)** - Development setup and contribution guide
 
 ### Help & Troubleshooting
 
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-- **[Contributing](docs/CONTRIBUTING.md)** - How to contribute
+- **[Troubleshooting](docs/guides/troubleshooting.md)** - Common issues and solutions
+- **[Contributing](docs/contributing/contributing.md)** - How to contribute
 
 ---
 
@@ -352,7 +352,7 @@ cortex transfer-working --session session-fix-sil-123
 | `feature/JIRA-456/oauth` | `regex: ([A-Z]+-\d+)` | `session-JIRA-456` |
 | `hotfix/prod/db-leak` | `full` | `session-hotfix-prod-db-leak` |
 
-Configure via `~/.config/cortex-ai/config.yaml`:
+Configure via `.ai/cortex/config.yaml`:
 
 ```yaml
 session:
@@ -363,7 +363,7 @@ session:
   separator: "-"            # Separator for branch parts
 ```
 
-> **📖 Details:** See [Configuration Reference](docs/CONFIGURATION.md#session-section) for all session options.
+> **📖 Details:** See [Configuration Reference](docs/guides/configuration.md#session-section) for all session options.
 
 ---
 
@@ -416,7 +416,7 @@ graph TB
 ## 🗄️ Storage Structure
 
 ```bash
-~/.local/share/cortex-ai/
+.ai/cortex/                   # project-local (relative to CWD)
 ├── memories.gob              # Episodic + Semantic memories
 ├── working/
 │   ├── session-abc123.gob    # Working memory for session ABC123
@@ -432,9 +432,9 @@ graph TB
 ### Quick Configuration
 
 ```yaml
-# ~/.config/cortex-ai/config.yaml
+# .ai/cortex/config.yaml
 storage:
-  path: ~/.local/share/cortex-ai
+  path: .ai/cortex
 
 embeddings:
   provider: ollama
@@ -454,7 +454,7 @@ autoprune:
   duplicates_threshold: 0.92
 ```
 
-> **📖 Full Reference:** See [Configuration](docs/CONFIGURATION.md) for all options.
+> **📖 Full Reference:** See [Configuration](docs/guides/configuration.md) for all options.
 
 ---
 
@@ -503,7 +503,7 @@ make build
 make lint
 ```
 
-See [Development Guide](docs/DEVELOPMENT.md) for complete setup instructions.
+See [Development Guide](docs/contributing/development.md) for complete setup instructions.
 
 ---
 
@@ -511,9 +511,9 @@ See [Development Guide](docs/DEVELOPMENT.md) for complete setup instructions.
 
 We welcome contributions! Please see:
 
-- **[Contributing Guide](docs/CONTRIBUTING.md)** - How to contribute
-- **[Architecture](docs/ARCHITECTURE.md)** - System design
-- **[Development](docs/DEVELOPMENT.md)** - Development setup
+- **[Contributing Guide](docs/contributing/contributing.md)** - How to contribute
+- **[Architecture](docs/architecture/overview.md)** - System design
+- **[Development](docs/contributing/development.md)** - Development setup
 
 ---
 
