@@ -92,9 +92,9 @@ func (p *ZvecProcess) BaseURL() string {
 // sidecarPath returns the path to zvec-server.py.
 // It searches in the following order:
 //  1. CORTEX_ZVEC_SERVER environment variable (explicit override)
-//  2. Same directory as the current executable
-//  3. {exec_dir}/../bin/zvec-server.py (installed next to binary)
-//  4. ./bin/zvec-server.py (development working directory)
+//  2. Same directory as the current executable: {exec_dir}/zvec-server.py
+//  3. scripts/ subdirectory next to binary: {exec_dir}/scripts/zvec-server.py
+//  4. ./scripts/zvec-server.py (development working directory)
 func (p *ZvecProcess) sidecarPath() (string, error) {
 	if env := os.Getenv("CORTEX_ZVEC_SERVER"); env != "" {
 		if _, err := os.Stat(env); err == nil {
@@ -108,10 +108,10 @@ func (p *ZvecProcess) sidecarPath() (string, error) {
 		dir := filepath.Dir(execPath)
 		candidates = append(candidates,
 			filepath.Join(dir, "zvec-server.py"),
-			filepath.Join(dir, "..", "bin", "zvec-server.py"),
+			filepath.Join(dir, "scripts", "zvec-server.py"),
 		)
 	}
-	candidates = append(candidates, filepath.Join("bin", "zvec-server.py"))
+	candidates = append(candidates, filepath.Join("scripts", "zvec-server.py"))
 
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
