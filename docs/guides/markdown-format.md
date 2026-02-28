@@ -39,14 +39,14 @@ This format enables:
 
 ```mermaid
 flowchart LR
-    A[Markdown file<br/>(.md)] -->|cortex import --format markdown| B[Parse frontmatter]
+    A["Markdown file<br/>(.md)"] -->|cortex import --format markdown| B[Parse frontmatter]
     B --> C[Validate fields]
     C --> D[Generate embedding]
     D --> E[(Memory Store)]
 
     E -->|cortex export --format markdown| F[Serialize frontmatter]
     F --> G[Write content]
-    G --> H[Markdown file<br/>(.md)]
+    G --> H["Markdown file<br/>(.md)"]
 
     style A fill:#fff4e6,stroke:#fd7e14
     style E fill:#d3f9d8,stroke:#37b24d

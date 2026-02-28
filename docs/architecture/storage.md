@@ -36,9 +36,9 @@ graph TB
     end
 
     subgraph "In-Memory Structures"
-        PI[Persistent Index<br/>map[string]*Memory]
-        WI[Working Index<br/>map[session]map[id]*Memory]
-        VI[Vector Index<br/>[]vectorEntry]
+        PI["Persistent Index<br/>map[string]*Memory"]
+        WI["Working Index<br/>map[session]map[id]*Memory"]
+        VI["Vector Index<br/>[]vectorEntry"]
     end
 
     subgraph "Disk Files"

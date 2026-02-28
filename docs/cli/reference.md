@@ -24,7 +24,7 @@ graph LR
 
     CLI --> MO[Memory Ops<br/>create, search, list, list-consolidated, get, delete]
     CLI --> AO[Advanced Ops<br/>transfer, consolidate, autoprune, import, export]
-    CLI --> SO[System Ops<br/>config, stats, completion, start-mcp-server]
+    CLI --> SO[System Ops<br/>config, stats, completion, start-mcp-server, validate-template]
 
     MO --> Storage[(Storage)]
     AO --> Storage
@@ -41,7 +41,7 @@ graph LR
 |----------|----------|---------|
 | **Memory Operations** | create, search, list, list-consolidated, get, delete | Basic CRUD operations |
 | **Advanced Operations** | transfer-working, consolidate, autoprune, export, import | Memory lifecycle management |
-| **System Commands** | config, stats, completion, start-mcp-server | Configuration and utilities |
+| **System Commands** | config, stats, completion, start-mcp-server, validate-template | Configuration and utilities |
 
 ---
 
@@ -967,6 +967,10 @@ cortex start-mcp-server [flags]
 |------|------|---------|-------------|
 | `--transport` | string | stdio | Transport mode: stdio or sse |
 | `--address` | string | :8080 | Address for SSE transport |
+| `--v` | bool | false | Verbose level 1: log MCP method calls |
+| `--vv` | bool | false | Verbose level 2: log tool calls |
+| `--vvv` | bool | false | Verbose level 3: log full JSON payloads |
+| `--no-logs` | bool | false | Disable all server-side logging |
 
 **Examples**:
 ```bash
@@ -993,8 +997,14 @@ Tools available:
   - cortex_list
   - cortex_get
   - cortex_consolidate
+  - cortex_promote_memory
+  - cortex_update_memory
+  - cortex_mark_obsolete
+  - cortex_review_session
   - cortex_choose_memory_layer
   - cortex_choose_working_consolidation
+  - cortex_think_about_task_completion
+  - cortex_think_about_memory_maintenance
 
 Server ready. Waiting for messages on stdin...
 ```
@@ -1014,6 +1024,60 @@ Server listening on :8080
 ```
 
 > **Note**: For integration with Claude Code or Cursor, use the default stdio transport.
+
+---
+
+### cortex validate-template
+
+Validate a custom template file for memory or synthesis exports.
+
+**Usage**:
+```bash
+cortex validate-template <file> [flags]
+```
+
+**Flags**:
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--type` | `-t` | auto | Template type: auto, memory, synthesis, markdown |
+
+**Supported formats**:
+- `.yaml` / `.yml` — Structured template configuration
+- `.json` — JSON template configuration
+- `.tmpl` — Plain Go template (for memory body only)
+
+**Validation checks**:
+- File format and syntax
+- Go template syntax
+- Required fields
+- Type compatibility
+
+**Examples**:
+```bash
+# Auto-detect template type and validate
+cortex validate-template memory.yaml
+
+# Validate a synthesis template
+cortex validate-template synthesis.json --type synthesis
+
+# Validate a plain Go template
+cortex validate-template simple.tmpl
+```
+
+**Output** (valid):
+```
+✓ Template is valid (memory)
+  File: memory.yaml
+```
+
+**Output** (invalid):
+```
+✗ Template validation failed (memory)
+  File: memory.yaml
+
+Errors:
+  1. [body] missing required field
+```
 
 ---
 

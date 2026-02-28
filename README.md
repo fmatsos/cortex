@@ -233,21 +233,53 @@ Add to Cursor MCP settings:
 
 ```mermaid
 graph LR
-    A[AI Assistant] --> B[cortex_search]
-    A --> C[cortex_create]
-    A --> D[cortex_consolidate]
-    A --> E[cortex_list]
-    A --> F[cortex_get]
+    A[AI Assistant] --> Search[cortex_search]
+    A --> Create[cortex_create]
+    A --> List[cortex_list]
+    A --> Get[cortex_get]
+    A --> Consolidate[cortex_consolidate]
+    A --> Promote[cortex_promote_memory]
+    A --> Update[cortex_update_memory]
+    A --> Obsolete[cortex_mark_obsolete]
+    A --> Review[cortex_review_session]
+    A --> ChooseLayer[cortex_choose_memory_layer]
+    A --> ChooseWC[cortex_choose_working_consolidation]
+    A --> TaskComplete[cortex_think_about_task_completion]
+    A --> Maintenance[cortex_think_about_memory_maintenance]
 
-    B --> G[(Memory<br/>System)]
-    C --> G
-    D --> G
-    E --> G
-    F --> G
+    Search --> G[(Memory<br/>System)]
+    Create --> G
+    List --> G
+    Get --> G
+    Consolidate --> G
+    Promote --> G
+    Update --> G
+    Obsolete --> G
+    Review --> G
+    ChooseLayer --> G
+    ChooseWC --> G
+    TaskComplete --> G
+    Maintenance --> G
 
     style A fill:#e7f5ff,stroke:#228be6
     style G fill:#d3f9d8,stroke:#37b24d
 ```
+
+| Tool | Category | Description |
+|------|----------|-------------|
+| `cortex_search` | Query | Semantic similarity search across all memories |
+| `cortex_create` | Write | Create a new memory at any level |
+| `cortex_list` | Query | List memories with optional filters and pagination |
+| `cortex_get` | Query | Retrieve a specific memory by ID |
+| `cortex_consolidate` | Write | Consolidate a synthesis into memory with dedup |
+| `cortex_promote_memory` | Write | Promote a memory to a higher layer |
+| `cortex_update_memory` | Write | Update an existing memory's content or tags |
+| `cortex_mark_obsolete` | Write | Soft-delete a memory (mark as obsolete) |
+| `cortex_review_session` | Workflow | End-of-session review of working memories |
+| `cortex_choose_memory_layer` | Workflow | Decide which memory layer to target |
+| `cortex_choose_working_consolidation` | Workflow | Select which working memories to consolidate |
+| `cortex_think_about_task_completion` | Workflow | Post-task reflection checkpoint |
+| `cortex_think_about_memory_maintenance` | Workflow | Periodic memory health checkpoint |
 
 > **📖 Full Guide:** See [MCP Integration](docs/cli/mcp.md) for complete setup and usage.
 
