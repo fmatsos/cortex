@@ -1,18 +1,13 @@
 package cli
 
 import (
-	"path/filepath"
-
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
 
-var (
-	configPath     string
-	storageBackend string
-)
+var configPath string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -34,7 +29,6 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "Path to config file")
-	rootCmd.PersistentFlags().StringVar(&storageBackend, "storage", "gob", "Storage backend (gob|sqlite)")
 }
 
 // GetConfigPath returns the current config file path (for commands that need to display it)
@@ -42,11 +36,11 @@ func GetConfigPath() string {
 	return configPath
 }
 
-// initStorage initializes storage from the global configuration
-func initStorage() (*storage.GobStorage, error) {
+// initStorage initializes storage from the global configuration.
+// The backend is selected by cfg.Storage.Backend (default: "gob").
+func initStorage() (storage.Storage, error) {
 	cfg := config.Global()
-	path := filepath.Join(cfg.Storage.Path, "memories.gob")
-	return storage.NewGobStorage(path)
+	return storage.New(cfg.Storage)
 }
 
 // initEmbedder initializes the embedder from the global configuration
