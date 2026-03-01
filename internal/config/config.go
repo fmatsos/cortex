@@ -22,6 +22,33 @@ type Config struct {
 	MCP           MCPConfig           `mapstructure:"mcp"`
 	Autoprune     AutopruneConfig     `mapstructure:"autoprune"`
 	Session       SessionConfig       `mapstructure:"session"`
+	Hooks         HooksConfig         `mapstructure:"hooks"`
+}
+
+// HooksConfig contains configuration for Claude Code hook scripts.
+type HooksConfig struct {
+	SessionStart HooksSessionStartConfig `mapstructure:"session_start"`
+	Stop         HooksStopConfig         `mapstructure:"stop"`
+	PreCompact   HooksPreCompactConfig   `mapstructure:"pre_compact"`
+}
+
+// HooksSessionStartConfig contains configuration for the SessionStart hook.
+type HooksSessionStartConfig struct {
+	// NotificationPrompt is appended after the memory counts line in session-start.sh.
+	NotificationPrompt string `mapstructure:"notification_prompt"`
+}
+
+// HooksStopConfig contains configuration for the Stop hook.
+type HooksStopConfig struct {
+	// ReviewPrompt is shown to Claude on the first Stop event of each session.
+	ReviewPrompt string `mapstructure:"review_prompt"`
+}
+
+// HooksPreCompactConfig contains configuration for the PreCompact hook.
+type HooksPreCompactConfig struct {
+	// SummaryPrompt is appended to the compaction instructions, asking Claude to
+	// save a summary to working memory before context is truncated.
+	SummaryPrompt string `mapstructure:"summary_prompt"`
 }
 
 // ConsolidationConfig contains configuration for memory consolidation
@@ -229,7 +256,35 @@ func DefaultConfig() *Config {
 			StripPrefix:    "",
 			FallbackToUUID: true,
 		},
+		Hooks: HooksConfig{
+			SessionStart: HooksSessionStartConfig{
+				NotificationPrompt: defaultHooksSessionStartNotificationPrompt(),
+			},
+			Stop: HooksStopConfig{
+				ReviewPrompt: defaultHooksStopReviewPrompt(),
+			},
+			PreCompact: HooksPreCompactConfig{
+				SummaryPrompt: defaultHooksPreCompactSummaryPrompt(),
+			},
+		},
 	}
+}
+
+func defaultHooksSessionStartNotificationPrompt() string {
+	return "Use 'cortex list --level <semantic|episodic|working>' or 'cortex search \"<query>\"' to retrieve context as needed."
+}
+
+func defaultHooksStopReviewPrompt() string {
+	return "Memory review: Please decide if anything from this session should be saved. " +
+		"Use 'cortex consolidate --level semantic|episodic --content \"...\"' to create memories, " +
+		"or 'cortex delete <id>' to remove obsolete ones. " +
+		"When done, your next response will end the session normally."
+}
+
+func defaultHooksPreCompactSummaryPrompt() string {
+	return "Before compacting: please save a summary of this conversation to Cortex working memory using " +
+		"'cortex consolidate --level working --content \"Session summary: <what was accomplished, decisions made, current state, open questions>\"'. " +
+		"This preserves context across compaction."
 }
 
 func defaultChooseMemoryLayerPrompt() string {
@@ -445,6 +500,11 @@ func (m *Manager) bindEnvVars() {
 	_ = m.v.BindEnv("session.max_segments", "CORTEX_SESSION_MAX_SEGMENTS")
 	_ = m.v.BindEnv("session.strip_prefix", "CORTEX_SESSION_STRIP_PREFIX")
 	_ = m.v.BindEnv("session.fallback_to_uuid", "CORTEX_SESSION_FALLBACK_TO_UUID")
+
+	// Hooks
+	_ = m.v.BindEnv("hooks.session_start.notification_prompt", "CORTEX_HOOKS_SESSION_START_NOTIFICATION_PROMPT")
+	_ = m.v.BindEnv("hooks.stop.review_prompt", "CORTEX_HOOKS_STOP_REVIEW_PROMPT")
+	_ = m.v.BindEnv("hooks.pre_compact.summary_prompt", "CORTEX_HOOKS_PRE_COMPACT_SUMMARY_PROMPT")
 }
 
 // setDefaults sets default values
@@ -500,6 +560,11 @@ func (m *Manager) setDefaults() {
 	m.v.SetDefault("session.max_segments", defaults.Session.MaxSegments)
 	m.v.SetDefault("session.strip_prefix", defaults.Session.StripPrefix)
 	m.v.SetDefault("session.fallback_to_uuid", defaults.Session.FallbackToUUID)
+
+	// Hooks defaults
+	m.v.SetDefault("hooks.session_start.notification_prompt", defaults.Hooks.SessionStart.NotificationPrompt)
+	m.v.SetDefault("hooks.stop.review_prompt", defaults.Hooks.Stop.ReviewPrompt)
+	m.v.SetDefault("hooks.pre_compact.summary_prompt", defaults.Hooks.PreCompact.SummaryPrompt)
 }
 
 // Get returns the current configuration
