@@ -2,10 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/term"
 )
 
 // FormatLevel returns a colored memory level string.
@@ -108,20 +110,40 @@ func RenderTable(headers []string, rows [][]string) string {
 	return t.String()
 }
 
-// RenderDetail renders a key-value map inside a rounded border box.
-// lines is an ordered list of [key, value] pairs.
+// RenderDetail renders key-value pairs as a two-column table with a rounded border.
+// The title (if non-empty) appears above the table in bold. Terminal width is detected
+// automatically so that long values wrap within the value column; when running outside
+// a terminal the table expands to fit its content.
 func RenderDetail(title string, lines [][2]string) string {
 	var sb strings.Builder
 
+	sb.WriteString("\n")
 	if title != "" {
 		sb.WriteString(Bold.Render(title))
-		sb.WriteString("\n\n")
-	}
-
-	for _, kv := range lines {
-		sb.WriteString(KeyValue(kv[0], kv[1]))
 		sb.WriteString("\n")
 	}
 
-	return DetailBox.Render(sb.String())
+	rows := make([][]string, len(lines))
+	for i, kv := range lines {
+		rows[i] = []string{kv[0], kv[1]}
+	}
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(colorPrimary)).
+		BorderColumn(true).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 0 {
+				return Label.Padding(0, 1)
+			}
+			return lipgloss.NewStyle().Padding(0, 1)
+		}).
+		Rows(rows...)
+
+	if w, _, err := term.GetSize(os.Stdout.Fd()); err == nil && w > 0 {
+		t = t.Width(w)
+	}
+
+	sb.WriteString(t.String())
+	return sb.String()
 }
