@@ -218,16 +218,19 @@ func (s *LanceDBStorage) memoryToRecord(m *memory.Memory) (arrow.Record, error) 
 
 	newStr := func(val string) arrow.Array {
 		b := array.NewStringBuilder(pool)
+		defer b.Release()
 		b.Append(val)
 		return b.NewArray()
 	}
 	newBool := func(val bool) arrow.Array {
 		b := array.NewBooleanBuilder(pool)
+		defer b.Release()
 		b.Append(val)
 		return b.NewArray()
 	}
 	newI64 := func(val int64) arrow.Array {
 		b := array.NewInt64Builder(pool)
+		defer b.Release()
 		b.Append(val)
 		return b.NewArray()
 	}
@@ -237,9 +240,11 @@ func (s *LanceDBStorage) memoryToRecord(m *memory.Memory) (arrow.Record, error) 
 	floatB := array.NewFloat32Builder(pool)
 	floatB.AppendValues(f32vals, nil)
 	floatArr := floatB.NewArray()
+	floatB.Release()
 	listType := arrow.FixedSizeListOf(int32(len(m.Embedding)), arrow.PrimitiveTypes.Float32)
 	listData := array.NewData(listType, 1, []*arrowmem.Buffer{nil}, []arrow.ArrayData{floatArr.Data()}, 0, 0)
 	vecArr := array.NewFixedSizeListData(listData)
+	listData.Release()
 
 	cols := []arrow.Array{
 		newStr(m.ID),
@@ -264,7 +269,6 @@ func (s *LanceDBStorage) memoryToRecord(m *memory.Memory) (arrow.Record, error) 
 
 	// Release intermediate arrays; the record has retained them.
 	floatArr.Release()
-	vecArr.Release()
 	for _, col := range cols {
 		col.Release()
 	}
