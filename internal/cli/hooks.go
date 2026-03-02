@@ -57,9 +57,9 @@ func sessionStartScript(notificationPrompt string) string {
 		"\n" +
 		"STATS=$(cortex stats --json 2>/dev/null || true)\n" +
 		`if [ -n "$STATS" ]; then` + "\n" +
-		`  SEM=$(printf '%s' "$STATS" | grep -o '"semantic":[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
-		`  EPI=$(printf '%s' "$STATS" | grep -o '"episodic":[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
-		`  WRK=$(printf '%s' "$STATS" | grep -o '"working":[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
+		`  SEM=$(printf '%s' "$STATS" | grep -o '"semantic":[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
+		`  EPI=$(printf '%s' "$STATS" | grep -o '"episodic":[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
+		`  WRK=$(printf '%s' "$STATS" | grep -o '"working":[[:space:]]*[0-9]*' | grep -o '[0-9]*' || echo 0)` + "\n" +
 		`  echo "# Cortex Memory"` + "\n" +
 		`  echo ""` + "\n" +
 		`  echo "${SEM} semantic · ${EPI} episodic · ${WRK} working memories stored."` + "\n" +

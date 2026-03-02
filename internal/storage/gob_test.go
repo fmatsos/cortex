@@ -200,3 +200,113 @@ func TestGobStorage_Persistence(t *testing.T) {
 		t.Errorf("ID after reopen = %q, want %q", retrieved.ID, mem.ID)
 	}
 }
+
+func TestGobStorage_ListIncludeObsolete(t *testing.T) {
+	basePath := filepath.Join(t.TempDir(), "memories.gob")
+	store, err := NewGobStorage(basePath)
+	if err != nil {
+		t.Fatalf("NewGobStorage() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	now := time.Now()
+	sessionID := "test-session"
+
+	// Create memories at different levels
+	episodicMem := &memory.Memory{
+		ID:        uuid.New().String(),
+		Level:     memory.MemoryLevelEpisodic,
+		Title:     "Episodic",
+		Content:   "Episodic content",
+		Embedding: []float64{0.1, 0.2, 0.3},
+		Context:   memory.MemoryContext{Source: "manual", Timestamp: now},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	workingMem := &memory.Memory{
+		ID:        uuid.New().String(),
+		Level:     memory.MemoryLevelWorking,
+		Title:     "Working",
+		Content:   "Working content",
+		Embedding: []float64{0.4, 0.5, 0.6},
+		Context:   memory.MemoryContext{SessionID: sessionID, Source: "manual", Timestamp: now},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := store.Save(ctx, episodicMem); err != nil {
+		t.Fatalf("Save episodic error = %v", err)
+	}
+	if err := store.Save(ctx, workingMem); err != nil {
+		t.Fatalf("Save working error = %v", err)
+	}
+
+	// List before marking obsolete
+	listBefore, err := store.List(ctx, memory.ListOptions{})
+	if err != nil {
+		t.Fatalf("List() before obsolete error = %v", err)
+	}
+	if len(listBefore) != 2 {
+		t.Errorf("List count before obsolete = %d, want 2", len(listBefore))
+	}
+
+	// Mark episodic memory as obsolete
+	episodicMem.Obsolete = true
+	episodicMem.UpdatedAt = now
+	if err := store.Update(ctx, episodicMem); err != nil {
+		t.Fatalf("Update episodic to obsolete error = %v", err)
+	}
+
+	// Mark working memory as obsolete
+	workingMem.Obsolete = true
+	workingMem.UpdatedAt = now
+	if err := store.Update(ctx, workingMem); err != nil {
+		t.Fatalf("Update working to obsolete error = %v", err)
+	}
+
+	// List without IncludeObsolete (default: false)
+	listExcludeObsolete, err := store.List(ctx, memory.ListOptions{})
+	if err != nil {
+		t.Fatalf("List() exclude obsolete error = %v", err)
+	}
+	if len(listExcludeObsolete) != 0 {
+		t.Errorf("List exclude obsolete count = %d, want 0", len(listExcludeObsolete))
+	}
+
+	// List with IncludeObsolete: true
+	listIncludeObsolete, err := store.List(ctx, memory.ListOptions{IncludeObsolete: true})
+	if err != nil {
+		t.Fatalf("List() include obsolete error = %v", err)
+	}
+	if len(listIncludeObsolete) != 2 {
+		t.Errorf("List include obsolete count = %d, want 2", len(listIncludeObsolete))
+	}
+
+	// Verify both memories are marked obsolete in the results
+	allObsolete := true
+	for _, m := range listIncludeObsolete {
+		if !m.Obsolete {
+			allObsolete = false
+			break
+		}
+	}
+	if !allObsolete {
+		t.Errorf("Not all memories in include obsolete list are marked obsolete")
+	}
+
+	// Test filtering by level with IncludeObsolete
+	listEpisodicOnly, err := store.List(ctx, memory.ListOptions{
+		FilterLevels:    []memory.MemoryLevel{memory.MemoryLevelEpisodic},
+		IncludeObsolete: true,
+	})
+	if err != nil {
+		t.Fatalf("List() episodic with obsolete error = %v", err)
+	}
+	if len(listEpisodicOnly) != 1 {
+		t.Errorf("List episodic with obsolete count = %d, want 1", len(listEpisodicOnly))
+	}
+	if listEpisodicOnly[0].Level != memory.MemoryLevelEpisodic {
+		t.Errorf("Level = %q, want %q", listEpisodicOnly[0].Level, memory.MemoryLevelEpisodic)
+	}
+}

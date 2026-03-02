@@ -1,6 +1,6 @@
 {
   "name": "cortex_list",
-  "description": "List all memories",
+  "description": "List memories. Excludes obsolete memories by default; set include_obsolete=true to include them.",
   "inputSchema": {
     "type": "object",
     "properties": {
