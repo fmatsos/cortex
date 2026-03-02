@@ -47,7 +47,7 @@ go test ./internal/search  -bench=BenchmarkCosine -count=1
 ## Environment Variables (quick reference)
 
 ```bash
-CORTEX_STORAGE_PATH=.ai/cortex
+CORTEX_STORAGE_PATH=.agents/cortex
 CORTEX_EMBEDDINGS_ENDPOINT=http://localhost:11434
 CORTEX_EMBEDDINGS_MODEL=nomic-embed-text
 CORTEX_EMBEDDINGS_TIMEOUT=30s

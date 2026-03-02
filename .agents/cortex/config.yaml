@@ -3,7 +3,7 @@
 
 storage:
   backend: gob                              # gob | sqlite
-  path: .ai/cortex                          # project-local storage
+  path: .agents/cortex                          # project-local storage
   mode: single                              # single | multi (single file vs one file per memory)
 
 embeddings:

@@ -35,7 +35,7 @@
     "cortex": {
       "enabled": true,
       "type": "local",
-      "command": ["cortex", "-c", ".ai/cortex/config.yaml", "start-mcp-server"]
+      "command": ["cortex", "-c", ".agents/cortex/config.yaml", "start-mcp-server"]
     }
   },
   "tools": {

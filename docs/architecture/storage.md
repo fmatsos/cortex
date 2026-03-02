@@ -162,7 +162,7 @@ sequenceDiagram
 ### Storage Directory Layout
 
 ```bash
-.ai/cortex/
+.agents/cortex/
 ├── memories.gob              # Persistent storage (episodic + semantic)
 ├── working/                  # Working memory directory
 │   ├── session-abc123.gob    # Session ABC123 memories
@@ -532,7 +532,7 @@ Gob files are compressed binary:
 
 ```bash
 # Backup entire storage directory
-cp -r .ai/cortex .ai/cortex.backup
+cp -r .agents/cortex .agents/cortex.backup
 ```
 
 #### Automated Backup
@@ -568,11 +568,11 @@ cortex export --all --output ./backup/
 pkill -f "cortex start-mcp-server"
 
 # Restore from tar backup
-tar -xzf ~/backups/cortex/cortex-20240115-143000.tar.gz -C .ai/cortex
+tar -xzf ~/backups/cortex/cortex-20240115-143000.tar.gz -C .agents/cortex
 
 # Or restore from directory backup
-rm -rf .ai/cortex
-cp -r .ai/cortex.backup .ai/cortex
+rm -rf .agents/cortex
+cp -r .agents/cortex.backup .agents/cortex
 ```
 
 ### Import from Markdown
@@ -601,10 +601,10 @@ Error: failed to load memories: gob: ...
 **Solutions**:
 ```bash
 # Option 1: Restore from backup
-cp .ai/cortex.backup/memories.gob .ai/cortex/
+cp .agents/cortex.backup/memories.gob .agents/cortex/
 
 # Option 2: Start fresh (WARNING: data loss)
-rm .ai/cortex/memories.gob
+rm .agents/cortex/memories.gob
 
 # Option 3: Export to Markdown first (if partially readable)
 cortex list --json > memories.json
@@ -614,14 +614,14 @@ cortex list --json > memories.json
 
 **Symptoms**:
 ```
-Error: permission denied: .ai/cortex/memories.gob
+Error: permission denied: .agents/cortex/memories.gob
 ```
 
 **Solutions**:
 ```bash
 # Fix permissions
-chmod 644 .ai/cortex/memories.gob
-chmod 755 .ai/cortex
+chmod 644 .agents/cortex/memories.gob
+chmod 755 .agents/cortex
 ```
 
 #### 3. Disk Space Issues
@@ -633,15 +633,15 @@ Error: no space left on device
 
 **Check Usage**:
 ```bash
-du -sh .ai/cortex
-du -sh .ai/cortex/working
+du -sh .agents/cortex
+du -sh .agents/cortex/working
 ```
 
 **Solutions**:
 ```bash
 # Remove old working memories
 cortex transfer-working --session old-session-id
-rm .ai/cortex/working/session-old-session-id.gob
+rm .agents/cortex/working/session-old-session-id.gob
 
 # Run autoprune to clean up
 cortex autoprune --all
@@ -657,7 +657,7 @@ cortex autoprune --all
 cortex stats
 
 # Check file sizes
-ls -lh .ai/cortex/
+ls -lh .agents/cortex/
 ```
 
 **Solutions**:
@@ -680,7 +680,7 @@ Error: working memory not found for session: dev-123
 **Check**:
 ```bash
 # List working files
-ls -la .ai/cortex/working/
+ls -la .agents/cortex/working/
 
 # Search for memory in persistent storage
 cortex search "content from that session" --level episodic

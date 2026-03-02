@@ -89,7 +89,7 @@ cortex start-mcp-server
 ```yaml
 storage:
   backend: gob
-  path: .ai/cortex
+  path: .agents/cortex
 
 embeddings:
   provider: ollama

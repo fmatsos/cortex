@@ -141,10 +141,10 @@ Create an issue with:
 
 Create default config:
 ```bash
-mkdir -p .ai/cortex
+mkdir -p .agents/cortex
 
 # Copy default config
-cortex config --show > .ai/cortex/config.yaml
+cortex config --show > .agents/cortex/config.yaml
 ```
 
 ### "Invalid configuration: unknown field"
@@ -166,7 +166,7 @@ Valid fields:
 ```yaml
 storage:
   backend: gob
-  path: .ai/cortex
+  path: .agents/cortex
 
 embeddings:
   provider: ollama
@@ -324,8 +324,8 @@ embeddings:
 
 Fix permissions:
 ```bash
-chmod 700 .ai/cortex/
-chmod 600 .ai/cortex/*
+chmod 700 .agents/cortex/
+chmod 600 .agents/cortex/*
 ```
 
 ### "Disk full" error
@@ -349,7 +349,7 @@ chmod 600 .ai/cortex/*
 3. Move storage directory:
    ```bash
    # Backup
-   cp -r .ai/cortex/ /mnt/larger-disk/cortex-ai/
+   cp -r .agents/cortex/ /mnt/larger-disk/cortex-ai/
 
    # Update config
    storage:
@@ -366,7 +366,7 @@ chmod 600 .ai/cortex/*
 
 1. **Backup first:**
    ```bash
-   cp -r .ai/cortex/ ~/backup-cortex-ai/
+   cp -r .agents/cortex/ ~/backup-cortex-ai/
    ```
 
 2. **Identify the file:**
@@ -376,7 +376,7 @@ chmod 600 .ai/cortex/*
 
 3. **Remove the corrupted file:**
    ```bash
-   rm .ai/cortex/memories/<id>.gob
+   rm .agents/cortex/memories/<id>.gob
    ```
 
 4. **Restore from backup if needed:**
@@ -394,12 +394,12 @@ Rebuild the index:
 
 1. Backup the directory:
    ```bash
-   cp -r .ai/cortex/ ~/backup/
+   cp -r .agents/cortex/ ~/backup/
    ```
 
 2. Delete index file:
    ```bash
-   rm .ai/cortex/index.gob
+   rm .agents/cortex/index.gob
    ```
 
 3. Cortex will rebuild automatically on next operation
@@ -599,7 +599,7 @@ If much higher:
 1. **Check storage path:**
    ```bash
    cortex config --show | grep path
-   ls .ai/cortex/memories/
+   ls .agents/cortex/memories/
    ```
 
 2. **Check if obsolete:**
@@ -609,7 +609,7 @@ If much higher:
 
 3. **Restore from backup:**
    ```bash
-   cp -r ~/backup-cortex-ai/* .ai/cortex/
+   cp -r ~/backup-cortex-ai/* .agents/cortex/
    ```
 
 ---
@@ -643,8 +643,8 @@ ollama show nomic-embed-text
 cortex config --show
 
 # Storage info
-ls -lh .ai/cortex/
-du -sh .ai/cortex/
+ls -lh .agents/cortex/
+du -sh .agents/cortex/
 ```
 
 ### Report a Bug

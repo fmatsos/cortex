@@ -562,7 +562,7 @@ CORTEX_EMBEDDINGS_MAX_RETRIES=3
 ### Config File
 
 ```yaml
-# .ai/cortex/config.yaml
+# .agents/cortex/config.yaml
 embeddings:
   provider: ollama
   endpoint: http://localhost:11434

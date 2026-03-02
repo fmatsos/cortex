@@ -103,7 +103,7 @@ Plain Go template (memory body only):
 
 ### From Config File
 
-Add to `.ai/cortex/config.yaml`:
+Add to `.agents/cortex/config.yaml`:
 
 ```yaml
 templates:

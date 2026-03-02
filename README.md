@@ -384,7 +384,7 @@ cortex transfer-working --session session-fix-sil-123
 | `feature/JIRA-456/oauth` | `regex: ([A-Z]+-\d+)` | `session-JIRA-456` |
 | `hotfix/prod/db-leak` | `full` | `session-hotfix-prod-db-leak` |
 
-Configure via `.ai/cortex/config.yaml`:
+Configure via `.agents/cortex/config.yaml`:
 
 ```yaml
 session:
@@ -448,7 +448,7 @@ graph TB
 ## 🗄️ Storage Structure
 
 ```bash
-.ai/cortex/                   # project-local (relative to CWD)
+.agents/cortex/                   # project-local (relative to CWD)
 ├── memories.gob              # Episodic + Semantic memories
 ├── working/
 │   ├── session-abc123.gob    # Working memory for session ABC123
@@ -464,9 +464,9 @@ graph TB
 ### Quick Configuration
 
 ```yaml
-# .ai/cortex/config.yaml
+# .agents/cortex/config.yaml
 storage:
-  path: .ai/cortex
+  path: .agents/cortex
 
 embeddings:
   provider: ollama

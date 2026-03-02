@@ -315,13 +315,13 @@ Return JSON only:
 }
 
 // defaultBasePath returns the default base directory for all Cortex data
-// Uses .ai/cortex in the current directory (project-local storage)
+// Uses .agents/cortex in the current directory (project-local storage)
 // Can be overridden via CORTEX_BASE_PATH environment variable
 func defaultBasePath() string {
 	if basePath := os.Getenv("CORTEX_BASE_PATH"); basePath != "" {
 		return basePath
 	}
-	return filepath.Join(".ai", "cortex")
+	return filepath.Join(".agents", "cortex")
 }
 
 // defaultDataPath returns the default data directory path
@@ -370,7 +370,7 @@ func (m *Manager) Load() (*Config, error) {
 	if m.cfgFile != "" {
 		m.v.SetConfigFile(m.cfgFile)
 	} else {
-		m.v.AddConfigPath(defaultConfigPath()) // .ai/cortex
+		m.v.AddConfigPath(defaultConfigPath()) // .agents/cortex
 		m.v.AddConfigPath(".")                 // current directory
 	}
 
@@ -576,7 +576,7 @@ func WriteDefaultConfig() error {
 
 storage:
   backend: gob                              # gob | sqlite
-  path: .ai/cortex                          # project-local storage
+  path: .agents/cortex                          # project-local storage
   mode: single                              # single | multi (single file vs one file per memory)
 
 embeddings:

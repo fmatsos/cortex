@@ -383,7 +383,7 @@ Cortex automatically derives session IDs from your git branch name, making sessi
 | `feature/JIRA-456/auth` | `regex` | `pattern: '([A-Z]+-\d+)'` | `session-JIRA-456` |
 | `hotfix/prod/db-leak` | `full` | All segments | `session-hotfix-prod-db-leak` |
 
-Configure in `.ai/cortex/config.yaml`:
+Configure in `.agents/cortex/config.yaml`:
 ```yaml
 session:
   auto_derive: true          # Enable auto-derivation (default)

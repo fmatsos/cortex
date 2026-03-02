@@ -51,7 +51,7 @@ Available for all commands:
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--config` | `-c` | `.ai/cortex/config.yaml` | Configuration file path |
+| `--config` | `-c` | `.agents/cortex/config.yaml` | Configuration file path |
 | `--output` | `-o` | `text` | Output format: `text` or `json` |
 | `--help` | `-h` | - | Show command help |
 | `--version` | `-v` | - | Show version information |
@@ -801,7 +801,7 @@ cortex config
 # Show configuration as JSON
 cortex config --json
 
-# Create default config file at .ai/cortex/config.yaml
+# Create default config file at .agents/cortex/config.yaml
 cortex config init
 
 # Show config file path
@@ -826,7 +826,7 @@ Configuration:
 
 Storage:
   Backend: gob
-  Path: .ai/cortex
+  Path: .agents/cortex
 
 Embeddings:
   Provider: ollama

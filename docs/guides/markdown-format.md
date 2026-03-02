@@ -301,7 +301,7 @@ cortex config template validate my-template.yaml
 ### Using Templates in Config
 
 ```yaml
-# .ai/cortex/config.yaml
+# .agents/cortex/config.yaml
 templates:
   markdown:
     synthesis:

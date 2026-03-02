@@ -692,7 +692,7 @@ Return JSON only:
 ## Environment Variables
 
 **Storage:**
-- `CORTEX_STORAGE_PATH`: Path to the storage directory (default: `.ai/cortex`)
+- `CORTEX_STORAGE_PATH`: Path to the storage directory (default: `.agents/cortex`)
 
 **Embeddings:**
 - `CORTEX_EMBEDDINGS_ENDPOINT`: Ollama endpoint (default: `http://localhost:11434`)
@@ -735,7 +735,7 @@ ollama pull nomic-embed-text
 Ensure the storage directory exists and is writable:
 
 ```bash
-mkdir -p .ai/cortex
+mkdir -p .agents/cortex
 ```
 
 ### Debug Logging

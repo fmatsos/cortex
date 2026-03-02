@@ -18,17 +18,17 @@ This document provides a complete reference for configuring Cortex.
 The default configuration file location is:
 
 ```
-.ai/cortex/config.yaml
+.agents/cortex/config.yaml
 ```
 
-> Configuration is **project-local** by default. The `.ai/cortex/` directory is created in the current working directory when Cortex first runs. Override the location with `CORTEX_BASE_PATH` or the `--config` flag.
+> Configuration is **project-local** by default. The `.agents/cortex/` directory is created in the current working directory when Cortex first runs. Override the location with `CORTEX_BASE_PATH` or the `--config` flag.
 
 ### Default Configuration
 
 ```yaml
 storage:
   backend: gob
-  path: .ai/cortex
+  path: .agents/cortex
 
 embeddings:
   provider: ollama
@@ -85,7 +85,7 @@ graph LR
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `storage.backend` | string | `gob` | Storage backend to use (only `gob` is currently supported) |
-| `storage.path` | string | `.ai/cortex` | Directory for storing memories |
+| `storage.path` | string | `.agents/cortex` | Directory for storing memories |
 
 ### Embeddings Section
 
@@ -627,7 +627,7 @@ This opens the config file in your default editor (`$EDITOR` or `vim`).
 ### Reset to Defaults
 
 ```bash
-rm .ai/cortex/config.yaml
+rm .agents/cortex/config.yaml
 cortex config --show  # Will use defaults
 ```
 
