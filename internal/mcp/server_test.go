@@ -3,11 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/cortex-ai/cortex-ai/internal/config"
 )
 
 // mockEmbedder implements memory.Embedder for testing
@@ -65,12 +66,13 @@ func resultText(t *testing.T, result *mcpgo.CallToolResult) string {
 // newTestServer creates a server with real storage for integration tests
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
-	tmpDir := t.TempDir()
-	storagePath := filepath.Join(tmpDir, "memories.gob")
+	cfg := config.Global()
+	cfg.Storage.Backend = "gob"
+	cfg.Storage.Path = t.TempDir()
 
 	server := NewServer()
 	embedder := &mockEmbedder{dim: 8}
-	if err := server.Initialize(storagePath, embedder); err != nil {
+	if err := server.Initialize(embedder); err != nil {
 		t.Fatalf("Failed to initialize server: %v", err)
 	}
 	return server
@@ -132,9 +134,7 @@ func TestServerInitialize(t *testing.T) {
 
 func TestServerInitialize_NilEmbedder(t *testing.T) {
 	server := NewServer()
-	tmpDir := t.TempDir()
-	storagePath := filepath.Join(tmpDir, "memories.gob")
-	if err := server.Initialize(storagePath, nil); err == nil {
+	if err := server.Initialize(nil); err == nil {
 		t.Error("Initialize with nil embedder should fail")
 	}
 }

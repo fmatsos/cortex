@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	charmlog "github.com/charmbracelet/log"
@@ -145,9 +144,8 @@ func runStartMCPServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize embedder: %w", err)
 	}
 
-	storagePath := filepath.Join(cfg.Storage.Path, "memories.gob")
-	logger.Info("initializing storage", "path", storagePath)
-	if err := server.Initialize(storagePath, embedder); err != nil {
+	logger.Info("initializing storage", "backend", cfg.Storage.Backend, "path", cfg.Storage.Path)
+	if err := server.Initialize(embedder); err != nil {
 		return fmt.Errorf("failed to initialize MCP server: %w", err)
 	}
 	defer func() { _ = server.Close() }()

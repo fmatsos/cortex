@@ -172,7 +172,7 @@ func DefaultMarkdownTemplateConfig() *MarkdownTemplateConfig {
 
 // StorageConfig contains storage backend configuration
 type StorageConfig struct {
-	Backend string `mapstructure:"backend"` // gob | sqlite
+	Backend string `mapstructure:"backend"` // gob (default, no CGO) | lancedb (requires -tags lancedb)
 	Path    string `mapstructure:"path"`    // data directory path
 	Mode    string `mapstructure:"mode"`    // single | multi (single file vs one file per memory)
 }
