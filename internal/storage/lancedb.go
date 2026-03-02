@@ -366,15 +366,16 @@ func arrowRowToMemory(row map[string]interface{}) (*memory.Memory, error) {
 	return m, nil
 }
 
-// Get retrieves a single memory by ID, searching across all level tables.
+// Get retrieves a single memory by full ID or unambiguous ID prefix, searching across all level tables.
 func (s *LanceDBStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
-	filter := fmt.Sprintf("id = '%s'", escapeSQLString(id))
 	s.tablesMu.RLock()
 	tables := s.snapshotTables()
 	s.tablesMu.RUnlock()
 
+	// Exact match first.
+	exactFilter := fmt.Sprintf("id = '%s'", escapeSQLString(id))
 	for _, tbl := range tables {
-		rows, err := tbl.SelectWithFilter(ctx, filter)
+		rows, err := tbl.SelectWithFilter(ctx, exactFilter)
 		if err != nil {
 			return nil, fmt.Errorf("get: %w", err)
 		}
@@ -382,7 +383,31 @@ func (s *LanceDBStorage) Get(ctx context.Context, id string) (*memory.Memory, er
 			return arrowRowToMemory(rows[0])
 		}
 	}
-	return nil, fmt.Errorf("memory not found: %s", id)
+
+	// Prefix scan.
+	prefixFilter := fmt.Sprintf("id LIKE '%s%%'", escapeSQLString(id))
+	var matches []*memory.Memory
+	for _, tbl := range tables {
+		rows, err := tbl.SelectWithFilter(ctx, prefixFilter)
+		if err != nil {
+			return nil, fmt.Errorf("get prefix: %w", err)
+		}
+		for _, row := range rows {
+			m, decodeErr := arrowRowToMemory(row)
+			if decodeErr != nil {
+				return nil, fmt.Errorf("get prefix decode: %w", decodeErr)
+			}
+			matches = append(matches, m)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("memory not found: %s", id)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("ambiguous ID prefix %q matches %d memories", id, len(matches))
+	}
 }
 
 // List returns memories across the specified levels with optional filtering and sorting.
@@ -440,9 +465,14 @@ func (s *LanceDBStorage) List(ctx context.Context, opts memory.ListOptions) ([]*
 	return results, nil
 }
 
-// Delete removes the memory with the given ID from whichever table holds it.
+// Delete removes the memory with the given full ID or unambiguous ID prefix from whichever table holds it.
 func (s *LanceDBStorage) Delete(ctx context.Context, id string) error {
-	predicate := fmt.Sprintf("id = '%s'", escapeSQLString(id))
+	// Resolve to full ID (handles prefix matching).
+	m, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	predicate := fmt.Sprintf("id = '%s'", escapeSQLString(m.ID))
 
 	s.tablesMu.RLock()
 	tables := s.snapshotTables()

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/cortex-ai/cortex-ai/internal/memory"
@@ -122,21 +123,63 @@ func (gs *GobStorage) saveWorking(m *memory.Memory) error {
 	return gs.flushWorking(sessionID)
 }
 
-// Get retrieves a memory by ID.
-func (gs *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
+// resolveID resolves a full or short (prefix) ID to a full memory ID.
+// Lock ordering: acquire mu before workingMu (same as other methods).
+func (gs *GobStorage) resolveID(id string) (string, error) {
 	gs.mu.RLock()
-	if m, ok := gs.data.Memories[id]; ok {
+	if _, ok := gs.data.Memories[id]; ok {
+		gs.mu.RUnlock()
+		return id, nil
+	}
+	var matches []string
+	for k := range gs.data.Memories {
+		if strings.HasPrefix(k, id) {
+			matches = append(matches, k)
+		}
+	}
+	gs.mu.RUnlock()
+
+	gs.workingMu.RLock()
+	defer gs.workingMu.RUnlock()
+	for _, wd := range gs.workingData {
+		if _, ok := wd.Memories[id]; ok {
+			return id, nil
+		}
+		for k := range wd.Memories {
+			if strings.HasPrefix(k, id) {
+				matches = append(matches, k)
+			}
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("memory not found: %s", id)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("ambiguous ID prefix %q matches %d memories", id, len(matches))
+	}
+}
+
+// Get retrieves a memory by ID or unambiguous ID prefix.
+func (gs *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
+	fullID, err := gs.resolveID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	gs.mu.RLock()
+	if m, ok := gs.data.Memories[fullID]; ok {
 		gs.mu.RUnlock()
 		return m, nil
 	}
 	gs.mu.RUnlock()
 
-	// gs.mu is released before acquiring workingMu to avoid lock ordering inversion
-	// with savePersistent which holds workingMu before acquiring gs.mu.
 	gs.workingMu.RLock()
 	defer gs.workingMu.RUnlock()
 	for _, wd := range gs.workingData {
-		if m, ok := wd.Memories[id]; ok {
+		if m, ok := wd.Memories[fullID]; ok {
 			return m, nil
 		}
 	}
@@ -193,12 +236,17 @@ func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*mem
 	return memories, nil
 }
 
-// Delete permanently deletes a memory.
+// Delete permanently deletes a memory by full ID or unambiguous ID prefix.
 func (gs *GobStorage) Delete(ctx context.Context, id string) error {
+	fullID, err := gs.resolveID(id)
+	if err != nil {
+		return err
+	}
+
 	gs.mu.Lock()
-	if _, ok := gs.data.Memories[id]; ok {
-		delete(gs.data.Memories, id)
-		delete(gs.data.Index, id)
+	if _, ok := gs.data.Memories[fullID]; ok {
+		delete(gs.data.Memories, fullID)
+		delete(gs.data.Index, fullID)
 		gs.mu.Unlock()
 		return gs.flushPersistent()
 	}
@@ -207,9 +255,9 @@ func (gs *GobStorage) Delete(ctx context.Context, id string) error {
 	gs.workingMu.Lock()
 	defer gs.workingMu.Unlock()
 	for sessionID, wd := range gs.workingData {
-		if _, ok := wd.Memories[id]; ok {
-			delete(wd.Memories, id)
-			delete(wd.Index, id)
+		if _, ok := wd.Memories[fullID]; ok {
+			delete(wd.Memories, fullID)
+			delete(wd.Index, fullID)
 			return gs.flushWorking(sessionID)
 		}
 	}
