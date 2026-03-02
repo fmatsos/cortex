@@ -90,7 +90,7 @@ func outputGetText(cmd *cobra.Command, m *memory.Memory) error {
 		lines = append(lines, [2]string{"Status", tui.Warning.Render("obsolete")})
 	}
 
-	lines = append(lines, [2]string{"Content", "\n" + m.Content})
+	lines = append(lines, [2]string{"Content", m.Content})
 
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderDetail(m.Title, lines))
 	return nil
