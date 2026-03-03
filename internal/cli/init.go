@@ -13,8 +13,52 @@ const (
 	cortexRulesMarkerEnd   = "<!-- cortex-rules-end -->"
 )
 
-// cortexRulesSection returns the Markdown block injected into agent config files.
-func cortexRulesSection() string {
+// cortexCLIRulesSection returns the Markdown block for CLI binary usage.
+func cortexCLIRulesSection() string {
+	return `## Cortex – Persistent Memory
+
+**IMPORTANT: Always search Cortex memories BEFORE starting a task, and store what you learned AFTER completing it.**
+
+### When to Use Cortex (REQUIRED)
+
+Run ` + "`cortex`" + ` CLI commands proactively:
+
+- **Before any non-trivial task** — run ` + "`cortex search`" + ` first to surface relevant context
+- **After completing work** — store decisions, patterns, and findings
+- **When making architectural decisions** — check for prior context
+- **When debugging** — search for prior solutions to similar issues
+- When the user mentions "remember", "store", "recall", or "what did we..."
+
+### CLI Commands Reference
+
+| Command | When to use |
+|---------|-------------|
+| ` + "`cortex search \"<query>\"`" + ` | Find relevant context before starting a task |
+| ` + "`cortex create --title \"...\" --level <level> --content \"...\"`" + ` | Store new facts, decisions, or findings |
+| ` + "`cortex list [--level <level>]`" + ` | Browse memories by level |
+| ` + "`cortex get <id>`" + ` | Retrieve a specific memory by ID |
+| ` + "`cortex delete <id>`" + ` | Permanently remove a memory |
+| ` + "`cortex consolidate \"<synthesis>\" --level <level>`" + ` | Synthesise related memories into one |
+| ` + "`cortex transfer-working`" + ` | Promote all working memories to episodic at session end |
+| ` + "`cortex autoprune`" + ` | Remove duplicate and expired memories |
+
+### Memory Levels
+
+| Level | Use for | Retention |
+|-------|---------|-----------|
+| ` + "`working`" + ` | Session context, active tasks, debug notes | Until transferred |
+| ` + "`episodic`" + ` | Bug fixes, decisions, incidents, meetings | 90 days (default) |
+| ` + "`semantic`" + ` | Conventions, patterns, architecture, best practices | Permanent |
+
+### Workflow
+
+1. **Session start**: ` + "`cortex search \"<task topic>\"`" + ` to surface relevant context
+2. **During work**: ` + "`cortex create`" + ` to capture key decisions and findings
+3. **Session end**: ` + "`cortex transfer-working`" + ` to promote working memories to episodic`
+}
+
+// cortexMCPRulesSection returns the Markdown block for MCP tool usage.
+func cortexMCPRulesSection() string {
 	return `## Cortex – Persistent Memory
 
 **IMPORTANT: Always search Cortex memories BEFORE starting a task, and store what you learned AFTER completing it.**
@@ -66,8 +110,10 @@ var initCmd = &cobra.Command{
 	Short: "Initialise Cortex in the current project",
 	Long: `Inject Cortex agent rules into AGENTS.md and/or CLAUDE.md.
 
-By default, only the Cortex rules section is injected. Use --skills and --hooks
-to also install skill files and session hook scripts.
+By default, rules describe how to use the cortex CLI binary. Pass --mcp to
+inject rules for MCP tool usage instead.
+
+Use --skills and --hooks to also install skill files and session hook scripts.
 
 If neither AGENTS.md nor CLAUDE.md exists in the current directory, AGENTS.md
 is created. If CLAUDE.md is a symlink to AGENTS.md, it is not written separately.
@@ -75,7 +121,8 @@ is created. If CLAUDE.md is a symlink to AGENTS.md, it is not written separately
 Re-run with --force to update an existing Cortex rules section.
 
 Examples:
-  cortex init                    # inject rules into AGENTS.md / CLAUDE.md
+  cortex init                    # CLI rules into AGENTS.md / CLAUDE.md
+  cortex init --mcp              # MCP tool rules instead of CLI rules
   cortex init --skills           # rules + install skill files
   cortex init --hooks            # rules + install Claude Code hooks
   cortex init --skills --hooks   # rules + skills + hooks
@@ -85,12 +132,14 @@ Examples:
 
 var (
 	initForce  bool
+	initMCP    bool
 	initSkills bool
 	initHooks  bool
 )
 
 func init() {
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing Cortex rules section")
+	initCmd.Flags().BoolVar(&initMCP, "mcp", false, "Inject MCP tool rules instead of CLI binary rules")
 	initCmd.Flags().BoolVar(&initSkills, "skills", false, "Also install Cortex agent skill files")
 	initCmd.Flags().BoolVar(&initHooks, "hooks", false, "Also install Claude Code session hooks")
 	rootCmd.AddCommand(initCmd)
@@ -99,11 +148,16 @@ func init() {
 func runInit(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 
+	section := cortexCLIRulesSection()
+	if initMCP {
+		section = cortexMCPRulesSection()
+	}
+
 	targets := resolveInitTargets()
 
 	_, _ = fmt.Fprintln(out, "Injecting Cortex rules...")
 	for _, path := range targets {
-		if err := injectCortexRules(cmd, path, initForce); err != nil {
+		if err := injectCortexRules(cmd, path, section, initForce); err != nil {
 			return fmt.Errorf("failed to update %s: %w", path, err)
 		}
 	}
@@ -157,8 +211,8 @@ func resolveInitTargets() []string {
 }
 
 // injectCortexRules appends (or replaces) the Cortex rules section in the given file.
-func injectCortexRules(cmd *cobra.Command, filePath string, force bool) error {
-	section := cortexRulesMarkerStart + "\n" + cortexRulesSection() + "\n" + cortexRulesMarkerEnd
+func injectCortexRules(cmd *cobra.Command, filePath, sectionContent string, force bool) error {
+	section := cortexRulesMarkerStart + "\n" + sectionContent + "\n" + cortexRulesMarkerEnd
 
 	existing, err := os.ReadFile(filePath)
 	if os.IsNotExist(err) {

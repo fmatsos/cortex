@@ -785,20 +785,25 @@ cortex init [flags]
 **Flags**:
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--mcp` | false | Inject MCP tool rules instead of CLI binary rules |
 | `--skills` | false | Also install Cortex agent skill files |
 | `--hooks` | false | Also install Claude Code session hook scripts |
 | `--force` | false | Overwrite existing Cortex rules section |
 
 **Behaviour**:
+- By default, rules describe how to use the `cortex` CLI binary.
+- With `--mcp`, rules describe the MCP tool interface instead.
 - If `AGENTS.md` exists, the Cortex rules section is appended (or updated with `--force`).
-- If `CLAUDE.md` exists **and** is not a symlink to `AGENTS.md`, it is also updated.
 - If neither file exists, `AGENTS.md` is created.
 - The injected section is wrapped in HTML comment markers (`<!-- cortex-rules-start -->` / `<!-- cortex-rules-end -->`) for idempotent re-runs.
 
 **Examples**:
 ```bash
-# Inject Cortex rules only
+# CLI binary rules (default)
 cortex init
+
+# MCP tool rules instead
+cortex init --mcp
 
 # Rules + skill files + hooks
 cortex init --skills --hooks
