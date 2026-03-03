@@ -271,13 +271,18 @@ func DefaultConfig() *Config {
 }
 
 func defaultHooksSessionStartNotificationPrompt() string {
-	return "Use 'cortex list --level <semantic|episodic|working>' or 'cortex search \"<query>\"' to retrieve context as needed."
+	return "Working memories for this session are listed above. " +
+		"Use 'cortex get <id>' to load the full content of any relevant memory. " +
+		"Use 'cortex list --level <semantic|episodic|working>' or 'cortex search \"<query>\"' to retrieve additional context as needed."
 }
 
 func defaultHooksStopReviewPrompt() string {
-	return "Memory review: Please decide if anything from this session should be saved. " +
-		"Use 'cortex consolidate --level semantic|episodic --content \"...\"' to create memories, " +
-		"or 'cortex delete <id>' to remove obsolete ones. " +
+	return "Memory review: Please save any relevant context from this session to working memory first " +
+		"using 'cortex consolidate --level working --session $SESSION_ID --content \"...\"'. " +
+		"Then consolidate to episodic memory any completed work, decisions, or outcomes worth keeping in history " +
+		"using 'cortex consolidate --level episodic --content \"...\"'. " +
+		"Do NOT write directly to semantic memory here — semantic consolidation happens separately via memory maintenance. " +
+		"Use 'cortex delete <id>' to remove obsolete memories. " +
 		"When done, your next response will end the session normally."
 }
 
@@ -307,8 +312,11 @@ func defaultChooseWorkingConsolidationPrompt() string {
 Pick entries that capture completed work, decisions, or knowledge that should persist.
 Exclude transient notes that are only useful during the session.
 
+Target level must be episodic. Working memories are promoted to episodic here.
+Semantic consolidation happens separately during memory maintenance, not here.
+
 Return JSON only:
-{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic|semantic|mixed"}`
+{"selected_ids":["id1","id2"],"rationale":"short reason","suggested_level":"episodic"}`
 }
 
 func defaultReviewSessionPrompt() string {
@@ -316,17 +324,20 @@ func defaultReviewSessionPrompt() string {
 For each memory, decide what action to take:
 
 - promote_episodic: Valuable time-bound event, decision, or outcome worth keeping in history.
-- promote_semantic: Durable knowledge, pattern, or convention that should persist permanently.
 - mark_obsolete: Outdated, incorrect, or no longer relevant.
 - keep: Still active/relevant for ongoing work, leave as working.
 
+IMPORTANT: Do NOT promote directly to semantic. Semantic memories are created separately
+during periodic memory maintenance (cortex_think_about_memory_maintenance) once enough
+episodic evidence has accumulated.
+
 Consider:
-1. Does this capture a reusable insight or just a transient note?
+1. Does this capture a time-bound event or decision from this session?
 2. Is the information still accurate and relevant?
-3. Would this be useful for future sessions?
+3. Would this be useful for future sessions as historical context?
 
 Return JSON only:
-{"actions":[{"memory_id":"id","action":"promote_episodic|promote_semantic|mark_obsolete|keep","rationale":"short reason"}],"session_summary":"brief summary of session outcomes"}`
+{"actions":[{"memory_id":"id","action":"promote_episodic|mark_obsolete|keep","rationale":"short reason"}],"session_summary":"brief summary of session outcomes"}`
 }
 
 func defaultMemoryMaintenancePrompt() string {
@@ -359,14 +370,20 @@ Consider:
 3. What patterns, conventions, or best practices were discovered?
 4. What would be useful to remember for similar future tasks?
 
+Memory layer rules:
+- working: current session context, active tasks, scratch notes (requires session_id).
+- episodic: time-bound events, decisions, and outcomes from this task. Use for anything that happened.
+- semantic: ONLY for patterns or conventions with strong episodic backing already present.
+  Prefer episodic; promote to semantic via maintenance only after multiple confirming episodes.
+
 For each piece of knowledge, suggest:
-- level: episodic (time-bound event/decision) or semantic (durable knowledge/pattern).
+- level: working (session notes) or episodic (task events/decisions). Use semantic sparingly.
 - title: concise title for the memory.
 - content: detailed content to store.
 - tags: relevant tags for categorization.
 
 Return JSON only:
-{"memories_to_create":[{"level":"episodic|semantic","title":"concise title","content":"detailed content","tags":["tag1","tag2"]}],"rationale":"why these memories are valuable"}`
+{"memories_to_create":[{"level":"working|episodic|semantic","title":"concise title","content":"detailed content","tags":["tag1","tag2"]}],"rationale":"why these memories are valuable"}`
 }
 
 // defaultBasePath returns the default base directory for all Cortex data

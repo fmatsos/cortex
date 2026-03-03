@@ -50,6 +50,7 @@ type ListOptions struct {
 	Limit           int
 	SortBy          string
 	Reverse         bool
+	SessionID       string // if set, filters working memories to this session only
 }
 
 // CreateInput for creating new memories.

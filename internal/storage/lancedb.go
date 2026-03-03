@@ -447,6 +447,9 @@ func (s *LanceDBStorage) List(ctx context.Context, opts memory.ListOptions) ([]*
 			if decodeErr != nil {
 				return nil, fmt.Errorf("list decode: %w", decodeErr)
 			}
+			if opts.SessionID != "" && level == memory.MemoryLevelWorking && m.SessionID != opts.SessionID {
+				continue
+			}
 			results = append(results, m)
 		}
 	}

@@ -197,6 +197,9 @@ func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*mem
 	if includeWorking {
 		gs.workingMu.RLock()
 		for _, wd := range gs.workingData {
+			if opts.SessionID != "" && wd.SessionID != opts.SessionID {
+				continue
+			}
 			for _, m := range wd.Memories {
 				if !opts.IncludeObsolete && m.Obsolete {
 					continue

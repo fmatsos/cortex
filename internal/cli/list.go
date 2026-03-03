@@ -30,6 +30,7 @@ var (
 	listIncludeObsolete bool
 	listJSON            bool
 	listReverse         bool
+	listSession         string
 )
 
 func init() {
@@ -38,6 +39,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listIncludeObsolete, "include-obsolete", false, "Include obsolete memories")
 	listCmd.Flags().BoolVar(&listReverse, "reverse", false, "Reverse sort order")
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output as JSON")
+	listCmd.Flags().StringVar(&listSession, "session", "", "Filter working memories by session ID")
 
 	rootCmd.AddCommand(listCmd)
 }
@@ -69,6 +71,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		IncludeObsolete: listIncludeObsolete,
 		Limit:           listLimit,
 		Reverse:         listReverse,
+		SessionID:       listSession,
 	}
 
 	memories, err := storageBackend.List(ctx, opts)

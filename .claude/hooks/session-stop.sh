@@ -10,20 +10,7 @@
 
 command -v cortex >/dev/null 2>&1 || exit 0
 
-# Derive session ID from git branch (prefix mode, max 2 segments, separator '-').
-SESSION_ID="default"
-if command -v git >/dev/null 2>&1; then
-  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-  if [ -n "$BRANCH" ] && [ "$BRANCH" != "HEAD" ]; then
-    PART1=$(echo "$BRANCH" | cut -d'/' -f1)
-    PART2=$(echo "$BRANCH" | cut -d'/' -f2)
-    if [ -n "$PART2" ] && [ "$PART2" != "$PART1" ]; then
-      SESSION_ID="session-${PART1}-${PART2}"
-    else
-      SESSION_ID="session-${PART1}"
-    fi
-  fi
-fi
+SESSION_ID=$(cortex session id 2>/dev/null || echo "default")
 
 REVIEW_FLAG="${TMPDIR:-/tmp}/cortex-reviewed-${SESSION_ID}"
 
@@ -31,7 +18,7 @@ REVIEW_FLAG="${TMPDIR:-/tmp}/cortex-reviewed-${SESSION_ID}"
 if [ ! -f "$REVIEW_FLAG" ]; then
   touch "$REVIEW_FLAG"
   MSG=$(cat <<'CORTEX_HOOKS_PROMPT_END'
-Memory review: Please decide if anything from this session should be saved. Use 'cortex consolidate --level semantic|episodic --content "..."' to create memories, or 'cortex delete <id>' to remove obsolete ones. When done, your next response will end the session normally.
+Memory review: Please save any relevant context from this session to working memory first using 'cortex consolidate --level working --session $SESSION_ID --content "..."'. Then consolidate to episodic memory any completed work, decisions, or outcomes worth keeping in history using 'cortex consolidate --level episodic --content "..."'. Do NOT write directly to semantic memory here — semantic consolidation happens separately via memory maintenance. Use 'cortex delete <id>' to remove obsolete memories. When done, your next response will end the session normally.
 CORTEX_HOOKS_PROMPT_END
   )
   printf '{"decision":"block","reason":"%s"}' \
