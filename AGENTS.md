@@ -16,7 +16,6 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
    ```
    make fmt && make lint && make test && make build
    ```
-   → Full target list: [`docs/agent/workflow.md`](docs/agent/workflow.md)
 2. **Never skip a failing step.** Fix it, restart from step 1.
 3. **golangci-lint: use v2** (CI pins v2.10.1; install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.10.1`)
 
@@ -25,11 +24,8 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
 4. **Return errors; never print from library packages.**
 5. **Stderr for errors, stdout for data.**
 6. **CLI output via `cmd.OutOrStdout()`** — never use `fmt.Print*` in CLI commands; use `_, _ = fmt.Fprint*(cmd.OutOrStdout(), ...)`. The `errcheck` linter enforces this.
-   → CLI patterns: [`docs/agent/conventions.md`](docs/agent/conventions.md)
 7. **No interface duplication** — use canonical interfaces (`memory.Embedder`, `storage.Storage`). The only accepted exception: the local storage interface in `memory/service.go` (breaks circular import). All other duplicates must be removed.
-   → Canonical interfaces: [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md)
 8. **Prefer `EmbedBatch` over repeated `Embed`** — for batch embedding operations, use `EmbedBatch` to avoid per-item round-trips to Ollama.
-   → Embedding details: [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md)
 
 ### Scope Discipline
 
@@ -41,8 +37,8 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
 
 12. **Update AGENTS.md after every completed task** — Before closing a task, evaluate what you learned and apply **exactly one** of these two actions:
    - **New Golden Rule** — if the learning is critical, universal, and must always be enforced (e.g., a constraint that caused a bug or a pattern that must never be violated), add it as a new numbered rule under the appropriate group above.
-   - **New or updated documentation** — if the learning is contextual, detailed, or scoped to a specific area (e.g., a new integration pattern, a debugging technique, a configuration guide), create or update a doc in `docs/` and add a corresponding row to the Documentation Index table with the appropriate "Rules to enforce" mapping.
-   - **Decision criteria:** ask yourself — *"Must every future task check this regardless of context?"* → Golden Rule. *"Is this useful only when working on a specific area?"* → Documentation + Index row.
+   - **New or updated instruction** — if the learning is contextual, detailed, or scoped to a specific area (e.g., a new integration pattern, a debugging technique, a configuration guide), create or update a file in `.agents/instructions/` (docs/ symlinks are maintained automatically).
+   - **Decision criteria:** ask yourself — *"Must every future task check this regardless of context?"* → Golden Rule. *"Is this useful only when working on a specific area?"* → Instruction file.
    - Never skip this step. Undocumented knowledge is lost knowledge.
 
 ### Pre-Commit Self-Check
@@ -54,41 +50,6 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
    - `EmbedBatch` used where applicable (rule 8)
    - AGENTS.md updated if new knowledge was gained (rule 12)
    - `make fmt && make lint && make test && make build` passes (rule 1)
-
----
-
-## Documentation Index
-
-**IMPORTANT: You MUST consult this table BEFORE starting ANY task. Open and read every doc whose trigger matches your current task. Never assume you already know the content — always re-read.**
-
-If no row clearly matches, read [`docs/INDEX.md`](docs/INDEX.md) to find the right doc.
-
-| Your task involves                                 | Doc                                                                      | What you'll find                                                          | Rules to enforce |
-|----------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------------|------------------|
-| Running builds, writing tests, checking CI targets | [`docs/agent/workflow.md`](docs/agent/workflow.md)                       | `make` targets, env vars, test commands, benchmarks                       | 1, 2, 3          |
-| Writing or reviewing Go code                       | [`docs/agent/conventions.md`](docs/agent/conventions.md)                 | Naming rules, error handling, concurrency, testing patterns, CLI patterns | 4, 5, 6, 7, 8    |
-| Adding a CLI command, MCP tool, or memory level    | [`docs/agent/tasks.md`](docs/agent/tasks.md)                             | Step-by-step recipes for each extension point                             | 6, 9, 10, 11     |
-| Fixing CLI help text, flags, or missing commands   | [`docs/cli/reference.md`](docs/cli/reference.md)                         | All commands, flags, examples                                             | 6, 9              |
-| Configuring or debugging MCP server / tool list    | [`docs/cli/mcp.md`](docs/cli/mcp.md)                                     | Tool names, transport modes (stdio/SSE), client setup                     | 9                 |
-| Understanding how memories flow between layers     | [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md) | Three-layer design, `Memory` struct fields, lifecycle, decision tree      | 7                 |
-| Debugging persistence or changing storage format   | [`docs/architecture/storage.md`](docs/architecture/storage.md)           | Gob file layout, serialisation, migration notes                           | 4, 10             |
-| Changing embedding model, chunk size, or strategy  | [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md)     | Ollama config, chunking strategies, vector dimensions                     | 8                 |
-| Getting a first system-wide picture                | [`docs/architecture/overview.md`](docs/architecture/overview.md)         | Component diagram, data flow, tech stack                                  | —                 |
-| Changing config keys, defaults, or env vars        | [`docs/guides/configuration.md`](docs/guides/configuration.md)           | All YAML/env keys with types and defaults                                 | 10                |
-| Diagnosing a runtime error or startup failure      | [`docs/guides/troubleshooting.md`](docs/guides/troubleshooting.md)       | Common errors, debug steps, log locations                                 | —                 |
-| Setting up or contributing to the dev environment  | [`docs/contributing/development.md`](docs/contributing/development.md)   | Dev setup, PR process, contribution guidelines                            | 1, 2              |
-| Updating AGENTS.md after completing a task         | [`docs/contributing/knowledge-capture.md`](docs/contributing/knowledge-capture.md) | Decision criteria, examples of golden rules vs docs, index update process | 12                |
-| None of the above / unsure which doc applies       | [`docs/INDEX.md`](docs/INDEX.md)                                         | Full docs index — browse to find the right doc                            | —                 |
-
-### Documentation Lookup Rules
-
-1. **Always scan before acting** — Before writing or modifying any code, scan every row. Open ALL docs that match, not just the first one.
-2. **Multiple matches are normal** — A task like "add a new CLI command" matches at least `tasks.md`, `conventions.md`, and `reference.md`. Read all of them.
-3. **Re-read if uncertain** — If you haven't read a matching doc in this session, or if your last read was for a different task, re-read it. Don't re-read docs you just consulted for the same task.
-4. **No skipping by assumption** — If a row *might* match, read it. False positives cost seconds; false negatives cause bugs.
-5. **Enforce linked rules** — After reading a doc, check the "Rules to enforce" column and verify compliance with each listed rule throughout your work.
-
-Full docs index: [`docs/INDEX.md`](docs/INDEX.md)
 
 ---
 
@@ -200,14 +161,13 @@ Always use the JSON output flag for machine-readable results.
 
 **IMPORTANT: Follow this sequence for EVERY task. Do not skip steps.**
 
-1. **Scan Documentation Index** — match current task against triggers, open and read ALL matching docs
-2. **Check Golden Rules** — note which rules apply (see "Rules to enforce" column)
-3. **Search Cortex** — `cortex search "<task topic>" --json` to surface prior context
-4. **Search code** — `grepai search "<intent>" --json --compact` to find relevant code
-5. **Trace dependencies** — `grepai trace` if modifying or calling existing functions
-6. **Do the work** — apply Golden Rules throughout, respect conventions from docs
-7. **Pre-commit self-check** — run rule 12 checklist
-8. **Verify** — `make fmt && make lint && make test && make build`
-9. **Store learnings** — `cortex create` for key decisions and findings
-10. **Update AGENTS.md** — apply rule 12: add a Golden Rule or create/update a doc + index row
-11. **Session end** — `cortex transfer-working --json` to promote working memories to episodic
+1. **Check Golden Rules** — note which rules apply to the current task
+2. **Search Cortex** — `cortex search "<task topic>" --json` to surface prior context
+3. **Search code** — `grepai search "<intent>" --json --compact` to find relevant code
+4. **Trace dependencies** — `grepai trace` if modifying or calling existing functions
+5. **Do the work** — apply Golden Rules throughout
+6. **Pre-commit self-check** — run rule 13 checklist
+7. **Verify** — `make fmt && make lint && make test && make build`
+8. **Store learnings** — `cortex create` for key decisions and findings
+9. **Update AGENTS.md** — apply rule 12: add a Golden Rule or update an instruction file in `.agents/instructions/`
+10. **Session end** — `cortex transfer-working --json` to promote working memories to episodic
