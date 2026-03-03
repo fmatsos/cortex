@@ -24,7 +24,7 @@ graph LR
 
     CLI --> MO[Memory Ops<br/>create, search, list, list-consolidated, get, delete]
     CLI --> AO[Advanced Ops<br/>transfer, consolidate, autoprune, import, export]
-    CLI --> SO[System Ops<br/>config, stats, hooks, session, skills, completion, start-mcp-server, validate-template]
+    CLI --> SO[System Ops<br/>init, config, stats, hooks, session, skills, completion, start-mcp-server, validate-template]
 
     MO --> Storage[(Storage)]
     AO --> Storage
@@ -41,7 +41,7 @@ graph LR
 |----------|----------|---------|
 | **Memory Operations** | create, search, list, list-consolidated, get, delete | Basic CRUD operations |
 | **Advanced Operations** | transfer-working, consolidate, autoprune, export, import | Memory lifecycle management |
-| **System Commands** | config, stats, hooks, session, skills, completion, start-mcp-server, validate-template | Configuration and utilities |
+| **System Commands** | init, config, stats, hooks, session, skills, completion, start-mcp-server, validate-template | Configuration and utilities |
 
 ---
 
@@ -772,6 +772,42 @@ Failed: 1
 ---
 
 ## System Commands
+
+### cortex init
+
+Initialise Cortex in the current project by injecting agent rules into `AGENTS.md` and/or `CLAUDE.md`.
+
+**Usage**:
+```bash
+cortex init [flags]
+```
+
+**Flags**:
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--skills` | false | Also install Cortex agent skill files |
+| `--hooks` | false | Also install Claude Code session hook scripts |
+| `--force` | false | Overwrite existing Cortex rules section |
+
+**Behaviour**:
+- If `AGENTS.md` exists, the Cortex rules section is appended (or updated with `--force`).
+- If `CLAUDE.md` exists **and** is not a symlink to `AGENTS.md`, it is also updated.
+- If neither file exists, `AGENTS.md` is created.
+- The injected section is wrapped in HTML comment markers (`<!-- cortex-rules-start -->` / `<!-- cortex-rules-end -->`) for idempotent re-runs.
+
+**Examples**:
+```bash
+# Inject Cortex rules only
+cortex init
+
+# Rules + skill files + hooks
+cortex init --skills --hooks
+
+# Update an existing Cortex section
+cortex init --force
+```
+
+---
 
 ### cortex config
 
