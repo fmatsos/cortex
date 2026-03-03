@@ -29,20 +29,20 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
 
 Read **only** what the current task requires. Each row lists the trigger condition — if it doesn't match your task, skip that doc.
 
-| When to read | Doc | What you'll find | Skip unless |
-|---|---|---|---|
-| Running builds, writing tests, checking CI targets | [`docs/agent/workflow.md`](docs/agent/workflow.md) | `make` targets, env vars, test commands, benchmarks | You already know the make targets |
-| Writing or reviewing Go code | [`docs/agent/conventions.md`](docs/agent/conventions.md) | Naming rules, error handling, concurrency, testing patterns, CLI patterns | Doing doc-only or infra-only work |
-| Adding a CLI command, MCP tool, or memory level | [`docs/agent/tasks.md`](docs/agent/tasks.md) | Step-by-step recipes for each extension point | Modifying existing code only |
-| Fixing CLI help text, flags, or missing commands | [`docs/cli/reference.md`](docs/cli/reference.md) | All commands, flags, examples | Not touching the CLI surface |
-| Configuring or debugging MCP server / tool list | [`docs/cli/mcp.md`](docs/cli/mcp.md) | Tool names, transport modes (stdio/SSE), client setup | Not working on MCP |
-| Understanding how memories flow between layers | [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md) | Three-layer design, `Memory` struct fields, lifecycle, decision tree | Not modifying memory types or promotion logic |
-| Debugging persistence or changing storage format | [`docs/architecture/storage.md`](docs/architecture/storage.md) | Gob file layout, serialisation, migration notes | Not touching the storage layer |
-| Changing embedding model, chunk size, or strategy | [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md) | Ollama config, chunking strategies, vector dimensions | Not working on embeddings |
-| Getting a first system-wide picture | [`docs/architecture/overview.md`](docs/architecture/overview.md) | Component diagram, data flow, tech stack | Already familiar with the architecture |
-| Changing config keys, defaults, or env vars | [`docs/guides/configuration.md`](docs/guides/configuration.md) | All YAML/env keys with types and defaults | Not touching config |
-| Diagnosing a runtime error or startup failure | [`docs/guides/troubleshooting.md`](docs/guides/troubleshooting.md) | Common errors, debug steps, log locations | No runtime issues |
-| Setting up or contributing to the dev environment | [`docs/contributing/development.md`](docs/contributing/development.md) | Dev setup, PR process, contribution guidelines | Already set up |
+| When to read                                       | Doc                                                                      | What you'll find                                                          | Skip unless                                   |
+|----------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------------|-----------------------------------------------|
+| Running builds, writing tests, checking CI targets | [`docs/agent/workflow.md`](docs/agent/workflow.md)                       | `make` targets, env vars, test commands, benchmarks                       | You already know the make targets             |
+| Writing or reviewing Go code                       | [`docs/agent/conventions.md`](docs/agent/conventions.md)                 | Naming rules, error handling, concurrency, testing patterns, CLI patterns | Doing doc-only or infra-only work             |
+| Adding a CLI command, MCP tool, or memory level    | [`docs/agent/tasks.md`](docs/agent/tasks.md)                             | Step-by-step recipes for each extension point                             | Modifying existing code only                  |
+| Fixing CLI help text, flags, or missing commands   | [`docs/cli/reference.md`](docs/cli/reference.md)                         | All commands, flags, examples                                             | Not touching the CLI surface                  |
+| Configuring or debugging MCP server / tool list    | [`docs/cli/mcp.md`](docs/cli/mcp.md)                                     | Tool names, transport modes (stdio/SSE), client setup                     | Not working on MCP                            |
+| Understanding how memories flow between layers     | [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md) | Three-layer design, `Memory` struct fields, lifecycle, decision tree      | Not modifying memory types or promotion logic |
+| Debugging persistence or changing storage format   | [`docs/architecture/storage.md`](docs/architecture/storage.md)           | Gob file layout, serialisation, migration notes                           | Not touching the storage layer                |
+| Changing embedding model, chunk size, or strategy  | [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md)     | Ollama config, chunking strategies, vector dimensions                     | Not working on embeddings                     |
+| Getting a first system-wide picture                | [`docs/architecture/overview.md`](docs/architecture/overview.md)         | Component diagram, data flow, tech stack                                  | Already familiar with the architecture        |
+| Changing config keys, defaults, or env vars        | [`docs/guides/configuration.md`](docs/guides/configuration.md)           | All YAML/env keys with types and defaults                                 | Not touching config                           |
+| Diagnosing a runtime error or startup failure      | [`docs/guides/troubleshooting.md`](docs/guides/troubleshooting.md)       | Common errors, debug steps, log locations                                 | No runtime issues                             |
+| Setting up or contributing to the dev environment  | [`docs/contributing/development.md`](docs/contributing/development.md)   | Dev setup, PR process, contribution guidelines                            | Already set up                                |
 
 Full docs index: [`docs/INDEX.md`](docs/INDEX.md)
 
@@ -115,3 +115,47 @@ grepai trace graph "ValidateToken" --depth 3 --json
 3. Use `Read` tool to examine files from results
 4. Only use Grep for exact string searches if needed
 
+<!-- cortex-rules-start -->
+## Cortex – Persistent Memory
+
+**IMPORTANT: Always search Cortex memories BEFORE starting a task, and store what you learned AFTER completing it.**
+
+### When to Use Cortex (REQUIRED)
+
+Run `cortex` CLI commands proactively:
+
+- **Before any non-trivial task** — run `cortex search` first to surface relevant context
+- **After completing work** — store decisions, patterns, and findings
+- **When making architectural decisions** — check for prior context
+- **When debugging** — search for prior solutions to similar issues
+- When the user mentions "remember", "store", "recall", or "what did we..."
+
+### CLI Commands Reference
+
+Always use the JSON output flag for machine-readable results.
+
+| Command | When to use |
+|---------|-------------|
+| `cortex search "<query>" --json` | Find relevant context before starting a task |
+| `cortex create --title "..." --level <level> --content "..." --json` | Store new facts, decisions, or findings |
+| `cortex list [--level <level>] --json` | Browse memories by level |
+| `cortex get <id> --json` | Retrieve a specific memory by ID |
+| `cortex delete <id>` | Permanently remove a memory |
+| `cortex consolidate "<synthesis>" --level <level> --json` | Synthesise related memories into one |
+| `cortex transfer-working --json` | Promote all working memories to episodic at session end |
+| `cortex autoprune --json` | Remove duplicate and expired memories |
+
+### Memory Levels
+
+| Level | Use for | Retention |
+|-------|---------|-----------|
+| `working` | Session context, active tasks, debug notes | Until transferred |
+| `episodic` | Bug fixes, decisions, incidents, meetings | 90 days (default) |
+| `semantic` | Conventions, patterns, architecture, best practices | Permanent |
+
+### Workflow
+
+1. **Session start**: `cortex search "<task topic>" --json` to surface relevant context
+2. **During work**: `cortex create` to capture key decisions and findings
+3. **Session end**: `cortex transfer-working --json` to promote working memories to episodic
+<!-- cortex-rules-end -->
