@@ -18,27 +18,31 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
 5. **Return errors; never print from library packages.**
 6. **Stderr for errors, stdout for data.**
 7. **Minimal changes** — don't refactor, add helpers, or clean up beyond what was asked.
+8. **CLI output via `cmd.OutOrStdout()`** — never use `fmt.Print*` in CLI commands; use `_, _ = fmt.Fprint*(cmd.OutOrStdout(), ...)`. The `errcheck` linter enforces this.
+9. **No interface duplication** — use canonical interfaces (`memory.Embedder`, `storage.Storage`). The only accepted exception: the local storage interface in `memory/service.go` (breaks circular import). All other duplicates must be removed.
+10. **Test mocks must satisfy the full interface** — implement ALL methods of the interface being mocked, not just those exercised in the test. Missing methods cause compile errors when the interface evolves.
+11. **Prefer `EmbedBatch` over repeated `Embed`** — for batch embedding operations, use `EmbedBatch` to avoid per-item round-trips to Ollama.
 
 ---
 
 ## Documentation Index
 
-Read only what the current task requires.
+Read **only** what the current task requires. Each row lists the trigger condition — if it doesn't match your task, skip that doc.
 
-| Context | Read |
-|---------|------|
-| Build, test, lint, env vars | [`docs/agent/workflow.md`](docs/agent/workflow.md) |
-| Code style, naming, error handling | [`docs/agent/conventions.md`](docs/agent/conventions.md) |
-| Adding commands / MCP tools / memory levels | [`docs/agent/tasks.md`](docs/agent/tasks.md) |
-| CLI commands reference | [`docs/cli/reference.md`](docs/cli/reference.md) |
-| MCP integration & tool list | [`docs/cli/mcp.md`](docs/cli/mcp.md) |
-| Memory model & three-layer design | [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md) |
-| Storage internals (Gob) | [`docs/architecture/storage.md`](docs/architecture/storage.md) |
-| Embeddings & Ollama | [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md) |
-| System architecture | [`docs/architecture/overview.md`](docs/architecture/overview.md) |
-| Configuration reference | [`docs/guides/configuration.md`](docs/guides/configuration.md) |
-| Troubleshooting | [`docs/guides/troubleshooting.md`](docs/guides/troubleshooting.md) |
-| Contributing & dev setup | [`docs/contributing/development.md`](docs/contributing/development.md) |
+| When to read | Doc | What you'll find | Skip unless |
+|---|---|---|---|
+| Running builds, writing tests, checking CI targets | [`docs/agent/workflow.md`](docs/agent/workflow.md) | `make` targets, env vars, test commands, benchmarks | You already know the make targets |
+| Writing or reviewing Go code | [`docs/agent/conventions.md`](docs/agent/conventions.md) | Naming rules, error handling, concurrency, testing patterns, CLI patterns | Doing doc-only or infra-only work |
+| Adding a CLI command, MCP tool, or memory level | [`docs/agent/tasks.md`](docs/agent/tasks.md) | Step-by-step recipes for each extension point | Modifying existing code only |
+| Fixing CLI help text, flags, or missing commands | [`docs/cli/reference.md`](docs/cli/reference.md) | All commands, flags, examples | Not touching the CLI surface |
+| Configuring or debugging MCP server / tool list | [`docs/cli/mcp.md`](docs/cli/mcp.md) | Tool names, transport modes (stdio/SSE), client setup | Not working on MCP |
+| Understanding how memories flow between layers | [`docs/architecture/memory-model.md`](docs/architecture/memory-model.md) | Three-layer design, `Memory` struct fields, lifecycle, decision tree | Not modifying memory types or promotion logic |
+| Debugging persistence or changing storage format | [`docs/architecture/storage.md`](docs/architecture/storage.md) | Gob file layout, serialisation, migration notes | Not touching the storage layer |
+| Changing embedding model, chunk size, or strategy | [`docs/architecture/embeddings.md`](docs/architecture/embeddings.md) | Ollama config, chunking strategies, vector dimensions | Not working on embeddings |
+| Getting a first system-wide picture | [`docs/architecture/overview.md`](docs/architecture/overview.md) | Component diagram, data flow, tech stack | Already familiar with the architecture |
+| Changing config keys, defaults, or env vars | [`docs/guides/configuration.md`](docs/guides/configuration.md) | All YAML/env keys with types and defaults | Not touching config |
+| Diagnosing a runtime error or startup failure | [`docs/guides/troubleshooting.md`](docs/guides/troubleshooting.md) | Common errors, debug steps, log locations | No runtime issues |
+| Setting up or contributing to the dev environment | [`docs/contributing/development.md`](docs/contributing/development.md) | Dev setup, PR process, contribution guidelines | Already set up |
 
 Full docs index: [`docs/INDEX.md`](docs/INDEX.md)
 
