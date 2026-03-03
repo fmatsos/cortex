@@ -54,11 +54,11 @@ Available for all commands:
 | `--config` | `.agents/cortex/config.yaml` | Configuration file path |
 | `--help` / `-h` | - | Show command help |
 
-> **Note:** `--output` and `--json` are per-command flags, not global. Check each command's documentation for available output options.
+> **Note:** `--json` is a per-command flag, not global. Check each command's documentation for available output options.
 
 **Example**:
 ```bash
-cortex search "query" --config /path/to/config.yaml --output json
+cortex search "query" --config /path/to/config.yaml --json
 ```
 
 ---
@@ -396,7 +396,7 @@ cortex list-consolidated [flags]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--level` | `-l` | string | - | Filter by level: `working`, `episodic`, `semantic` |
-| `--output` | `-o` | string | `text` | Output format: `text` or `json` |
+| `--json` | - | bool | false | Output as JSON |
 
 **Examples**:
 ```bash
@@ -404,7 +404,7 @@ cortex list-consolidated [flags]
 cortex list-consolidated --level working
 
 # List semantic memories as JSON
-cortex list-consolidated --level semantic --output json
+cortex list-consolidated --level semantic --json
 
 # List all episodic memories
 cortex list-consolidated --level episodic

@@ -37,7 +37,7 @@ var (
 	consolidateContent   string
 	consolidateContext   string
 	consolidateForce     bool
-	consolidateOutput    string
+	consolidateJSON      bool
 	consolidateSessionID string
 	consolidateTags      []string
 	consolidateSource    string
@@ -48,7 +48,7 @@ func init() {
 	consolidateCmd.Flags().StringVar(&consolidateContent, "content", "", "Content to consolidate (required)")
 	consolidateCmd.Flags().StringVar(&consolidateContext, "context", "", "Context JSON (optional)")
 	consolidateCmd.Flags().BoolVarP(&consolidateForce, "force", "f", false, "Bypass duplicate check")
-	consolidateCmd.Flags().StringVarP(&consolidateOutput, "output", "o", "text", "Output format (text|json)")
+	consolidateCmd.Flags().BoolVar(&consolidateJSON, "json", false, "Output as JSON")
 	consolidateCmd.Flags().StringVar(&consolidateSessionID, "session", "", "Session ID (auto-generated if not provided)")
 	consolidateCmd.Flags().StringSliceVar(&consolidateTags, "tags", nil, "Tags for the memory")
 	consolidateCmd.Flags().StringVar(&consolidateSource, "source", "manual", "Source: manual|auto|llm")
@@ -132,7 +132,7 @@ func runConsolidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("consolidation failed: %w", err)
 	}
 
-	if consolidateOutput == "json" {
+	if consolidateJSON {
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 		return nil
@@ -172,13 +172,13 @@ Examples:
 }
 
 var (
-	listConsolidatedLevel  string
-	listConsolidatedOutput string
+	listConsolidatedLevel string
+	listConsolidatedJSON  bool
 )
 
 func init() {
 	listConsolidatedCmd.Flags().StringVarP(&listConsolidatedLevel, "level", "l", "", "Memory level: working|episodic|semantic")
-	listConsolidatedCmd.Flags().StringVarP(&listConsolidatedOutput, "output", "o", "text", "Output format (text|json)")
+	listConsolidatedCmd.Flags().BoolVar(&listConsolidatedJSON, "json", false, "Output as JSON")
 
 	rootCmd.AddCommand(listConsolidatedCmd)
 }
@@ -216,7 +216,7 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if listConsolidatedOutput == "json" {
+	if listConsolidatedJSON {
 		jsonBytes, _ := json.MarshalIndent(memories, "", "  ")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 		return nil
@@ -264,12 +264,12 @@ Examples:
 
 var (
 	transferSessionID string
-	transferOutput    string
+	transferJSON      bool
 )
 
 func init() {
 	transferWorkingCmd.Flags().StringVar(&transferSessionID, "session", "", "Session ID (required)")
-	transferWorkingCmd.Flags().StringVarP(&transferOutput, "output", "o", "text", "Output format (text|json)")
+	transferWorkingCmd.Flags().BoolVar(&transferJSON, "json", false, "Output as JSON")
 
 	_ = transferWorkingCmd.MarkFlagRequired("session")
 
@@ -297,7 +297,7 @@ func runTransferWorking(cmd *cobra.Command, args []string) error {
 		"transferred": transferred,
 	}
 
-	if transferOutput == "json" {
+	if transferJSON {
 		jsonBytes, _ := json.MarshalIndent(jsonResult, "", "  ")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 		return nil

@@ -38,7 +38,7 @@ var (
 	autopruneMergeSemantic   bool
 	autopruneDryRun          bool
 	autopruneOlderThan       string
-	autopruneOutput          string
+	autopruneJSON            bool
 )
 
 func init() {
@@ -47,7 +47,7 @@ func init() {
 	autopruneCmd.Flags().BoolVar(&autopruneMergeSemantic, "merge-semantic", false, "Merge similar semantic memories")
 	autopruneCmd.Flags().BoolVar(&autopruneDryRun, "dry-run", false, "Preview changes without executing")
 	autopruneCmd.Flags().StringVar(&autopruneOlderThan, "older-than", "90d", "Age threshold for archiving (e.g., 30d, 2160h)")
-	autopruneCmd.Flags().StringVarP(&autopruneOutput, "output", "o", "text", "Output format (text|json)")
+	autopruneCmd.Flags().BoolVar(&autopruneJSON, "json", false, "Output as JSON")
 
 	rootCmd.AddCommand(autopruneCmd)
 }
@@ -96,7 +96,7 @@ func runAutoprune(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("autoprune failed: %w", err)
 	}
 
-	if autopruneOutput == "json" {
+	if autopruneJSON {
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 		return nil

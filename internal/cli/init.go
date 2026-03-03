@@ -40,9 +40,9 @@ Always use the JSON output flag for machine-readable results.
 | ` + "`cortex list [--level <level>] --json`" + ` | Browse memories by level |
 | ` + "`cortex get <id> --json`" + ` | Retrieve a specific memory by ID |
 | ` + "`cortex delete <id>`" + ` | Permanently remove a memory |
-| ` + "`cortex consolidate \"<synthesis>\" --level <level> --output json`" + ` | Synthesise related memories into one |
-| ` + "`cortex transfer-working --output json`" + ` | Promote all working memories to episodic at session end |
-| ` + "`cortex autoprune --output json`" + ` | Remove duplicate and expired memories |
+| ` + "`cortex consolidate \"<synthesis>\" --level <level> --json`" + ` | Synthesise related memories into one |
+| ` + "`cortex transfer-working --json`" + ` | Promote all working memories to episodic at session end |
+| ` + "`cortex autoprune --json`" + ` | Remove duplicate and expired memories |
 
 ### Memory Levels
 
@@ -56,7 +56,7 @@ Always use the JSON output flag for machine-readable results.
 
 1. **Session start**: ` + "`cortex search \"<task topic>\" --json`" + ` to surface relevant context
 2. **During work**: ` + "`cortex create`" + ` to capture key decisions and findings
-3. **Session end**: ` + "`cortex transfer-working --output json`" + ` to promote working memories to episodic`
+3. **Session end**: ` + "`cortex transfer-working --json`" + ` to promote working memories to episodic`
 }
 
 // cortexMCPRulesSection returns the Markdown block for MCP tool usage.

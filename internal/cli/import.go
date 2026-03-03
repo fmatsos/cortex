@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"github.com/cortex-ai/cortex-ai/internal/memory"
@@ -35,14 +36,14 @@ Examples:
 var (
 	importForce      bool
 	importDryRun     bool
-	importFormat     string
+	importJSON       bool
 	importFileFormat string
 )
 
 func init() {
 	importCmd.Flags().BoolVar(&importForce, "force", false, "Overwrite existing memories with same ID")
 	importCmd.Flags().BoolVar(&importDryRun, "dry-run", false, "Validate files without importing")
-	importCmd.Flags().StringVar(&importFormat, "output", "text", "Output format (text|json)")
+	importCmd.Flags().BoolVar(&importJSON, "json", false, "Output as JSON")
 	importCmd.Flags().StringVarP(&importFileFormat, "format", "f", "", "File format (json|markdown). Auto-detected by extension if not specified")
 
 	rootCmd.AddCommand(importCmd)
@@ -84,11 +85,11 @@ func runImport(cmd *cobra.Command, args []string) error {
 
 	// Dry run mode - just validate
 	if importDryRun {
-		return runDryRun(files)
+		return runDryRun(cmd.OutOrStdout(), files)
 	}
 
 	// Real import
-	return runRealImport(ctx, files)
+	return runRealImport(ctx, cmd.OutOrStdout(), files)
 }
 
 // ImportFileResult represents the result of importing a single file
@@ -128,7 +129,7 @@ func importFile(path string) (*memory.Memory, error) {
 	return pkgjson.NewImporter().ImportFile(path)
 }
 
-func runDryRun(files []string) error {
+func runDryRun(w io.Writer, files []string) error {
 	var valid, invalid int
 	var results []ImportFileResult
 
@@ -145,7 +146,7 @@ func runDryRun(files []string) error {
 		}
 	}
 
-	if importFormat == "json" {
+	if importJSON {
 		output := make([]map[string]interface{}, len(results))
 		for i, r := range results {
 			entry := map[string]interface{}{
@@ -164,19 +165,19 @@ func runDryRun(files []string) error {
 			"files":   output,
 		}
 		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(jsonBytes))
+		_, _ = fmt.Fprintln(w, string(jsonBytes))
 	} else {
-		fmt.Println(tui.SectionHeader("Dry Run Validation"))
-		fmt.Println()
-		fmt.Printf("  %s  %s\n\n",
+		_, _ = fmt.Fprintln(w, tui.SectionHeader("Dry Run Validation"))
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintf(w, "  %s  %s\n\n",
 			tui.KeyValue("Valid", tui.Success.Render(fmt.Sprintf("%d", valid))),
 			tui.KeyValue("Invalid", tui.Error.Render(fmt.Sprintf("%d", invalid))),
 		)
 		for _, r := range results {
 			if r.Error != nil {
-				fmt.Printf("  %s  %s\n", tui.FormatStatus(false), tui.Subtle.Render(r.Path)+": "+r.Error.Error())
+				_, _ = fmt.Fprintf(w, "  %s  %s\n", tui.FormatStatus(false), tui.Subtle.Render(r.Path)+": "+r.Error.Error())
 			} else {
-				fmt.Printf("  %s  %s\n", tui.FormatStatus(true), r.Path)
+				_, _ = fmt.Fprintf(w, "  %s  %s\n", tui.FormatStatus(true), r.Path)
 			}
 		}
 	}
@@ -188,7 +189,7 @@ func runDryRun(files []string) error {
 	return nil
 }
 
-func runRealImport(ctx context.Context, files []string) error {
+func runRealImport(ctx context.Context, w io.Writer, files []string) error {
 	var imported, failed, skipped int
 	var importResults []map[string]interface{}
 
@@ -269,7 +270,7 @@ func runRealImport(ctx context.Context, files []string) error {
 		return fmt.Errorf("import failed: %w", err)
 	}
 
-	if importFormat == "json" {
+	if importJSON {
 		output := map[string]interface{}{
 			"imported": imported,
 			"failed":   failed,
@@ -277,9 +278,9 @@ func runRealImport(ctx context.Context, files []string) error {
 			"files":    importResults,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
-		fmt.Println(string(jsonBytes))
+		_, _ = fmt.Fprintln(w, string(jsonBytes))
 	} else {
-		fmt.Printf("\n  %s  %s  %s\n\n",
+		_, _ = fmt.Fprintf(w, "\n  %s  %s  %s\n\n",
 			tui.KeyValue("Imported", tui.Success.Render(fmt.Sprintf("%d", imported))),
 			tui.KeyValue("Skipped", tui.Subtle.Render(fmt.Sprintf("%d", skipped))),
 			tui.KeyValue("Failed", func() string {
@@ -292,11 +293,11 @@ func runRealImport(ctx context.Context, files []string) error {
 		for _, r := range importResults {
 			switch r["status"] {
 			case "imported":
-				fmt.Printf("  %s  %s → %s\n", tui.FormatStatus(true), r["path"], tui.Subtle.Render(fmt.Sprintf("%v", r["id"])))
+				_, _ = fmt.Fprintf(w, "  %s  %s → %s\n", tui.FormatStatus(true), r["path"], tui.Subtle.Render(fmt.Sprintf("%v", r["id"])))
 			case "skipped":
-				fmt.Printf("  %s  %s: %s\n", tui.SkipMsg(""), r["path"], r["reason"])
+				_, _ = fmt.Fprintf(w, "  %s  %s: %s\n", tui.SkipMsg(""), r["path"], r["reason"])
 			case "failed":
-				fmt.Printf("  %s  %s: %s\n", tui.FormatStatus(false), r["path"], r["error"])
+				_, _ = fmt.Fprintf(w, "  %s  %s: %s\n", tui.FormatStatus(false), r["path"], r["error"])
 			}
 		}
 	}
