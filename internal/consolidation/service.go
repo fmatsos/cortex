@@ -13,20 +13,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// Embedder interface for generating embeddings
-type Embedder interface {
-	Embed(ctx context.Context, text string) ([]float64, error)
-}
-
 // Service handles memory consolidation operations
 type Service struct {
 	storage  storage.Storage
-	embedder Embedder
+	embedder memory.Embedder
 	config   *config.ConsolidationConfig
 }
 
 // NewService creates a new consolidation service
-func NewService(store storage.Storage, embedder Embedder, cfg *config.ConsolidationConfig) *Service {
+func NewService(store storage.Storage, embedder memory.Embedder, cfg *config.ConsolidationConfig) *Service {
 	return &Service{
 		storage:  store,
 		embedder: embedder,
@@ -132,7 +127,7 @@ func (s *Service) mergeWithExisting(ctx context.Context, existing *memory.Memory
 	}
 
 	if len(input.Context.RelatedMemories) > 0 {
-		existing.Context.RelatedMemories = mergeSlices(existing.Context.RelatedMemories, input.Context.RelatedMemories)
+		existing.Context.RelatedMemories = mergeTags(existing.Context.RelatedMemories, input.Context.RelatedMemories)
 	}
 
 	if err := s.storage.Update(ctx, existing); err != nil {
@@ -273,22 +268,6 @@ func mergeTags(existing, new []string) []string {
 	result := make([]string, 0, len(tagSet))
 	for t := range tagSet {
 		result = append(result, t)
-	}
-	return result
-}
-
-func mergeSlices(existing, new []string) []string {
-	set := make(map[string]bool)
-	for _, s := range existing {
-		set[s] = true
-	}
-	for _, s := range new {
-		set[s] = true
-	}
-
-	result := make([]string, 0, len(set))
-	for s := range set {
-		result = append(result, s)
 	}
 	return result
 }

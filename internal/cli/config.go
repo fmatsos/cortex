@@ -110,6 +110,7 @@ func init() {
 }
 
 func runConfigShow(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
 	manager := config.NewManager()
 	cfg, err := manager.Load()
 	if err != nil {
@@ -122,17 +123,17 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
-		fmt.Println(string(output))
+		_, _ = fmt.Fprintln(out, string(output))
 
 	case "yaml":
 		output, err := yaml.Marshal(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
-		fmt.Print(string(output))
+		_, _ = fmt.Fprint(out, string(output))
 
 	case "text":
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 		_, _ = fmt.Fprintln(w, "Configuration:")
 		_, _ = fmt.Fprintln(w, "")
 		_, _ = fmt.Fprintln(w, "[Storage]")
@@ -157,9 +158,9 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 
 		// Show config file used
 		if cfgFile := manager.ConfigFileUsed(); cfgFile != "" {
-			fmt.Printf("\nConfig file: %s\n", cfgFile)
+			_, _ = fmt.Fprintf(out, "\nConfig file: %s\n", cfgFile)
 		} else {
-			fmt.Printf("\nConfig file: (using defaults)\n")
+			_, _ = fmt.Fprintf(out, "\nConfig file: (using defaults)\n")
 		}
 
 	default:
@@ -170,11 +171,12 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
 	configPath := config.ConfigFilePath()
 
 	// Check if file already exists
 	if _, err := os.Stat(configPath); err == nil {
-		fmt.Printf("Configuration file already exists: %s\n", configPath)
+		_, _ = fmt.Fprintf(out, "Configuration file already exists: %s\n", configPath)
 		return nil
 	}
 
@@ -182,16 +184,17 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
-	fmt.Printf("Created default configuration file: %s\n", configPath)
+	_, _ = fmt.Fprintf(out, "Created default configuration file: %s\n", configPath)
 	return nil
 }
 
 func runConfigPath(cmd *cobra.Command, args []string) error {
-	fmt.Println(config.ConfigFilePath())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), config.ConfigFilePath())
 	return nil
 }
 
 func runConfigGet(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
 	key := args[0]
 
 	manager := config.NewManager()
@@ -204,25 +207,26 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 	if value == "" {
 		// Try as int
 		if intVal := manager.GetInt(key); intVal != 0 {
-			fmt.Println(intVal)
+			_, _ = fmt.Fprintln(out, intVal)
 			return nil
 		}
 		// Try as float
 		if floatVal := manager.GetFloat64(key); floatVal != 0 {
-			fmt.Println(floatVal)
+			_, _ = fmt.Fprintln(out, floatVal)
 			return nil
 		}
 		// Try as bool (tricky because false is valid)
 		boolVal := manager.GetBool(key)
-		fmt.Println(boolVal)
+		_, _ = fmt.Fprintln(out, boolVal)
 		return nil
 	}
 
-	fmt.Println(value)
+	_, _ = fmt.Fprintln(out, value)
 	return nil
 }
 
 func runConfigSchema(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
 	schemaType := args[0]
 
 	var data []byte
@@ -243,15 +247,16 @@ func runConfigSchema(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(schemaOutputFile, data, 0644); err != nil {
 			return fmt.Errorf("failed to write schema to file: %w", err)
 		}
-		fmt.Printf("Schema exported to: %s\n", schemaOutputFile)
+		_, _ = fmt.Fprintf(out, "Schema exported to: %s\n", schemaOutputFile)
 		return nil
 	}
 
-	fmt.Println(string(data))
+	_, _ = fmt.Fprintln(out, string(data))
 	return nil
 }
 
 func runConfigTemplateValidate(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
 	filePath := args[0]
 
 	result, err := schemas.ValidateMarkdownTemplateFile(filePath)
@@ -260,17 +265,17 @@ func runConfigTemplateValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Valid {
-		fmt.Printf("Template file is valid: %s\n", filePath)
+		_, _ = fmt.Fprintf(out, "Template file is valid: %s\n", filePath)
 		return nil
 	}
 
-	fmt.Printf("Template file is invalid: %s\n\n", filePath)
-	fmt.Println("Errors:")
+	_, _ = fmt.Fprintf(out, "Template file is invalid: %s\n\n", filePath)
+	_, _ = fmt.Fprintln(out, "Errors:")
 	for _, e := range result.Errors {
 		if e.Field != "" {
-			fmt.Printf("  - %s: %s\n", e.Field, e.Message)
+			_, _ = fmt.Fprintf(out, "  - %s: %s\n", e.Field, e.Message)
 		} else {
-			fmt.Printf("  - %s\n", e.Message)
+			_, _ = fmt.Fprintf(out, "  - %s\n", e.Message)
 		}
 	}
 

@@ -191,12 +191,6 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid level: %s (must be working|episodic|semantic)", listConsolidatedLevel)
 	}
 
-	// Initialize embedder (needed for service)
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
 	// Initialize storage
 	store, err := initStorage()
 	if err != nil {
@@ -204,25 +198,19 @@ func runListConsolidated(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	// Get config
-	cfg := config.Global()
-
-	// Create service
-	svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
-
 	// List memories
 	var memories []*memory.Memory
 	if listConsolidatedLevel == "" {
 		// List all levels
 		for _, level := range memory.ValidMemoryLevels {
-			levelMemories, err := svc.List(ctx, level)
+			levelMemories, err := store.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{level}})
 			if err != nil {
 				continue
 			}
 			memories = append(memories, levelMemories...)
 		}
 	} else {
-		memories, err = svc.List(ctx, memory.MemoryLevel(listConsolidatedLevel))
+		memories, err = store.List(ctx, memory.ListOptions{FilterLevels: []memory.MemoryLevel{memory.MemoryLevel(listConsolidatedLevel)}})
 		if err != nil {
 			return fmt.Errorf("failed to list memories: %w", err)
 		}
@@ -291,12 +279,6 @@ func init() {
 func runTransferWorking(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Initialize embedder
-	embedder, err := initEmbedder()
-	if err != nil {
-		return fmt.Errorf("failed to initialize embedder: %w", err)
-	}
-
 	// Initialize storage
 	store, err := initStorage()
 	if err != nil {
@@ -304,14 +286,8 @@ func runTransferWorking(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	// Get config
-	cfg := config.Global()
-
-	// Create service
-	svc := consolidation.NewService(store, embedder, &cfg.Consolidation)
-
-	// Transfer
-	transferred, err := svc.TransferWorkingToEpisodic(ctx, transferSessionID)
+	// Transfer directly via storage
+	transferred, err := store.TransferWorkingToEpisodic(ctx, transferSessionID)
 	if err != nil {
 		return fmt.Errorf("transfer failed: %w", err)
 	}

@@ -7,18 +7,19 @@ import (
 
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/memory"
+	"github.com/cortex-ai/cortex-ai/internal/search"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 )
 
 // AutopruneService handles automatic memory cleanup and optimization
 type AutopruneService struct {
 	storage  storage.Storage
-	embedder Embedder
+	embedder memory.Embedder
 	config   *config.AutopruneConfig
 }
 
 // NewAutopruneService creates a new autoprune service
-func NewAutopruneService(store storage.Storage, embedder Embedder, cfg *config.AutopruneConfig) *AutopruneService {
+func NewAutopruneService(store storage.Storage, embedder memory.Embedder, cfg *config.AutopruneConfig) *AutopruneService {
 	return &AutopruneService{
 		storage:  store,
 		embedder: embedder,
@@ -109,7 +110,7 @@ func (s *AutopruneService) removeDuplicates(ctx context.Context, dryRun bool) (i
 					continue
 				}
 
-				similarity := cosineSimilarity(m1.Embedding, m2.Embedding)
+				similarity := search.CosineSimilarity(m1.Embedding, m2.Embedding)
 				if similarity >= s.config.DuplicatesThreshold {
 					if dryRun {
 						details = append(details, fmt.Sprintf("[dry-run] would remove duplicate: %s (similar to %s, score: %.3f)", m2.ID[:8], m1.ID[:8], similarity))
@@ -183,7 +184,7 @@ func (s *AutopruneService) mergeSemantic(ctx context.Context, dryRun bool) (int,
 				continue
 			}
 
-			similarity := cosineSimilarity(m1.Embedding, m2.Embedding)
+			similarity := search.CosineSimilarity(m1.Embedding, m2.Embedding)
 			if similarity >= s.config.SemanticMergeThreshold {
 				toMerge = append(toMerge, m2)
 				mergedIDs[m2.ID] = true
@@ -248,39 +249,4 @@ func collectContextTags(memories []*memory.Memory) []string {
 		tags = append(tags, m.Context.Tags...)
 	}
 	return tags
-}
-
-// cosineSimilarity calculates cosine similarity between two vectors
-func cosineSimilarity(a, b []float64) float64 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0
-	}
-
-	var dotProduct, normA, normB float64
-	for i := range a {
-		dotProduct += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return dotProduct / (sqrt(normA) * sqrt(normB))
-}
-
-// sqrt is a simple square root implementation
-func sqrt(x float64) float64 {
-	if x < 0 {
-		return 0
-	}
-	if x == 0 {
-		return 0
-	}
-	z := x
-	for i := 0; i < 100; i++ {
-		z = (z + x/z) / 2
-	}
-	return z
 }

@@ -37,6 +37,22 @@ func (m *mockEmbedder) Embed(ctx context.Context, text string) ([]float64, error
 	return emb, nil
 }
 
+func (m *mockEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]float64, error) {
+	result := make([][]float64, len(texts))
+	for i, text := range texts {
+		emb, err := m.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = emb
+	}
+	return result, nil
+}
+
+func (m *mockEmbedder) Dimension() int {
+	return m.dimension
+}
+
 func setupTestService(t *testing.T) (*Service, *storage.GobStorage) {
 	t.Helper()
 

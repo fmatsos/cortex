@@ -24,7 +24,7 @@ graph LR
 
     CLI --> MO[Memory Ops<br/>create, search, list, list-consolidated, get, delete]
     CLI --> AO[Advanced Ops<br/>transfer, consolidate, autoprune, import, export]
-    CLI --> SO[System Ops<br/>config, stats, completion, start-mcp-server, validate-template]
+    CLI --> SO[System Ops<br/>config, stats, hooks, session, skills, completion, start-mcp-server, validate-template]
 
     MO --> Storage[(Storage)]
     AO --> Storage
@@ -41,7 +41,7 @@ graph LR
 |----------|----------|---------|
 | **Memory Operations** | create, search, list, list-consolidated, get, delete | Basic CRUD operations |
 | **Advanced Operations** | transfer-working, consolidate, autoprune, export, import | Memory lifecycle management |
-| **System Commands** | config, stats, completion, start-mcp-server, validate-template | Configuration and utilities |
+| **System Commands** | config, stats, hooks, session, skills, completion, start-mcp-server, validate-template | Configuration and utilities |
 
 ---
 
@@ -49,12 +49,12 @@ graph LR
 
 Available for all commands:
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--config` | `-c` | `.agents/cortex/config.yaml` | Configuration file path |
-| `--output` | `-o` | `text` | Output format: `text` or `json` |
-| `--help` | `-h` | - | Show command help |
-| `--version` | `-v` | - | Show version information |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--config` | `.agents/cortex/config.yaml` | Configuration file path |
+| `--help` / `-h` | - | Show command help |
+
+> **Note:** `--output` and `--json` are per-command flags, not global. Check each command's documentation for available output options.
 
 **Example**:
 ```bash
@@ -1081,6 +1081,101 @@ Errors:
 
 ---
 
+### cortex hooks
+
+Manage hook scripts for Claude Code and GitHub Copilot.
+
+**Usage**:
+```bash
+cortex hooks <subcommand> [flags]
+```
+
+**Subcommands**:
+| Subcommand | Description |
+|------------|-------------|
+| `init` | Generate hook scripts for automatic memory management |
+
+**Flags** (init):
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--claude` | bool | true | Generate Claude Code hooks |
+| `--copilot` | bool | false | Generate GitHub Copilot hooks |
+| `--force` | bool | false | Overwrite existing files |
+
+**Examples**:
+```bash
+# Generate Claude Code hooks (default)
+cortex hooks init
+
+# Generate GitHub Copilot hooks
+cortex hooks init --copilot
+
+# Generate both
+cortex hooks init --claude --copilot
+
+# Overwrite existing hooks
+cortex hooks init --force
+```
+
+---
+
+### cortex session
+
+Session management utilities.
+
+**Usage**:
+```bash
+cortex session <subcommand>
+```
+
+**Subcommands**:
+| Subcommand | Description |
+|------------|-------------|
+| `id` | Print the deterministic session ID for the current git branch |
+
+**Examples**:
+```bash
+# Print session ID derived from current git branch
+cortex session id
+```
+
+---
+
+### cortex skills
+
+Manage Cortex agent skills.
+
+**Usage**:
+```bash
+cortex skills <subcommand> [flags]
+```
+
+**Subcommands**:
+| Subcommand | Description |
+|------------|-------------|
+| `install` | Install Cortex skill files for Claude Code and/or GitHub Copilot |
+
+**Flags** (install):
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--claude` | bool | true | Install for Claude Code |
+| `--copilot` | bool | false | Install for GitHub Copilot |
+| `--global` | bool | false | Install globally (user-level) instead of project-level |
+
+**Examples**:
+```bash
+# Install skills locally for Claude Code (default)
+cortex skills install
+
+# Install for both Claude and Copilot
+cortex skills install --claude --copilot
+
+# Install globally
+cortex skills install --global
+```
+
+---
+
 ## Output Formats
 
 ### Text Format (Default)
@@ -1237,4 +1332,4 @@ done
 ---
 
 **Last Updated**: 2026-02-04
-**CLI Version**: 1.0 (15 commands)
+**CLI Version**: 1.0 (19 commands)

@@ -82,7 +82,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if statsJSON {
-		return outputStatsJSON(stats)
+		return outputStatsJSON(cmd, stats)
 	}
 	return outputStatsText(cmd, stats)
 }
@@ -131,12 +131,12 @@ func calculateStats(memories []*memory.Memory, storagePath string) Statistics {
 	return stats
 }
 
-func outputStatsJSON(stats Statistics) error {
+func outputStatsJSON(cmd *cobra.Command, stats Statistics) error {
 	jsonBytes, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal stats: %w", err)
 	}
-	fmt.Println(string(jsonBytes))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(jsonBytes))
 	return nil
 }
 

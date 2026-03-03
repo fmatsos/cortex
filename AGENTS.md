@@ -14,7 +14,7 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
    ```
 2. **Never skip a failing step.** Fix it, restart from step 1.
 3. **Keep MCP tool names stable** — renaming breaks integrations.
-4. **golangci-lint: use latest v1** (1.64.x or later; install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`)
+4. **golangci-lint: use v2** (CI pins v2.10.1; install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.10.1`)
 5. **Return errors; never print from library packages.**
 6. **Stderr for errors, stdout for data.**
 7. **Minimal changes** — don't refactor, add helpers, or clean up beyond what was asked.

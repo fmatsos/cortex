@@ -76,19 +76,20 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	// Export by intent (synthesis)
 	if exportIntent != "" {
-		return exportSynthesis(ctx, storageBackend)
+		return exportSynthesis(cmd, ctx, storageBackend)
 	}
 
 	// Export all memories
 	if exportAll {
-		return exportAllMemories(ctx, storageBackend)
+		return exportAllMemories(cmd, ctx, storageBackend)
 	}
 
 	// Export single memory by ID
-	return exportSingleMemory(ctx, storageBackend, args[0])
+	return exportSingleMemory(cmd, ctx, storageBackend, args[0])
 }
 
-func exportSingleMemory(ctx context.Context, store storage.Storage, id string) error {
+func exportSingleMemory(cmd *cobra.Command, ctx context.Context, store storage.Storage, id string) error {
+	out := cmd.OutOrStdout()
 	mem, err := store.Get(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to get memory: %w", err)
@@ -109,7 +110,7 @@ func exportSingleMemory(ctx context.Context, store storage.Storage, id string) e
 		if err != nil {
 			return fmt.Errorf("failed to export memory: %w", err)
 		}
-		fmt.Printf("Exported memory to: %s\n", path)
+		_, _ = fmt.Fprintf(out, "Exported memory to: %s\n", path)
 	} else {
 		// Export as JSON (default)
 		exporter := pkgjson.NewExporter(exportOutput)
@@ -124,13 +125,14 @@ func exportSingleMemory(ctx context.Context, store storage.Storage, id string) e
 			"success": true,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
-		fmt.Println(string(jsonBytes))
+		_, _ = fmt.Fprintln(out, string(jsonBytes))
 	}
 
 	return nil
 }
 
-func exportAllMemories(ctx context.Context, store storage.Storage) error {
+func exportAllMemories(cmd *cobra.Command, ctx context.Context, store storage.Storage) error {
+	out := cmd.OutOrStdout()
 	memories, err := store.List(ctx, memory.ListOptions{
 		IncludeObsolete: true,
 	})
@@ -139,7 +141,7 @@ func exportAllMemories(ctx context.Context, store storage.Storage) error {
 	}
 
 	if len(memories) == 0 {
-		fmt.Println("No memories to export")
+		_, _ = fmt.Fprintln(out, "No memories to export")
 		return nil
 	}
 
@@ -158,9 +160,9 @@ func exportAllMemories(ctx context.Context, store storage.Storage) error {
 		if err != nil {
 			return fmt.Errorf("failed to export memories: %w", err)
 		}
-		fmt.Printf("Exported %d memories:\n", len(paths))
+		_, _ = fmt.Fprintf(out, "Exported %d memories:\n", len(paths))
 		for _, p := range paths {
-			fmt.Printf("  - %s\n", p)
+			_, _ = fmt.Fprintf(out, "  - %s\n", p)
 		}
 	} else {
 		// Export as JSON (default)
@@ -174,13 +176,14 @@ func exportAllMemories(ctx context.Context, store storage.Storage) error {
 			"paths": paths,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
-		fmt.Println(string(jsonBytes))
+		_, _ = fmt.Fprintln(out, string(jsonBytes))
 	}
 
 	return nil
 }
 
-func exportSynthesis(ctx context.Context, store storage.Storage) error {
+func exportSynthesis(cmd *cobra.Command, ctx context.Context, store storage.Storage) error {
+	out := cmd.OutOrStdout()
 	// Initialize embedder from config for search
 	embedder, err := initEmbedder()
 	if err != nil {
@@ -218,8 +221,8 @@ func exportSynthesis(ctx context.Context, store storage.Storage) error {
 		if err != nil {
 			return fmt.Errorf("failed to export synthesis: %w", err)
 		}
-		fmt.Printf("Exported synthesis to: %s\n", path)
-		fmt.Printf("Based on %d memories matching '%s'\n", len(results), exportIntent)
+		_, _ = fmt.Fprintf(out, "Exported synthesis to: %s\n", path)
+		_, _ = fmt.Fprintf(out, "Based on %d memories matching '%s'\n", len(results), exportIntent)
 	} else {
 		// Export as JSON (default)
 		exporter := pkgjson.NewExporter(exportOutput)
@@ -242,7 +245,7 @@ func exportSynthesis(ctx context.Context, store storage.Storage) error {
 			"sources": sources,
 		}
 		jsonBytes, _ := json.MarshalIndent(output, "", "  ")
-		fmt.Println(string(jsonBytes))
+		_, _ = fmt.Fprintln(out, string(jsonBytes))
 	}
 
 	return nil
