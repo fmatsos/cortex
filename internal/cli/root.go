@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
+	"github.com/cortex-ai/cortex-ai/internal/logging"
+	"github.com/cortex-ai/cortex-ai/internal/memory"
 	"github.com/cortex-ai/cortex-ai/internal/storage"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +23,15 @@ It allows storing, retrieving, and searching memories using semantic similarity.
 	Version: "0.0.1",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize configuration with custom config file if provided
-		return config.Initialize(configPath)
+		if err := config.Initialize(configPath); err != nil {
+			return err
+		}
+		// Logging is ancillary; a misconfigured log path or invalid level must
+		// not prevent commands from running (e.g. `completion`, `config path`).
+		if err := logging.Initialize(config.Global().Logging); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: logging disabled: %v\n", err)
+		}
+		return nil
 	},
 }
 
@@ -44,7 +57,7 @@ func initStorage() (storage.Storage, error) {
 }
 
 // initEmbedder initializes the embedder from the global configuration
-func initEmbedder() (embeddings.Embedder, error) {
+func initEmbedder() (memory.Embedder, error) {
 	cfg := config.Global()
 	return embeddings.NewOllamaEmbedder(
 		cfg.Embeddings.Endpoint,

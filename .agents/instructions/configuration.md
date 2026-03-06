@@ -56,6 +56,14 @@ output:
   format: text
   colors: true
 
+logging:
+  level: info
+  file: .agents/cortex/logs/cortex.log
+  max_size_mb: 10
+  max_backups: 5
+  max_age_days: 30
+  compress: true
+
 consolidation:
   similarity_threshold: 0.85
   prompt_template: default
@@ -180,6 +188,19 @@ graph LR
 |--------|------|---------|-------------|
 | `output.format` | string | `text` | Output format (`text` or `json`) |
 | `output.colors` | boolean | `true` | Enable colored output |
+
+### Logging Section
+
+Global logging writes structured JSON logs to a rotating file in the Cortex base directory.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `logging.level` | string | `info` | Log level: `debug`, `info`, `warning`, `critical` |
+| `logging.file` | string | `.agents/cortex/logs/cortex.log` | Rotating log file path |
+| `logging.max_size_mb` | integer | `10` | Rotate after file reaches this size (MB) |
+| `logging.max_backups` | integer | `5` | Number of rotated files to keep |
+| `logging.max_age_days` | integer | `30` | Days to keep rotated files |
+| `logging.compress` | boolean | `true` | Compress rotated files |
 
 ### Consolidation Section
 
@@ -422,6 +443,12 @@ graph TB
 | `CORTEX_SEARCH_INCLUDE_OBSOLETE` | `search.include_obsolete` |
 | `CORTEX_OUTPUT_FORMAT` | `output.format` |
 | `CORTEX_OUTPUT_COLORS` | `output.colors` |
+| `CORTEX_LOGGING_LEVEL` | `logging.level` |
+| `CORTEX_LOGGING_FILE` | `logging.file` |
+| `CORTEX_LOGGING_MAX_SIZE_MB` | `logging.max_size_mb` |
+| `CORTEX_LOGGING_MAX_BACKUPS` | `logging.max_backups` |
+| `CORTEX_LOGGING_MAX_AGE_DAYS` | `logging.max_age_days` |
+| `CORTEX_LOGGING_COMPRESS` | `logging.compress` |
 | `CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD` | `consolidation.similarity_threshold` |
 | `CORTEX_CONSOLIDATION_PROMPT_TEMPLATE` | `consolidation.prompt_template` |
 | `CORTEX_CONSOLIDATION_AUTO_TRANSFER` | `consolidation.auto_transfer_on_session_end` |
