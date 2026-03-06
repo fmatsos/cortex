@@ -1,0 +1,51 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Add tool and project binaries to PATH
+        shell: bash
+        run: |
+          echo "$$(go env GOPATH)/bin" >> "$$GITHUB_PATH"
+          echo "$$GITHUB_WORKSPACE/bin" >> "$$GITHUB_PATH"
+
+      - name: Install golangci-lint
+        shell: bash
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.10.1
+
+      - name: Download and verify Go modules
+        shell: bash
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Build cortex
+        shell: bash
+        run: |
+          make build
+
+      - name: Smoke check toolchain
+        shell: bash
+        run: |
+          go version
+          golangci-lint version
+          test -x ./bin/cortex
