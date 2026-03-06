@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/cortex-ai/cortex-ai/internal/config"
 	"github.com/cortex-ai/cortex-ai/internal/embeddings"
 	"github.com/cortex-ai/cortex-ai/internal/logging"
@@ -23,7 +26,12 @@ It allows storing, retrieving, and searching memories using semantic similarity.
 		if err := config.Initialize(configPath); err != nil {
 			return err
 		}
-		return logging.Initialize(config.Global().Logging)
+		// Logging is ancillary; a misconfigured log path or invalid level must
+		// not prevent commands from running (e.g. `completion`, `config path`).
+		if err := logging.Initialize(config.Global().Logging); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: logging disabled: %v\n", err)
+		}
+		return nil
 	},
 }
 
