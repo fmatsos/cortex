@@ -110,8 +110,9 @@ func (m *Memory) TitleOrDerived() string {
 		return "Memory"
 	}
 	const max = 60
-	if len(line) > max {
-		return strings.TrimSpace(line[:max]) + "..."
+	lineRunes := []rune(line)
+	if len(lineRunes) > max {
+		return strings.TrimSpace(string(lineRunes[:max])) + "..."
 	}
 	return line
 }
