@@ -43,12 +43,17 @@ func init() {
 
 func runValidateTemplate(cmd *cobra.Command, args []string) error {
 	filePath := args[0]
+	out := cmd.OutOrStdout()
 
 	// Determine template type
 	templateType := validateTemplateType
 	if templateType == "auto" {
 		// Auto-detect based on content or filename
-		templateType = detectTemplateType(filePath)
+		detectedType, err := detectTemplateType(filePath)
+		if err != nil {
+			return err
+		}
+		templateType = detectedType
 	}
 
 	var result *schemas.ValidationResult
@@ -70,39 +75,39 @@ func runValidateTemplate(cmd *cobra.Command, args []string) error {
 	}
 
 	if result.Valid {
-		fmt.Printf("✓ Template is valid (%s)\n", templateType)
-		fmt.Printf("  File: %s\n", filePath)
+		_, _ = fmt.Fprintf(out, "✓ Template is valid (%s)\n", templateType)
+		_, _ = fmt.Fprintf(out, "  File: %s\n", filePath)
 		return nil
 	}
 
 	// Print validation errors
-	fmt.Printf("✗ Template validation failed (%s)\n", templateType)
-	fmt.Printf("  File: %s\n\n", filePath)
-	fmt.Println("Errors:")
+	_, _ = fmt.Fprintf(out, "✗ Template validation failed (%s)\n", templateType)
+	_, _ = fmt.Fprintf(out, "  File: %s\n\n", filePath)
+	_, _ = fmt.Fprintln(out, "Errors:")
 	for i, verr := range result.Errors {
 		if verr.Field != "" {
-			fmt.Printf("  %d. [%s] %s\n", i+1, verr.Field, verr.Message)
+			_, _ = fmt.Fprintf(out, "  %d. [%s] %s\n", i+1, verr.Field, verr.Message)
 		} else {
-			fmt.Printf("  %d. %s\n", i+1, verr.Message)
+			_, _ = fmt.Fprintf(out, "  %d. %s\n", i+1, verr.Message)
 		}
 	}
 
 	return fmt.Errorf("template validation failed with %d error(s)", len(result.Errors))
 }
 
-func detectTemplateType(filePath string) string {
+func detectTemplateType(filePath string) (string, error) {
 	// Try to load as markdown template first
 	mdCfg, err := schemas.LoadMarkdownTemplateFromFile(filePath)
 	if err == nil {
 		// Check if it has both memory and synthesis sections
 		if mdCfg.Memory != nil && mdCfg.Synthesis != nil {
-			return "markdown"
+			return "markdown", nil
 		}
 		if mdCfg.Synthesis != nil {
-			return "synthesis"
+			return "synthesis", nil
 		}
 		if mdCfg.Memory != nil {
-			return "memory"
+			return "memory", nil
 		}
 	}
 
@@ -112,7 +117,7 @@ func detectTemplateType(filePath string) string {
 		// Check if it has synthesis-specific fields
 		if synthCfg.Header != "" || synthCfg.Footer != "" ||
 			synthCfg.LearningsSection != nil || synthCfg.SummarySection != nil {
-			return "synthesis"
+			return "synthesis", nil
 		}
 	}
 
@@ -121,18 +126,17 @@ func detectTemplateType(filePath string) string {
 	if memErr == nil {
 		// Check if it has memory-specific fields
 		if memCfg.Body != "" {
-			return "memory"
+			return "memory", nil
 		}
 	}
 
 	// Default based on which loader succeeded
 	if synthErr == nil {
-		return "synthesis"
+		return "synthesis", nil
 	}
 	if memErr == nil {
-		return "memory"
+		return "memory", nil
 	}
 
-	// Default to memory
-	return "memory"
+	return "", fmt.Errorf("failed to detect template type for %s: provide --type memory|synthesis|markdown", filePath)
 }

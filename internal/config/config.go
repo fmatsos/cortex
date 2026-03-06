@@ -17,12 +17,23 @@ type Config struct {
 	Embeddings    EmbeddingsConfig    `mapstructure:"embeddings"`
 	Search        SearchConfig        `mapstructure:"search"`
 	Output        OutputConfig        `mapstructure:"output"`
+	Logging       LoggingConfig       `mapstructure:"logging"`
 	Templates     TemplatesConfig     `mapstructure:"templates"`
 	Consolidation ConsolidationConfig `mapstructure:"consolidation"`
 	MCP           MCPConfig           `mapstructure:"mcp"`
 	Autoprune     AutopruneConfig     `mapstructure:"autoprune"`
 	Session       SessionConfig       `mapstructure:"session"`
 	Hooks         HooksConfig         `mapstructure:"hooks"`
+}
+
+// LoggingConfig contains global logging configuration.
+type LoggingConfig struct {
+	Level      string `mapstructure:"level"`        // debug | info | warning | critical
+	File       string `mapstructure:"file"`         // log file path
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`  // rotate after size in MB
+	MaxBackups int    `mapstructure:"max_backups"`  // number of rotated files to keep
+	MaxAgeDays int    `mapstructure:"max_age_days"` // max age in days for rotated files
+	Compress   bool   `mapstructure:"compress"`     // gzip rotated files
 }
 
 // HooksConfig contains configuration for Claude Code hook scripts.
@@ -226,6 +237,14 @@ func DefaultConfig() *Config {
 		Output: OutputConfig{
 			Format: "text",
 			Colors: true,
+		},
+		Logging: LoggingConfig{
+			Level:      "info",
+			File:       filepath.Join(defaultBasePath(), "logs", "cortex.log"),
+			MaxSizeMB:  10,
+			MaxBackups: 5,
+			MaxAgeDays: 30,
+			Compress:   true,
 		},
 		Consolidation: ConsolidationConfig{
 			SimilarityThreshold:      0.85,
@@ -498,6 +517,14 @@ func (m *Manager) bindEnvVars() {
 	_ = m.v.BindEnv("output.format", "CORTEX_OUTPUT_FORMAT")
 	_ = m.v.BindEnv("output.colors", "CORTEX_OUTPUT_COLORS")
 
+	// Logging
+	_ = m.v.BindEnv("logging.level", "CORTEX_LOGGING_LEVEL")
+	_ = m.v.BindEnv("logging.file", "CORTEX_LOGGING_FILE")
+	_ = m.v.BindEnv("logging.max_size_mb", "CORTEX_LOGGING_MAX_SIZE_MB")
+	_ = m.v.BindEnv("logging.max_backups", "CORTEX_LOGGING_MAX_BACKUPS")
+	_ = m.v.BindEnv("logging.max_age_days", "CORTEX_LOGGING_MAX_AGE_DAYS")
+	_ = m.v.BindEnv("logging.compress", "CORTEX_LOGGING_COMPRESS")
+
 	// Consolidation
 	_ = m.v.BindEnv("consolidation.similarity_threshold", "CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD")
 	_ = m.v.BindEnv("consolidation.prompt_template", "CORTEX_CONSOLIDATION_PROMPT_TEMPLATE")
@@ -550,6 +577,14 @@ func (m *Manager) setDefaults() {
 	// Output defaults
 	m.v.SetDefault("output.format", defaults.Output.Format)
 	m.v.SetDefault("output.colors", defaults.Output.Colors)
+
+	// Logging defaults
+	m.v.SetDefault("logging.level", defaults.Logging.Level)
+	m.v.SetDefault("logging.file", defaults.Logging.File)
+	m.v.SetDefault("logging.max_size_mb", defaults.Logging.MaxSizeMB)
+	m.v.SetDefault("logging.max_backups", defaults.Logging.MaxBackups)
+	m.v.SetDefault("logging.max_age_days", defaults.Logging.MaxAgeDays)
+	m.v.SetDefault("logging.compress", defaults.Logging.Compress)
 
 	// Consolidation defaults
 	m.v.SetDefault("consolidation.similarity_threshold", defaults.Consolidation.SimilarityThreshold)
@@ -678,6 +713,14 @@ search:
 output:
   format: text                              # text | json
   colors: true
+
+logging:
+  level: info                               # debug | info | warning | critical
+  file: .agents/cortex/logs/cortex.log      # rotating log file path
+  max_size_mb: 10                           # rotate after this size in MB
+  max_backups: 5                            # number of rotated files to keep
+  max_age_days: 30                          # days to retain rotated files
+  compress: true                            # gzip rotated files
 
 session:
   auto_derive: true                         # automatically derive session ID from git branch

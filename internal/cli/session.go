@@ -1,11 +1,11 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
-	"os/exec"
-	"strings"
 
+	"github.com/cortex-ai/cortex-ai/pkg/session"
 	"github.com/spf13/cobra"
 )
 
@@ -46,19 +46,18 @@ func branchSessionID(branch string) string {
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-func runSessionID(_ *cobra.Command, _ []string) error {
+func runSessionID(cmd *cobra.Command, _ []string) error {
 	branch := currentGitBranch()
-	_, _ = fmt.Println(branchSessionID(branch))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), branchSessionID(branch))
 	return nil
 }
 
 // currentGitBranch returns the current git branch name, or "" if unavailable.
 func currentGitBranch() string {
-	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	branch, err := session.GetCurrentBranch(context.Background())
 	if err != nil {
 		return ""
 	}
-	branch := strings.TrimSpace(string(out))
 	if branch == "HEAD" {
 		return ""
 	}

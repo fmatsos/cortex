@@ -15,6 +15,7 @@ require (
 	github.com/mark3labs/mcp-go v0.44.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 

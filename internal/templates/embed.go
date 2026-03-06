@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"sync"
 	"text/template"
 )
 
@@ -13,12 +14,16 @@ var FS embed.FS
 
 // templateCache stores parsed templates.
 var templateCache = make(map[string]*template.Template)
+var templateCacheMu sync.RWMutex
 
 // Load loads and parses a template by name.
 func Load(name string) (*template.Template, error) {
+	templateCacheMu.RLock()
 	if tmpl, ok := templateCache[name]; ok {
+		templateCacheMu.RUnlock()
 		return tmpl, nil
 	}
+	templateCacheMu.RUnlock()
 
 	data, err := FS.ReadFile(name)
 	if err != nil {
@@ -30,7 +35,9 @@ func Load(name string) (*template.Template, error) {
 		return nil, fmt.Errorf("failed to parse template %s: %w", name, err)
 	}
 
+	templateCacheMu.Lock()
 	templateCache[name] = tmpl
+	templateCacheMu.Unlock()
 	return tmpl, nil
 }
 
