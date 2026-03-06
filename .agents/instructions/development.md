@@ -486,3 +486,13 @@ View results on the GitHub Actions tab.
 - [ARCHITECTURE.md](../architecture/overview.md) - System architecture
 - [CONTRIBUTING.md](contributing.md) - Contributing guidelines
 - [CLI_REFERENCE.md](../cli/reference.md) - CLI reference
+
+---
+
+## Tooling Fallbacks
+
+When semantic tools are unavailable in the environment (for example `grepai` or `cortex` is not installed), document the failure and use deterministic fallbacks:
+
+- Use `rg` for exact code discovery and file targeting.
+- Use direct GitHub API queries (for PR comments/review context) when web context is needed.
+- Continue the workflow, and explicitly note the limitation in task validation output.

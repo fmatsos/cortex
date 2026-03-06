@@ -177,6 +177,11 @@ func TestMemory_TitleOrDerived(t *testing.T) {
 			expected: strings.Repeat("a", 60) + "...",
 		},
 		{
+			name:     "truncates long first line on rune boundaries",
+			memory:   Memory{Title: "", Content: strings.Repeat("界", 61)},
+			expected: strings.Repeat("界", 60) + "...",
+		},
+		{
 			name:     "returns Memory for empty content",
 			memory:   Memory{Title: "", Content: ""},
 			expected: "Memory",

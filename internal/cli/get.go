@@ -64,7 +64,10 @@ func runGet(cmd *cobra.Command, args []string) error {
 }
 
 func outputGetJSON(cmd *cobra.Command, m *memory.Memory) error {
-	jsonBytes, err := pkgjson.MarshalMemory(m, true)
+	memoryForJSON := *m
+	memoryForJSON.Title = m.TitleOrDerived()
+
+	jsonBytes, err := pkgjson.MarshalMemory(&memoryForJSON, true)
 	if err != nil {
 		return fmt.Errorf("failed to marshal memory: %w", err)
 	}
