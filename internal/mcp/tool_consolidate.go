@@ -25,6 +25,10 @@ type consolidateContextArg struct {
 	Tags            []string `json:"tags"`
 	Source          string   `json:"source"`
 	RelatedMemories []string `json:"related_memories"`
+	GitBranch       string   `json:"git_branch"`
+	AgentName       string   `json:"agent_name"`
+	AgentSessionID  string   `json:"agent_session_id"`
+	UserPrompt      string   `json:"user_prompt"`
 }
 
 func (s *Server) handleConsolidate(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -72,6 +76,10 @@ func (s *Server) handleConsolidate(ctx context.Context, req mcpgo.CallToolReques
 			Tags:            a.Context.Tags,
 			Source:          a.Context.Source,
 			RelatedMemories: a.Context.RelatedMemories,
+			GitBranch:       a.Context.GitBranch,
+			AgentName:       a.Context.AgentName,
+			AgentSessionID:  a.Context.AgentSessionID,
+			UserPrompt:      a.Context.UserPrompt,
 		},
 		Force: a.Force,
 	}

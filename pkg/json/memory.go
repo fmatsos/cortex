@@ -19,6 +19,7 @@ type MemoryJSON struct {
 	Level      string               `json:"level"`
 	Tags       []string             `json:"tags,omitempty"`
 	Context    memory.MemoryContext `json:"context"`
+	Timestamp  int64                `json:"timestamp"`
 	CreatedAt  time.Time            `json:"created_at"`
 	UpdatedAt  time.Time            `json:"updated_at"`
 	MergedFrom []string             `json:"merged_from,omitempty"`
@@ -57,6 +58,10 @@ type BatchExportJSON struct {
 
 // ToMemoryJSON converts a Memory to MemoryJSON
 func ToMemoryJSON(m *memory.Memory) MemoryJSON {
+	ts := m.Timestamp
+	if ts == 0 {
+		ts = m.CreatedAt.Unix() // backward compat: derive from CreatedAt
+	}
 	return MemoryJSON{
 		ID:         m.ID,
 		Title:      m.Title,
@@ -64,6 +69,7 @@ func ToMemoryJSON(m *memory.Memory) MemoryJSON {
 		Level:      string(m.Level),
 		Tags:       m.Tags,
 		Context:    m.Context,
+		Timestamp:  ts,
 		CreatedAt:  m.CreatedAt,
 		UpdatedAt:  m.UpdatedAt,
 		MergedFrom: m.MergedFrom,
@@ -99,6 +105,7 @@ func (mj *MemoryJSON) ToMemory() (*memory.Memory, error) {
 		Level:      memory.MemoryLevel(mj.Level),
 		Tags:       mj.Tags,
 		Context:    mj.Context,
+		Timestamp:  mj.Timestamp,
 		MergedFrom: mj.MergedFrom,
 		Obsolete:   mj.Obsolete,
 	}
@@ -123,6 +130,9 @@ func (mj *MemoryJSON) ToMemory() (*memory.Memory, error) {
 
 	if m.Context.Timestamp.IsZero() {
 		m.Context.Timestamp = m.CreatedAt
+	}
+	if m.Timestamp == 0 {
+		m.Timestamp = m.CreatedAt.Unix() // backward compat
 	}
 
 	return m, nil

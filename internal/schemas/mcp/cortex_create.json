@@ -15,7 +15,11 @@
       "level": {
         "type": "string",
         "description": "Memory level",
-        "enum": ["working", "episodic", "semantic"]
+        "enum": [
+          "working",
+          "episodic",
+          "semantic"
+        ]
       },
       "tags": {
         "type": "array",
@@ -31,7 +35,11 @@
       "source": {
         "type": "string",
         "description": "Source (manual|auto|llm)",
-        "enum": ["manual", "auto", "llm"]
+        "enum": [
+          "manual",
+          "auto",
+          "llm"
+        ]
       },
       "task_id": {
         "type": "string",
@@ -40,8 +48,28 @@
       "author": {
         "type": "string",
         "description": "Optional author"
+      },
+      "git_branch": {
+        "type": "string",
+        "description": "Git branch name (auto-detected if omitted)"
+      },
+      "agent_name": {
+        "type": "string",
+        "description": "AI agent name (e.g. Claude, Copilot)"
+      },
+      "agent_session_id": {
+        "type": "string",
+        "description": "AI agent session ID"
+      },
+      "user_prompt": {
+        "type": "string",
+        "description": "Triggering user prompt"
       }
     },
-    "required": ["title", "content", "level"]
+    "required": [
+      "title",
+      "content",
+      "level"
+    ]
   }
 }

@@ -30,8 +30,8 @@ func RunCreateForm(input *CreateFormInput) error {
 				Placeholder("Short descriptive title (min 3 chars)").
 				Value(&input.Title).
 				Validate(func(s string) error {
-					if len(strings.TrimSpace(s)) < 3 {
-						return fmt.Errorf("title must be at least 3 characters")
+					if n := len([]rune(strings.TrimSpace(s))); n < 3 {
+						return fmt.Errorf("title too short: got %d characters, minimum is 3", n)
 					}
 					return nil
 				}),
@@ -53,8 +53,8 @@ func RunCreateForm(input *CreateFormInput) error {
 				Lines(5).
 				Value(&input.Content).
 				Validate(func(s string) error {
-					if len(strings.TrimSpace(s)) < 10 {
-						return fmt.Errorf("content must be at least 10 characters")
+					if n := len([]rune(strings.TrimSpace(s))); n < 10 {
+						return fmt.Errorf("content too short: got %d characters, minimum is 10", n)
 					}
 					return nil
 				}),

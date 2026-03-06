@@ -47,6 +47,11 @@ type MemoryContext struct {
 	Tags            []string  `json:"tags,omitempty"`
 	Source          string    `json:"source,omitempty"` // manual, auto, llm
 	RelatedMemories []string  `json:"related_memories,omitempty"`
+	// Save-context fields: record where/how the memory was created.
+	GitBranch      string `json:"git_branch,omitempty"`       // Git branch at save time (auto-detected)
+	AgentName      string `json:"agent_name,omitempty"`       // AI agent name (e.g. "Claude", "Copilot")
+	AgentSessionID string `json:"agent_session_id,omitempty"` // AI agent session ID
+	UserPrompt     string `json:"user_prompt,omitempty"`      // Triggering user prompt
 }
 
 // ValidSources lists valid consolidation sources.
@@ -71,6 +76,7 @@ type Memory struct {
 	Tags       []string      `json:"tags,omitempty"`
 	Embedding  []float64     `json:"-"`
 	Context    MemoryContext `json:"context"`
+	Timestamp  int64         `json:"timestamp"` // Unix timestamp set automatically at creation
 	CreatedAt  time.Time     `json:"created_at"`
 	UpdatedAt  time.Time     `json:"updated_at"`
 	MergedFrom []string      `json:"merged_from,omitempty"`
@@ -79,11 +85,11 @@ type Memory struct {
 
 // Validate validates the memory fields.
 func (m *Memory) Validate() error {
-	if m.Title == "" || utf8.RuneCountInString(m.Title) < 3 {
-		return fmt.Errorf("title must be at least 3 characters")
+	if titleLen := utf8.RuneCountInString(m.Title); titleLen < 3 {
+		return fmt.Errorf("title too short: got %d characters, minimum is 3", titleLen)
 	}
-	if m.Content == "" || utf8.RuneCountInString(m.Content) < 10 {
-		return fmt.Errorf("content must be at least 10 characters")
+	if contentLen := utf8.RuneCountInString(m.Content); contentLen < 10 {
+		return fmt.Errorf("content too short: got %d characters, minimum is 10", contentLen)
 	}
 	if !IsValidLevel(string(m.Level)) {
 		return fmt.Errorf("invalid level: %s", m.Level)

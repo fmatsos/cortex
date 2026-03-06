@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,18 +53,33 @@ type ListOptions struct {
 	SortBy          string
 	Reverse         bool
 	SessionID       string // if set, filters working memories to this session only
+	GitBranch       string // if set, filters memories to this git branch only
 }
 
 // CreateInput for creating new memories.
 type CreateInput struct {
-	Title     string
-	Content   string
-	Level     MemoryLevel
-	Tags      []string
-	SessionID string
-	Source    string
-	TaskID    string
-	Author    string
+	Title          string
+	Content        string
+	Level          MemoryLevel
+	Tags           []string
+	SessionID      string
+	Source         string
+	TaskID         string
+	Author         string
+	GitBranch      string // overrides auto-detection; empty = auto-detect
+	AgentName      string
+	AgentSessionID string
+	UserPrompt     string
+}
+
+// detectGitBranch returns the current git branch name, or empty string if not
+// in a git repository or if the git command is unavailable.
+func detectGitBranch() string {
+	out, err := exec.Command("git", "branch", "--show-current").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // MemoryService provides memory operations.
@@ -87,6 +104,10 @@ func NewMemoryService(storage Storage, embedder Embedder) *MemoryService {
 // Create creates a new memory.
 func (s *MemoryService) Create(ctx context.Context, input CreateInput) (*Memory, error) {
 	now := time.Now()
+	gitBranch := input.GitBranch
+	if gitBranch == "" {
+		gitBranch = detectGitBranch()
+	}
 	m := &Memory{
 		ID:      uuid.New().String(),
 		Level:   input.Level,
@@ -94,13 +115,18 @@ func (s *MemoryService) Create(ctx context.Context, input CreateInput) (*Memory,
 		Content: input.Content,
 		Tags:    input.Tags,
 		Context: MemoryContext{
-			TaskID:    input.TaskID,
-			SessionID: input.SessionID,
-			Timestamp: now,
-			Author:    input.Author,
-			Tags:      input.Tags,
-			Source:    input.Source,
+			TaskID:         input.TaskID,
+			SessionID:      input.SessionID,
+			Timestamp:      now,
+			Author:         input.Author,
+			Tags:           input.Tags,
+			Source:         input.Source,
+			GitBranch:      gitBranch,
+			AgentName:      input.AgentName,
+			AgentSessionID: input.AgentSessionID,
+			UserPrompt:     input.UserPrompt,
 		},
+		Timestamp: now.Unix(),
 		CreatedAt: now,
 		UpdatedAt: now,
 		Obsolete:  false,

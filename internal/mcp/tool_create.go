@@ -11,14 +11,18 @@ import (
 )
 
 type createArgs struct {
-	Title     string   `json:"title"`
-	Content   string   `json:"content"`
-	Level     string   `json:"level"`
-	Tags      []string `json:"tags"`
-	SessionID string   `json:"session_id"`
-	Source    string   `json:"source"`
-	TaskID    string   `json:"task_id"`
-	Author    string   `json:"author"`
+	Title          string   `json:"title"`
+	Content        string   `json:"content"`
+	Level          string   `json:"level"`
+	Tags           []string `json:"tags"`
+	SessionID      string   `json:"session_id"`
+	Source         string   `json:"source"`
+	TaskID         string   `json:"task_id"`
+	Author         string   `json:"author"`
+	GitBranch      string   `json:"git_branch"`
+	AgentName      string   `json:"agent_name"`
+	AgentSessionID string   `json:"agent_session_id"`
+	UserPrompt     string   `json:"user_prompt"`
 }
 
 func (s *Server) handleCreate(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -38,14 +42,18 @@ func (s *Server) handleCreate(ctx context.Context, req mcpgo.CallToolRequest) (*
 	}
 
 	input := memory.CreateInput{
-		Title:     a.Title,
-		Content:   a.Content,
-		Level:     memory.MemoryLevel(a.Level),
-		Tags:      a.Tags,
-		SessionID: a.SessionID,
-		Source:    a.Source,
-		TaskID:    a.TaskID,
-		Author:    a.Author,
+		Title:          a.Title,
+		Content:        a.Content,
+		Level:          memory.MemoryLevel(a.Level),
+		Tags:           a.Tags,
+		SessionID:      a.SessionID,
+		Source:         a.Source,
+		TaskID:         a.TaskID,
+		Author:         a.Author,
+		GitBranch:      a.GitBranch,
+		AgentName:      a.AgentName,
+		AgentSessionID: a.AgentSessionID,
+		UserPrompt:     a.UserPrompt,
 	}
 
 	mem, err := s.service.Create(ctx, input)

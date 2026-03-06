@@ -14,14 +14,28 @@
     },
     "level": {
       "type": "string",
-      "enum": ["working", "episodic", "semantic"],
+      "enum": [
+        "working",
+        "episodic",
+        "semantic"
+      ],
       "description": "Memory level"
     },
     "created": {
       "type": "string",
       "format": "date-time",
       "description": "Creation timestamp"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Unix timestamp of creation"
     }
   },
-  "required": ["id", "title", "level", "created"]
+  "required": [
+    "id",
+    "title",
+    "level",
+    "created",
+    "timestamp"
+  ]
 }

@@ -204,6 +204,9 @@ func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*mem
 				if !opts.IncludeObsolete && m.Obsolete {
 					continue
 				}
+				if opts.GitBranch != "" && m.Context.GitBranch != opts.GitBranch {
+					continue
+				}
 				memories = append(memories, m)
 			}
 		}
@@ -219,6 +222,9 @@ func (gs *GobStorage) List(ctx context.Context, opts memory.ListOptions) ([]*mem
 			continue
 		}
 		if !opts.IncludeObsolete && m.Obsolete {
+			continue
+		}
+		if opts.GitBranch != "" && m.Context.GitBranch != opts.GitBranch {
 			continue
 		}
 		memories = append(memories, m)

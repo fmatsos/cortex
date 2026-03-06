@@ -27,13 +27,17 @@ Examples:
 }
 
 var (
-	createTitle   string
-	createContent string
-	createLevel   string
-	createTags    string
-	createSession string
-	createSource  string
-	createJSON    bool
+	createTitle        string
+	createContent      string
+	createLevel        string
+	createTags         string
+	createSession      string
+	createSource       string
+	createJSON         bool
+	createAgentName    string
+	createAgentSession string
+	createUserPrompt   string
+	createGitBranch    string
 )
 
 func init() {
@@ -44,6 +48,10 @@ func init() {
 	createCmd.Flags().StringVar(&createSession, "session", "", "Session ID (required for working level)")
 	createCmd.Flags().StringVar(&createSource, "source", "manual", "Source: manual, auto, llm")
 	createCmd.Flags().BoolVar(&createJSON, "json", false, "Output as JSON")
+	createCmd.Flags().StringVar(&createAgentName, "agent-name", "", "AI agent name (e.g. Claude, Copilot)")
+	createCmd.Flags().StringVar(&createAgentSession, "agent-session", "", "AI agent session ID")
+	createCmd.Flags().StringVar(&createUserPrompt, "user-prompt", "", "Triggering user prompt")
+	createCmd.Flags().StringVar(&createGitBranch, "git-branch", "", "Git branch (default: auto-detected)")
 
 	// Required flags are validated manually in RunE so we can launch the
 	// interactive Huh form when the command is run without them in a TTY.
@@ -97,12 +105,16 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	input := memory.CreateInput{
-		Title:     createTitle,
-		Content:   createContent,
-		Level:     memory.MemoryLevel(createLevel),
-		Tags:      tags,
-		SessionID: createSession,
-		Source:    createSource,
+		Title:          createTitle,
+		Content:        createContent,
+		Level:          memory.MemoryLevel(createLevel),
+		Tags:           tags,
+		SessionID:      createSession,
+		Source:         createSource,
+		GitBranch:      createGitBranch,
+		AgentName:      createAgentName,
+		AgentSessionID: createAgentSession,
+		UserPrompt:     createUserPrompt,
 	}
 
 	var m *memory.Memory
