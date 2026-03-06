@@ -164,7 +164,7 @@ func (o *OllamaEmbedder) embedSingle(ctx context.Context, text string) ([]float6
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, fmt.Errorf("ollama API returned status %d: %s", resp.StatusCode, string(body))
 	}
 

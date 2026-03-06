@@ -4,6 +4,7 @@ package consolidation
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -269,5 +270,7 @@ func mergeTags(existing, new []string) []string {
 	for t := range tagSet {
 		result = append(result, t)
 	}
+	// Sort for deterministic output
+	sort.Strings(result)
 	return result
 }

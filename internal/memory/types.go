@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // MemoryLevel represents the three-tier memory system
@@ -78,10 +79,10 @@ type Memory struct {
 
 // Validate validates the memory fields.
 func (m *Memory) Validate() error {
-	if m.Title == "" || len(m.Title) < 3 {
+	if m.Title == "" || utf8.RuneCountInString(m.Title) < 3 {
 		return fmt.Errorf("title must be at least 3 characters")
 	}
-	if m.Content == "" || len(m.Content) < 10 {
+	if m.Content == "" || utf8.RuneCountInString(m.Content) < 10 {
 		return fmt.Errorf("content must be at least 10 characters")
 	}
 	if !IsValidLevel(string(m.Level)) {
