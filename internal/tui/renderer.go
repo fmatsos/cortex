@@ -85,12 +85,12 @@ func SectionHeader(title string) string {
 	return SectionTitle.Render(title)
 }
 
-// ShortID returns the first 8 characters of a UUID followed by "…".
+// ShortID returns the first 8 characters of a UUID.
 func ShortID(id string) string {
 	if len(id) <= 8 {
 		return id
 	}
-	return id[:8] + "…"
+	return id[:8]
 }
 
 // RenderTable renders rows as a bordered, styled table using lipgloss/table.

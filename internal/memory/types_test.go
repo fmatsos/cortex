@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -146,6 +147,59 @@ func TestValidationError_Error(t *testing.T) {
 	expected := "synthesis: synthesis is required"
 	if err.Error() != expected {
 		t.Errorf("Error() = %q, want %q", err.Error(), expected)
+	}
+}
+
+func TestMemory_TitleOrDerived(t *testing.T) {
+	tests := []struct {
+		name     string
+		memory   Memory
+		expected string
+	}{
+		{
+			name:     "returns title when set",
+			memory:   Memory{Title: "My Title", Content: "some content here"},
+			expected: "My Title",
+		},
+		{
+			name:     "derives from first line when title empty",
+			memory:   Memory{Title: "", Content: "First line\nSecond line"},
+			expected: "First line",
+		},
+		{
+			name:     "derives from single-line content",
+			memory:   Memory{Title: "", Content: "Only one line of content"},
+			expected: "Only one line of content",
+		},
+		{
+			name:     "truncates long first line",
+			memory:   Memory{Title: "", Content: strings.Repeat("a", 70)},
+			expected: strings.Repeat("a", 60) + "...",
+		},
+		{
+			name:     "returns Memory for empty content",
+			memory:   Memory{Title: "", Content: ""},
+			expected: "Memory",
+		},
+		{
+			name:     "returns Memory for whitespace content",
+			memory:   Memory{Title: "", Content: "   \n   "},
+			expected: "Memory",
+		},
+		{
+			name:     "returns Memory for too-short first line",
+			memory:   Memory{Title: "", Content: "ab\nMore content"},
+			expected: "Memory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.memory.TitleOrDerived()
+			if result != tt.expected {
+				t.Errorf("TitleOrDerived() = %q, want %q", result, tt.expected)
+			}
+		})
 	}
 }
 
