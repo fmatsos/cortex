@@ -94,7 +94,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		for i, r := range results {
 			items[i] = output.SearchItem{
 				ID:    r.Memory.ID,
-				Title: r.Memory.TitleOrDerived(),
+				Title: r.Memory.Title,
 				Level: string(r.Memory.Level),
 				Tags:  r.Memory.Tags,
 				Score: r.Score,
@@ -115,7 +115,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		rows[i] = []string{
 			tui.FormatScore(r.Score),
 			tui.ShortID(r.Memory.ID),
-			r.Memory.TitleOrDerived(),
+			r.Memory.Title,
 			tui.FormatLevel(string(r.Memory.Level)),
 			tui.FormatTags(r.Memory.Tags),
 		}

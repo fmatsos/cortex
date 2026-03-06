@@ -2,7 +2,6 @@ package memory
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -91,29 +90,6 @@ func (m *Memory) Validate() error {
 		return fmt.Errorf("session_id required for working memory")
 	}
 	return nil
-}
-
-// TitleOrDerived returns the memory's title if set; otherwise it derives a title
-// from the first line of content for backward compatibility with older memories
-// that were stored without an explicit title.
-func (m *Memory) TitleOrDerived() string {
-	if m.Title != "" {
-		return m.Title
-	}
-	content := strings.TrimSpace(m.Content)
-	if content == "" {
-		return "Memory"
-	}
-	line := strings.SplitN(content, "\n", 2)[0]
-	line = strings.TrimSpace(line)
-	if len(line) < 3 {
-		return "Memory"
-	}
-	const max = 60
-	if len(line) > max {
-		return strings.TrimSpace(line[:max]) + "..."
-	}
-	return line
 }
 
 // ConsolidateInput represents input for consolidating a memory.

@@ -84,7 +84,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		for i, m := range memories {
 			items[i] = output.ListItem{
 				ID:        m.ID,
-				Title:     m.TitleOrDerived(),
+				Title:     m.Title,
 				Level:     string(m.Level),
 				Tags:      m.Tags,
 				CreatedAt: m.CreatedAt,
@@ -110,7 +110,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		rows[i] = []string{
 			tui.FormatLevel(string(m.Level)),
 			tui.ShortID(m.ID),
-			m.TitleOrDerived(),
+			m.Title,
 			m.CreatedAt.Format("2006-01-02 15:04"),
 			obsoleteFlag,
 		}
