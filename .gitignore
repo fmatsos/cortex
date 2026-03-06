@@ -43,7 +43,3 @@ go.work
 .env.local
 .grepai/
 *.gob
-
-# Cortex log/data directories (created at runtime)
-.agents/
-
