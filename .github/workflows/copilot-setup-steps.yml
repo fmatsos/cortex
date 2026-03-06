@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Set up Go from go.mod
         uses: actions/setup-go@v6
@@ -24,8 +24,8 @@ jobs:
       - name: Add tool and project binaries to PATH
         shell: bash
         run: |
-          echo "$$(go env GOPATH)/bin" >> "$$GITHUB_PATH"
-          echo "$$GITHUB_WORKSPACE/bin" >> "$$GITHUB_PATH"
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
 
       - name: Install golangci-lint
         shell: bash
