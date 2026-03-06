@@ -142,7 +142,11 @@ func (s *MemoryService) cachedEmbed(ctx context.Context, text string) ([]float64
 
 	s.embedCacheMu.Lock()
 	if len(s.embedCache) >= s.embedCacheCap {
-		s.embedCache = make(map[string][]float64) // evict all on overflow
+		// Evict one entry to make room (random eviction via map iteration)
+		for k := range s.embedCache {
+			delete(s.embedCache, k)
+			break
+		}
 	}
 	s.embedCache[text] = vec
 	s.embedCacheMu.Unlock()
