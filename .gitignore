@@ -33,6 +33,7 @@ go.work
 # Local data
 .local/
 .config/
+.agents/cortex/logs/
 
 # Temporary files
 *.tmp
@@ -43,3 +44,4 @@ go.work
 .env.local
 .grepai/
 *.gob
+*.log
