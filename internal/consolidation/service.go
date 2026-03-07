@@ -86,6 +86,7 @@ func (s *Service) createNew(ctx context.Context, input memory.ConsolidateInput, 
 		Tags:      input.Context.Tags,
 		Embedding: embedding,
 		Context:   input.Context,
+		Timestamp: now.Unix(),
 		CreatedAt: now,
 		UpdatedAt: now,
 		Obsolete:  false,
@@ -169,6 +170,7 @@ func (s *Service) PromoteToSemantic(ctx context.Context, memoryID string, newCon
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
+	now := time.Now()
 	semantic := &memory.Memory{
 		ID:         uuid.New().String(),
 		Level:      memory.MemoryLevelSemantic,
@@ -177,8 +179,9 @@ func (s *Service) PromoteToSemantic(ctx context.Context, memoryID string, newCon
 		Tags:       existing.Tags,
 		Embedding:  embedding,
 		Context:    existing.Context,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		Timestamp:  now.Unix(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 		MergedFrom: []string{memoryID},
 		Obsolete:   false,
 	}

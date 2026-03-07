@@ -193,3 +193,72 @@ func TestService_List(t *testing.T) {
 		t.Errorf("Episodic count = %d, want 1", len(episodic))
 	}
 }
+
+func TestService_Consolidate_CreateNew_SetsTimestamp(t *testing.T) {
+	svc, store := setupTestService(t)
+	defer func() { _ = store.Close() }()
+
+	before := time.Now().Unix()
+	ctx := context.Background()
+	input := memory.ConsolidateInput{
+		Synthesis: "Timestamp test content",
+		Level:     memory.MemoryLevelEpisodic,
+		Context: memory.MemoryContext{
+			Source: "manual",
+		},
+		Force: true,
+	}
+
+	result, err := svc.Consolidate(ctx, input)
+	if err != nil {
+		t.Fatalf("Consolidate() error = %v", err)
+	}
+
+	mem, err := svc.Get(ctx, result.MemoryID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	after := time.Now().Unix()
+	if mem.Timestamp < before || mem.Timestamp > after {
+		t.Errorf("Timestamp %d not in expected range [%d, %d]", mem.Timestamp, before, after)
+	}
+}
+
+func TestService_PromoteToSemantic_SetsTimestamp(t *testing.T) {
+	svc, store := setupTestService(t)
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+
+	// Create an episodic memory first.
+	episodicInput := memory.ConsolidateInput{
+		Synthesis: "Episodic content to promote",
+		Level:     memory.MemoryLevelEpisodic,
+		Context:   memory.MemoryContext{Source: "manual"},
+		Force:     true,
+	}
+	created, err := svc.Consolidate(ctx, episodicInput)
+	if err != nil {
+		t.Fatalf("Consolidate() error = %v", err)
+	}
+
+	before := time.Now().Unix()
+	result, err := svc.PromoteToSemantic(ctx, created.MemoryID, "")
+	if err != nil {
+		t.Fatalf("PromoteToSemantic() error = %v", err)
+	}
+	after := time.Now().Unix()
+
+	promoted, err := svc.Get(ctx, result.MemoryID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if promoted.Timestamp < before || promoted.Timestamp > after {
+		t.Errorf("Timestamp %d not in expected range [%d, %d]", promoted.Timestamp, before, after)
+	}
+	if promoted.Level != memory.MemoryLevelSemantic {
+		t.Errorf("Level = %q, want semantic", promoted.Level)
+	}
+}

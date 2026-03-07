@@ -72,9 +72,9 @@ type CreateInput struct {
 	UserPrompt     string
 }
 
-// detectGitBranch returns the current git branch name, or empty string if not
+// DetectGitBranch returns the current git branch name, or empty string if not
 // in a git repository or if the git command is unavailable.
-func detectGitBranch() string {
+func DetectGitBranch() string {
 	out, err := exec.Command("git", "branch", "--show-current").Output()
 	if err != nil {
 		return ""
@@ -106,7 +106,7 @@ func (s *MemoryService) Create(ctx context.Context, input CreateInput) (*Memory,
 	now := time.Now()
 	gitBranch := input.GitBranch
 	if gitBranch == "" {
-		gitBranch = detectGitBranch()
+		gitBranch = DetectGitBranch()
 	}
 	m := &Memory{
 		ID:      uuid.New().String(),

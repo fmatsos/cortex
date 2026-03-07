@@ -54,6 +54,11 @@ func (s *Server) handleConsolidate(ctx context.Context, req mcpgo.CallToolReques
 		a.Context.Source = "llm"
 	}
 
+	// Auto-detect git branch when not provided (mirrors MemoryService.Create behaviour).
+	if a.Context.GitBranch == "" {
+		a.Context.GitBranch = memory.DetectGitBranch()
+	}
+
 	var timestamp time.Time
 	if a.Context.Timestamp != "" {
 		var err error
