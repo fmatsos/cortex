@@ -57,25 +57,25 @@ A memory system that offers:
 **Motivation:** Claude-Mem generates AI summaries of captured content automatically, dramatically reducing redundancy and token overhead. Cortex has no automatic summarisation today.
 
 **Scope:**
-- New MCP tool: `cortex_summarise_working` — takes all working memories for a session, calls the LLM (via configurable model), returns a compact summary.
+- New MCP tool: `cortex_summarise_working` — gathers all working memories for a session and returns a structured synthesis prompt for the agent to read and synthesise. **Thinking-prompt pattern** (same as `cortex_review_session`): Cortex makes no active LLM call; the agent uses its own reasoning to produce the summary.
 - Triggered explicitly by the agent at session end (not automatic — keeps Cortex's explicit-control posture).
-- Optional integration into `cortex_review_session` as a pre-step.
-- Summary stored as a new episodic memory with `Source: "llm"` and `MergedFrom` pointing to the working memory IDs.
+- Agent reads the returned prompt, synthesises, then calls `cortex_consolidate` or `cortex_create` with `level=episodic` to store the result.
+- Configurable prompt template controls the synthesis instructions the agent receives.
 
 **Implementation notes:**
-- New package: `internal/summarisation/service.go`
 - New MCP tool handler: `internal/mcp/tool_summarise_working.go`
-- Configurable prompt in `internal/config/config.go` (`summarisation.prompt_template`)
-- Embedder already handles the resulting episodic memory
+- Configurable prompt template in `internal/config/config.go` (`summarisation.prompt_template`)
+- Handler uses `text/template` to render the prompt with session memories; no separate service package needed
+- Embedder handles the resulting episodic memory when the agent calls `cortex_consolidate`
 
 **Acceptance criteria:**
 - `cortex_summarise_working` is callable from Claude Code / Cursor.
-- Summary is stored as an episodic memory with correct lineage.
-- Configurable prompt allows customisation without code changes.
-- Token savings measurable by comparing `list --level working` before/after.
+- Tool returns a structured prompt containing the session's working memories; agent synthesises and stores episodic memory via `cortex_consolidate`.
+- Configurable prompt template allows customisation without code changes.
+- Token savings measurable by comparing `list --level working` before/after agent synthesis.
 
-**Estimated effort:** Medium (3–5 days)
-**Risk:** Requires an LLM call (Ollama or external); must be opt-in.
+**Estimated effort:** Small–Medium (1–2 days)
+**Risk:** Low — no active LLM call from Cortex; pure prompt-assembly pattern consistent with existing thinking tools.
 
 ---
 
@@ -160,33 +160,33 @@ A memory system that offers:
 
 ---
 
-### 3.2 Web Viewer (Minimal)
+### 3.2 TUI Memory Browser
 
-**Motivation:** Claude-Mem's web UI at `localhost:37777` gives users a visual window into memories. Cortex is CLI-only today, which limits accessibility.
+**Motivation:** Claude-Mem's web UI gives users a visual window into memories. Cortex is CLI-only today, which limits discoverability. A terminal UI fits Cortex's single-binary, offline-first design better than a web server, requires no HTTP port, and works seamlessly in remote/SSH environments.
 
 **Scope (minimal viable):**
-- New subcommand: `cortex start-web` — starts an embedded HTTP server.
-- Pages: memory list, memory detail, search bar.
-- Static HTML served from embedded Go filesystem (`embed.FS`).
-- No JavaScript framework — plain HTML + CSS + vanilla JS for search.
-- Read-only initially (no create/edit from web UI in v1).
+- New subcommand: `cortex browse` — opens an interactive terminal UI (TUI) using Bubbletea.
+- Views: scrollable memory list, full-content detail view, live search.
+- Memory management: delete, toggle private/obsolete, export to Markdown.
+- Multi-select for bulk delete and export.
+- Read/write from v1 (CLI parity in TUI).
 
 **Implementation notes:**
-- New package: `internal/web/`
-- New CLI command: `internal/cli/web.go`
-- Static assets embedded via `//go:embed` — keeps single-binary property.
-- Reuses existing `memory.Service` for all data queries.
-- Default port: `3777` (configurable via `--port` flag / `CORTEX_WEB_PORT`).
+- New package: `internal/tui/` — Bubbletea model, list/detail/search view components.
+- New CLI command: `internal/cli/browse.go`
+- Dependencies: `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`, `github.com/charmbracelet/bubbles` (already used in `internal/tui/`).
+- Reuses existing `memory.Service` for all data operations.
 
 **Acceptance criteria:**
-- `cortex start-web` serves a page listing all memories.
-- Search bar performs semantic search and shows results.
-- Memory detail page shows full content, level, tags, timestamps.
-- No external JS dependencies (no npm, no CDN).
-- Binary size increase < 500 KB.
+- `cortex browse` opens an interactive list of all memories.
+- `/` toggles search mode; results update in real time.
+- `Enter` opens full-content detail view; `b` returns to list.
+- `d` deletes selected memory (with confirmation); `p` toggles private; `o` toggles obsolete.
+- `e` exports selected memory (or multi-selection) to Markdown.
+- No new HTTP server or port opened.
 
-**Estimated effort:** Medium (3–5 days)
-**Risk:** Medium — UI scope can expand; must be disciplined about v1 features.
+**Estimated effort:** Medium (4–6 days)
+**Risk:** Medium — TUI scope can expand; must be disciplined about v1 key bindings and features.
 
 ---
 
@@ -227,31 +227,32 @@ A memory system that offers:
 
 ### 4.2 IDE Lifecycle Integration (Claude Code)
 
-**Motivation:** Claude-Mem's automatic context injection (via `UserPromptSubmit` hook) and session tracking (`SessionStart` / `SessionEnd`) reduce agent friction significantly. Cortex agents must manually call `cortex_search` to get context.
+**Motivation:** Claude-Mem's automatic context injection (via `UserPromptSubmit` hook) and session tracking (`SessionStart` / `SessionEnd`) reduce agent friction significantly. Cortex already has `session-start.sh`, `session-stop.sh`, and `pre-compact.sh` hooks; this tier improves them and adds the missing `UserPromptSubmit` hook.
 
-**Scope (minimal viable):**
-- New `SessionStart` hook handler: on session start, load relevant working memories for the current session and write a context summary to `$CLAUDE_CONTEXT_FILE` (Claude Code hook contract).
-- New `SessionEnd` hook handler: trigger `cortex_review_session` equivalent — summarise and transfer working memories.
-- Hooks remain opt-in; agents not using Claude Code are unaffected.
+**Scope:**
+- Improve existing `session-start.sh`: inject structured JSON (working + top semantic memories) as a formatted context block.
+- Improve existing `session-stop.sh`: auto-transfer working memories even if agent forgets; skip review step when session is empty.
+- New `UserPromptSubmit` hook (`user-prompt-submit.sh`): on every incoming prompt, run `cortex search --compact` against the prompt text and inject top-3 relevant memories. This is the key missing capability versus Claude-Mem.
+- All hooks remain opt-in via `cortex hooks init`; agents not using Claude Code are unaffected.
 
 **Out of scope for v1:**
-- `PostToolUse` automatic observation capture (automatic capture conflicts with Cortex's explicit-control philosophy).
+- `PostToolUse` automatic observation capture (conflicts with explicit-control philosophy).
 - Cursor integration (follow after Claude Code is validated).
 
 **Implementation notes:**
-- New CLI command: `cortex hooks install-claude-code` — writes hook scripts to `.claude/hooks/`.
-- Hook scripts call `cortex session id` to get deterministic session ID from git branch.
-- `SessionEnd` hook calls `cortex transfer-working --session <id>` + optional summarisation.
-- No changes to core memory service — hooks are thin wrappers.
+- Modify `internal/cli/hooks.go` — extend `initHooksCmd` to generate all four scripts + updated `settings.json`.
+- `UserPromptSubmit` hook uses `cortex search --compact` (requires Plan A1 compact flag) with `timeout 3s` to avoid blocking Claude Code on cold Ollama start.
+- `settings.json` merge strategy: preserve any existing user hooks when regenerating.
 
 **Acceptance criteria:**
-- After `cortex hooks install-claude-code`, session start loads prior context automatically.
-- Session end transfers working memories without manual agent intervention.
-- Hooks are idempotent (re-running `install-claude-code` is safe).
+- After `cortex hooks init`, session start injects structured working + semantic memory context.
+- On each user prompt, top-3 relevant memories are injected (if any match above threshold).
+- Session stop auto-transfers working memories without manual agent intervention.
+- Hooks are idempotent (re-running `cortex hooks init` is safe).
 - Works with Claude Code ≥ current version.
 
 **Estimated effort:** Medium (3–5 days)
-**Risk:** Medium — Claude Code hook API may evolve; test against current version explicitly.
+**Risk:** Medium — Claude Code hook API may evolve; `UserPromptSubmit` requires Plan A1 compact flag as prerequisite.
 
 ---
 
@@ -264,7 +265,7 @@ A memory system that offers:
 **Motivation:** Claude-Mem exposes a full HTTP REST API, allowing external tooling, dashboards, and integrations. Cortex exposes MCP (stdio/SSE) only.
 
 **Scope:**
-- Extend `cortex start-web` to also serve a JSON REST API under `/api/v1/`.
+- New subcommand: `cortex start-api` — starts a lightweight HTTP JSON API server.
 - Endpoints mirroring CLI commands: `GET /memories`, `POST /memories`, `GET /memories/{id}`, `DELETE /memories/{id}`, `GET /search?q=...`.
 - Authentication: none by default (localhost only); optional bearer token via config.
 
@@ -317,13 +318,15 @@ Full design documents for each feature will be created in `docs/analysis/designs
 
 ```
 docs/analysis/designs/
-  summarisation-tool.md
   token-aware-search.md
   timeline-tool.md
+  summarisation-tool.md
   privacy-tags.md
-  web-viewer.md
+  tui-memory-browser.md
   sqlite-backend.md
   ide-lifecycle-hooks.md
+  storage-performance.md
+  multi-project-memory.md
   rest-api.md
 ```
 
@@ -337,10 +340,13 @@ docs/analysis/designs/
 | 2026-03-10 | No automatic PostToolUse capture | Cortex's explicit-control model is a differentiator, not a limitation |
 | 2026-03-10 | No Chroma integration | Python subprocess breaks single-binary deployment goal |
 | 2026-03-10 | Summarisation is MCP tool, not automatic hook | Preserves agent control; agents decide when to summarise |
-| 2026-03-10 | Web UI read-only in v1 | Scope control; write operations are well-served by CLI and MCP |
+| 2026-03-10 | `cortex_summarise_working` uses thinking-prompt pattern, no active LLM call | Consistent with all existing thinking tools (`cortex_review_session`, etc.); Cortex does not call Ollama directly — agent reasons from the returned prompt |
+| 2026-03-10 | TUI browser instead of web viewer (Tier 1B) | TUI fits single-binary, offline-first design; no HTTP port or embedded assets; works in SSH/remote environments; Charm/Bubbletea already in use |
+| 2026-03-10 | IDE hooks: improve existing + add UserPromptSubmit, not build from scratch | Hooks (`session-start.sh`, `session-stop.sh`, `pre-compact.sh`) already exist; UserPromptSubmit is the key missing hook vs Claude-Mem |
+| 2026-03-10 | Web UI read-only in v1 (superseded by TUI decision above) | Scope control; write operations are well-served by CLI and MCP |
 | 2026-03-10 | FTS5 search deferred to Tier 2 | Requires SQLite backend as prerequisite; tackle after backend lands |
 | 2026-03-10 | Prioritise Summarisation + Token Awareness (Tier 1A) | Lower effort, high token-efficiency ROI; no storage changes required |
-| 2026-03-10 | Prioritise Web UI + Privacy (Tier 1B) in parallel | UX and safety improvements are independent of storage changes |
+| 2026-03-10 | Prioritise TUI Browser + Privacy (Tier 1B) in parallel | UX and safety improvements are independent of storage changes |
 
 ---
 
