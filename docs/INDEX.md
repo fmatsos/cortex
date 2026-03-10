@@ -39,6 +39,13 @@ Complete guide to all Cortex documentation.
 | [architecture/storage.md](architecture/storage.md) | Storage layer and implementations | Developers, operators |
 | [architecture/embeddings.md](architecture/embeddings.md) | Vector generation and Ollama integration | Developers, DevOps |
 
+### Analysis & Roadmap
+
+| Document | Purpose | For Whom |
+|----------|---------|----------|
+| [analysis/claude-mem-comparison.md](analysis/claude-mem-comparison.md) | Functional comparison with Claude-Mem (feature matrix, gaps, strategy) | Product, developers |
+| [analysis/roadmap.md](analysis/roadmap.md) | Feature roadmap derived from comparison (tiered, with design notes) | Product, contributors |
+
 ### Development
 
 | Document | Purpose | For Whom |
