@@ -1,6 +1,6 @@
 # Cortex – Agent Notes
 
-**Module:** `github.com/cortex-ai/cortex-ai` · **Go 1.24+** · **Cobra / Viper / Ollama / Gob**
+**Package:** `cortex-memory` · **Python 3.12+** · **Typer / Pydantic / ChromaDB / Ollama / MCP**
 
 Three-layer memory system: `working` (session) → `episodic` (historical) → `semantic` (permanent).
 
@@ -12,44 +12,49 @@ Three-layer memory system: `working` (session) → `episodic` (historical) → `
 
 ### Build & CI
 
-1. **fmt → lint → test → build** before every commit — no exceptions.
+1. **fmt → lint → test** before every commit — no exceptions.
    ```
-   make fmt && make lint && make test && make build
+   uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run pytest tests/
    ```
 2. **Never skip a failing step.** Fix it, restart from step 1.
-3. **golangci-lint: use v2** (CI pins v2.10.1; install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.10.1`)
+3. **ruff for linting and formatting** — configured in `pyproject.toml`. Run with `uv run ruff check` and `uv run ruff format`.
 
 ### Code Quality
 
-4. **Return errors; never print from library packages.**
-5. **Stderr for errors, stdout for data.**
-6. **CLI output via `cmd.OutOrStdout()`** — never use `fmt.Print*` in CLI commands; use `_, _ = fmt.Fprint*(cmd.OutOrStdout(), ...)`. The `errcheck` linter enforces this.
-7. **No interface duplication** — use canonical interfaces (`memory.Embedder`, `storage.Storage`). The only accepted exception: the local storage interface in `memory/service.go` (breaks circular import). All other duplicates must be removed.
-8. **Prefer `EmbedBatch` over repeated `Embed`** — for batch embedding operations, use `EmbedBatch` to avoid per-item round-trips to Ollama.
+4. **Raise exceptions from library code; never print.** CLI commands use `typer.echo()`, library code raises.
+5. **Stderr for errors, stdout for data.** Use `typer.echo(..., err=True)` for error messages.
+6. **All CLI output via typer.echo()** — never use `print()` in CLI commands.
+7. **No Protocol duplication** — use canonical protocols (`cortex.embeddings.base.Embedder`, `cortex.storage.base.Storage`). Do not redeclare them in other modules.
+8. **Prefer `embed_batch` over repeated `embed`** — for batch embedding operations, use `embed_batch()` to avoid per-item round-trips to Ollama.
+
+### Storage Rules
+
+9. **ChromaDB metadata is flat** — only `str`, `int`, `float`, `bool` are supported. Serialize lists with `json.dumps()`.
+10. **Always close storage** — call `storage.close()` in a `finally` block or use a context manager.
 
 ### Scope Discipline
 
-9. **Keep MCP tool names stable** — renaming breaks integrations.
-10. **Minimal changes** — don't refactor, add helpers, or clean up beyond what was asked.
-11. **Test mocks must satisfy the full interface** — implement ALL methods of the interface being mocked, not just those exercised in the test. Missing methods cause compile errors when the interface evolves.
+11. **Keep MCP tool names stable** — renaming breaks integrations (Claude Code, Cursor, etc.).
+12. **Minimal changes** — don't refactor, add helpers, or clean up beyond what was asked.
+13. **Test mocks must satisfy the full Protocol** — implement ALL methods of the Protocol being mocked.
 
 ### Knowledge Capture
 
-12. **Update AGENTS.md after every completed task** — Before closing a task, evaluate what you learned and apply **exactly one** of these two actions:
-   - **New Golden Rule** — if the learning is critical, universal, and must always be enforced (e.g., a constraint that caused a bug or a pattern that must never be violated), add it as a new numbered rule under the appropriate group above.
-   - **New or updated instruction** — if the learning is contextual, detailed, or scoped to a specific area (e.g., a new integration pattern, a debugging technique, a configuration guide), create or update a file in `.agents/instructions/` (docs/ symlinks are maintained automatically).
-   - **Decision criteria:** ask yourself — *"Must every future task check this regardless of context?"* → Golden Rule. *"Is this useful only when working on a specific area?"* → Instruction file.
+14. **Update AGENTS.md after every completed task** — Before closing a task, evaluate what you learned and apply **exactly one** of these two actions:
+   - **New Golden Rule** — if the learning is critical, universal, and must always be enforced.
+   - **New or updated instruction** — if the learning is contextual or scoped to a specific area.
    - Never skip this step. Undocumented knowledge is lost knowledge.
 
 ### Pre-Commit Self-Check
 
-13. **Verify before committing** — Before every commit, confirm:
-   - No `fmt.Print*` in CLI code (rule 6)
-   - No duplicated interfaces (rule 7)
-   - All mock methods implemented (rule 11)
-   - `EmbedBatch` used where applicable (rule 8)
-   - AGENTS.md updated if new knowledge was gained (rule 12)
-   - `make fmt && make lint && make test && make build` passes (rule 1)
+15. **Verify before committing** — Before every commit, confirm:
+   - No `print()` in CLI or library code (rules 4, 6)
+   - No duplicated Protocols (rule 7)
+   - All mock methods implemented (rule 13)
+   - `embed_batch` used where applicable (rule 8)
+   - `storage.close()` called in `finally` blocks (rule 10)
+   - AGENTS.md updated if new knowledge was gained (rule 14)
+   - `uv run ruff format && uv run ruff check && uv run pytest` passes (rule 1)
 
 ---
 
@@ -69,71 +74,23 @@ Use `grepai search` INSTEAD OF Grep/Glob/find for:
 
 Only use Grep/Glob when you need:
 - Exact text matching (variable names, imports, specific strings)
-- File path patterns (e.g., `**/*.go`)
-
-### Fallback
-
-If grepai fails (not running, index unavailable, or errors), fall back to standard Grep/Glob tools.
+- File path patterns (e.g., `**/*.py`)
 
 ### Usage
 
 ```bash
-# ALWAYS use English queries for best results (--compact saves ~80% tokens)
 grepai search "user authentication flow" --json --compact
 grepai search "error handling middleware" --json --compact
 grepai search "database connection pool" --json --compact
-grepai search "API request validation" --json --compact
-```
-
-### Query Tips
-
-- **Use English** for queries (better semantic matching)
-- **Describe intent**, not implementation: "handles user login" not "func Login"
-- **Be specific**: "JWT token validation" better than "token"
-- Results include: file path, line numbers, relevance score, code preview
-
-### Call Graph Tracing
-
-Use `grepai trace` to understand function relationships:
-- Finding all callers of a function before modifying it
-- Understanding what functions are called by a given function
-- Visualizing the complete call graph around a symbol
-
-#### Trace Commands
-
-**IMPORTANT: Always use `--json` flag for optimal AI agent integration.**
-
-```bash
-# Find all functions that call a symbol
-grepai trace callers "HandleRequest" --json
-
-# Find all functions called by a symbol
-grepai trace callees "ProcessOrder" --json
-
-# Build complete call graph (callers + callees)
-grepai trace graph "ValidateToken" --depth 3 --json
 ```
 
 ---
 
-<!-- cortex-rules-start -->
 ## Cortex – Persistent Memory
 
 **IMPORTANT: Always search Cortex memories BEFORE starting a task, and store what you learned AFTER completing it.**
 
-### When to Use Cortex (REQUIRED)
-
-Run `cortex` CLI commands proactively:
-
-- **Before any non-trivial task** — run `cortex search` first to surface relevant context
-- **After completing work** — store decisions, patterns, and findings
-- **When making architectural decisions** — check for prior context
-- **When debugging** — search for prior solutions to similar issues
-- When the user mentions "remember", "store", "recall", or "what did we..."
-
 ### CLI Commands Reference
-
-Always use the JSON output flag for machine-readable results.
 
 | Command | When to use |
 |---------|-------------|
@@ -146,15 +103,6 @@ Always use the JSON output flag for machine-readable results.
 | `cortex transfer-working --json` | Promote all working memories to episodic at session end |
 | `cortex autoprune --json` | Remove duplicate and expired memories |
 
-### Memory Levels
-
-| Level | Use for | Retention |
-|-------|---------|-----------|
-| `working` | Session context, active tasks, debug notes | Until transferred |
-| `episodic` | Bug fixes, decisions, incidents, meetings | 90 days (default) |
-| `semantic` | Conventions, patterns, architecture, best practices | Permanent |
-<!-- cortex-rules-end -->
-
 ---
 
 ## Task Workflow
@@ -166,8 +114,8 @@ Always use the JSON output flag for machine-readable results.
 3. **Search code** — `grepai search "<intent>" --json --compact` to find relevant code
 4. **Trace dependencies** — `grepai trace` if modifying or calling existing functions
 5. **Do the work** — apply Golden Rules throughout
-6. **Pre-commit self-check** — run rule 13 checklist
-7. **Verify** — `make fmt && make lint && make test && make build`
+6. **Pre-commit self-check** — run rule 15 checklist
+7. **Verify** — `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run pytest tests/`
 8. **Store learnings** — `cortex create` for key decisions and findings
-9. **Update AGENTS.md** — apply rule 12: add a Golden Rule or update an instruction file in `.agents/instructions/`
+9. **Update AGENTS.md** — apply rule 14: add a Golden Rule or update an instruction file in `.agents/instructions/`
 10. **Session end** — `cortex transfer-working --json` to promote working memories to episodic

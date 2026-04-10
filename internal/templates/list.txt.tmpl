@@ -1,4 +1,0 @@
-ID	TITLE	TYPES	CREATED
-{{- range .}}
-{{.Level}}	{{slice .ID 0 8}}...	{{.Title}}{{if .Obsolete}} (obsolete){{end}}	{{.CreatedAt.Format "2006-01-02"}}
-{{- end}}

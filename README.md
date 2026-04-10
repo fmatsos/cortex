@@ -4,7 +4,7 @@
 
 **AI-Powered Memory Management for Developers**
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat&logo=python)](https://python.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](docs/cli/mcp.md)
 
@@ -110,7 +110,7 @@ flowchart LR
 
 ### Prerequisites
 
-1. **Go 1.24+** - [Install Go](https://go.dev/doc/install)
+1. **Python 3.12+** - [Install Python](https://python.org/downloads/)
 2. **Ollama** - For local embeddings
    ```bash
    # Install Ollama: https://ollama.ai
@@ -123,13 +123,14 @@ flowchart LR
 ### Installation
 
 ```bash
-# Install from source
-go install github.com/cortex-ai/cortex-ai/cmd/cortex@latest
+# Run directly without installing (recommended)
+uvx cortex --help
 
-# Or build locally
-git clone https://github.com/cortex-ai/cortex-ai.git
-cd cortex-ai
-make install
+# Or install permanently
+pip install cortex-memory
+
+# Or install with uv
+uv tool install cortex-memory
 ```
 
 ### Basic Usage
@@ -170,7 +171,6 @@ cortex export --all --output ./memories/
 | `list` | List memories with filtering |
 | `get` | Get a specific memory by ID |
 | `delete` | Delete a memory permanently |
-| `list-consolidated` | List memories by level |
 
 ### Advanced Operations
 
@@ -188,7 +188,6 @@ cortex export --all --output ./memories/
 |---------|-------------|
 | `config` | View or edit configuration |
 | `stats` | Display database statistics |
-| `completion` | Generate shell completions (bash/zsh/fish/powershell) |
 | `start-mcp-server` | Start MCP server for AI assistant integration |
 
 > **📖 Full Reference:** See [CLI Reference](docs/cli/reference.md) for detailed command documentation.
@@ -404,7 +403,7 @@ session:
 ```mermaid
 graph TB
     subgraph "CLI Layer"
-        CLI[Cobra Commands]
+        CLI[Typer Commands]
     end
 
     subgraph "Service Layer"
@@ -414,13 +413,13 @@ graph TB
     end
 
     subgraph "Infrastructure"
-        E[Embedder<br/>Ollama]
-        S[Storage<br/>Gob Files]
+        E[Embedder<br/>Ollama / httpx]
+        S[Storage<br/>ChromaDB]
         SE[Search<br/>Cosine Similarity]
     end
 
     subgraph "MCP Server"
-        MCP[JSON-RPC 2.0]
+        MCP[FastMCP]
         T[Transport<br/>stdio/SSE]
     end
 
@@ -447,15 +446,20 @@ graph TB
 
 ## 🗄️ Storage Structure
 
+ChromaDB stores memories in three collections, persisted under `.agents/cortex/`:
+
 ```bash
 .agents/cortex/                   # project-local (relative to CWD)
-├── memories.gob              # Episodic + Semantic memories
-├── working/
-│   ├── session-abc123.gob    # Working memory for session ABC123
-│   ├── session-def456.gob    # Working memory for session DEF456
+├── chroma.sqlite3            # ChromaDB persistence file
+├── <uuid>/                   # ChromaDB segment data
 │   └── ...
 └── config.yaml               # Local configuration
 ```
+
+Collections:
+- `cortex_working` — Session-scoped working memories
+- `cortex_episodic` — Time-bound episodic memories
+- `cortex_semantic` — Permanent semantic memories
 
 ---
 
@@ -472,6 +476,7 @@ embeddings:
   provider: ollama
   endpoint: http://localhost:11434
   model: nomic-embed-text
+  timeout: 30
 
 search:
   top_k: 5
@@ -484,6 +489,14 @@ consolidation:
 autoprune:
   episodic_retention_days: 90
   duplicates_threshold: 0.92
+```
+
+Environment variables use `CORTEX_` prefix with `__` as nested delimiter:
+
+```bash
+export CORTEX_EMBEDDINGS__MODEL=mxbai-embed-large
+export CORTEX_EMBEDDINGS__ENDPOINT=http://localhost:11434
+export CORTEX_SEARCH__TOP_K=10
 ```
 
 > **📖 Full Reference:** See [Configuration](docs/guides/configuration.md) for all options.
@@ -519,20 +532,18 @@ autoprune:
 
 ```bash
 # Clone repository
-git clone https://github.com/cortex-ai/cortex-ai.git
-cd cortex-ai
+git clone https://github.com/fmatsos/cortex.git
+cd cortex
 
-# Install dependencies
-make deps
+# Install dependencies (requires uv)
+uv sync --all-groups
 
 # Run tests
-make test
+uv run pytest tests/ -v
 
-# Build
-make build
-
-# Run linter
-make lint
+# Format and lint
+uv run ruff format src/ tests/
+uv run ruff check src/ tests/
 ```
 
 See [Development Guide](docs/contributing/development.md) for complete setup instructions.
@@ -558,8 +569,10 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details.
 ## 🙏 Acknowledgments
 
 - **[Ollama](https://ollama.ai)** - Local embedding model serving
-- **[Cobra](https://github.com/spf13/cobra)** - CLI framework
-- **[Viper](https://github.com/spf13/viper)** - Configuration management
+- **[ChromaDB](https://www.trychroma.com)** - Vector database
+- **[Typer](https://typer.tiangolo.com)** - CLI framework
+- **[pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)** - Configuration management
+- **[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)** - Model Context Protocol
 
 ---
 
@@ -567,6 +580,6 @@ Apache License 2.0 - See [LICENSE](LICENSE) for details.
 
 **Built with ❤️ by the Cortex team**
 
-[⭐ Star us on GitHub](https://github.com/cortex-ai/cortex-ai) • [📖 Read the Docs](docs/INDEX.md) • [🐛 Report Issues](https://github.com/cortex-ai/cortex-ai/issues)
+[⭐ Star us on GitHub](https://github.com/fmatsos/cortex) • [📖 Read the Docs](docs/INDEX.md) • [🐛 Report Issues](https://github.com/fmatsos/cortex/issues)
 
 </div>
