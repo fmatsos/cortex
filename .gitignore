@@ -15,8 +15,6 @@ env/
 .env
 .env.local
 
-# uv
-uv.lock
 
 # Testing
 .pytest_cache/
