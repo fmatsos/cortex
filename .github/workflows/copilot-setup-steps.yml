@@ -15,37 +15,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go from go.mod
-        uses: actions/setup-go@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          go-version-file: go.mod
-          cache: true
+          enable-cache: true
 
-      - name: Add tool and project binaries to PATH
-        shell: bash
-        run: |
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
 
-      - name: Install golangci-lint
-        shell: bash
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.1
-
-      - name: Download and verify Go modules
-        shell: bash
-        run: |
-          go mod download
-          go mod verify
-
-      - name: Build cortex
-        shell: bash
-        run: |
-          make build
+      - name: Install dependencies
+        run: uv sync --all-groups
 
       - name: Smoke check toolchain
-        shell: bash
         run: |
-          go version
-          golangci-lint version
-          test -x ./bin/cortex
+          uv run python --version
+          uv run ruff --version
+          uv run mypy --version
+          uv run pytest --version
