@@ -2,7 +2,9 @@
 applyTo: "**"
 ---
 
-# Cortex - Development Guide
+# Cortex - Development Guide (Python)
+
+> **Note:** This project was migrated from Go to Python. All source code is now in `src/cortex/`. See `pyproject.toml` for dependencies and entry points.
 
 Guide for setting up the development environment and contributing to Cortex.
 

@@ -10,7 +10,7 @@ embeddings:
   provider: ollama
   model: nomic-embed-text
   endpoint: http://localhost:11434
-  timeout: 30s
+  timeout: 30
   chunk_size: 8000                          # max chars per chunk (0 = no chunking)
   chunk_overlap: 200                        # overlap between chunks for context
   chunk_strategy: average                   # average | first | max_pool
