@@ -1,0 +1,9 @@
+## {{.Title}}
+
+> Created: {{.CreatedAt.Format "Jan 2, 2006"}}
+{{if .Tags}}> Tags: {{range .Tags}}#{{.}} {{end}}{{end}}
+
+{{.Content}}
+
+---
+*Last updated: {{.UpdatedAt.Format "2006-01-02 15:04"}}*

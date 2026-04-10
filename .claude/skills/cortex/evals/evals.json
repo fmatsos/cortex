@@ -1,0 +1,69 @@
+{
+  "skill_name": "cortex",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm about to start implementing a new feature: adding rate limiting to the REST API endpoints in this Go project. Before I start writing code, is there anything I should check or be aware of?",
+      "expected_output": "Agent proactively searches Cortex memory for relevant context (rate limiting, API patterns, Go middleware) before starting work. Does NOT immediately start coding. Uses cortex_search or `cortex search` with relevant queries. Reports what was found (or nothing found).",
+      "files": [],
+      "assertions": [
+        {
+          "name": "search_executed",
+          "description": "Agent runs a cortex search command or calls cortex_search tool"
+        },
+        {
+          "name": "search_before_advice",
+          "description": "The search happens before any substantive advice or recommendations are given"
+        },
+        {
+          "name": "relevant_search_query",
+          "description": "Search query is relevant to rate limiting, API, or middleware — not just generic 'help'"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I just spent 2 hours debugging a panic in the job worker. Root cause: a nil pointer dereference when the queue is empty and two goroutines both check `len(queue) > 0` before popping. Fixed it by adding a mutex around the check-and-pop. This bug cost us a production outage last Tuesday.",
+      "expected_output": "Agent stores this bug fix as an episodic memory with: meaningful title, content covering symptoms + root cause + fix, appropriate tags, level: episodic.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "memory_creation_command",
+          "description": "Agent runs cortex create or cortex consolidate command (not just describes what it would do)"
+        },
+        {
+          "name": "level_episodic",
+          "description": "Memory is stored at level episodic (not semantic or working)"
+        },
+        {
+          "name": "content_includes_root_cause",
+          "description": "The stored memory content includes root cause details (nil pointer, race condition, or mutex)"
+        },
+        {
+          "name": "includes_tags",
+          "description": "The memory creation command includes --tags or tags parameter"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "We're designing the authentication system for the new microservice. Should we go with JWT tokens or session-based auth? I need to make a decision today.",
+      "expected_output": "Agent searches Cortex BEFORE recommending. After deciding, stores the decision as episodic or semantic memory including the rationale.",
+      "files": [],
+      "assertions": [
+        {
+          "name": "search_before_decision",
+          "description": "Agent searches memory before making or recommending a decision"
+        },
+        {
+          "name": "decision_stored",
+          "description": "Agent stores the final decision as a memory (cortex create or cortex consolidate)"
+        },
+        {
+          "name": "stores_rationale",
+          "description": "The stored memory includes reasoning, not just the conclusion ('use JWT')"
+        }
+      ]
+    }
+  ]
+}

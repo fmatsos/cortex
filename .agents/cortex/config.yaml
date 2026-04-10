@@ -1,0 +1,35 @@
+# Cortex Configuration
+# See documentation for all options
+
+storage:
+  backend: gob                              # gob | sqlite
+  path: .agents/cortex                      # project-local storage
+  mode: single                              # single | multi (single file vs one file per memory)
+
+embeddings:
+  provider: ollama
+  model: nomic-embed-text
+  endpoint: http://localhost:11434
+  timeout: 30
+  chunk_size: 8000                          # max chars per chunk (0 = no chunking)
+  chunk_overlap: 200                        # overlap between chunks for context
+  chunk_strategy: average                   # average | first | max_pool
+
+search:
+  top_k: 5
+  min_score: 0.5
+  include_obsolete: false
+
+output:
+  format: text                              # text | json
+  colors: true
+
+session:
+  auto_derive: true                         # automatically derive session ID from git branch
+  pattern_type: prefix                      # pattern type: prefix, regex, full
+  pattern: ""                               # regex pattern (only for pattern_type: regex)
+  prefix: "session-"                        # prefix to add to derived session ID
+  separator: "-"                            # separator for branch name parts
+  max_segments: 2                           # max number of branch segments (0 = all)
+  strip_prefix: ""                          # optional prefix to strip from branch
+  fallback_to_uuid: true                    # fallback to UUID if pattern doesn't match

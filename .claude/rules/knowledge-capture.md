@@ -1,0 +1,1 @@
+../../.agents/instructions/knowledge-capture.md

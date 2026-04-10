@@ -1,0 +1,11 @@
+# Simple Memory Template
+# Minimal configuration with clean output
+
+frontmatter:
+  include_id: false
+  include_dates: true
+  include_metadata: false
+  date_format: "2006-01-02"
+
+body: |
+  {{.Content}}
