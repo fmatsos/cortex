@@ -17,42 +17,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          go-version: '1.24.7'
-          cache: true
+          enable-cache: true
 
-      - name: Download dependencies
-        run: make deps
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
 
-      - name: Check code formatting
-        run: |
-          go fmt ./...
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Code is not formatted. Run 'go fmt ./...' to fix."
-            git diff
-            exit 1
-          fi
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Check formatting
+        run: uv run ruff format --check src/ tests/
 
       - name: Run linter
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
-          args: --timeout=5m
+        run: uv run ruff check src/ tests/
 
       - name: Run tests
-        run: make test
-
-      - name: Run tests with race detector
-        run: make test-race
-
-      - name: Build
-        run: make build
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cortex-binary
-          path: bin/cortex
-          retention-days: 7
+        run: uv run pytest tests/ -v

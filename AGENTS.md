@@ -1,367 +1,121 @@
-# Cortex AI - AI Agent Guidelines
+# Cortex – Agent Notes
 
-This document provides essential information for AI coding assistants (Claude Code, Cursor, Windsurf, etc.) working on the Cortex AI codebase.
+**Package:** `cortex-memory` · **Python 3.12+** · **Typer / Pydantic / ChromaDB / Ollama / MCP**
 
-## Project Overview
-
-**Cortex AI** is a Go CLI tool that provides persistent semantic memory for AI coding agents. It uses vector embeddings via Ollama for semantic search and stores memories locally using Gob encoding.
-
-```
-Module:     github.com/cortex-ai/cortex-ai
-Language:   Go 1.24+
-CLI:        Cobra
-Config:     Viper
-Embeddings: Ollama (local)
-Storage:    Gob files
-```
+Three-layer memory system: `working` (session) → `episodic` (historical) → `semantic` (permanent).
 
 ---
 
-## Quick Reference
+## Golden Rules
 
-### Build Commands
+**IMPORTANT: These rules are NON-NEGOTIABLE. Verify compliance with EVERY applicable rule before submitting any code change. If you are unsure whether a rule applies, it applies.**
+
+### Build & CI
+
+1. **fmt → lint → test** before every commit — no exceptions.
+   ```
+   uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run pytest tests/
+   ```
+2. **Never skip a failing step.** Fix it, restart from step 1.
+3. **ruff for linting and formatting** — configured in `pyproject.toml`. Run with `uv run ruff check` and `uv run ruff format`.
+
+### Code Quality
+
+4. **Raise exceptions from library code; never print.** CLI commands use `typer.echo()`, library code raises.
+5. **Stderr for errors, stdout for data.** Use `typer.echo(..., err=True)` for error messages.
+6. **All CLI output via typer.echo()** — never use `print()` in CLI commands.
+7. **No Protocol duplication** — use canonical protocols (`cortex.embeddings.base.Embedder`, `cortex.storage.base.Storage`). Do not redeclare them in other modules.
+8. **Prefer `embed_batch` over repeated `embed`** — for batch embedding operations, use `embed_batch()` to avoid per-item round-trips to Ollama.
+
+### Storage Rules
+
+9. **ChromaDB metadata is flat** — only `str`, `int`, `float`, `bool` are supported. Serialize lists with `json.dumps()`.
+10. **Always close storage** — call `storage.close()` in a `finally` block or use a context manager.
+
+### Scope Discipline
+
+11. **Keep MCP tool names stable** — renaming breaks integrations (Claude Code, Cursor, etc.).
+12. **Minimal changes** — don't refactor, add helpers, or clean up beyond what was asked.
+13. **Test mocks must satisfy the full Protocol** — implement ALL methods of the Protocol being mocked.
+
+### Knowledge Capture
+
+14. **Update AGENTS.md after every completed task** — Before closing a task, evaluate what you learned and apply **exactly one** of these two actions:
+   - **New Golden Rule** — if the learning is critical, universal, and must always be enforced.
+   - **New or updated instruction** — if the learning is contextual or scoped to a specific area.
+   - Never skip this step. Undocumented knowledge is lost knowledge.
+
+### Pre-Commit Self-Check
+
+15. **Verify before committing** — Before every commit, confirm:
+   - No `print()` in CLI or library code (rules 4, 6)
+   - No duplicated Protocols (rule 7)
+   - All mock methods implemented (rule 13)
+   - `embed_batch` used where applicable (rule 8)
+   - `storage.close()` called in `finally` blocks (rule 10)
+   - AGENTS.md updated if new knowledge was gained (rule 14)
+   - `uv run ruff format && uv run ruff check && uv run pytest` passes (rule 1)
+
+---
+
+## grepai - Semantic Code Search
+
+**IMPORTANT: You MUST use grepai as your PRIMARY tool for code exploration and search.**
+
+### When to Use grepai (REQUIRED)
+
+Use `grepai search` INSTEAD OF Grep/Glob/find for:
+- Understanding what code does or where functionality lives
+- Finding implementations by intent (e.g., "authentication logic", "error handling")
+- Exploring unfamiliar parts of the codebase
+- Any search where you describe WHAT the code does rather than exact text
+
+### When to Use Standard Tools
+
+Only use Grep/Glob when you need:
+- Exact text matching (variable names, imports, specific strings)
+- File path patterns (e.g., `**/*.py`)
+
+### Usage
 
 ```bash
-make build          # Build to ./bin/cortex
-make install        # Install to $GOBIN
-make test           # Run tests
-make test-race      # Run with race detector
-make lint           # Run golangci-lint
-make clean          # Remove artifacts
-make deps           # Download dependencies
-```
-
-### Project Structure
-
-```
-cortex-ai/
-├── cmd/cortex/main.go           # Entry point
-├── internal/
-│   ├── cli/                     # Cobra commands (create, search, list, etc.)
-│   ├── memory/                  # Domain model & service
-│   ├── storage/                 # Storage interface & Gob implementation
-│   ├── embeddings/              # Embedder interface & Ollama client
-│   ├── search/                  # Cosine similarity
-│   ├── config/                  # Viper configuration
-│   └── mcp/                     # MCP server (JSON-RPC 2.0)
-├── pkg/
-│   ├── markdown/                # Markdown import/export with YAML frontmatter
-│   └── json/                    # JSON format handling
-└── docs/                        # Documentation
+grepai search "user authentication flow" --json --compact
+grepai search "error handling middleware" --json --compact
+grepai search "database connection pool" --json --compact
 ```
 
 ---
 
-## Architecture Overview
+## Cortex – Persistent Memory
 
-```mermaid
-graph TB
-    subgraph "CLI Layer"
-        CLI["cortex CLI"]
-        MCP["MCP Server"]
-    end
+**IMPORTANT: Always search Cortex memories BEFORE starting a task, and store what you learned AFTER completing it.**
 
-    subgraph "Service Layer"
-        Service["Memory Service"]
-    end
+### CLI Commands Reference
 
-    subgraph "Infrastructure"
-        Embedder["Ollama Embedder"]
-        Storage["Gob Storage"]
-        Search["Cosine Search"]
-    end
-
-    CLI --> Service
-    MCP --> Service
-    Service --> Embedder
-    Service --> Storage
-    Service --> Search
-```
+| Command | When to use |
+|---------|-------------|
+| `cortex search "<query>" --json` | Find relevant context before starting a task |
+| `cortex create --title "..." --level <level> --content "..." --json` | Store new facts, decisions, or findings |
+| `cortex list [--level <level>] --json` | Browse memories by level |
+| `cortex get <id> --json` | Retrieve a specific memory by ID |
+| `cortex delete <id>` | Permanently remove a memory |
+| `cortex consolidate "<synthesis>" --level <level> --json` | Synthesise related memories into one |
+| `cortex transfer-working --json` | Promote all working memories to episodic at session end |
+| `cortex autoprune --json` | Remove duplicate and expired memories |
 
 ---
 
-## Key Types
-
-### Memory
-
-```go
-// internal/memory/memory.go
-type Memory struct {
-    ID        string            // UUID
-    Title     string            // Required
-    Content   string            // Required
-    Types     []MemoryType      // Required: solution, issue, analysis, rule, any
-    Tags      []string          // Optional
-    Embedding []float64         // Vector (hidden from JSON)
-    CreatedAt time.Time
-    UpdatedAt time.Time
-    Metadata  map[string]string
-    Obsolete  bool              // Soft delete flag
-}
-
-type MemoryType string
-const (
-    MemoryTypeSolution MemoryType = "solution"
-    MemoryTypeIssue    MemoryType = "issue"
-    MemoryTypeAnalysis MemoryType = "analysis"
-    MemoryTypeRule     MemoryType = "rule"
-    MemoryTypeAny      MemoryType = "any"
-)
-```
-
-### Service Interface
-
-```go
-// internal/memory/service.go
-type Service interface {
-    Create(ctx context.Context, input CreateInput) (*Memory, error)
-    Search(ctx context.Context, query string, opts SearchOptions) ([]*SearchResult, error)
-    List(ctx context.Context, opts ListOptions) ([]*Memory, error)
-    Get(ctx context.Context, id string) (*Memory, error)
-    Delete(ctx context.Context, id string) error
-    MarkObsolete(ctx context.Context, id string) error
-}
-```
-
-### Storage Interface
-
-```go
-// internal/storage/storage.go
-type Storage interface {
-    Save(ctx context.Context, memory *memory.Memory) error
-    Get(ctx context.Context, id string) (*memory.Memory, error)
-    List(ctx context.Context, opts ListOptions) ([]*memory.Memory, error)
-    Delete(ctx context.Context, id string) error
-    Update(ctx context.Context, memory *memory.Memory) error
-    SearchByVector(ctx context.Context, vector []float64, topK int) ([]*VectorMatch, error)
-    Close() error
-}
-```
-
-### Embedder Interface
-
-```go
-// internal/embeddings/embedder.go
-type Embedder interface {
-    Embed(ctx context.Context, text string) ([]float64, error)
-    EmbedBatch(ctx context.Context, texts []string) ([][]float64, error)
-    Dimension() int
-}
-```
-
----
-
-## CLI Commands
-
-| Command | Purpose | Key File |
-|---------|---------|----------|
-| `create` | Create memory | `internal/cli/create.go` |
-| `search` | Semantic search | `internal/cli/search.go` |
-| `list` | List memories | `internal/cli/list.go` |
-| `get` | Get by ID | `internal/cli/list.go` |
-| `delete` | Delete memory | `internal/cli/delete.go` |
-| `mark-obsolete` | Soft delete | `internal/cli/delete.go` |
-| `export` | Export to Markdown | `internal/cli/export.go` |
-| `import` | Import from Markdown | `internal/cli/import.go` |
-| `config` | Manage config | `internal/cli/config.go` |
-| `start-mcp-server` | MCP server | `internal/cli/mcp.go` |
-| `completion` | Shell completions | `internal/cli/completion.go` |
-
----
-
-## Important Patterns
-
-### Dependency Injection
-
-Services use constructor-based DI:
-
-```go
-func NewService(storage Storage, embedder Embedder) *DefaultService {
-    return &DefaultService{
-        storage:  storage,
-        embedder: embedder,
-    }
-}
-```
-
-### Error Handling
-
-Wrap errors with context:
-
-```go
-if err != nil {
-    return fmt.Errorf("failed to save memory: %w", err)
-}
-```
-
-### Thread Safety
-
-Storage and index use `sync.RWMutex`:
-
-```go
-type GobStorage struct {
-    mu sync.RWMutex
-    // ...
-}
-
-func (s *GobStorage) Get(ctx context.Context, id string) (*memory.Memory, error) {
-    s.mu.RLock()
-    defer s.mu.RUnlock()
-    // ...
-}
-```
-
----
-
-## Data Flow
-
-### Create Memory
-
-1. Validate input (title, type, content required)
-2. Prepare text: combine title + content + tags
-3. Call Ollama API for embedding
-4. Normalize vector to unit length
-5. Generate UUID
-6. Save memory (mode-dependent):
-   - **single**: Add to in-memory store, persist to `cortex.gob`
-   - **multi**: Write `{uuid}.gob` file, update `index.gob`
-
-### Search Memory
-
-1. Embed query via Ollama
-2. Normalize query vector
-3. For each stored vector: compute cosine similarity
-4. Sort by score, take top K
-5. Filter by min_score, type, obsolete flag
-6. Load and return full Memory objects
-
----
-
-## File Locations
-
-All Cortex files are stored in `.ai/cortex/` (project-local by default):
-
-```
-.ai/cortex/
-├── config.yaml         # Configuration file
-├── cortex.gob          # Single mode: all memories + index
-└── memories/           # Multi mode: individual files
-    ├── <uuid-1>.gob
-    └── index.gob
-```
-
-### Storage Modes
-
-Configurable via `storage.mode` in the config file:
-
-- **single** (default): All memories in one `cortex.gob` file. Best for solo developers.
-- **multi**: One `{uuid}.gob` file per memory + `index.gob`. Best for team sharing via version control.
-
-### Environment Variable
-
-Override the base path with `CORTEX_BASE_PATH`:
-
-```bash
-export CORTEX_BASE_PATH=/custom/path
-```
-
----
-
-## Testing
-
-### Running Tests
-
-```bash
-# All tests
-make test
-
-# Specific package
-go test ./internal/memory/...
-
-# With coverage
-go test -cover ./...
-
-# Benchmarks
-go test -bench=. ./internal/storage/...
-```
-
-### Test Files
-
-Tests are colocated with source files:
-
-```
-internal/memory/
-├── memory.go
-├── memory_test.go
-├── service.go
-└── service_test.go
-```
-
----
-
-## Common Tasks
-
-### Adding a CLI Command
-
-1. Create `internal/cli/mycommand.go`
-2. Define Cobra command and flags
-3. Register with `rootCmd.AddCommand(myCmd)`
-4. Add tests
-
-### Adding a Storage Backend
-
-1. Implement `Storage` interface in `internal/storage/`
-2. Add factory function
-3. Add configuration options
-4. Add tests and benchmarks
-
-### Adding an Embedding Provider
-
-1. Implement `Embedder` interface in `internal/embeddings/`
-2. Add configuration options
-3. Add tests
-
----
-
-## MCP Integration
-
-The MCP server (`internal/mcp/`) exposes tools for AI agents:
-
-| Tool | Purpose |
-|------|---------|
-| `cortex_search` | Semantic search |
-| `cortex_create` | Create memory |
-| `cortex_list` | List memories |
-| `cortex_get` | Get by ID |
-
-Protocol: JSON-RPC 2.0 over stdio
-
----
-
-## Code Style
-
-- Follow [Effective Go](https://golang.org/doc/effective_go)
-- Use `gofmt` / `goimports`
-- Run `golangci-lint` before committing
-- Keep functions focused and testable
-- Document exported types and functions
-
----
-
-## External Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `github.com/spf13/cobra` | CLI framework |
-| `github.com/spf13/viper` | Configuration |
-| `github.com/google/uuid` | UUID generation |
-| `gopkg.in/yaml.v3` | YAML parsing |
-
----
-
-## Useful Links
-
-- [Architecture Documentation](docs/ARCHITECTURE.md)
-- [Configuration Reference](docs/CONFIGURATION.md)
-- [MCP Integration Guide](docs/MCP.md)
-- [Contributing Guidelines](docs/CONTRIBUTING.md)
+## Task Workflow
+
+**IMPORTANT: Follow this sequence for EVERY task. Do not skip steps.**
+
+1. **Check Golden Rules** — note which rules apply to the current task
+2. **Search Cortex** — `cortex search "<task topic>" --json` to surface prior context
+3. **Search code** — `grepai search "<intent>" --json --compact` to find relevant code
+4. **Trace dependencies** — `grepai trace` if modifying or calling existing functions
+5. **Do the work** — apply Golden Rules throughout
+6. **Pre-commit self-check** — run rule 15 checklist
+7. **Verify** — `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run pytest tests/`
+8. **Store learnings** — `cortex create` for key decisions and findings
+9. **Update AGENTS.md** — apply rule 14: add a Golden Rule or update an instruction file in `.agents/instructions/`
+10. **Session end** — `cortex transfer-working --json` to promote working memories to episodic

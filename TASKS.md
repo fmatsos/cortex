@@ -1,4 +1,4 @@
-# Cortex AI - Implementation Tasks
+# Cortex - Implementation Tasks
 
 This file tracks the implementation progress for each development phase.
 

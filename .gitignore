@@ -1,21 +1,30 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.so.*
-*.dylib
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env
+.env.local
 
-# Test binary, built with `go test -c`
-*.test
 
-# Output of the go coverage tool
-*.out
-coverage.txt
-*.cover
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.syrupy/
 
-# Go workspace file
-go.work
+# Type checking
+.mypy_cache/
 
 # IDEs
 .vscode/
@@ -25,19 +34,16 @@ go.work
 *~
 .DS_Store
 
-# Build artifacts
-/dist/
-/bin/
-/cortex
-
 # Local data
 .local/
 .config/
+.agents/cortex/logs/
+.agents/cortex/chroma/
 
 # Temporary files
 *.tmp
 *.bak
+*.log
 
-# Environment
-.env
-.env.local
+# Legacy
+.grepai/

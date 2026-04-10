@@ -1,245 +1,342 @@
-.TH CORTEX 1 "February 2026" "Cortex AI 0.0.1" "User Commands"
+.TH CORTEX 1 "April 2026" "cortex-memory 0.1.0" "User Commands"
 .SH NAME
-cortex \- persistent semantic memory for AI coding agents
+cortex \- three-layer semantic memory system for AI assistants
 .SH SYNOPSIS
 .B cortex
-[\fIcommand\fR] [\fIoptions\fR]
+[\fB\-\-config\fR \fIpath\fR] [\fB\-\-log\-level\fR \fIlevel\fR] \fIcommand\fR [\fIoptions\fR]
 .SH DESCRIPTION
-.B Cortex AI
-is a CLI tool that provides persistent memory for AI coding agents.
-It uses vector embeddings via Ollama for semantic search and stores memories
-locally using Gob encoding. This enables AI agents to store, retrieve, and
-search memories using semantic similarity.
+.B Cortex
+is a Python CLI tool that provides a three-layer semantic memory system for
+AI coding assistants. It uses vector embeddings via Ollama for semantic search
+and stores memories in ChromaDB, organised across working, episodic and
+semantic layers. It can also be driven via the MCP protocol (JSON-RPC 2.0
+over stdio or SSE) for direct integration with AI agents.
+.PP
+Install via PyPI:
+.PP
+.RS
+.nf
+pip install cortex-memory
+# or run without installing:
+uvx cortex
+.fi
+.RE
 .SH COMMANDS
 .TP
 .B create
-Create a new memory with title, type, and content.
+Create a new memory.
 .RS
 .TP
 .BI \-t ", " \-\-title " " \fIstring\fR
-Memory title (required)
-.TP
-.BI \-\-type " " \fItype\fR
-Memory type: solution, issue, analysis, rule, any (required)
+Memory title (derived from content if omitted)
 .TP
 .BI \-c ", " \-\-content " " \fIstring\fR
 Memory content (required)
 .TP
+.BI \-l ", " \-\-level " " \fIlevel\fR
+Memory level: working, episodic, semantic (default: episodic)
+.TP
 .BI \-\-tags " " \fItags\fR
 Comma-separated tags
 .TP
-.BI \-\-metadata " " \fIkey=value\fR
-Metadata key-value pairs (repeatable)
+.BI \-\-session " " \fIid\fR
+Session ID (required for working level if not auto-derived)
+.TP
+.BI \-\-source " " \fIsource\fR
+Source: manual, auto, llm (default: manual)
+.TP
+.BI \-\-task\-id " " \fIid\fR
+Task or ticket ID
+.TP
+.BI \-\-author " " \fIstring\fR
+Author identifier
+.TP
+.B \-\-json
+Output result as JSON
 .RE
 .TP
 .B search \fIquery\fR
-Search memories semantically by meaning.
+Search memories using semantic similarity.
 .RS
 .TP
 .BI \-n ", " \-\-top " " \fIint\fR
-Top K results (default: 5)
+Maximum number of results (default: 5)
 .TP
 .BI \-\-min\-score " " \fIfloat\fR
-Minimum similarity score 0-1 (default: 0.5)
+Minimum similarity score 0\(en1 (default: 0.5)
 .TP
-.BI \-\-type " " \fItype\fR
-Filter by memory type
+.BI \-l ", " \-\-level " " \fIlevels\fR
+Filter by level(s), comma-separated
+.TP
+.BI \-\-session " " \fIid\fR
+Filter working memories by session ID
 .TP
 .B \-\-include\-obsolete
-Include soft-deleted memories
+Include obsolete memories
 .TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
+.B \-\-json
+Output results as JSON
 .RE
 .TP
 .B list
-List all memories with optional filtering.
+List memories with optional filtering.
 .RS
 .TP
-.BI \-\-type " " \fItype\fR
-Filter by memory type
+.BI \-l ", " \-\-level " " \fIlevel\fR
+Filter by level: working, episodic, semantic
+.TP
+.BI \-\-session " " \fIid\fR
+Filter by session ID
 .TP
 .B \-\-include\-obsolete
-Include soft-deleted memories
+Include obsolete memories
 .TP
 .BI \-\-limit " " \fIint\fR
-Limit number of results
+Maximum number of results (0 = all)
 .TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
-.TP
-.BI \-\-sort " " \fIfield\fR
-Sort by: id, title, created, updated (default: created)
+.BI \-\-offset " " \fIint\fR
+Number of results to skip
 .TP
 .B \-\-reverse
-Reverse sort order
+Reverse sort order (oldest first)
+.TP
+.B \-\-json
+Output results as JSON
 .RE
 .TP
 .B get \fImemory-id\fR
-Get a specific memory by ID (UUID).
+Retrieve a memory by ID or unique ID prefix.
 .RS
 .TP
-.BI \-\-format " " \fIformat\fR
-Output format: text, json (default: text)
+.B \-\-json
+Output as JSON
 .RE
 .TP
 .B delete \fImemory-id\fR
-Permanently delete a memory by ID.
+Permanently delete a memory.
+.RS
 .TP
-.B mark\-obsolete \fImemory-id\fR
-Soft delete a memory (mark as obsolete without permanent deletion).
+.BR \-y ", " \-\-yes
+Skip confirmation prompt
+.RE
+.TP
+.B consolidate \fIsynthesis\fR
+Create a memory or merge with a similar existing one (deduplication).
+.RS
+.TP
+.BI \-l ", " \-\-level " " \fIlevel\fR
+Memory level (default: semantic)
+.TP
+.BI \-t ", " \-\-title " " \fIstring\fR
+Memory title (derived from content if omitted)
+.TP
+.BI \-\-tags " " \fItags\fR
+Comma-separated tags
+.TP
+.BI \-\-session " " \fIid\fR
+Session ID
+.TP
+.BI \-\-source " " \fIsource\fR
+Source: manual, auto, llm (default: manual)
+.TP
+.BI \-\-task\-id " " \fIid\fR
+Task or ticket ID
+.TP
+.BI \-\-author " " \fIstring\fR
+Author identifier
+.TP
+.B \-\-force
+Skip duplicate detection
+.TP
+.B \-\-json
+Output as JSON
+.RE
+.TP
+.B transfer\-working
+Promote all working memories for a session to the episodic layer.
+.RS
+.TP
+.BI \-\-session " " \fIid\fR
+Session ID to transfer (auto-derived from git branch if omitted)
+.TP
+.B \-\-json
+Output as JSON
+.RE
+.TP
+.B autoprune
+Clean up and optimise the memory database.
+.RS
+.TP
+.B \-\-dry\-run
+Show what would be done without making changes
+.TP
+.B \-\-duplicates
+Remove duplicate memories
+.TP
+.B \-\-episodic
+Archive old episodic memories
+.TP
+.B \-\-semantic
+Merge similar semantic memories
+.TP
+.B \-\-json
+Output as JSON
+.RE
 .TP
 .B export
 Export memories to Markdown format.
 .RS
 .TP
 .BI \-o ", " \-\-output " " \fIpath\fR
-Output directory or file path
+Output file path (stdout if omitted)
+.TP
+.BI \-l ", " \-\-level " " \fIlevel\fR
+Filter by level
+.TP
+.BI \-\-id " " \fIid\fR
+Export a single memory by ID
 .TP
 .B \-\-all
 Export all memories
-.TP
-.BI \-\-intent " " \fIstring\fR
-Generate synthesis by intent query
-.TP
-.BI \-\-type " " \fItype\fR
-Filter by type before export
-.TP
-.B \-\-include\-obsolete
-Include soft-deleted memories
 .RE
 .TP
 .B import \fIfiles...\fR
 Import memories from Markdown files.
 .RS
 .TP
-.BI \-f ", " \-\-force
-Overwrite existing memories
+.B \-\-force
+Overwrite existing memories with the same ID
 .TP
 .B \-\-dry\-run
-Validate without importing
+Validate without saving
 .TP
-.BI \-\-format " " \fIformat\fR
-Input format: markdown (default: markdown)
+.B \-\-json
+Output as JSON
+.RE
+.TP
+.B stats
+Display memory database statistics.
+.RS
+.TP
+.B \-\-json
+Output as JSON
 .RE
 .TP
 .B config
-View and manage configuration.
+Show the current Cortex configuration.
 .RS
 .TP
-.B init
-Create default configuration file
+.B \-\-json
+Output as JSON
+.RE
 .TP
-.B path
-Show configuration file path
+.B session
+Display the current session ID (derived from git branch).
+.RS
 .TP
-.BI "get " \fIkey\fR
-Get a configuration value
-.TP
-.BI "schema " \fItype\fR
-Show or export JSON schema for templates
-.TP
-.BI "template validate " \fIfile\fR
-Validate a custom template file
+.B \-\-json
+Output as JSON
 .RE
 .TP
 .B start\-mcp\-server
-Start the MCP (Model Context Protocol) server.
+Start the Cortex MCP server.
 .RS
 .TP
 .BI \-\-transport " " \fItransport\fR
 Transport mode: stdio, sse (default: stdio)
 .TP
 .BI \-\-address " " \fIaddr\fR
-Server address for SSE transport (default: :8080)
-.TP
-.BI \-\-log " " \fIlevel\fR
-Log level: debug, info, warn, error (default: info)
+SSE server address host:port (default: :8080)
 .RE
-.TP
-.B completion \fIshell\fR
-Generate shell completion scripts for bash, zsh, or fish.
-.TP
-.B statistics
-Display database metrics and storage statistics.
 .TP
 .B install\-man
 Install the cortex man page to the system.
 .RS
 .TP
 .BI \-\-dir " " \fIpath\fR
-Custom man page directory
+Custom man page directory (default: ~/.local/share/man/man1)
 .TP
 .B \-\-system
-Install to /usr/local/share/man (requires sudo)
+Install to /usr/local/share/man/man1 (requires root)
 .RE
 .SH GLOBAL OPTIONS
 .TP
-.BI \-c ", " \-\-config " " \fIpath\fR
+.BI \-\-config " " \fIpath\fR
 Path to configuration file
 .TP
-.BI \-\-storage " " \fIbackend\fR
-Storage backend: gob, sqlite (default: gob)
+.BI \-\-log\-level " " \fIlevel\fR
+Log level: debug, info, warning, error (default: info)
 .TP
-.BR \-h ", " \-\-help
+.BR \-\-help
 Show help message
 .TP
-.BR \-v ", " \-\-version
+.BR \-\-version
 Show version information
+.SH MEMORY LAYERS
+Cortex organises memories in three layers:
+.TP
+.B working
+Short-lived, session-scoped notes. Automatically scoped to a session ID
+derived from the current git branch.
+.TP
+.B episodic
+Medium-term memories covering specific tasks, bugs, and decisions.
+.TP
+.B semantic
+Long-term distilled knowledge: patterns, conventions, architecture decisions.
 .SH FILES
 .TP
-.I .ai/cortex/config.yaml
+.I .agents/cortex/config.yaml
 Project-local configuration file
 .TP
-.I .ai/cortex/cortex.gob
-Single mode storage file (all memories + index)
-.TP
-.I .ai/cortex/memories/
-Multi mode storage directory (individual memory files)
-.TP
-.I .ai/cortex/memories/index.gob
-Multi mode index file
+.I .agents/cortex/
+ChromaDB storage directory (default)
 .SH ENVIRONMENT
+All environment variables follow the
+.B CORTEX_
+prefix and mirror the YAML configuration hierarchy
+(e.g.\&
+.B CORTEX_STORAGE__PATH
+overrides
+.I storage.path
+).
+Notable variables:
 .TP
-.B CORTEX_BASE_PATH
-Override the base storage path
+.B CORTEX_STORAGE__BACKEND
+Storage backend (default: chroma)
 .TP
-.B CORTEX_STORAGE_BACKEND
-Storage backend (gob)
+.B CORTEX_STORAGE__PATH
+Storage directory path (default: .agents/cortex)
 .TP
-.B CORTEX_STORAGE_PATH
-Storage directory path
+.B CORTEX_EMBEDDINGS__PROVIDER
+Embeddings provider (default: ollama)
 .TP
-.B CORTEX_EMBEDDINGS_PROVIDER
-Embeddings provider (ollama)
-.TP
-.B CORTEX_EMBEDDINGS_MODEL
+.B CORTEX_EMBEDDINGS__MODEL
 Ollama model name (default: nomic-embed-text)
 .TP
-.B CORTEX_EMBEDDINGS_ENDPOINT
+.B CORTEX_EMBEDDINGS__ENDPOINT
 Ollama API endpoint (default: http://localhost:11434)
 .TP
-.B CORTEX_SEARCH_TOP_K
+.B CORTEX_SEARCH__TOP_K
 Default number of search results (default: 5)
 .TP
-.B CORTEX_SEARCH_MIN_SCORE
+.B CORTEX_SEARCH__MIN_SCORE
 Default minimum similarity score (default: 0.5)
-.TP
-.B CORTEX_SEARCH_INCLUDE_OBSOLETE
-Include obsolete memories in search (default: false)
-.TP
-.B CORTEX_OUTPUT_FORMAT
-Default output format: text, json (default: text)
-.TP
-.B CORTEX_OUTPUT_COLORS
-Enable colored output (default: true)
 .SH EXAMPLES
-Create a memory:
+Create an episodic memory:
 .PP
 .RS
 .nf
-cortex create \-\-title "JWT Fix" \-\-type solution \\
-  \-\-content "Use refresh tokens for better security"
+cortex create \-\-content "Use refresh tokens for better security" \\
+  \-\-level episodic \-\-tags jwt,auth
+.fi
+.RE
+.PP
+Create a working-layer note for the current session:
+.PP
+.RS
+.nf
+cortex create \-\-content "Investigating flaky test in CI" \-\-level working
 .fi
 .RE
 .PP
@@ -251,11 +348,19 @@ cortex search "authentication issues" \-\-top 10
 .fi
 .RE
 .PP
-List all memories:
+Consolidate knowledge into the semantic layer:
 .PP
 .RS
 .nf
-cortex list \-\-format json
+cortex consolidate "Always validate JWTs server-side" \-\-level semantic
+.fi
+.RE
+.PP
+Promote working memories to episodic at session end:
+.PP
+.RS
+.nf
+cortex transfer\-working
 .fi
 .RE
 .PP
@@ -263,7 +368,7 @@ Export all memories to Markdown:
 .PP
 .RS
 .nf
-cortex export \-\-all \-\-output ./memories/
+cortex export \-\-all \-\-output ./memories.md
 .fi
 .RE
 .PP
@@ -275,50 +380,27 @@ cortex start\-mcp\-server \-\-transport stdio
 .fi
 .RE
 .PP
-Generate shell completions (bash):
+Install the man page to your local share:
 .PP
 .RS
 .nf
-cortex completion bash >> ~/.bashrc
+cortex install\-man
 .fi
 .RE
-.SH MEMORY TYPES
-.TP
-.B solution
-Solutions to problems, fixes, and workarounds
-.TP
-.B issue
-Known issues, bugs, and problems
-.TP
-.B analysis
-Analysis of code, architecture, or behavior
-.TP
-.B rule
-Project rules, conventions, and best practices
-.TP
-.B any
-General-purpose memory type
 .SH MCP INTEGRATION
-The MCP server exposes the following tools for AI agents:
-.TP
-.B cortex_search
-Semantic search for memories
-.TP
-.B cortex_create
-Create new memories
-.TP
-.B cortex_list
-List memories with filtering
-.TP
-.B cortex_get
-Get a specific memory by ID
+The MCP server exposes tools for AI agents including:
+.BR cortex_search ", " cortex_create ", " cortex_list ", " cortex_get ", "
+.BR cortex_consolidate ", " cortex_promote_memory ", " cortex_update_memory ", "
+.BR cortex_mark_obsolete ", " cortex_review_session ", "
+.BR cortex_think_about_memory_maintenance ", " cortex_think_about_task_completion ", "
+.BR cortex_choose_memory_layer .
 .PP
-The MCP server uses JSON-RPC 2.0 over stdio or SSE transport.
+The MCP server communicates via JSON-RPC 2.0 over stdio (default) or SSE.
 .SH SEE ALSO
 .BR ollama (1)
 .PP
-Online documentation: https://github.com/cortex-ai/cortex-ai
+Online documentation: https://github.com/fmatsos/cortex
 .SH AUTHORS
-Cortex AI Contributors
+Franck Matsos and contributors.
 .SH BUGS
-Report bugs at: https://github.com/cortex-ai/cortex-ai/issues
+Report bugs at: https://github.com/fmatsos/cortex/issues
