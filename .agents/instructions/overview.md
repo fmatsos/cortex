@@ -26,8 +26,8 @@ Cortex is a **three-layer semantic memory system** for AI assistants, implementi
 ```mermaid
 graph TB
     subgraph "Presentation Layer"
-        CLI[CLI Commands<br/>Cobra Framework]
-        MCP[MCP Server<br/>JSON-RPC 2.0]
+        CLI[CLI Commands<br/>Typer]
+        MCP[MCP Server<br/>FastMCP / stdio]
     end
 
     subgraph "Application Layer"
@@ -37,15 +37,15 @@ graph TB
     end
 
     subgraph "Domain Layer"
-        DM[Domain Models<br/>Memory, Context, Level]
+        DM[Domain Models<br/>Pydantic v2]
         BL[Business Logic<br/>Validation, Rules]
     end
 
     subgraph "Infrastructure Layer"
-        ST[Storage<br/>GobStorage]
-        EM[Embeddings<br/>Ollama Client]
+        ST[Storage<br/>ChromaDB]
+        EM[Embeddings<br/>Ollama / httpx]
         SE[Search<br/>Cosine Similarity]
-        CF[Config<br/>Viper]
+        CF[Config<br/>pydantic-settings]
     end
 
     CLI --> MS
@@ -78,9 +78,9 @@ graph TB
 
 - **Layered Architecture**: Clear separation between presentation, application, domain, and infrastructure
 - **Dependency Injection**: Services receive dependencies via constructors
-- **Interface-Based Design**: Infrastructure components implement interfaces for testability
-- **Context-Aware**: All I/O operations accept `context.Context` for cancellation and timeout
-- **Thread-Safe**: Concurrent operations protected by appropriate synchronization primitives
+- **Protocol-Based Design**: Infrastructure components implement Protocols for testability
+- **Pydantic v2 Models**: All domain objects are validated Pydantic models
+- **ChromaDB Storage**: Vector storage with three named collections (working, episodic, semantic)
 
 ---
 
@@ -91,17 +91,16 @@ graph TB
 **Purpose**: Handle user interaction and external communication
 
 **Components**:
-- **CLI Commands** (`internal/cli/`)
-  - Cobra command definitions
+- **CLI Commands** (`src/cortex/cli/`)
+  - Typer command definitions
   - Flag parsing and validation
   - User-facing error messages
-  - Output formatting (text/JSON)
+  - Output formatting (rich tables / JSON)
 
-- **MCP Server** (`internal/mcp/`)
-  - JSON-RPC 2.0 protocol implementation
-  - Tool definitions and handlers
-  - Transport abstraction (stdio/SSE)
-  - MCP specification compliance
+- **MCP Server** (`src/cortex/mcp/`)
+  - FastMCP server with 13 registered tools
+  - stdio transport (default)
+  - Tool definitions matching stable names for integrations
 
 **Responsibilities**:
 - Parse and validate user input
@@ -114,171 +113,106 @@ graph TB
 **Purpose**: Coordinate business operations and use cases
 
 **Components**:
-- **Memory Service** (`internal/memory/service.go`)
+- **Memory Service** (`src/cortex/memory/service.py`)
   - CRUD operations for memories
   - Semantic search orchestration
   - Embedding generation coordination
   - Memory lifecycle management
 
-- **Consolidation Service** (`internal/consolidation/service.go`)
-  - Duplicate detection
+- **Consolidation Service** (`src/cortex/consolidation/service.py`)
+  - Duplicate detection via cosine similarity
   - Memory merging logic
   - Similarity threshold enforcement
-  - Multi-level consolidation
+  - Promote-to-semantic operations
 
-- **Autoprune Service** (`internal/consolidation/autoprune.go`)
+- **Autoprune Service** (`src/cortex/consolidation/autoprune.py`)
   - Duplicate cleanup
-  - Episodic memory archiving
+  - Episodic memory archiving by age
   - Semantic memory merging
   - Batch optimization
-
-**Responsibilities**:
-- Implement use cases
-- Coordinate between domain and infrastructure
-- Enforce business rules
-- Manage transactions and error handling
 
 ### 3. Domain Layer
 
 **Purpose**: Define core business entities and rules
 
 **Components**:
-- **Memory Model** (`internal/memory/types.go`)
-  ```go
-  type Memory struct {
-      ID         string        // UUID identifier
-      Level      MemoryLevel   // working|episodic|semantic
-      Title      string        // Human-readable title
-      Content    string        // Full content (Markdown supported)
-      Tags       []string      // Categorization tags
-      Embedding  []float64     // Vector representation
-      Context    MemoryContext // Metadata and relationships
-      CreatedAt  time.Time     // Creation timestamp
-      UpdatedAt  time.Time     // Last modification
-      MergedFrom []string      // Source memory IDs (for consolidation)
-      Obsolete   bool          // Soft delete flag
-  }
-  ```
+- **Memory Model** (`src/cortex/models/memory.py`)
+
+```python
+class Memory(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    level: MemoryLevel
+    title: str         # 3–60 characters
+    content: str       # min 10 characters
+    tags: list[str] = []
+    embedding: list[float] | None = None
+    context: MemoryContext = MemoryContext()
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    merged_from: list[str] = []
+    obsolete: bool = False
+```
 
 - **Memory Level Enum**
-  ```go
-  type MemoryLevel string
-  const (
-      LevelWorking  MemoryLevel = "working"   // Session-scoped
-      LevelEpisodic MemoryLevel = "episodic"  // Time-bound
-      LevelSemantic MemoryLevel = "semantic"  // Permanent
-  )
-  ```
+
+```python
+class MemoryLevel(str, Enum):
+    WORKING  = "working"   # Session-scoped
+    EPISODIC = "episodic"  # Time-bound
+    SEMANTIC = "semantic"  # Permanent
+```
 
 - **Memory Context**
-  ```go
-  type MemoryContext struct {
-      TaskID          string    // Associated task/ticket
-      SessionID       string    // Development session
-      Timestamp       time.Time // Event timestamp
-      Author          string    // Creator identity
-      Tags            []string  // Additional categorization
-      Source          string    // Origin (manual|auto|llm)
-      RelatedMemories []string  // Connected memory IDs
-  }
-  ```
 
-**Responsibilities**:
-- Define core entities
-- Enforce domain invariants
-- Encapsulate business logic
-- Provide domain services
+```python
+class MemoryContext(BaseModel):
+    task_id: str = ""
+    session_id: str = ""
+    author: str = ""
+    source: str = "manual"     # manual | auto | llm
+    tags: list[str] = []
+    related_memories: list[str] = []
+```
 
 ### 4. Infrastructure Layer
 
 **Purpose**: Implement technical capabilities
 
-**Components**:
+**Storage** (`src/cortex/storage/`):
 
-#### Storage (`internal/storage/`)
-
-```mermaid
-classDiagram
-    class Storage {
-        <<interface>>
-        +Save(ctx, memory) error
-        +Get(ctx, id) (*Memory, error)
-        +List(ctx, opts) ([]*Memory, error)
-        +Delete(ctx, id) error
-        +Update(ctx, memory) error
-        +SearchAllLayers(ctx, vector, opts) ([]*SearchResult, error)
-        +TransferWorkingToEpisodic(ctx, sessionID) (int, error)
-        +Close() error
-    }
-
-    class GobStorage {
-        -path string
-        -mu sync.RWMutex
-        -persistentIndex map[string]*Memory
-        -workingIndex map[string]map[string]*Memory
-        +NewGobStorage(path) *GobStorage
-        -load() error
-        -save() error
-        -loadWorking(sessionID) error
-        -saveWorking(sessionID) error
-    }
-
-    Storage <|.. GobStorage
+```python
+class Storage(Protocol):
+    def save(self, memory: Memory) -> None: ...
+    def get(self, memory_id: str) -> Memory: ...
+    def list(self, level=None, session_id=None, include_obsolete=False) -> list[Memory]: ...
+    def delete(self, memory_id: str) -> None: ...
+    def update(self, memory: Memory) -> None: ...
+    def search_all_layers(self, vector, top_k, min_score, ...) -> list[SearchResult]: ...
+    def transfer_working_to_episodic(self, session_id: str) -> int: ...
+    def get_embedding(self, memory_id: str) -> list[float]: ...
+    def close(self) -> None: ...
 ```
 
-#### Embeddings (`internal/embeddings/`)
+**Embeddings** (`src/cortex/embeddings/`):
 
-```mermaid
-classDiagram
-    class Embedder {
-        <<interface>>
-        +Embed(ctx, text) ([]float64, error)
-        +EmbedBatch(ctx, texts) ([][]float64, error)
-        +Dimension() int
-    }
-
-    class OllamaEmbedder {
-        -endpoint string
-        -model string
-        -timeout time.Duration
-        -client *http.Client
-        +NewOllamaEmbedder(cfg) *OllamaEmbedder
-        -makeRequest(ctx, prompt) ([]float64, error)
-        -normalize(vector) []float64
-    }
-
-    Embedder <|.. OllamaEmbedder
+```python
+class Embedder(Protocol):
+    def embed(self, text: str) -> list[float]: ...
+    def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
+    def dimension(self) -> int: ...
 ```
 
-#### Search (`internal/search/`)
+**Search** (`src/cortex/search/cosine.py`):
 
-```mermaid
-classDiagram
-    class CosineSimilarity {
-        <<function>>
-        +CosineSimilarity(a, b []float64) float64
-    }
-
-    class SearchOptions {
-        +TopK int
-        +MinScore float64
-        +Level MemoryLevel
-        +SessionID string
-        +IncludeObsolete bool
-    }
-
-    class SearchResult {
-        +Memory *Memory
-        +Score float64
-    }
+```python
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    va, vb = np.array(a), np.array(b)
+    dot = np.dot(va, vb)
+    norm_a, norm_b = np.linalg.norm(va), np.linalg.norm(vb)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(dot / (norm_a * norm_b))
 ```
-
-**Responsibilities**:
-- Implement storage mechanisms
-- Provide embedding generation
-- Execute similarity search
-- Manage configuration
-- Handle external integrations
 
 ---
 
@@ -295,24 +229,24 @@ sequenceDiagram
     participant EM as Embedder
     participant ST as Storage
 
-    CLI->>MS: Create(ctx, memory)
-    MS->>MS: Validate(memory)
-    MS->>EM: Embed(ctx, title+content+tags)
-    EM-->>MS: vector
-    MS->>MS: Normalize(vector)
-    MS->>ST: Save(ctx, memory)
-    ST-->>MS: nil (success)
-    MS-->>CLI: memory.ID, nil
+    CLI->>MS: create(memory)
+    MS->>MS: validate(memory)
+    MS->>EM: embed(title + content + tags)
+    EM-->>MS: vector [768 floats]
+    MS->>MS: normalize(vector)
+    MS->>ST: save(memory)
+    ST-->>MS: None (success)
+    MS-->>CLI: memory
 ```
 
 **Key Methods**:
-- `Create(ctx, memory)` - Create new memory with embeddings
-- `Search(ctx, query, opts)` - Semantic search across layers
-- `Get(ctx, id)` - Retrieve memory by ID
-- `List(ctx, opts)` - List with filtering
-- `Update(ctx, memory)` - Update existing memory
-- `Delete(ctx, id)` - Permanent deletion
-- `MarkObsolete(ctx, id)` - Soft deletion
+- `create(memory)` — Create new memory with embeddings
+- `search(query, opts)` — Semantic search across layers
+- `get(memory_id)` — Retrieve memory by ID (prefix matching)
+- `list(opts)` — List with filtering
+- `update(memory)` — Update existing memory
+- `delete(memory_id)` — Permanent deletion
+- `mark_obsolete(memory_id)` — Soft deletion
 
 ### Consolidation Service
 
@@ -335,17 +269,6 @@ flowchart TD
     style D fill:#fff4e6,stroke:#fd7e14
     style F fill:#d3f9d8,stroke:#37b24d
     style E fill:#d3f9d8,stroke:#37b24d
-```
-
-**Consolidation Result**:
-```go
-type ConsolidationResult struct {
-    Action     string  // "created" | "merged"
-    MemoryID   string  // Resulting memory ID
-    Level      string  // Memory level
-    Similarity float64 // Similarity score (if merged)
-    Message    string  // Human-readable description
-}
 ```
 
 ### Autoprune Service
@@ -398,18 +321,17 @@ sequenceDiagram
 
     User->>CLI: cortex create --title "..." --content "..."
     CLI->>CLI: Parse flags & validate input
-    CLI->>MemoryService: Create(ctx, memory)
-    MemoryService->>MemoryService: Validate memory (min lengths, level)
-    MemoryService->>Embedder: Embed(ctx, text)
-    Embedder->>Embedder: Call Ollama API
-    Embedder-->>MemoryService: vector [768]float64
-    MemoryService->>MemoryService: Normalize vector
-    MemoryService->>Storage: Save(ctx, memory)
-    Storage->>Storage: Add to index
-    Storage->>Storage: Write to disk (memories.gob or working/*.gob)
-    Storage-->>MemoryService: nil (success)
-    MemoryService-->>CLI: memory, nil
-    CLI->>CLI: Format output
+    CLI->>MemoryService: create(memory)
+    MemoryService->>MemoryService: Validate memory (lengths, level)
+    MemoryService->>Embedder: embed(text)
+    Embedder->>Embedder: POST /api/embeddings (Ollama)
+    Embedder-->>MemoryService: vector [768 floats]
+    MemoryService->>MemoryService: normalize(vector)
+    MemoryService->>Storage: save(memory)
+    Storage->>Storage: collection.add(ids, embeddings, metadatas)
+    Storage-->>MemoryService: None (success)
+    MemoryService-->>CLI: memory
+    CLI->>CLI: Format output (rich / JSON)
     CLI-->>User: Success message with ID
 ```
 
@@ -422,53 +344,22 @@ sequenceDiagram
     participant MemoryService
     participant Embedder
     participant Storage
-    participant Search
 
     User->>CLI: cortex search "query text"
-    CLI->>CLI: Parse query & options
-    CLI->>MemoryService: Search(ctx, query, opts)
-    MemoryService->>Embedder: Embed(ctx, query)
+    CLI->>MemoryService: search(query, opts)
+    MemoryService->>Embedder: embed(query)
     Embedder-->>MemoryService: queryVector
-    MemoryService->>Storage: SearchAllLayers(ctx, queryVector, opts)
+    MemoryService->>Storage: search_all_layers(queryVector, top_k, min_score)
 
-    Storage->>Storage: Search persistent memories
-    Storage->>Storage: Search working memories
-
-    loop For each memory
-        Storage->>Search: CosineSimilarity(queryVector, memVector)
-        Search-->>Storage: score
+    loop For each collection (working, episodic, semantic)
+        Storage->>Storage: col.query(query_embeddings=[v], n_results=top_k)
+        Storage->>Storage: score = max(0.0, 1.0 - distance)
     end
 
-    Storage->>Storage: Filter by min_score
-    Storage->>Storage: Sort by score (descending)
-    Storage->>Storage: Take top_k results
-    Storage-->>MemoryService: []*SearchResult
-    MemoryService-->>CLI: results, nil
-    CLI->>CLI: Format results
+    Storage->>Storage: merge + sort by score + take top_k
+    Storage-->>MemoryService: list[SearchResult]
+    MemoryService-->>CLI: results
     CLI-->>User: Ranked memories with scores
-```
-
-### Transfer Working Memory Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant CLI
-    participant Storage
-
-    User->>CLI: cortex transfer-working --session dev-123
-    CLI->>Storage: TransferWorkingToEpisodic(ctx, "dev-123")
-    Storage->>Storage: Load working/session-dev-123.gob
-
-    loop For each working memory
-        Storage->>Storage: Change level to episodic
-        Storage->>Storage: Add to persistent index
-    end
-
-    Storage->>Storage: Save memories.gob
-    Storage->>Storage: Delete working/session-dev-123.gob
-    Storage-->>CLI: count, nil
-    CLI-->>User: "Transferred N memories"
 ```
 
 ---
@@ -520,109 +411,75 @@ graph TB
     E3 -.-> Time
 ```
 
-### Memory Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Working: Create with --level working
-    [*] --> Episodic: Create with --level episodic
-    [*] --> Semantic: Create with --level semantic
-
-    Working --> Episodic: transfer-working
-    Working --> Deleted: delete
-
-    Episodic --> Archived: Age > retention
-    Episodic --> Semantic: Abstraction
-    Episodic --> Obsolete: mark-obsolete
-    Episodic --> Deleted: delete
-
-    Semantic --> Merged: Consolidation
-    Semantic --> Obsolete: mark-obsolete
-    Semantic --> Deleted: delete
-
-    Obsolete --> Deleted: autoprune --remove-obsolete
-    Archived --> Deleted: autoprune --archive-episodic
-
-    Deleted --> [*]
-```
-
 ---
 
 ## Storage Architecture
 
-### File Organization
+### ChromaDB Collections
 
-```mermaid
-graph TB
-    subgraph "Storage Directory: .agents/cortex/"
-        Main[memories.gob<br/>Episodic + Semantic]
+Cortex uses three ChromaDB collections, one per memory level:
 
-        subgraph "Working Directory"
-            W1[session-abc123.gob]
-            W2[session-def456.gob]
-            WN[session-xyz789.gob]
-        end
+| Collection | Contents |
+|---|---|
+| `cortex_working` | Working memories (session-scoped) |
+| `cortex_episodic` | Episodic memories (time-bound) |
+| `cortex_semantic` | Semantic memories (permanent) |
 
-        Config[config.yaml]
-    end
+### Metadata Schema
 
-    Main --> Episodic[(Episodic Memories)]
-    Main --> Semantic[(Semantic Memories)]
+ChromaDB only supports `str`, `int`, `float`, `bool` in metadata. Lists are serialized with `json.dumps()`:
 
-    W1 --> Working1[(Working: session-abc123)]
-    W2 --> Working2[(Working: session-def456)]
-    WN --> WorkingN[(Working: session-xyz789)]
-
-    style Main fill:#e7f5ff,stroke:#228be6,stroke-width:2px
-    style W1 fill:#fff4e6,stroke:#fd7e14
-    style W2 fill:#fff4e6,stroke:#fd7e14
-    style WN fill:#fff4e6,stroke:#fd7e14
+```python
+{
+    "title": str,
+    "level": str,              # "working" | "episodic" | "semantic"
+    "tags": str,               # json.dumps(list[str])
+    "session_id": str,         # "" if not working
+    "task_id": str,
+    "author": str,
+    "source": str,
+    "ctx_tags": str,           # json.dumps(list[str])
+    "related_memories": str,   # json.dumps(list[str])
+    "created_at": str,         # ISO 8601
+    "updated_at": str,
+    "merged_from": str,        # json.dumps(list[str])
+    "obsolete": bool,
+}
 ```
 
-### GobStorage Implementation
+### Storage Directory
 
-```mermaid
-classDiagram
-    class GobStorage {
-        -path string
-        -mu sync.RWMutex
-        -persistentIndex map~string~*Memory
-        -workingIndex map~string~map~string~*Memory
-        -vectorIndex []vectorEntry
-
-        +NewGobStorage(path) *GobStorage
-        +Save(ctx, m) error
-        +Get(ctx, id) (*Memory, error)
-        +List(ctx, opts) ([]*Memory, error)
-        +Delete(ctx, id) error
-        +SearchAllLayers(ctx, vector, opts) ([]*SearchResult, error)
-        +TransferWorkingToEpisodic(ctx, sessionID) (int, error)
-        +Close() error
-
-        -load() error
-        -save() error
-        -loadWorking(sessionID) error
-        -saveWorking(sessionID) error
-        -buildVectorIndex()
-        -searchWithVector(vector, opts) []*SearchResult
-    }
-
-    class vectorEntry {
-        +id string
-        +vector []float64
-        +level MemoryLevel
-        +sessionID string
-    }
-
-    GobStorage --> vectorEntry
+```bash
+.agents/cortex/
+├── chroma.sqlite3        # ChromaDB main persistence file
+├── <uuid>/               # ChromaDB segment data directories
+│   └── ...
+└── config.yaml           # Local configuration
 ```
 
-**Key Features**:
-- **Thread-Safe**: Uses `sync.RWMutex` for concurrent access
-- **In-Memory Index**: Fast lookups without disk I/O
-- **Separate Files**: Working memories isolated by session
-- **Vector Index**: Optimized for similarity search
-- **Lazy Loading**: Working files loaded on-demand
+### ID Prefix Matching
+
+ChromaDB does not support native prefix search. Cortex implements it by scanning all IDs:
+
+```python
+all_ids = collection.get()["ids"]
+matches = [id for id in all_ids if id.startswith(prefix)]
+if len(matches) == 1:
+    return collection.get(ids=[matches[0]])
+elif len(matches) > 1:
+    raise AmbiguousIDError(prefix, matches)
+```
+
+### Transfer Working → Episodic
+
+```python
+# 1. Get all working memories for session
+items = working_col.get(where={"session_id": session_id})
+# 2. Re-add to episodic collection with level="episodic"
+episodic_col.add(embeddings=..., metadatas=..., ids=...)
+# 3. Delete from working collection
+working_col.delete(ids=items["ids"])
+```
 
 ---
 
@@ -632,15 +489,13 @@ classDiagram
 
 ```mermaid
 graph TB
-    subgraph "MCP Server"
-        Server[MCP Server]
-        Protocol[JSON-RPC 2.0 Handler]
-        Tools[Tool Registry]
+    subgraph "MCP Server (FastMCP)"
+        Server[FastMCP Instance]
+        Tools[13 Tool Handlers]
     end
 
-    subgraph "Transports"
-        Stdio[Stdio Transport<br/>stdin/stdout]
-        SSE[SSE Transport<br/>HTTP Server]
+    subgraph "Transport"
+        Stdio[stdio Transport<br/>stdin/stdout]
     end
 
     subgraph "Tools"
@@ -649,8 +504,14 @@ graph TB
         T3[cortex_consolidate]
         T4[cortex_list]
         T5[cortex_get]
-        T6[cortex_choose_memory_layer]
-        T7[cortex_choose_working_consolidation]
+        T6[cortex_promote_memory]
+        T7[cortex_update_memory]
+        T8[cortex_mark_obsolete]
+        T9[cortex_review_session]
+        T10[cortex_choose_memory_layer]
+        T11[cortex_choose_working_consolidation]
+        T12[cortex_think_about_task_completion]
+        T13[cortex_think_about_memory_maintenance]
     end
 
     subgraph "Services"
@@ -660,113 +521,100 @@ graph TB
 
     Client1[Claude Code] --> Stdio
     Client2[Cursor] --> Stdio
-    Client3[Web Client] --> SSE
 
     Stdio --> Server
-    SSE --> Server
-    Server --> Protocol
-    Protocol --> Tools
-
-    Tools --> T1
-    Tools --> T2
-    Tools --> T3
-    Tools --> T4
-    Tools --> T5
-    Tools --> T6
-    Tools --> T7
+    Server --> Tools
 
     T1 --> MS
     T2 --> MS
     T3 --> CS
     T4 --> MS
     T5 --> MS
+    T6 --> CS
+    T7 --> MS
+    T8 --> MS
 
     style Server fill:#e7f5ff,stroke:#228be6,stroke-width:2px
     style Stdio fill:#fff4e6,stroke:#fd7e14
-    style SSE fill:#fff4e6,stroke:#fd7e14
 ```
 
-### MCP Protocol Flow
+Tool names are **stable** — renaming breaks integrations (Claude Code, Cursor).
 
-```mermaid
-sequenceDiagram
-    participant Client as MCP Client
-    participant Transport as Transport Layer
-    participant Server as MCP Server
-    participant Tool as Tool Handler
-    participant Service as Memory Service
+---
 
-    Client->>Transport: Initialize connection
-    Transport->>Server: initialize request
-    Server-->>Transport: capabilities
-    Transport-->>Client: Server info
+## Configuration
 
-    Client->>Transport: tools/list request
-    Transport->>Server: List available tools
-    Server-->>Transport: Tool schemas
-    Transport-->>Client: Tool list
+Configuration is loaded by pydantic-settings with this priority (highest first):
 
-    Client->>Transport: tools/call (cortex_search)
-    Transport->>Server: Execute tool
-    Server->>Tool: cortex_search handler
-    Tool->>Service: Search(ctx, query, opts)
-    Service-->>Tool: results
-    Tool-->>Server: Tool result
-    Server-->>Transport: JSON-RPC response
-    Transport-->>Client: Search results
+1. CLI flags
+2. `CORTEX_*` environment variables (`__` for nested keys)
+3. `.agents/cortex/config.yaml`
+4. Built-in defaults
+
+```python
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="CORTEX_",
+        env_nested_delimiter="__",
+        yaml_file=".agents/cortex/config.yaml",
+    )
+    storage: StorageConfig = StorageConfig()
+    embeddings: EmbeddingsConfig = EmbeddingsConfig()
+    search: SearchConfig = SearchConfig()
+    consolidation: ConsolidationConfig = ConsolidationConfig()
+    autoprune: AutopruneConfig = AutopruneConfig()
+    session: SessionConfig = SessionConfig()
 ```
+
+Settings are loaded once in the CLI root command and injected into services.
 
 ---
 
 ## Design Decisions
 
-### Why Three Memory Layers?
+### Why ChromaDB?
 
-**Rationale**: Mimics human memory systems (working, episodic, semantic)
-
-**Benefits**:
-- **Working**: Fast, temporary context for active sessions
-- **Episodic**: Time-bound events with automatic cleanup
-- **Semantic**: Permanent knowledge without clutter
-
-**Trade-offs**:
-- More complexity than flat storage
-- Requires user understanding of levels
-- Additional transfer operations
-
-### Why Gob Storage?
-
-**Rationale**: Simple, efficient, Go-native serialization
+**Rationale**: Purpose-built vector database with native similarity search
 
 **Benefits**:
-- No external dependencies
-- Type-safe serialization
-- Fast encoding/decoding
-- Single-file simplicity
+- Native vector storage and cosine similarity search
+- No manual vector indexing required
+- Persistent SQLite backend
+- Python-native, no external service needed
+- Metadata filtering built-in
 
 **Trade-offs**:
-- Go-specific format
-- No cross-language compatibility
-- Not human-readable
-- Limited query capabilities
+- More complex than file-based storage
+- ChromaDB metadata is flat (str/int/float/bool only — lists need `json.dumps()`)
 
-**Future**: SQLite for advanced queries and larger datasets
+### Why Typer?
+
+**Rationale**: Modern Python CLI framework built on Click
+
+**Benefits**:
+- Type annotations drive CLI argument definitions
+- Automatic `--help` generation
+- Rich output integration
+- Pythonic and testable
+
+### Why pydantic-settings?
+
+**Rationale**: Unified YAML + env var config with type validation
+
+**Benefits**:
+- Config, env vars, and defaults in one place
+- Automatic type coercion and validation
+- `__` nested delimiter for env vars
 
 ### Why Ollama for Embeddings?
 
 **Rationale**: Local-first, privacy-preserving, cost-effective
 
 **Benefits**:
-- Runs locally (no cloud costs)
-- Privacy (no data leaves machine)
-- Fast inference
+- Runs locally (no cloud costs or data leakage)
+- Fast inference on modern hardware
 - Offline capability
 - Free and open source
-
-**Trade-offs**:
-- Requires Ollama installation
-- Limited to Ollama-supported models
-- Requires disk space and compute
 
 ### Why Cosine Similarity?
 
@@ -774,32 +622,10 @@ sequenceDiagram
 
 **Benefits**:
 - Well-understood metric
-- Normalized to [0, 1] range
-- Efficient computation
-- Handles different vector magnitudes
+- Normalized to [-1, 1] (practically [0, 1] for non-negative embeddings)
+- Efficient computation with NumPy
 
-**Trade-offs**:
-- Linear search (O(n) for n memories)
-- No spatial indexing (yet)
-
-**Future**: Consider HNSW or Annoy for > 10k memories
-
-### Why In-Memory Index?
-
-**Rationale**: Fast search for small-to-medium datasets
-
-**Benefits**:
-- O(1) lookups by ID
-- Fast similarity search
-- Simple implementation
-- No index maintenance overhead
-
-**Trade-offs**:
-- Memory usage scales with dataset
-- Cold start requires loading
-- Not suitable for 100k+ memories
-
-**Threshold**: Consider disk-based index at 50k+ memories
+**Note**: ChromaDB returns cosine distance; score = `max(0.0, 1.0 - distance)`.
 
 ---
 
@@ -809,45 +635,35 @@ sequenceDiagram
 
 | Operation | Complexity | Notes |
 |-----------|------------|-------|
-| Create | O(E + W) | E = embedding time, W = disk write |
-| Get by ID | O(1) | In-memory hash lookup |
-| Search | O(N·D) | N = memories, D = vector dimension |
+| Create | O(E + W) | E = embedding time, W = ChromaDB write |
+| Get by ID | O(1) | Direct ChromaDB lookup |
+| Search | O(N) | ChromaDB handles vector scan |
 | List | O(N) | Linear scan with filter |
-| Delete | O(1 + W) | Hash delete + disk write |
-| Transfer | O(M·W) | M = memories to transfer |
-
-### Space Complexity
-
-| Component | Complexity | Notes |
-|-----------|------------|-------|
-| Memory Index | O(N) | N = total memories |
-| Vector Index | O(N·D) | D = vector dimension (768) |
-| Gob Files | O(N·S) | S = average memory size |
+| Delete | O(1) | Direct ChromaDB delete |
+| Transfer | O(M) | M = memories to transfer |
 
 ### Bottlenecks
 
-1. **Embedding Generation**: 100-500ms per request (Ollama latency)
-2. **Disk I/O**: File writes block (mitigated by in-memory index)
-3. **Search**: Linear scan of all vectors
+1. **Embedding Generation**: 100–500 ms per request (Ollama latency)
+2. **ChromaDB Search**: Linear for small datasets; ANN for larger ones (built-in)
+3. **ID Prefix Scan**: O(N) — avoid when exact IDs are available
 
 ### Optimization Strategies
 
-1. **Batch Embeddings**: Use `EmbedBatch` for bulk operations
-2. **Lazy Loading**: Load working files on-demand
-3. **Concurrent Search**: Can parallelize similarity computation
-4. **Caching**: Ollama caches model in memory
+1. **Batch Embeddings**: Use `embed_batch` for bulk operations
+2. **LRU Cache**: Ollama embedder caches last 128 embeddings in memory
+3. **Exact IDs**: Use full UUIDs to bypass prefix scan
 
 ---
 
 ## Related Documentation
 
-- **[Storage Implementation](storage.md)** - Detailed storage design
-- **[Embeddings System](embeddings.md)** - Vector generation details
-- **[Memory Model](memory-model.md)** - Domain model specification
+- **[Development Guide](development.md)** - Setup, testing, common tasks
+- **[Configuration](configuration.md)** - Configuration reference
+- **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 - **[MCP Integration](../cli/mcp.md)** - MCP server implementation
-- **[Development Guide](../contributing/development.md)** - Contributing to architecture
 
 ---
 
-**Last Updated**: 2026-02-04
-**Architecture Version**: 1.0 (Three-layer system with consolidation)
+**Last Updated**: 2026-04-10
+**Architecture Version**: 2.0 (Python rewrite — Typer / ChromaDB / pydantic-settings)
