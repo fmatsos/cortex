@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 cortex = "cortex.__main__:main"
+cortex-memory = "cortex.__main__:main"
 
 [dependency-groups]
 dev = [

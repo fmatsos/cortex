@@ -124,7 +124,7 @@ flowchart LR
 
 ```bash
 # Run directly without installing (recommended)
-uvx cortex --help
+uvx cortex-memory --help
 
 # Or install permanently
 pip install cortex-memory
