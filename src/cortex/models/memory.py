@@ -32,6 +32,11 @@ class MemoryContext(BaseModel):
     tags: list[str] = Field(default_factory=list)
     source: MemorySource = MemorySource.manual
     related_memories: list[str] = Field(default_factory=list)
+    # Save-context fields (PR #38): record where/how each memory was created
+    git_branch: str = ""
+    agent_name: str = ""
+    agent_session_id: str = ""
+    user_prompt: str = ""
 
     model_config = {"use_enum_values": True}
 

@@ -66,6 +66,65 @@ class TestMemoryServiceCreate:
         assert "Content: Test content here." in text
         assert "Tags: tag1, tag2" in text
 
+    def test_create_stores_save_context_fields(
+        self, chroma_storage: object, mock_embedder: MockEmbedder
+    ) -> None:
+        """PR #38: New context fields are persisted and retrievable."""
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        memory = svc.create(
+            CreateInput(
+                title="Context field test",
+                content="Testing new save-context fields.",
+                level=MemoryLevel.episodic,
+                git_branch="feature/my-branch",
+                agent_name="claude",
+                agent_session_id="agent-sess-001",
+                user_prompt="fix the bug please",
+            )
+        )
+        assert memory.context.git_branch == "feature/my-branch"
+        assert memory.context.agent_name == "claude"
+        assert memory.context.agent_session_id == "agent-sess-001"
+        assert memory.context.user_prompt == "fix the bug please"
+
+        # Reload from storage and verify persistence
+        reloaded = svc.get(memory.id)
+        assert reloaded.context.git_branch == "feature/my-branch"
+        assert reloaded.context.agent_name == "claude"
+        assert reloaded.context.agent_session_id == "agent-sess-001"
+        assert reloaded.context.user_prompt == "fix the bug please"
+
+    def test_create_auto_detects_git_branch(
+        self, chroma_storage: object, mock_embedder: MockEmbedder, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR #38: git_branch is auto-detected when not provided."""
+        monkeypatch.setattr("cortex.session._get_git_branch", lambda: "auto-detected-branch")
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        memory = svc.create(
+            CreateInput(
+                title="Auto branch test",
+                content="Testing git branch auto-detection.",
+                level=MemoryLevel.episodic,
+            )
+        )
+        assert memory.context.git_branch == "auto-detected-branch"
+
+    def test_create_explicit_git_branch_overrides_auto(
+        self, chroma_storage: object, mock_embedder: MockEmbedder, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR #38: explicit git_branch takes precedence over auto-detection."""
+        monkeypatch.setattr("cortex.session._get_git_branch", lambda: "auto-detected-branch")
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        memory = svc.create(
+            CreateInput(
+                title="Explicit branch test",
+                content="Testing explicit git branch override.",
+                level=MemoryLevel.episodic,
+                git_branch="explicit-branch",
+            )
+        )
+        assert memory.context.git_branch == "explicit-branch"
+
 
 class TestMemoryServiceSearch:
     def test_search_returns_sorted_results(

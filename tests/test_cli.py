@@ -193,6 +193,79 @@ class TestConfigCommand:
         assert "search" in data
 
 
+class TestCreateCommandSaveContext:
+    def test_create_with_git_branch_flag(self, cli_runner: CliRunner) -> None:
+        """PR #38: --git-branch flag is accepted and stored."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "create",
+                "--title",
+                "Branch test",
+                "--content",
+                "Content with explicit git branch field.",
+                "--level",
+                "episodic",
+                "--git-branch",
+                "feature/test-branch",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["context"]["git_branch"] == "feature/test-branch"
+
+    def test_create_with_all_save_context_flags(self, cli_runner: CliRunner) -> None:
+        """PR #38: --agent-name, --agent-session, --user-prompt flags work."""
+        result = cli_runner.invoke(
+            app,
+            [
+                "create",
+                "--title",
+                "Full context test",
+                "--content",
+                "Content with all save-context fields set.",
+                "--level",
+                "semantic",
+                "--agent-name",
+                "claude",
+                "--agent-session",
+                "agent-sess-42",
+                "--user-prompt",
+                "help me fix this",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["context"]["agent_name"] == "claude"
+        assert data["context"]["agent_session_id"] == "agent-sess-42"
+        assert data["context"]["user_prompt"] == "help me fix this"
+
+
+class TestInstallManCommand:
+    def test_install_man_to_temp_dir(self, cli_runner: CliRunner, tmp_path: Path) -> None:
+        """PR #14: install-man copies man page to the given prefix."""
+        result = cli_runner.invoke(
+            app,
+            ["install-man", "--prefix", str(tmp_path)],
+        )
+        assert result.exit_code == 0
+        dest = tmp_path / "share" / "man" / "man1" / "cortex.1"
+        assert dest.exists(), f"Expected man page at {dest}"
+        content = dest.read_text()
+        assert ".TH CORTEX" in content
+
+    def test_install_man_output_message(self, cli_runner: CliRunner, tmp_path: Path) -> None:
+        """PR #14: install-man prints the destination path."""
+        result = cli_runner.invoke(
+            app,
+            ["install-man", "--prefix", str(tmp_path)],
+        )
+        assert result.exit_code == 0
+        assert "cortex.1" in result.output
+
+
 class TestTransferWorkingCommand:
     def test_transfer_working(self, cli_runner: CliRunner, chroma_storage: object) -> None:
         from cortex.models.memory import MemoryLevel

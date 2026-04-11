@@ -9,6 +9,15 @@ from uuid import uuid4
 from cortex.config.settings import SessionConfig
 
 
+def get_git_branch() -> str:
+    """Return the current git branch name, or empty string if unavailable.
+
+    Public helper used by memory service and consolidation service to
+    auto-populate the ``git_branch`` context field.
+    """
+    return _get_git_branch() or ""
+
+
 def derive_session_id(config: SessionConfig) -> str:
     """Derive a session ID from the current git branch.
 

@@ -1,0 +1,417 @@
+.TH CORTEX 1 "2026" "cortex-memory" "User Commands"
+.SH NAME
+cortex \- three-layer semantic memory system for AI assistants
+.SH SYNOPSIS
+.B cortex
+[\fB\-\-config\fR \fIpath\fR]
+[\fB\-\-log\-level\fR \fIlevel\fR]
+\fIcommand\fR [\fIargs\fR]
+.SH DESCRIPTION
+\fBcortex\fR is a three-layer semantic memory system for AI assistants.
+It stores, organises, and retrieves developer knowledge using vector embeddings
+and cosine-similarity search, organised into three lifecycle layers:
+.PP
+.RS 4
+.IP working
+Session-scoped temporary context.
+.IP episodic
+Time-bound events and decisions (retained for 90 days by default).
+.IP semantic
+Permanent, reusable knowledge and conventions.
+.RE
+.PP
+Memories are embedded via Ollama (default model: \fInomic\-embed\-text\fR) and
+stored in a ChromaDB database in the project-local \fI.agents/cortex\fR directory.
+.SH GLOBAL OPTIONS
+.TP
+.BI \-\-config " path"
+Path to configuration file (default: \fI.agents/cortex/config.yaml\fR).
+.TP
+.BI \-\-log\-level " level"
+Log level: debug, info, warning, error (default: info).
+.SH COMMANDS
+.TP
+.B create
+Create a new memory with title, content, and metadata.
+.RS
+.TP
+.BI \-t ", " \-\-title " string"
+Memory title (3\(en60 characters). Derived from content if omitted.
+.TP
+.BI \-c ", " \-\-content " string"
+Memory content (required, minimum 10 characters, Markdown supported).
+.TP
+.BI \-l ", " \-\-level " level"
+Memory level: working, episodic, semantic (default: episodic).
+.TP
+.BI \-\-tags " tags"
+Comma-separated tags.
+.TP
+.BI \-\-session " id"
+Session ID (required for working level; auto-derived from git branch if omitted).
+.TP
+.BI \-\-source " source"
+Origin source: manual, auto, llm (default: manual).
+.TP
+.BI \-\-task\-id " id"
+Associated task or ticket identifier.
+.TP
+.BI \-\-author " string"
+Author identifier.
+.TP
+.BI \-\-git\-branch " branch"
+Git branch at creation time (auto-detected from current repository if omitted).
+.TP
+.BI \-\-agent\-name " name"
+Name of the agent creating this memory.
+.TP
+.BI \-\-agent\-session " id"
+Agent session identifier.
+.TP
+.BI \-\-user\-prompt " text"
+User prompt that triggered creation of this memory.
+.TP
+.B \-\-json
+Output result as JSON.
+.RE
+.TP
+.B search \fIquery\fR
+Search memories using semantic (cosine) similarity.
+.RS
+.TP
+.BI \-n ", " \-\-top " int"
+Maximum number of results (default: 5).
+.TP
+.BI \-\-min\-score " float"
+Minimum similarity score, 0.0\(en1.0 (default: 0.5).
+.TP
+.BI \-l ", " \-\-level " level"
+Filter by memory level: working, episodic, semantic.
+.TP
+.BI \-\-session " id"
+Filter working memories by session ID.
+.TP
+.B \-\-include\-obsolete
+Include obsolete (soft-deleted) memories.
+.TP
+.B \-\-json
+Output results as JSON.
+.RE
+.TP
+.B list
+List memories with optional filtering.
+.RS
+.TP
+.BI \-l ", " \-\-level " level"
+Filter by memory level.
+.TP
+.BI \-\-session " id"
+Filter working memories by session ID.
+.TP
+.B \-\-include\-obsolete
+Include obsolete memories.
+.TP
+.BI \-\-limit " int"
+Maximum results (0 = unlimited).
+.TP
+.BI \-\-offset " int"
+Number of results to skip.
+.TP
+.B \-\-reverse
+Reverse sort order (oldest first).
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B get \fIid\fR
+Retrieve a specific memory by ID or unique ID prefix.
+.RS
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B delete \fIid\fR
+Permanently delete a memory by ID.
+.RS
+.TP
+.BR \-f ", " \-\-force
+Skip confirmation prompt.
+.RE
+.TP
+.B consolidate \fIcontent\fR
+Create a memory or merge with a semantically similar existing one.
+.RS
+.TP
+.BI \-l ", " \-\-level " level"
+Target memory level (default: semantic).
+.TP
+.BI \-t ", " \-\-title " string"
+Memory title (derived from content if omitted).
+.TP
+.BI \-\-tags " tags"
+Comma-separated tags.
+.TP
+.BI \-\-session " id"
+Session ID (auto-derived from git branch if omitted).
+.TP
+.BI \-\-source " source"
+Source: manual, auto, llm (default: manual).
+.TP
+.BI \-\-task\-id " id"
+Associated task/ticket ID.
+.TP
+.BI \-\-author " string"
+Author identifier.
+.TP
+.BI \-\-git\-branch " branch"
+Git branch (auto-detected if omitted).
+.TP
+.BI \-\-agent\-name " name"
+Agent name.
+.TP
+.BI \-\-agent\-session " id"
+Agent session ID.
+.TP
+.BI \-\-user\-prompt " text"
+User prompt that triggered consolidation.
+.TP
+.B \-\-force
+Skip duplicate detection; always create a new memory.
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B transfer\-working
+Transfer all working memories for a session to the episodic layer.
+.RS
+.TP
+.BI \-\-session " id"
+Session ID to transfer (auto-derived from git branch if omitted).
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B autoprune
+Remove duplicates, archive old episodic memories, and merge similar semantic memories.
+.RS
+.TP
+.BI \-\-duplicates\-threshold " float"
+Similarity threshold for duplicate removal (default: 0.92).
+.TP
+.BI \-\-retention\-days " int"
+Episodic retention period in days (default: 90).
+.TP
+.BI \-\-merge\-threshold " float"
+Similarity threshold for semantic memory merging (default: 0.88).
+.TP
+.B \-\-dry\-run
+Preview changes without modifying storage.
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B export
+Export memories to JSON or Markdown format.
+.RS
+.TP
+.BI \-o ", " \-\-output " path"
+Output directory or file path.
+.TP
+.B \-\-all
+Export all memories.
+.TP
+.BI \-\-level " level"
+Filter by memory level.
+.TP
+.BI \-\-intent " string"
+Export a synthesis document based on semantic search.
+.TP
+.BI \-f ", " \-\-format " format"
+Export format: json, markdown (default: json).
+.RE
+.TP
+.B import \fIfiles...\fR
+Import memories from JSON or Markdown files.
+.RS
+.TP
+.B \-\-force
+Overwrite existing memories.
+.TP
+.B \-\-dry\-run
+Validate without importing.
+.TP
+.BI \-f ", " \-\-format " format"
+File format: json, markdown (auto-detected if omitted).
+.TP
+.B \-\-json
+Output result as JSON.
+.RE
+.TP
+.B stats
+Display database metrics and storage statistics.
+.RS
+.TP
+.B \-\-json
+Output as JSON.
+.RE
+.TP
+.B config
+View and manage configuration.
+.RS
+.TP
+.BI \-\-output " format"
+Output format: yaml, json, text (default: yaml).
+.TP
+.B init
+Create default configuration file at \fI.agents/cortex/config.yaml\fR.
+.TP
+.B path
+Show path to the active configuration file.
+.TP
+.BI "get " \fIkey\fR
+Get a specific configuration value by dot-separated key.
+.RE
+.TP
+.B session
+Print the session ID derived from the current git branch.
+.TP
+.B start\-mcp\-server
+Start the Cortex MCP server for AI assistant integration.
+.RS
+.TP
+.BI \-\-transport " mode"
+Transport mode: stdio, sse (default: stdio).
+.TP
+.BI \-\-address " addr"
+Server address for SSE transport (default: :8080).
+.RE
+.TP
+.B completion \fIshell\fR
+Generate shell completion scripts for bash, zsh, fish, or powershell.
+.TP
+.B install\-man
+Install the cortex man page to the system.
+.RS
+.TP
+.BI \-\-prefix " path"
+Installation prefix (default: /usr/local).
+The man page is installed to \fI<prefix>/share/man/man1/cortex.1\fR.
+.RE
+.SH ENVIRONMENT
+.TP
+.B CORTEX_STORAGE_PATH
+Storage directory path (default: \fI.agents/cortex\fR).
+.TP
+.B CORTEX_EMBEDDINGS_ENDPOINT
+Ollama API endpoint (default: \fIhttp://localhost:11434\fR).
+.TP
+.B CORTEX_EMBEDDINGS_MODEL
+Ollama embedding model (default: \fInomic\-embed\-text\fR).
+.TP
+.B CORTEX_EMBEDDINGS_TIMEOUT
+Ollama request timeout in seconds (default: 30).
+.TP
+.B CORTEX_SEARCH_TOP_K
+Default number of search results (default: 5).
+.TP
+.B CORTEX_SEARCH_MIN_SCORE
+Minimum similarity score for search (default: 0.5).
+.TP
+.B CORTEX_CONSOLIDATION_SIMILARITY_THRESHOLD
+Deduplication threshold for consolidation (default: 0.85).
+.TP
+.B CORTEX_AUTOPRUNE_DUPLICATES_THRESHOLD
+Similarity threshold for autoprune duplicate removal (default: 0.92).
+.TP
+.B CORTEX_AUTOPRUNE_EPISODIC_RETENTION_DAYS
+Episodic memory retention period in days (default: 90).
+.TP
+.B CORTEX_AUTOPRUNE_SEMANTIC_MERGE_THRESHOLD
+Similarity threshold for semantic memory merging (default: 0.88).
+.TP
+.B CORTEX_SESSION_AUTO_DERIVE
+Auto-derive session ID from git branch (default: true).
+.TP
+.B CORTEX_SESSION_MAX_SEGMENTS
+Number of git branch segments to use (default: 2).
+.SH EXAMPLES
+Create a semantic memory:
+.PP
+.RS
+.nf
+cortex create \-\-title "Context timeout pattern" \-\-level semantic \e
+  \-\-content "Always set a timeout on external calls." \-\-tags "pattern,best-practice"
+.fi
+.RE
+.PP
+Search for relevant memories:
+.PP
+.RS
+.nf
+cortex search "database connection timeout"
+.fi
+.RE
+.PP
+List all episodic memories:
+.PP
+.RS
+.nf
+cortex list \-\-level episodic \-\-json
+.fi
+.RE
+.PP
+Consolidate a learning into semantic memory (deduplicates automatically):
+.PP
+.RS
+.nf
+cortex consolidate "Use exponential backoff for retry logic." \-\-level semantic
+.fi
+.RE
+.PP
+Transfer working memories to episodic at session end:
+.PP
+.RS
+.nf
+cortex transfer\-working
+.fi
+.RE
+.PP
+Start the MCP server for Claude Code or Cursor integration:
+.PP
+.RS
+.nf
+cortex start\-mcp\-server \-\-transport stdio
+.fi
+.RE
+.PP
+Show database statistics as JSON:
+.PP
+.RS
+.nf
+cortex stats \-\-json
+.fi
+.RE
+.PP
+Generate shell completions (bash):
+.PP
+.RS
+.nf
+cortex completion bash > /etc/bash_completion.d/cortex
+.fi
+.RE
+.SH FILES
+.TP
+.I .agents/cortex/config.yaml
+Project-local configuration file.
+.TP
+.I .agents/cortex/chroma.sqlite3
+ChromaDB persistence file.
+.SH SEE ALSO
+.BR ollama (1)
+.SH AUTHOR
+Written by the Cortex contributors.

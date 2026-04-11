@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from cortex.consolidation.service import ConsolidateInput, ConsolidationService
 from cortex.memory.service import CreateInput, MemoryService
 from cortex.models.memory import MemoryLevel
@@ -108,3 +110,59 @@ class TestConsolidation:
         # Original should be obsolete
         original = mem_svc.get(episodic.id)
         assert original.obsolete
+
+    def test_consolidate_stores_save_context_fields(
+        self, chroma_storage: object, mock_embedder: MockEmbedder
+    ) -> None:
+        """PR #38: save-context fields are persisted via consolidation path."""
+        svc = self._make_svc(chroma_storage, mock_embedder)
+        result = svc.consolidate(
+            ConsolidateInput(
+                synthesis="Testing context fields in consolidation path.",
+                level=MemoryLevel.semantic,
+                git_branch="feature/ctx-test",
+                agent_name="test-agent",
+                agent_session_id="agent-sess-999",
+                user_prompt="consolidate this",
+                force=True,
+            )
+        )
+        assert result.action == "created"
+
+        # Reload and verify
+        from cortex.storage.base import ListOptions
+
+        memories = chroma_storage.list(  # type: ignore[attr-defined]
+            ListOptions(level=MemoryLevel.semantic)
+        )
+        assert len(memories) == 1
+        ctx = memories[0].context
+        assert ctx.git_branch == "feature/ctx-test"
+        assert ctx.agent_name == "test-agent"
+        assert ctx.agent_session_id == "agent-sess-999"
+        assert ctx.user_prompt == "consolidate this"
+
+    def test_consolidate_auto_detects_git_branch(
+        self,
+        chroma_storage: object,
+        mock_embedder: MockEmbedder,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """PR #38/#39: git_branch is auto-detected in consolidation when omitted."""
+        monkeypatch.setattr("cortex.session._get_git_branch", lambda: "auto-branch-consolidate")
+        svc = self._make_svc(chroma_storage, mock_embedder)
+        result = svc.consolidate(
+            ConsolidateInput(
+                synthesis="Auto git-branch detection in consolidation service.",
+                level=MemoryLevel.semantic,
+                force=True,
+            )
+        )
+        from cortex.storage.base import ListOptions
+
+        memories = chroma_storage.list(  # type: ignore[attr-defined]
+            ListOptions(level=MemoryLevel.semantic)
+        )
+        assert len(memories) == 1
+        assert memories[0].context.git_branch == "auto-branch-consolidate"
+        assert result.action == "created"

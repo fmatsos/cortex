@@ -24,6 +24,14 @@ def consolidate(
     source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
     task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
     author: Annotated[str, typer.Option("--author", help="Author identifier")] = "",
+    git_branch: Annotated[
+        str, typer.Option("--git-branch", help="Git branch (auto-detected if omitted)")
+    ] = "",
+    agent_name: Annotated[str, typer.Option("--agent-name", help="Agent name")] = "",
+    agent_session: Annotated[str, typer.Option("--agent-session", help="Agent session ID")] = "",
+    user_prompt: Annotated[
+        str, typer.Option("--user-prompt", help="User prompt that triggered this memory")
+    ] = "",
     force: Annotated[bool, typer.Option("--force", help="Skip duplicate detection")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
@@ -68,6 +76,10 @@ def consolidate(
                 source=mem_source,
                 task_id=task_id,
                 author=author,
+                git_branch=git_branch,
+                agent_name=agent_name,
+                agent_session_id=agent_session,
+                user_prompt=user_prompt,
                 force=force,
             )
         )
