@@ -288,6 +288,8 @@ graph LR
 
 ### Getting Started
 
+- Run `cortex init` to scaffold a default config (`--global` by default, `--local` for the current project).
+- Install Claude/Cortex/Copilot hooks with `cortex hook` (merges Cortex entries; keeps your existing hooks intact).
 - **[Documentation Index](docs/INDEX.md)** - Complete documentation guide
 - **[CLI Reference](docs/cli/reference.md)** - All commands and options
 - **[Memory Model](docs/architecture/memory-model.md)** - Understanding memory layers and best practices
