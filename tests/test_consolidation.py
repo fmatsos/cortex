@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from cortex.consolidation.service import ConsolidateInput, ConsolidationService
 from cortex.memory.service import CreateInput, MemoryService
 from cortex.models.memory import MemoryLevel
@@ -144,29 +146,23 @@ class TestConsolidation:
         self,
         chroma_storage: object,
         mock_embedder: MockEmbedder,
-        monkeypatch: object,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """PR #38/#39: git_branch is auto-detected in consolidation when omitted."""
-        import pytest
-
-        mp = pytest.MonkeyPatch()
-        mp.setattr("cortex.session._get_git_branch", lambda: "auto-branch-consolidate")
-        try:
-            svc = self._make_svc(chroma_storage, mock_embedder)
-            result = svc.consolidate(
-                ConsolidateInput(
-                    synthesis="Auto git-branch detection in consolidation service.",
-                    level=MemoryLevel.semantic,
-                    force=True,
-                )
+        monkeypatch.setattr("cortex.session._get_git_branch", lambda: "auto-branch-consolidate")
+        svc = self._make_svc(chroma_storage, mock_embedder)
+        result = svc.consolidate(
+            ConsolidateInput(
+                synthesis="Auto git-branch detection in consolidation service.",
+                level=MemoryLevel.semantic,
+                force=True,
             )
-            from cortex.storage.base import ListOptions
+        )
+        from cortex.storage.base import ListOptions
 
-            memories = chroma_storage.list(  # type: ignore[attr-defined]
-                ListOptions(level=MemoryLevel.semantic)
-            )
-            assert len(memories) == 1
-            assert memories[0].context.git_branch == "auto-branch-consolidate"
-            assert result.action == "created"
-        finally:
-            mp.undo()
+        memories = chroma_storage.list(  # type: ignore[attr-defined]
+            ListOptions(level=MemoryLevel.semantic)
+        )
+        assert len(memories) == 1
+        assert memories[0].context.git_branch == "auto-branch-consolidate"
+        assert result.action == "created"
