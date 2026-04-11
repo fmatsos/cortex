@@ -84,9 +84,9 @@ class MemoryService:
 
     def update(self, memory: Memory) -> Memory:
         """Update an existing memory (re-embeds if content changed)."""
-        memory.touch()
         embed_text = self._embed_text(memory)
         memory.embedding = self._embedder.embed(embed_text)
+        memory.touch()
         self._storage.update(memory)
         return memory
 

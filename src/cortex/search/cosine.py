@@ -9,10 +9,13 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors.
 
     Returns a value in [0, 1] for L2-normalized vectors.
-    Returns 0.0 for empty or zero-norm vectors.
+    Returns 0.0 for zero-norm vectors.
+    Raises ValueError for empty or dimension-mismatched vectors.
     """
-    if not a or not b or len(a) != len(b):
-        return 0.0
+    if not a or not b:
+        raise ValueError("Vectors cannot be empty")
+    if len(a) != len(b):
+        raise ValueError(f"Vector dimension mismatch: {len(a)} vs {len(b)}")
 
     va = np.array(a, dtype=np.float64)
     vb = np.array(b, dtype=np.float64)

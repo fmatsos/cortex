@@ -9,7 +9,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -32,10 +32,18 @@ class EmbeddingsConfig(BaseModel):
     chunk_overlap: int = 200
     chunk_strategy: str = "average"  # average | first | max_pool
 
+    @field_validator("chunk_strategy")
+    @classmethod
+    def validate_chunk_strategy(cls, v: str) -> str:
+        """Validate chunk strategy is one of the supported options."""
+        if v not in ("average", "first", "max_pool"):
+            raise ValueError(f"chunk_strategy must be one of: average, first, max_pool (got {v})")
+        return v
+
 
 class SearchConfig(BaseModel):
     top_k: int = 5
-    min_score: float = 0.5
+    min_score: float = Field(default=0.5, ge=0.0, le=1.0)
     include_obsolete: bool = False
 
 
@@ -48,16 +56,26 @@ class LoggingConfig(BaseModel):
     level: str = "info"
     file: str = ""
 
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate log level is one of the standard levels."""
+        if v.lower() not in ("debug", "info", "warning", "error", "critical"):
+            raise ValueError(
+                f"level must be one of: debug, info, warning, error, critical (got {v})"
+            )
+        return v.lower()
+
 
 class ConsolidationConfig(BaseModel):
-    similarity_threshold: float = 0.85
+    similarity_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
     auto_transfer_on_session_end: bool = True
 
 
 class AutopruneConfig(BaseModel):
-    duplicates_threshold: float = 0.92
-    episodic_retention_days: int = 90
-    semantic_merge_threshold: float = 0.88
+    duplicates_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+    episodic_retention_days: int = Field(default=90, ge=1)
+    semantic_merge_threshold: float = Field(default=0.88, ge=0.0, le=1.0)
 
 
 class SessionConfig(BaseModel):

@@ -11,6 +11,7 @@ from cortex.models.memory import Memory, MemoryLevel
 from cortex.models.results import AutopruneResult, AutopruneStats
 from cortex.search.cosine import cosine_similarity, normalize
 from cortex.storage.chroma import ChromaStorage
+from cortex.utils import dedupe_list
 
 _MERGE_SEPARATOR = "\n\n---\n\n"
 
@@ -144,8 +145,8 @@ class AutopruneService:
     ) -> None:
         """Merge source into target, deleting source."""
         target.content = target.content + _MERGE_SEPARATOR + source.content
-        target.tags = _dedupe_list(target.tags + source.tags)
-        target.merged_from = _dedupe_list([*target.merged_from, source.id, *source.merged_from])
+        target.tags = dedupe_list(target.tags + source.tags)
+        target.merged_from = dedupe_list([*target.merged_from, source.id, *source.merged_from])
         target.touch()
 
         # Average the two embeddings
@@ -155,13 +156,3 @@ class AutopruneService:
         self._storage.update(target)
         with contextlib.suppress(KeyError):
             self._storage.delete(source.id)
-
-
-def _dedupe_list(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            result.append(item)
-    return result

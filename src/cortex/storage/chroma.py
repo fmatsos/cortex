@@ -300,8 +300,12 @@ class ChromaStorage:
                     m = _dict_to_memory(mid, doc, meta)
                     results.append(SearchResult(memory=m, score=score))
 
-            except Exception:
-                # Empty collection or other non-fatal error — skip this level
+            except (IndexError, ValueError) as e:
+                # IndexError: empty result from query; ValueError: dimension mismatch
+                # Let dimension mismatch propagate instead of silently returning empty
+                if "dimension" in str(e).lower():
+                    raise
+                # Skip level if empty result set
                 pass
 
         results.sort(key=lambda r: r.score, reverse=True)
@@ -420,7 +424,8 @@ class ChromaStorage:
         # avoid partial dimension mismatches.
         all_embeddings = [e for e in new_embeddings if e is not None]
         embeddings_arg = all_embeddings if len(all_embeddings) == len(result["ids"]) else None
-        episodic_col.add(
+        # Use upsert to make transfer idempotent (safe to retry on failure)
+        episodic_col.upsert(
             ids=result["ids"],
             embeddings=embeddings_arg,
             documents=result["documents"],

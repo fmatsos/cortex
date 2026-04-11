@@ -24,6 +24,7 @@ from cortex.cli import (
     transfer_working,
 )
 from cortex.config.settings import load_settings
+from cortex.logging_ import configure_logging
 
 app = typer.Typer(
     name="cortex",
@@ -63,5 +64,6 @@ def main_callback(
     ] = "info",
 ) -> None:
     """Cortex — three-layer semantic memory system."""
+    configure_logging(log_level)
     if config:
         load_settings(config_path=config)
