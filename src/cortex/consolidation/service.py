@@ -10,6 +10,7 @@ from cortex.embeddings.base import Embedder
 from cortex.memory.service import MemoryService
 from cortex.models.memory import Memory, MemoryContext, MemoryLevel, MemorySource
 from cortex.models.results import ConsolidateResult
+from cortex.session import get_git_branch
 from cortex.storage.base import SearchOptions, Storage
 
 _MERGE_SEPARATOR = "\n\n---\n\n"
@@ -28,6 +29,10 @@ class ConsolidateInput:
     task_id: str = ""
     author: str = ""
     force: bool = False  # Skip duplicate detection when True
+    git_branch: str = ""  # overrides auto-detection; empty = auto-detect
+    agent_name: str = ""
+    agent_session_id: str = ""
+    user_prompt: str = ""
 
 
 class ConsolidationService:
@@ -76,12 +81,17 @@ class ConsolidationService:
                 )
 
         # Create new memory
+        git_branch = inp.git_branch or get_git_branch()
         context = MemoryContext(
             session_id=inp.session_id,
             task_id=inp.task_id,
             author=inp.author,
             source=inp.source,
             timestamp=datetime.now(UTC),
+            git_branch=git_branch,
+            agent_name=inp.agent_name,
+            agent_session_id=inp.agent_session_id,
+            user_prompt=inp.user_prompt,
         )
         title = inp.title or Memory.derive_title(inp.synthesis)
         memory = Memory(

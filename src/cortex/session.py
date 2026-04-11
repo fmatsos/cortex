@@ -46,6 +46,11 @@ def _get_git_branch() -> str | None:
     return None
 
 
+def get_git_branch() -> str:
+    """Return the current git branch name, or empty string if unavailable."""
+    return _get_git_branch() or ""
+
+
 def _branch_to_session(branch: str, config: SessionConfig) -> str:
     """Convert a git branch name to a session ID per config rules."""
     pattern_type = config.pattern_type

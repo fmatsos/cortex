@@ -92,6 +92,11 @@ class TestMemoryContext:
         assert ctx.task_id == ""
         assert ctx.source == MemorySource.manual
         assert ctx.related_memories == []
+        # Save-context fields default to empty string
+        assert ctx.git_branch == ""
+        assert ctx.agent_name == ""
+        assert ctx.agent_session_id == ""
+        assert ctx.user_prompt == ""
 
     def test_source_validation(self) -> None:
         ctx = MemoryContext(source=MemorySource.llm)
@@ -100,3 +105,34 @@ class TestMemoryContext:
     def test_invalid_source(self) -> None:
         with pytest.raises(ValueError):
             MemoryContext(source="invalid")  # type: ignore[arg-type]
+
+    def test_save_context_fields(self) -> None:
+        ctx = MemoryContext(
+            git_branch="feature/auth",
+            agent_name="Claude",
+            agent_session_id="sess-abc",
+            user_prompt="Fix the auth bug",
+        )
+        assert ctx.git_branch == "feature/auth"
+        assert ctx.agent_name == "Claude"
+        assert ctx.agent_session_id == "sess-abc"
+        assert ctx.user_prompt == "Fix the auth bug"
+
+
+class TestMemoryTimestamp:
+    def test_timestamp_property(self) -> None:
+        m = Memory(
+            level=MemoryLevel.episodic,
+            title="Test title",
+            content="Test content here.",
+        )
+        # timestamp should match created_at as unix epoch seconds
+        assert m.timestamp == int(m.created_at.timestamp())
+
+    def test_timestamp_is_integer(self) -> None:
+        m = Memory(
+            level=MemoryLevel.semantic,
+            title="Test title",
+            content="Test content here.",
+        )
+        assert isinstance(m.timestamp, int)

@@ -37,6 +37,7 @@ class ListOptions:
         limit: int = 0,
         offset: int = 0,
         reverse: bool = False,
+        git_branch: str = "",
     ) -> None:
         self.level = level
         self.session_id = session_id
@@ -44,6 +45,7 @@ class ListOptions:
         self.limit = limit
         self.offset = offset
         self.reverse = reverse
+        self.git_branch = git_branch  # if set, filters memories to this git branch only
 
 
 @runtime_checkable

@@ -32,6 +32,11 @@ class MemoryContext(BaseModel):
     tags: list[str] = Field(default_factory=list)
     source: MemorySource = MemorySource.manual
     related_memories: list[str] = Field(default_factory=list)
+    # Save-context fields: record where/how the memory was created.
+    git_branch: str = ""  # Git branch at save time (auto-detected when empty)
+    agent_name: str = ""  # AI agent name (e.g. "Claude", "Copilot")
+    agent_session_id: str = ""  # AI agent session ID
+    user_prompt: str = ""  # Triggering user prompt
 
     model_config = {"use_enum_values": True}
 
@@ -79,6 +84,11 @@ class Memory(BaseModel):
     def touch(self) -> None:
         """Update the updated_at timestamp."""
         self.updated_at = datetime.now(UTC)
+
+    @property
+    def timestamp(self) -> int:
+        """Unix timestamp derived from created_at (seconds since epoch)."""
+        return int(self.created_at.timestamp())
 
     @classmethod
     def derive_title(cls, content: str, max_length: int = 60) -> str:

@@ -132,3 +132,66 @@ class TestMemoryServiceLifecycle:
         # Should now be episodic
         episodic = svc.list(ListOptions(level=MemoryLevel.episodic))
         assert len(episodic) == 1
+
+
+class TestMemoryServiceSaveContext:
+    def test_create_stores_save_context_fields(
+        self, chroma_storage: object, mock_embedder: MockEmbedder
+    ) -> None:
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        memory = svc.create(
+            CreateInput(
+                title="Explicit branch memory",
+                content="Created with explicit git branch metadata.",
+                level=MemoryLevel.episodic,
+                git_branch="feature/auth-refactor",
+                agent_name="Claude",
+                agent_session_id="agent-sess-123",
+                user_prompt="Add auth refactor notes",
+            )
+        )
+        # Fields must be persisted through storage
+        retrieved = svc.get(memory.id)
+        assert retrieved.context.git_branch == "feature/auth-refactor"
+        assert retrieved.context.agent_name == "Claude"
+        assert retrieved.context.agent_session_id == "agent-sess-123"
+        assert retrieved.context.user_prompt == "Add auth refactor notes"
+
+    def test_create_timestamp_is_unix_epoch(
+        self, chroma_storage: object, mock_embedder: MockEmbedder
+    ) -> None:
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        memory = svc.create(
+            CreateInput(
+                title="Timestamp test",
+                content="Testing that timestamp is a unix epoch integer.",
+                level=MemoryLevel.episodic,
+            )
+        )
+        assert isinstance(memory.timestamp, int)
+        assert memory.timestamp == int(memory.created_at.timestamp())
+
+    def test_list_filters_by_git_branch(
+        self, chroma_storage: object, mock_embedder: MockEmbedder
+    ) -> None:
+        svc = MemoryService(chroma_storage, mock_embedder)  # type: ignore[arg-type]
+        svc.create(
+            CreateInput(
+                title="Branch A memory",
+                content="Stored on feature branch alpha.",
+                level=MemoryLevel.episodic,
+                git_branch="feature/alpha",
+            )
+        )
+        svc.create(
+            CreateInput(
+                title="Branch B memory",
+                content="Stored on feature branch beta.",
+                level=MemoryLevel.episodic,
+                git_branch="feature/beta",
+            )
+        )
+        opts = ListOptions(git_branch="feature/alpha")
+        results = svc.list(opts)
+        assert len(results) == 1
+        assert results[0].context.git_branch == "feature/alpha"

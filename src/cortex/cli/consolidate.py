@@ -24,6 +24,12 @@ def consolidate(
     source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
     task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
     author: Annotated[str, typer.Option("--author", help="Author identifier")] = "",
+    git_branch: Annotated[
+        str, typer.Option("--git-branch", help="Git branch (auto-detected if omitted)")
+    ] = "",
+    agent_name: Annotated[str, typer.Option("--agent-name", help="AI agent name")] = "",
+    agent_session: Annotated[str, typer.Option("--agent-session", help="AI agent session ID")] = "",
+    user_prompt: Annotated[str, typer.Option("--user-prompt", help="Triggering user prompt")] = "",
     force: Annotated[bool, typer.Option("--force", help="Skip duplicate detection")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
@@ -69,6 +75,10 @@ def consolidate(
                 task_id=task_id,
                 author=author,
                 force=force,
+                git_branch=git_branch,
+                agent_name=agent_name,
+                agent_session_id=agent_session,
+                user_prompt=user_prompt,
             )
         )
     except Exception as exc:

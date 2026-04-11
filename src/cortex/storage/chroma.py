@@ -50,6 +50,11 @@ def _meta_to_dict(memory: Memory) -> dict[str, Any]:
         "updated_at": memory.updated_at.isoformat(),
         "merged_from": json.dumps(memory.merged_from),
         "obsolete": memory.obsolete,
+        # Save-context fields
+        "git_branch": memory.context.git_branch or "",
+        "agent_name": memory.context.agent_name or "",
+        "agent_session_id": memory.context.agent_session_id or "",
+        "user_prompt": memory.context.user_prompt or "",
     }
 
 
@@ -74,6 +79,10 @@ def _dict_to_memory(
         tags=json.loads(metadata.get("ctx_tags", "[]")),
         related_memories=json.loads(metadata.get("related_memories", "[]")),
         timestamp=_dt(metadata.get("created_at", datetime.now(UTC).isoformat())),
+        git_branch=metadata.get("git_branch", ""),
+        agent_name=metadata.get("agent_name", ""),
+        agent_session_id=metadata.get("agent_session_id", ""),
+        user_prompt=metadata.get("user_prompt", ""),
     )
 
     return Memory(
@@ -174,6 +183,8 @@ class ChromaStorage:
                 if not opts.include_obsolete and m.obsolete:
                     continue
                 if opts.session_id and m.context.session_id != opts.session_id:
+                    continue
+                if opts.git_branch and m.context.git_branch != opts.git_branch:
                     continue
                 memories.append(m)
 
