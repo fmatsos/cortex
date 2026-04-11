@@ -96,6 +96,26 @@ class Storage(Protocol):
         """Semantic search across all memory layers."""
         ...
 
+    def search_by_vector(
+        self,
+        vector: list[float],
+        level: MemoryLevel,
+        top_k: int = 10,
+        min_score: float = 0.0,
+        include_obsolete: bool = True,
+        session_id: str = "",
+    ) -> list[SearchResult]:
+        """Search within a single level collection."""
+        ...
+
+    def get_all_with_embeddings(self, level: MemoryLevel) -> list[tuple[Memory, list[float]]]:
+        """Retrieve all memories and their raw embeddings for a level."""
+        ...
+
+    def stats(self) -> dict[str, int]:
+        """Return counts per memory level."""
+        ...
+
     def transfer_working_to_episodic(self, session_id: str) -> int:
         """Move all working memories for a session to episodic layer.
 

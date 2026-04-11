@@ -10,7 +10,7 @@ import numpy as np
 from cortex.models.memory import Memory, MemoryLevel
 from cortex.models.results import AutopruneResult, AutopruneStats
 from cortex.search.cosine import cosine_similarity, normalize
-from cortex.storage.chroma import ChromaStorage
+from cortex.storage.base import Storage
 from cortex.utils import dedupe_list
 
 _MERGE_SEPARATOR = "\n\n---\n\n"
@@ -26,7 +26,7 @@ class AutopruneService:
 
     def __init__(
         self,
-        storage: ChromaStorage,
+        storage: Storage,
         duplicates_threshold: float = 0.92,
         episodic_retention_days: int = 90,
         semantic_merge_threshold: float = 0.88,
