@@ -127,7 +127,8 @@ class TestListCommand:
         result = cli_runner.invoke(app, ["list", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert data == []
+        assert data["memories"] == []
+        assert data["total"] == 0
 
     def test_list_with_memories(self, cli_runner: CliRunner, chroma_storage: object) -> None:
         from cortex.models.memory import MemoryLevel
@@ -140,7 +141,8 @@ class TestListCommand:
         result = cli_runner.invoke(app, ["list", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert len(data) == 2
+        assert len(data["memories"]) == 2
+        assert data["total"] == 2
 
 
 class TestGetCommand:

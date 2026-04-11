@@ -12,6 +12,7 @@ from cortex.models.memory import Memory, MemoryContext, MemoryLevel, MemorySourc
 from cortex.models.results import ConsolidateResult
 from cortex.session import get_git_branch
 from cortex.storage.base import SearchOptions, Storage
+from cortex.utils import dedupe_list
 
 _MERGE_SEPARATOR = "\n\n---\n\n"
 
@@ -163,29 +164,19 @@ class ConsolidationService:
     def _merge(self, existing: Memory, inp: ConsolidateInput, new_vector: list[float]) -> Memory:
         """Merge new content into an existing memory."""
         existing.content = existing.content + _MERGE_SEPARATOR + inp.synthesis
-        existing.tags = _dedupe_list(existing.tags + inp.tags)
-        existing.merged_from = _dedupe_list([*existing.merged_from, existing.id])
+        existing.tags = dedupe_list(existing.tags + inp.tags)
+        existing.merged_from = dedupe_list(existing.merged_from)
         existing.touch()
 
-        # Average embeddings
-        if existing.embedding and new_vector:
+        # Average embeddings (fetch stored embedding since deserialized embedding is always [])
+        stored_embedding = self._storage.get_embedding(existing.id)
+        if stored_embedding and new_vector:
             import numpy as np
 
             from cortex.search.cosine import normalize
 
-            averaged = np.mean([existing.embedding, new_vector], axis=0).tolist()
+            averaged = np.mean([stored_embedding, new_vector], axis=0).tolist()
             existing.embedding = normalize(averaged)
 
         self._storage.update(existing)
         return existing
-
-
-def _dedupe_list(items: list[str]) -> list[str]:
-    """Deduplicate while preserving order."""
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in items:
-        if item not in seen:
-            seen.add(item)
-            result.append(item)
-    return result

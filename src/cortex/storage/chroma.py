@@ -50,6 +50,8 @@ def _meta_to_dict(memory: Memory) -> dict[str, Any]:
         "updated_at": memory.updated_at.isoformat(),
         "merged_from": json.dumps(memory.merged_from),
         "obsolete": memory.obsolete,
+        "access_count": memory.access_count,
+        "last_accessed_at": memory.last_accessed_at.isoformat() if memory.last_accessed_at else "",
         # Save-context fields (PR #38)
         "git_branch": memory.context.git_branch or "",
         "agent_name": memory.context.agent_name or "",
@@ -86,6 +88,7 @@ def _dict_to_memory(
         user_prompt=metadata.get("user_prompt", ""),
     )
 
+    last_acc = metadata.get("last_accessed_at", "")
     return Memory(
         id=memory_id,
         level=MemoryLevel(metadata["level"]),
@@ -98,6 +101,8 @@ def _dict_to_memory(
         updated_at=_dt(metadata["updated_at"]),
         merged_from=json.loads(metadata.get("merged_from", "[]")),
         obsolete=bool(metadata.get("obsolete", False)),
+        access_count=int(metadata.get("access_count", 0)),
+        last_accessed_at=_dt(last_acc) if last_acc else None,
     )
 
 
@@ -176,18 +181,27 @@ class ChromaStorage:
         memories: list[Memory] = []
         for level in levels:
             col = self._col(level)
-            result = col.get(include=["documents", "metadatas"])
+
+            # Build server-side where filter to reduce data transfer
+            where_clauses: list[dict[str, Any]] = []
+            if not opts.include_obsolete:
+                where_clauses.append({"obsolete": False})
+            if opts.session_id:
+                where_clauses.append({"session_id": opts.session_id})
+            if opts.git_branch:
+                where_clauses.append({"git_branch": opts.git_branch})
+
+            where: dict[str, Any] | None = None
+            if len(where_clauses) == 1:
+                where = where_clauses[0]
+            elif len(where_clauses) > 1:
+                where = {"$and": where_clauses}
+
+            result = col.get(where=where, include=["documents", "metadatas"])
             for mid, doc, meta in zip(
                 result["ids"], result["documents"], result["metadatas"], strict=False
             ):
-                m = _dict_to_memory(mid, doc, meta)
-                if not opts.include_obsolete and m.obsolete:
-                    continue
-                if opts.session_id and m.context.session_id != opts.session_id:
-                    continue
-                if opts.git_branch and m.context.git_branch != opts.git_branch:
-                    continue
-                memories.append(m)
+                memories.append(_dict_to_memory(mid, doc, meta))
 
         memories.sort(key=lambda m: m.created_at, reverse=not opts.reverse)
 
@@ -256,6 +270,58 @@ class ChromaStorage:
     # Semantic search
     # ------------------------------------------------------------------
 
+    def _query_collection(
+        self,
+        col: Collection,
+        vector: list[float],
+        n: int,
+        where: dict[str, Any] | None,
+        min_score: float,
+    ) -> list[SearchResult]:
+        """Shared query logic for a single ChromaDB collection."""
+        count = col.count()
+        if count == 0:
+            return []
+
+        query_result = col.query(
+            query_embeddings=[vector],
+            n_results=min(n, count),
+            where=where,
+            include=["documents", "metadatas", "distances"],
+        )
+
+        results: list[SearchResult] = []
+        ids = query_result["ids"][0]
+        docs = query_result["documents"][0]
+        metas = query_result["metadatas"][0]
+        distances = query_result["distances"][0]
+
+        for mid, doc, meta, dist in zip(ids, docs, metas, distances, strict=False):
+            # ChromaDB cosine distance = 1 - similarity; clamp to [0, 1]
+            score = max(0.0, 1.0 - dist)
+            if score < min_score:
+                continue
+            m = _dict_to_memory(mid, doc, meta)
+            results.append(SearchResult(memory=m, score=score))
+
+        return results
+
+    @staticmethod
+    def _build_where(
+        *,
+        include_obsolete: bool,
+        level: MemoryLevel | None = None,
+        session_id: str = "",
+    ) -> dict[str, Any] | None:
+        """Build a ChromaDB where-filter clause."""
+        where: dict[str, Any] | None = None
+        if not include_obsolete:
+            where = {"obsolete": False}
+        if level == MemoryLevel.working and session_id:
+            sf: dict[str, Any] = {"session_id": session_id}
+            where = {"$and": [where, sf]} if where else sf
+        return where
+
     def search_all_layers(
         self,
         vector: list[float],
@@ -263,46 +329,30 @@ class ChromaStorage:
     ) -> list[SearchResult]:
         opts = opts or SearchOptions()
         levels = opts.filter_levels if opts.filter_levels else list(_LEVELS)
-
-        # For working-level search, filter by session_id
         results: list[SearchResult] = []
 
         for level in levels:
             col = self._col(level)
             try:
-                n = max(opts.top_k, 10)  # fetch more to allow filtering
-                where: dict[str, Any] | None = None
-
-                if not opts.include_obsolete:
-                    where = {"obsolete": False}
-
-                if level == MemoryLevel.working and opts.session_id:
-                    session_filter: dict[str, Any] = {"session_id": opts.session_id}
-                    where = {"$and": [where, session_filter]} if where else session_filter
-
-                query_result = col.query(
-                    query_embeddings=[vector],
-                    n_results=min(n, max(col.count(), 1)),
-                    where=where,
-                    include=["documents", "metadatas", "distances"],
+                where = self._build_where(
+                    include_obsolete=opts.include_obsolete,
+                    level=level,
+                    session_id=opts.session_id,
                 )
+                n = max(opts.top_k, 10)
+                results.extend(self._query_collection(col, vector, n, where, opts.min_score))
+            except (IndexError, ValueError) as e:
+                if "dimension" in str(e).lower():
+                    raise
 
-                ids = query_result["ids"][0]
-                docs = query_result["documents"][0]
-                metas = query_result["metadatas"][0]
-                distances = query_result["distances"][0]
-
-                for mid, doc, meta, dist in zip(ids, docs, metas, distances, strict=False):
-                    # ChromaDB cosine distance = 1 - similarity; clamp to [0, 1]
-                    score = max(0.0, 1.0 - dist)
-                    if score < opts.min_score:
-                        continue
-                    m = _dict_to_memory(mid, doc, meta)
-                    results.append(SearchResult(memory=m, score=score))
-
-            except Exception:
-                # Empty collection or other non-fatal error — skip this level
-                pass
+        # Apply freshness weighting when requested (E3)
+        w = opts.freshness_weight
+        if w > 0.0:
+            now = datetime.now(UTC)
+            for r in results:
+                days = max((now - r.memory.updated_at).total_seconds() / 86400, 0.0)
+                freshness = 1.0 / (1.0 + days / 30.0)
+                r.score = (1.0 - w) * r.score + w * freshness
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[: opts.top_k]
@@ -321,39 +371,12 @@ class ChromaStorage:
         Used internally by consolidation and autoprune services.
         """
         col = self._col(level)
-        count = col.count()
-        if count == 0:
-            return []
-
-        where: dict[str, Any] | None = None
-        if not include_obsolete:
-            where = {"obsolete": False}
-
-        if level == MemoryLevel.working and session_id:
-            sf: dict[str, Any] = {"session_id": session_id}
-            where = {"$and": [where, sf]} if where else sf
-
-        query_result = col.query(
-            query_embeddings=[vector],
-            n_results=min(top_k, count),
-            where=where,
-            include=["documents", "metadatas", "distances"],
+        where = self._build_where(
+            include_obsolete=include_obsolete,
+            level=level,
+            session_id=session_id,
         )
-
-        results: list[SearchResult] = []
-        ids = query_result["ids"][0]
-        docs = query_result["documents"][0]
-        metas = query_result["metadatas"][0]
-        distances = query_result["distances"][0]
-
-        for mid, doc, meta, dist in zip(ids, docs, metas, distances, strict=False):
-            score = max(0.0, 1.0 - dist)
-            if score < min_score:
-                continue
-            m = _dict_to_memory(mid, doc, meta)
-            results.append(SearchResult(memory=m, score=score))
-
-        return results
+        return self._query_collection(col, vector, top_k, where, min_score)
 
     def get_embedding(self, memory_id: str) -> list[float]:
         """Fetch the raw stored embedding for a single memory.
@@ -420,7 +443,8 @@ class ChromaStorage:
         # avoid partial dimension mismatches.
         all_embeddings = [e for e in new_embeddings if e is not None]
         embeddings_arg = all_embeddings if len(all_embeddings) == len(result["ids"]) else None
-        episodic_col.add(
+        # Use upsert to make transfer idempotent (safe to retry on failure)
+        episodic_col.upsert(
             ids=result["ids"],
             embeddings=embeddings_arg,
             documents=result["documents"],

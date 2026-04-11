@@ -80,13 +80,32 @@ class MemoryService:
         embed_text = self._embed_text(memory)
         memory.embedding = self._embedder.embed(embed_text)
         self._storage.save(memory)
+
+        # Auto-detect related memories via similarity search
+        try:
+            opts = SearchOptions(top_k=3, min_score=0.75)
+            related = self._storage.search_all_layers(memory.embedding, opts)
+            related_ids = [r.memory.id for r in related if r.memory.id != memory.id]
+            if related_ids:
+                memory.context.related_memories = related_ids[:3]
+                self._storage.update(memory)
+        except Exception:
+            pass  # Non-critical: relationship detection is best-effort
+
         return memory
 
-    def update(self, memory: Memory) -> Memory:
-        """Update an existing memory (re-embeds if content changed)."""
+    def update(self, memory: Memory, *, content_changed: bool = True) -> Memory:
+        """Update an existing memory. Re-embeds only if content changed.
+
+        Args:
+            memory: Memory with updated fields.
+            content_changed: If True (default), recompute embedding.
+                Set to False for metadata-only updates (tags, obsolete, etc.).
+        """
+        if content_changed:
+            embed_text = self._embed_text(memory)
+            memory.embedding = self._embedder.embed(embed_text)
         memory.touch()
-        embed_text = self._embed_text(memory)
-        memory.embedding = self._embedder.embed(embed_text)
         self._storage.update(memory)
         return memory
 
@@ -109,6 +128,25 @@ class MemoryService:
     def promote(self, memory_id: str, target_level: MemoryLevel) -> Memory:
         """Promote a memory to a higher layer (e.g. episodic → semantic)."""
         memory = self._storage.get(memory_id)
+        memory.level = target_level
+        memory.touch()
+        self._storage.update(memory)
+        return memory
+
+    def demote(self, memory_id: str, target_level: MemoryLevel) -> Memory:
+        """Demote a memory to a lower layer (e.g. semantic → episodic).
+
+        Raises ValueError if target_level is not lower than current level.
+        """
+        _order = {MemoryLevel.working: 0, MemoryLevel.episodic: 1, MemoryLevel.semantic: 2}
+        memory = self._storage.get(memory_id)
+        current = (
+            memory.level if isinstance(memory.level, MemoryLevel) else MemoryLevel(memory.level)
+        )
+        if _order.get(MemoryLevel(target_level), 0) >= _order.get(current, 0):
+            raise ValueError(
+                f"Cannot demote: target {target_level} is not lower than current {current.value}"
+            )
         memory.level = target_level
         memory.touch()
         self._storage.update(memory)

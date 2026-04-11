@@ -12,6 +12,7 @@ from cortex.cli import (
     consolidate,
     create,
     delete,
+    edit,
     export_,
     get,
     import_,
@@ -24,6 +25,7 @@ from cortex.cli import (
     transfer_working,
 )
 from cortex.config.settings import load_settings
+from cortex.logging_ import configure_logging
 
 app = typer.Typer(
     name="cortex",
@@ -38,6 +40,7 @@ app.command("search")(search.search)
 app.command("list")(list_.list_memories)
 app.command("get")(get.get_memory)
 app.command("delete")(delete.delete_memory)
+app.command("edit")(edit.edit_memory)
 app.command("consolidate")(consolidate.consolidate)
 app.command("transfer-working")(transfer_working.transfer_working)
 app.command("autoprune")(autoprune.autoprune)
@@ -63,5 +66,6 @@ def main_callback(
     ] = "info",
 ) -> None:
     """Cortex — three-layer semantic memory system."""
+    configure_logging(log_level)
     if config:
         load_settings(config_path=config)

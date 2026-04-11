@@ -66,7 +66,8 @@ def cortex_search(
             session_id=session_id,
         )
         results = svc.search(query, opts)
-        return [{"score": round(r.score, 4), **memory_to_dict(r.memory)} for r in results]
+        items = [{"score": round(r.score, 4), **memory_to_dict(r.memory)} for r in results]
+        return {"results": items, "total": len(items), "query": query}
     finally:
         storage.close()
 
@@ -131,7 +132,13 @@ def cortex_create(
                 user_prompt=user_prompt,
             )
         )
-        return memory_to_dict(memory)
+        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        return {
+            "id": memory.id,
+            "level": level_val,
+            "title": memory.title,
+            "tags": tag_list,
+        }
     finally:
         storage.close()
 
@@ -167,7 +174,8 @@ def cortex_list(
             offset=offset,
         )
         memories = storage.list(opts)
-        return [memory_to_dict(m) for m in memories]
+        items = [memory_to_dict(m, compact=True) for m in memories]
+        return {"memories": items, "total": len(items)}
     finally:
         storage.close()
 
@@ -287,7 +295,38 @@ def cortex_promote_memory(memory_id: str, target_level: str = "semantic") -> dic
         else:
             mem_svc = MemoryService(storage, embedder)
             memory = mem_svc.promote(memory_id, target)
-        return memory_to_dict(memory)
+        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        return {
+            "id": memory.id,
+            "level": level_val,
+            "previous_level": target_level,
+            "status": "promoted",
+        }
+    finally:
+        storage.close()
+
+
+@mcp.tool()
+def cortex_demote_memory(memory_id: str, target_level: str = "episodic") -> dict[str, Any]:
+    """Demote a memory to a lower layer (e.g. semantic → episodic).
+
+    Args:
+        memory_id: ID of the memory to demote.
+        target_level: Target level (must be lower than current).
+
+    Returns:
+        The demoted memory summary.
+    """
+    target = MemoryLevel(target_level)
+    svc, storage = _get_svc()
+    try:
+        memory = svc.demote(memory_id, target)
+        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        return {
+            "id": memory.id,
+            "level": level_val,
+            "status": "demoted",
+        }
     finally:
         storage.close()
 
@@ -422,44 +461,29 @@ def cortex_think_about_memory_maintenance() -> str:
     finally:
         storage.close()
 
-    return f"""# Memory Maintenance Analysis
-
-## Current Session: {session_id}
-## Memory Counts: {json.dumps(counts)}
-
-## When to use each operation:
-
-### cortex_create
-- Capture new learnings, decisions, bugs, patterns
-- Use level="working" for session-scoped temporary context
-- Use level="episodic" for event-specific knowledge
-- Use level="semantic" for permanent conventions/patterns
-
-### cortex_consolidate
-- When you have a synthesis or summary to store
-- Automatically deduplicates against existing memories
-  (threshold={settings.consolidation.similarity_threshold})
-- Use force=True to always create new (bypass dedup)
-
-### cortex_search
-- Before starting any task to surface relevant context
-- When debugging to find similar prior solutions
-- When making architectural decisions
-
-### transfer-working
-- At session end to promote working memories to episodic
-- Run cortex_review_session first to see what's there
-
-### cortex_mark_obsolete
-- When a memory is superseded by newer knowledge
-- Before replacing a pattern with a better approach
-
-### autoprune
-- Periodically to remove duplicates (>{settings.autoprune.duplicates_threshold} similarity)
-- To archive old episodic memories (>{settings.autoprune.episodic_retention_days} days)
-- To merge very similar semantic memories
-  (>{settings.autoprune.semantic_merge_threshold} similarity)
-"""
+    lines = [
+        f"Session: {session_id} | Counts: {json.dumps(counts)}",
+    ]
+    if counts.get("working", 0) > 0:
+        lines.append(
+            f"- {counts['working']} working memories: review_session → transfer or consolidate"
+        )
+    if counts.get("episodic", 0) > 10:
+        lines.append(
+            f"- {counts['episodic']} episodic: consider autoprune "
+            f"(dup>{settings.autoprune.duplicates_threshold}, "
+            f"age>{settings.autoprune.episodic_retention_days}d)"
+        )
+    if counts.get("semantic", 0) > 20:
+        lines.append(
+            f"- {counts['semantic']} semantic: consider merge "
+            f"(>{settings.autoprune.semantic_merge_threshold})"
+        )
+    threshold = settings.consolidation.similarity_threshold
+    lines.append(
+        f"Ops: create, consolidate(threshold={threshold}), search, mark_obsolete, transfer-working"
+    )
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -468,38 +492,15 @@ def cortex_think_about_task_completion() -> str:
 
     Returns a checklist for knowledge capture when finishing a task.
     """
-    return """# Task Completion Memory Checklist
-
-Before closing a task, evaluate what knowledge should be captured:
-
-## 1. Decisions made
-- What architectural/design choices did you make?
-- Why was this approach chosen over alternatives?
-- → cortex_create level="episodic" or cortex_consolidate level="semantic"
-
-## 2. Bugs fixed
-- What was the root cause?
-- How was it diagnosed and resolved?
-- → cortex_create level="episodic" tags="bug,<component>"
-
-## 3. Patterns discovered
-- Any reusable code patterns or conventions?
-- API behaviors or edge cases found?
-- → cortex_consolidate level="semantic" (will merge with similar existing patterns)
-
-## 4. Working memory cleanup
-- Transfer session working memories to episodic
-- → cortex_review_session → transfer-working or cortex_consolidate each item
-
-## 5. Obsolete knowledge
-- Did this task change how something works?
-- Mark old memories obsolete with cortex_mark_obsolete
-
-## Priority
-- Critical patterns → semantic
-- Task-specific events → episodic
-- In-progress context → working → transfer at session end
-"""
+    return (
+        "Task completion checklist:\n"
+        "1. Decisions → consolidate level=semantic\n"
+        "2. Bugs fixed → create level=episodic tags=bug\n"
+        "3. Patterns → consolidate level=semantic (auto-dedup)\n"
+        "4. Working cleanup → review_session → transfer-working\n"
+        "5. Obsolete knowledge → mark_obsolete\n"
+        "Priority: patterns→semantic, events→episodic, temp→working→transfer"
+    )
 
 
 @mcp.tool()
@@ -585,22 +586,9 @@ def cortex_choose_working_consolidation(session_id: str = "") -> dict[str, Any]:
 
         recommendations = []
         for m in memories:
-            # Heuristic: long content → consolidate, short → transfer, old → transfer
-            if len(m.content) > 500:
-                action = "consolidate"
-                reason = "Rich content suitable for consolidation into episodic/semantic"
-            else:
-                action = "transfer"
-                reason = "Transfer to episodic as-is"
-
-            recommendations.append(
-                {
-                    "id": m.id[:8],
-                    "title": m.title,
-                    "action": action,
-                    "reason": reason,
-                }
-            )
+            # Heuristic: long content → consolidate, short → transfer
+            action = "consolidate" if len(m.content) > 500 else "transfer"
+            recommendations.append({"id": m.id[:8], "title": m.title, "action": action})
 
         return {
             "session_id": session_id,

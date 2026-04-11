@@ -18,12 +18,14 @@ class SearchOptions:
         filter_levels: list[MemoryLevel] | None = None,
         include_obsolete: bool = False,
         session_id: str = "",
+        freshness_weight: float = 0.0,
     ) -> None:
         self.top_k = top_k
         self.min_score = min_score
         self.filter_levels = filter_levels
         self.include_obsolete = include_obsolete
         self.session_id = session_id
+        self.freshness_weight = freshness_weight
 
 
 class ListOptions:
@@ -94,6 +96,26 @@ class Storage(Protocol):
         opts: SearchOptions | None = None,
     ) -> list[SearchResult]:
         """Semantic search across all memory layers."""
+        ...
+
+    def search_by_vector(
+        self,
+        vector: list[float],
+        level: MemoryLevel,
+        top_k: int = 10,
+        min_score: float = 0.0,
+        include_obsolete: bool = True,
+        session_id: str = "",
+    ) -> list[SearchResult]:
+        """Search within a single level collection."""
+        ...
+
+    def get_all_with_embeddings(self, level: MemoryLevel) -> list[tuple[Memory, list[float]]]:
+        """Retrieve all memories and their raw embeddings for a level."""
+        ...
+
+    def stats(self) -> dict[str, int]:
+        """Return counts per memory level."""
         ...
 
     def transfer_working_to_episodic(self, session_id: str) -> int:

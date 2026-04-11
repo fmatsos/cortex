@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from cortex.models.memory import Memory
 
@@ -17,20 +19,20 @@ class SearchResult(BaseModel):
 class ConsolidateResult(BaseModel):
     """Result of a consolidation (create or merge) operation."""
 
-    action: str  # "created" | "merged"
+    action: Literal["created", "merged"]
     memory_id: str
     level: str
-    similarity: float = 0.0
+    similarity: float = Field(default=0.0, ge=0.0, le=1.0)
     message: str
 
 
 class AutopruneStats(BaseModel):
     """Statistics from a single autoprune operation."""
 
-    removed: int = 0
-    merged: int = 0
-    archived: int = 0
-    details: list[str] = []
+    removed: int = Field(default=0, ge=0)
+    merged: int = Field(default=0, ge=0)
+    archived: int = Field(default=0, ge=0)
+    details: list[str] = Field(default_factory=list)
 
 
 class AutopruneResult(BaseModel):

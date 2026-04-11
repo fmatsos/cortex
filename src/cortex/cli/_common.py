@@ -35,30 +35,49 @@ def error(message: str, exit_code: int = 1) -> None:
     raise typer.Exit(exit_code)
 
 
-def memory_to_dict(memory: Any) -> dict[str, Any]:
-    """Serialize a Memory to a JSON-compatible dict."""
+def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
+    """Serialize a Memory to a JSON-compatible dict.
+
+    Args:
+        memory: Memory object to serialize.
+        compact: If True, return minimal fields for token efficiency.
+    """
     from cortex.models.memory import Memory
 
     m: Memory = memory
+    level_val = m.level if isinstance(m.level, str) else m.level.value
+
+    if compact:
+        return {
+            "id": m.id[:8],
+            "level": level_val,
+            "title": m.title,
+            "tags": m.tags,
+            "updated_at": m.updated_at.isoformat()[:10],
+        }
+
+    # Build context dict, stripping empty-string values
+    source_val = m.context.source if isinstance(m.context.source, str) else m.context.source.value
+    ctx_raw = {
+        "session_id": m.context.session_id,
+        "task_id": m.context.task_id,
+        "author": m.context.author,
+        "source": source_val,
+        "related_memories": m.context.related_memories,
+        "git_branch": m.context.git_branch,
+        "agent_name": m.context.agent_name,
+        "agent_session_id": m.context.agent_session_id,
+        "user_prompt": m.context.user_prompt,
+    }
+    ctx = {k: v for k, v in ctx_raw.items() if v != "" and v != []}
+
     return {
         "id": m.id,
-        "level": m.level if isinstance(m.level, str) else m.level.value,
+        "level": level_val,
         "title": m.title,
         "content": m.content,
         "tags": m.tags,
-        "context": {
-            "session_id": m.context.session_id,
-            "task_id": m.context.task_id,
-            "author": m.context.author,
-            "source": m.context.source
-            if isinstance(m.context.source, str)
-            else m.context.source.value,
-            "related_memories": m.context.related_memories,
-            "git_branch": m.context.git_branch,
-            "agent_name": m.context.agent_name,
-            "agent_session_id": m.context.agent_session_id,
-            "user_prompt": m.context.user_prompt,
-        },
+        "context": ctx,
         "created_at": m.created_at.isoformat(),
         "updated_at": m.updated_at.isoformat(),
         "merged_from": m.merged_from,

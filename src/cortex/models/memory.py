@@ -55,6 +55,8 @@ class Memory(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     merged_from: list[str] = Field(default_factory=list)
     obsolete: bool = False
+    access_count: int = Field(default=0, ge=0)
+    last_accessed_at: datetime | None = None
 
     model_config = {"use_enum_values": True}
 
