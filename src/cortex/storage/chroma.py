@@ -50,6 +50,8 @@ def _meta_to_dict(memory: Memory) -> dict[str, Any]:
         "updated_at": memory.updated_at.isoformat(),
         "merged_from": json.dumps(memory.merged_from),
         "obsolete": memory.obsolete,
+        "access_count": memory.access_count,
+        "last_accessed_at": memory.last_accessed_at.isoformat() if memory.last_accessed_at else "",
         # Save-context fields (PR #38)
         "git_branch": memory.context.git_branch or "",
         "agent_name": memory.context.agent_name or "",
@@ -86,6 +88,7 @@ def _dict_to_memory(
         user_prompt=metadata.get("user_prompt", ""),
     )
 
+    last_acc = metadata.get("last_accessed_at", "")
     return Memory(
         id=memory_id,
         level=MemoryLevel(metadata["level"]),
@@ -98,6 +101,8 @@ def _dict_to_memory(
         updated_at=_dt(metadata["updated_at"]),
         merged_from=json.loads(metadata.get("merged_from", "[]")),
         obsolete=bool(metadata.get("obsolete", False)),
+        access_count=int(metadata.get("access_count", 0)),
+        last_accessed_at=_dt(last_acc) if last_acc else None,
     )
 
 
@@ -339,6 +344,15 @@ class ChromaStorage:
             except (IndexError, ValueError) as e:
                 if "dimension" in str(e).lower():
                     raise
+
+        # Apply freshness weighting when requested (E3)
+        w = opts.freshness_weight
+        if w > 0.0:
+            now = datetime.now(UTC)
+            for r in results:
+                days = max((now - r.memory.updated_at).total_seconds() / 86400, 0.0)
+                freshness = 1.0 / (1.0 + days / 30.0)
+                r.score = (1.0 - w) * r.score + w * freshness
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[: opts.top_k]

@@ -307,6 +307,31 @@ def cortex_promote_memory(memory_id: str, target_level: str = "semantic") -> dic
 
 
 @mcp.tool()
+def cortex_demote_memory(memory_id: str, target_level: str = "episodic") -> dict[str, Any]:
+    """Demote a memory to a lower layer (e.g. semantic → episodic).
+
+    Args:
+        memory_id: ID of the memory to demote.
+        target_level: Target level (must be lower than current).
+
+    Returns:
+        The demoted memory summary.
+    """
+    target = MemoryLevel(target_level)
+    svc, storage = _get_svc()
+    try:
+        memory = svc.demote(memory_id, target)
+        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        return {
+            "id": memory.id,
+            "level": level_val,
+            "status": "demoted",
+        }
+    finally:
+        storage.close()
+
+
+@mcp.tool()
 def cortex_update_memory(
     memory_id: str,
     title: str = "",

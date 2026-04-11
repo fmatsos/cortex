@@ -18,12 +18,14 @@ class SearchOptions:
         filter_levels: list[MemoryLevel] | None = None,
         include_obsolete: bool = False,
         session_id: str = "",
+        freshness_weight: float = 0.0,
     ) -> None:
         self.top_k = top_k
         self.min_score = min_score
         self.filter_levels = filter_levels
         self.include_obsolete = include_obsolete
         self.session_id = session_id
+        self.freshness_weight = freshness_weight
 
 
 class ListOptions:

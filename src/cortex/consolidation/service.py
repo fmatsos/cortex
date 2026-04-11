@@ -165,6 +165,7 @@ class ConsolidationService:
         """Merge new content into an existing memory."""
         existing.content = existing.content + _MERGE_SEPARATOR + inp.synthesis
         existing.tags = dedupe_list(existing.tags + inp.tags)
+        existing.merged_from = dedupe_list(existing.merged_from)
         existing.touch()
 
         # Average embeddings (fetch stored embedding since deserialized embedding is always [])
