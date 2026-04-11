@@ -22,6 +22,11 @@ def export_cmd(
     all_memories: Annotated[bool, typer.Option("--all", help="Export all memories")] = False,
 ) -> None:
     """Export memories to Markdown format."""
+    if memory_id and (level or all_memories):
+        error("--id cannot be combined with --level or --all")
+    if level and all_memories:
+        error("--level cannot be combined with --all")
+
     storage = get_storage()
 
     try:

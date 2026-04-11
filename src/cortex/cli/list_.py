@@ -28,6 +28,9 @@ def list_memories(
     reverse: Annotated[
         bool, typer.Option("--reverse", help="Reverse sort order (oldest first)")
     ] = False,
+    sort: Annotated[
+        str, typer.Option("--sort", help="Sort by: created_at, updated_at, title")
+    ] = "created_at",
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """List memories with optional filtering."""
@@ -51,13 +54,25 @@ def list_memories(
 
     try:
         memories = storage.list(opts)
+        # Apply client-side sort (storage sorts by created_at by default)
+        if sort == "updated_at":
+            memories.sort(key=lambda m: m.updated_at, reverse=not reverse)
+        elif sort == "title":
+            memories.sort(key=lambda m: m.title.lower(), reverse=not reverse)
     except Exception as exc:
         error(str(exc))
     finally:
         storage.close()
 
     if as_json:
-        print_json([memory_to_dict(m) for m in memories])
+        print_json(
+            {
+                "memories": [memory_to_dict(m) for m in memories],
+                "total": len(memories),
+                "offset": offset,
+                "limit": limit,
+            }
+        )
         return
 
     if not memories:

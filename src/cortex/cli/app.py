@@ -12,6 +12,7 @@ from cortex.cli import (
     consolidate,
     create,
     delete,
+    edit,
     export_,
     get,
     import_,
@@ -39,6 +40,7 @@ app.command("search")(search.search)
 app.command("list")(list_.list_memories)
 app.command("get")(get.get_memory)
 app.command("delete")(delete.delete_memory)
+app.command("edit")(edit.edit_memory)
 app.command("consolidate")(consolidate.consolidate)
 app.command("transfer-working")(transfer_working.transfer_working)
 app.command("autoprune")(autoprune.autoprune)
