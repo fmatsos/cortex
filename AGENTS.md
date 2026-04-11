@@ -119,3 +119,7 @@ grepai search "database connection pool" --json --compact
 8. **Store learnings** — `cortex create` for key decisions and findings
 9. **Update AGENTS.md** — apply rule 14: add a Golden Rule or update an instruction file in `.agents/instructions/`
 10. **Session end** — `cortex transfer-working --json` to promote working memories to episodic
+
+### Configuration Notes
+
+- Config lookup now falls back to `~/.config/cortex/config.yaml` when `.agents/cortex/config.yaml` is missing. Scaffold defaults with `cortex init --global` (or `--local` for the current project).
