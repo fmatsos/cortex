@@ -164,16 +164,16 @@ class ConsolidationService:
         """Merge new content into an existing memory."""
         existing.content = existing.content + _MERGE_SEPARATOR + inp.synthesis
         existing.tags = _dedupe_list(existing.tags + inp.tags)
-        existing.merged_from = _dedupe_list([*existing.merged_from, existing.id])
         existing.touch()
 
-        # Average embeddings
-        if existing.embedding and new_vector:
+        # Average embeddings (fetch stored embedding since deserialized embedding is always [])
+        stored_embedding = self._storage.get_embedding(existing.id)
+        if stored_embedding and new_vector:
             import numpy as np
 
             from cortex.search.cosine import normalize
 
-            averaged = np.mean([existing.embedding, new_vector], axis=0).tolist()
+            averaged = np.mean([stored_embedding, new_vector], axis=0).tolist()
             existing.embedding = normalize(averaged)
 
         self._storage.update(existing)
