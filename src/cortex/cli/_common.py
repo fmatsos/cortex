@@ -54,6 +54,10 @@ def memory_to_dict(memory: Any) -> dict[str, Any]:
             if isinstance(m.context.source, str)
             else m.context.source.value,
             "related_memories": m.context.related_memories,
+            "git_branch": m.context.git_branch,
+            "agent_name": m.context.agent_name,
+            "agent_session_id": m.context.agent_session_id,
+            "user_prompt": m.context.user_prompt,
         },
         "created_at": m.created_at.isoformat(),
         "updated_at": m.updated_at.isoformat(),

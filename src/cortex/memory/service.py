@@ -9,6 +9,7 @@ from uuid import uuid4
 from cortex.embeddings.base import Embedder
 from cortex.models.memory import Memory, MemoryContext, MemoryLevel, MemorySource
 from cortex.models.results import SearchResult
+from cortex.session import get_git_branch
 from cortex.storage.base import ListOptions, SearchOptions, Storage
 
 
@@ -24,6 +25,11 @@ class CreateInput:
     source: MemorySource = MemorySource.manual
     task_id: str = ""
     author: str = ""
+    # Save-context fields (PR #38)
+    git_branch: str = ""
+    agent_name: str = ""
+    agent_session_id: str = ""
+    user_prompt: str = ""
 
 
 class MemoryService:
@@ -47,12 +53,19 @@ class MemoryService:
 
     def create(self, inp: CreateInput) -> Memory:
         """Create and persist a new memory with embedding."""
+        # Auto-detect git branch when not explicitly provided (PR #38/#39)
+        git_branch = inp.git_branch or get_git_branch()
+
         context = MemoryContext(
             session_id=inp.session_id,
             task_id=inp.task_id,
             author=inp.author,
             source=inp.source,
             timestamp=datetime.now(UTC),
+            git_branch=git_branch,
+            agent_name=inp.agent_name,
+            agent_session_id=inp.agent_session_id,
+            user_prompt=inp.user_prompt,
         )
 
         memory = Memory(

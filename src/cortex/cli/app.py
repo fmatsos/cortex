@@ -15,6 +15,7 @@ from cortex.cli import (
     export_,
     get,
     import_,
+    install_man,
     list_,
     mcp_,
     search,
@@ -46,6 +47,7 @@ app.command("stats")(stats.stats_cmd)
 app.command("config")(config_.config_cmd)
 app.command("start-mcp-server")(mcp_.start_mcp_server)
 app.command("session")(session_.session_cmd)
+app.command("install-man")(install_man.install_man)
 
 
 @app.callback()

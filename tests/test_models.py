@@ -92,6 +92,11 @@ class TestMemoryContext:
         assert ctx.task_id == ""
         assert ctx.source == MemorySource.manual
         assert ctx.related_memories == []
+        # Save-context fields default to empty
+        assert ctx.git_branch == ""
+        assert ctx.agent_name == ""
+        assert ctx.agent_session_id == ""
+        assert ctx.user_prompt == ""
 
     def test_source_validation(self) -> None:
         ctx = MemoryContext(source=MemorySource.llm)
@@ -100,3 +105,15 @@ class TestMemoryContext:
     def test_invalid_source(self) -> None:
         with pytest.raises(ValueError):
             MemoryContext(source="invalid")  # type: ignore[arg-type]
+
+    def test_save_context_fields(self) -> None:
+        ctx = MemoryContext(
+            git_branch="feature/my-branch",
+            agent_name="claude",
+            agent_session_id="sess-123",
+            user_prompt="help me fix this bug",
+        )
+        assert ctx.git_branch == "feature/my-branch"
+        assert ctx.agent_name == "claude"
+        assert ctx.agent_session_id == "sess-123"
+        assert ctx.user_prompt == "help me fix this bug"

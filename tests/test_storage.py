@@ -16,8 +16,9 @@ def make_memory(
     content: str = "Test content that is long enough.",
     tags: list[str] | None = None,
     session_id: str = "",
+    git_branch: str = "",
 ) -> Memory:
-    ctx = MemoryContext(session_id=session_id)
+    ctx = MemoryContext(session_id=session_id, git_branch=git_branch)
     embedder = MockEmbedder()
     m = Memory(level=level, title=title, content=content, tags=tags or [], context=ctx)
     from cortex.memory.service import MemoryService
@@ -134,6 +135,41 @@ class TestList:
         result = chroma_storage.list(ListOptions(session_id="session-a"))
         assert len(result) == 1
         assert result[0].context.session_id == "session-a"
+
+    def test_list_by_git_branch(self, chroma_storage: ChromaStorage) -> None:
+        """PR #38: git_branch filter in ListOptions is applied."""
+        m1 = make_memory(title="Branch A memory", git_branch="feature/branch-a")
+        m2 = make_memory(title="Branch B memory", git_branch="feature/branch-b")
+        m3 = make_memory(title="No branch memory")
+        chroma_storage.save(m1)
+        chroma_storage.save(m2)
+        chroma_storage.save(m3)
+
+        result = chroma_storage.list(ListOptions(git_branch="feature/branch-a"))
+        assert len(result) == 1
+        assert result[0].context.git_branch == "feature/branch-a"
+
+    def test_save_and_retrieve_preserves_save_context(self, chroma_storage: ChromaStorage) -> None:
+        """PR #38: all save-context fields survive the storage round-trip."""
+        # Build memory with pre-computed embedding (avoids Ollama call)
+        m = make_memory(
+            title="Context round-trip test",
+            content="Verifying that save-context fields persist correctly.",
+            git_branch="main",
+        )
+        # Overwrite context with full set of save-context fields
+        m.context = MemoryContext(
+            git_branch="main",
+            agent_name="test-agent",
+            agent_session_id="agent-sess-42",
+            user_prompt="create a memory about testing",
+        )
+        chroma_storage.save(m)
+        retrieved = chroma_storage.get(m.id)
+        assert retrieved.context.git_branch == "main"
+        assert retrieved.context.agent_name == "test-agent"
+        assert retrieved.context.agent_session_id == "agent-sess-42"
+        assert retrieved.context.user_prompt == "create a memory about testing"
 
 
 class TestSearch:

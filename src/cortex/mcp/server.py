@@ -81,6 +81,10 @@ def cortex_create(
     source: str = "llm",
     task_id: str = "",
     author: str = "",
+    git_branch: str = "",
+    agent_name: str = "",
+    agent_session_id: str = "",
+    user_prompt: str = "",
 ) -> dict[str, Any]:
     """Create a new memory.
 
@@ -93,6 +97,10 @@ def cortex_create(
         source: Origin source: manual, auto, or llm.
         task_id: Associated task/ticket ID.
         author: Author identifier.
+        git_branch: Git branch at creation time (auto-detected if omitted).
+        agent_name: Name of the agent that created the memory.
+        agent_session_id: Agent session identifier.
+        user_prompt: User prompt that triggered creation of this memory.
 
     Returns:
         The created memory.
@@ -117,6 +125,10 @@ def cortex_create(
                 source=mem_source,
                 task_id=task_id,
                 author=author,
+                git_branch=git_branch,
+                agent_name=agent_name,
+                agent_session_id=agent_session_id,
+                user_prompt=user_prompt,
             )
         )
         return memory_to_dict(memory)
@@ -187,6 +199,10 @@ def cortex_consolidate(
     session_id: str = "",
     source: str = "llm",
     force: bool = False,
+    git_branch: str = "",
+    agent_name: str = "",
+    agent_session_id: str = "",
+    user_prompt: str = "",
 ) -> dict[str, Any]:
     """Create or merge a memory based on semantic similarity.
 
@@ -201,6 +217,10 @@ def cortex_consolidate(
         session_id: Session ID (required for working level).
         source: Source: manual, auto, or llm.
         force: Skip duplicate detection and always create new memory.
+        git_branch: Git branch at creation time (auto-detected if omitted).
+        agent_name: Name of the agent that created the memory.
+        agent_session_id: Agent session identifier.
+        user_prompt: User prompt that triggered consolidation.
 
     Returns:
         ConsolidateResult with action, memory_id, level, similarity, message.
@@ -231,6 +251,10 @@ def cortex_consolidate(
                 session_id=session_id,
                 source=MemorySource(source),
                 force=force,
+                git_branch=git_branch,
+                agent_name=agent_name,
+                agent_session_id=agent_session_id,
+                user_prompt=user_prompt,
             )
         )
         return result.model_dump()
