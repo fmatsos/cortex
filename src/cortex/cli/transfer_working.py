@@ -12,8 +12,8 @@ from cortex.session import derive_session_id
 
 
 def transfer_working(
-    session: Annotated[str, typer.Option("--session", help="Session ID to transfer")] = "",
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    session: Annotated[str, typer.Option("--session", help="Session ID to transfer")] = "",
 ) -> None:
     """Transfer all working memories for a session to episodic layer."""
     session_id = session

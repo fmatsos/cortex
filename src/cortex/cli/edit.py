@@ -12,10 +12,10 @@ from cortex.memory.service import MemoryService
 
 def edit_memory(
     memory_id: Annotated[str, typer.Argument(help="Memory ID or unique prefix")],
-    title: Annotated[str, typer.Option("--title", "-t", help="New title")] = "",
     content: Annotated[str, typer.Option("--content", "-c", help="New content")] = "",
-    tags: Annotated[str, typer.Option("--tags", help="New comma-separated tags")] = "",
     json_output: Annotated[bool, typer.Option("--json", "-j", help="Output as JSON")] = False,
+    tags: Annotated[str, typer.Option("--tags", help="New comma-separated tags")] = "",
+    title: Annotated[str, typer.Option("--title", "-t", help="New title")] = "",
 ) -> None:
     """Edit an existing memory's title, content, or tags."""
     if not title and not content and not tags:

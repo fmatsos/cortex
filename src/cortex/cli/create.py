@@ -14,27 +14,27 @@ from cortex.session import derive_session_id
 
 
 def create(
-    title: Annotated[str | None, typer.Option("--title", "-t", help="Memory title")] = None,
     content: Annotated[str | None, typer.Option("--content", "-c", help="Memory content")] = None,
-    level: Annotated[
-        str, typer.Option("--level", "-l", help="Memory level: working, episodic, semantic")
-    ] = "episodic",
-    tags: Annotated[str, typer.Option("--tags", help="Comma-separated tags")] = "",
-    session: Annotated[
-        str, typer.Option("--session", help="Session ID (required for working level)")
-    ] = "",
-    source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
-    task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
+    title: Annotated[str | None, typer.Option("--title", "-t", help="Memory title")] = None,
+    agent_name: Annotated[str, typer.Option("--agent-name", help="Agent name")] = "",
+    agent_session: Annotated[str, typer.Option("--agent-session", help="Agent session ID")] = "",
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     author: Annotated[str, typer.Option("--author", help="Author identifier")] = "",
     git_branch: Annotated[
         str, typer.Option("--git-branch", help="Git branch (auto-detected if omitted)")
     ] = "",
-    agent_name: Annotated[str, typer.Option("--agent-name", help="Agent name")] = "",
-    agent_session: Annotated[str, typer.Option("--agent-session", help="Agent session ID")] = "",
+    level: Annotated[
+        str, typer.Option("--level", "-l", help="Memory level: working, episodic, semantic")
+    ] = "episodic",
+    session: Annotated[
+        str, typer.Option("--session", help="Session ID (required for working level)")
+    ] = "",
+    source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
+    tags: Annotated[str, typer.Option("--tags", help="Comma-separated tags")] = "",
+    task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
     user_prompt: Annotated[
         str, typer.Option("--user-prompt", help="User prompt that triggered this memory")
     ] = "",
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Create a new memory."""
     # Validate level

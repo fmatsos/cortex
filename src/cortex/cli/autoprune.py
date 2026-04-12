@@ -12,6 +12,7 @@ from cortex.consolidation.autoprune import AutopruneService
 
 
 def autoprune(
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Show what would be done without making changes")
     ] = False,
@@ -24,7 +25,6 @@ def autoprune(
     semantic: Annotated[
         bool, typer.Option("--semantic", help="Merge similar semantic memories")
     ] = False,
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Clean up and optimize the memory database.
 
