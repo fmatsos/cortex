@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 
@@ -29,7 +29,7 @@ def print_json(data: Any) -> None:
     typer.echo(json.dumps(data, indent=2, default=str))
 
 
-def error(message: str, exit_code: int = 1) -> None:
+def error(message: str, exit_code: int = 1) -> NoReturn:
     """Print an error message to stderr and exit."""
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(exit_code)

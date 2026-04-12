@@ -54,7 +54,7 @@ def create(
         error("--content is required")
 
     # Derive title if not provided
-    final_title = title or content[:60].strip()  # type: ignore[union-attr]
+    final_title = title or content[:60].strip()
 
     # Auto-derive session for working level
     session_id = session
@@ -76,7 +76,7 @@ def create(
         memory = svc.create(
             CreateInput(
                 title=final_title,
-                content=content,  # type: ignore[arg-type]
+                content=content,
                 level=mem_level,
                 tags=tag_list,
                 session_id=session_id,
