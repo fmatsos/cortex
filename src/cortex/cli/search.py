@@ -19,16 +19,16 @@ console = Console()
 
 def search(
     query: Annotated[str, typer.Argument(help="Search query")],
-    top: Annotated[int, typer.Option("--top", "-n", help="Maximum results")] = 5,
-    min_score: Annotated[float, typer.Option("--min-score", help="Minimum similarity score")] = 0.5,
-    level: Annotated[str, typer.Option("--level", help="Filter by level(s), comma-separated")] = "",
-    session: Annotated[
-        str, typer.Option("--session", help="Filter by session ID (working memories)")
-    ] = "",
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     include_obsolete: Annotated[
         bool, typer.Option("--include-obsolete", help="Include obsolete memories")
     ] = False,
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    level: Annotated[str, typer.Option("--level", help="Filter by level(s), comma-separated")] = "",
+    min_score: Annotated[float, typer.Option("--min-score", help="Minimum similarity score")] = 0.5,
+    session: Annotated[
+        str, typer.Option("--session", help="Filter by session ID (working memories)")
+    ] = "",
+    top: Annotated[int, typer.Option("--top", "-n", help="Maximum results")] = 5,
 ) -> None:
     """Search memories using semantic similarity."""
     settings = get_settings()

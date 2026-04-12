@@ -8,12 +8,12 @@ import typer
 
 
 def start_mcp_server(
-    transport: Annotated[
-        str, typer.Option("--transport", help="Transport: stdio or sse")
-    ] = "stdio",
     address: Annotated[
         str, typer.Option("--address", help="SSE server address (host:port)")
     ] = ":8080",
+    transport: Annotated[
+        str, typer.Option("--transport", help="Transport: stdio or sse")
+    ] = "stdio",
 ) -> None:
     """Start the Cortex MCP server.
 

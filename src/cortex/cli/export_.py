@@ -14,12 +14,12 @@ from cortex.storage.base import ListOptions
 
 
 def export_cmd(
+    all_memories: Annotated[bool, typer.Option("--all", help="Export all memories")] = False,
+    level: Annotated[str, typer.Option("--level", "-l", help="Filter by level")] = "",
+    memory_id: Annotated[str, typer.Option("--id", help="Export a single memory by ID")] = "",
     output: Annotated[
         str | None, typer.Option("--output", "-o", help="Output file path (stdout if omitted)")
     ] = None,
-    level: Annotated[str, typer.Option("--level", "-l", help="Filter by level")] = "",
-    memory_id: Annotated[str, typer.Option("--id", help="Export a single memory by ID")] = "",
-    all_memories: Annotated[bool, typer.Option("--all", help="Export all memories")] = False,
 ) -> None:
     """Export memories to Markdown format."""
     if memory_id and (level or all_memories):

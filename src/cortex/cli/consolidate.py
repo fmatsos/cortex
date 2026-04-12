@@ -15,25 +15,25 @@ from cortex.session import derive_session_id
 
 def consolidate(
     synthesis: Annotated[str, typer.Argument(help="Content to consolidate")],
-    level: Annotated[str, typer.Option("--level", "-l", help="Memory level")] = "semantic",
-    title: Annotated[
-        str, typer.Option("--title", "-t", help="Memory title (derived from content if omitted)")
-    ] = "",
-    tags: Annotated[str, typer.Option("--tags", help="Comma-separated tags")] = "",
-    session: Annotated[str, typer.Option("--session", help="Session ID")] = "",
-    source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
-    task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
+    agent_name: Annotated[str, typer.Option("--agent-name", help="Agent name")] = "",
+    agent_session: Annotated[str, typer.Option("--agent-session", help="Agent session ID")] = "",
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     author: Annotated[str, typer.Option("--author", help="Author identifier")] = "",
+    force: Annotated[bool, typer.Option("--force", help="Skip duplicate detection")] = False,
     git_branch: Annotated[
         str, typer.Option("--git-branch", help="Git branch (auto-detected if omitted)")
     ] = "",
-    agent_name: Annotated[str, typer.Option("--agent-name", help="Agent name")] = "",
-    agent_session: Annotated[str, typer.Option("--agent-session", help="Agent session ID")] = "",
+    level: Annotated[str, typer.Option("--level", "-l", help="Memory level")] = "semantic",
+    session: Annotated[str, typer.Option("--session", help="Session ID")] = "",
+    source: Annotated[str, typer.Option("--source", help="Source: manual, auto, llm")] = "manual",
+    tags: Annotated[str, typer.Option("--tags", help="Comma-separated tags")] = "",
+    task_id: Annotated[str, typer.Option("--task-id", help="Task/ticket ID")] = "",
+    title: Annotated[
+        str, typer.Option("--title", "-t", help="Memory title (derived from content if omitted)")
+    ] = "",
     user_prompt: Annotated[
         str, typer.Option("--user-prompt", help="User prompt that triggered this memory")
     ] = "",
-    force: Annotated[bool, typer.Option("--force", help="Skip duplicate detection")] = False,
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Create a memory or merge with a similar existing one."""
     try:

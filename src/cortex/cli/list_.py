@@ -16,22 +16,22 @@ console = Console()
 
 
 def list_memories(
-    level: Annotated[
-        str, typer.Option("--level", "-l", help="Filter by level: working, episodic, semantic")
-    ] = "",
-    session: Annotated[str, typer.Option("--session", help="Filter by session ID")] = "",
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
     include_obsolete: Annotated[
         bool, typer.Option("--include-obsolete", help="Include obsolete memories")
     ] = False,
+    level: Annotated[
+        str, typer.Option("--level", "-l", help="Filter by level: working, episodic, semantic")
+    ] = "",
     limit: Annotated[int, typer.Option("--limit", help="Maximum number of results (0 = all)")] = 0,
     offset: Annotated[int, typer.Option("--offset", help="Number of results to skip")] = 0,
     reverse: Annotated[
         bool, typer.Option("--reverse", help="Reverse sort order (oldest first)")
     ] = False,
+    session: Annotated[str, typer.Option("--session", help="Filter by session ID")] = "",
     sort: Annotated[
         str, typer.Option("--sort", help="Sort by: created_at, updated_at, title")
     ] = "created_at",
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """List memories with optional filtering."""
     filter_level: MemoryLevel | None = None

@@ -15,11 +15,11 @@ from cortex.memory.service import MemoryService
 
 def import_cmd(
     paths: Annotated[list[Path], typer.Argument(help="Markdown files to import")],
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate without saving")] = False,
     force: Annotated[
         bool, typer.Option("--force", help="Overwrite existing memories with same ID")
     ] = False,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Validate without saving")] = False,
-    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
 ) -> None:
     """Import memories from Markdown files."""
     if not paths:

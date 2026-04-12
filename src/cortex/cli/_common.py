@@ -35,12 +35,13 @@ def error(message: str, exit_code: int = 1) -> NoReturn:
     raise typer.Exit(exit_code)
 
 
-def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
+def memory_to_dict(memory: Any, *, compact: bool = False, snippet_len: int = 0) -> dict[str, Any]:
     """Serialize a Memory to a JSON-compatible dict.
 
     Args:
+        compact: If True, return minimal fields for token efficiency (no content).
         memory: Memory object to serialize.
-        compact: If True, return minimal fields for token efficiency.
+        snippet_len: If > 0, truncate content to this many characters (ignored when compact=True).
     """
     from cortex.models.memory import Memory
 
@@ -71,11 +72,15 @@ def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
     }
     ctx = {k: v for k, v in ctx_raw.items() if v != "" and v != []}
 
+    content = m.content
+    if snippet_len and len(content) > snippet_len:
+        content = content[:snippet_len] + "…"
+
     return {
         "id": m.id,
         "level": level_val,
         "title": m.title,
-        "content": m.content,
+        "content": content,
         "tags": m.tags,
         "context": ctx,
         "created_at": m.created_at.isoformat(),
