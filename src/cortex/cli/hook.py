@@ -94,7 +94,7 @@ _SESSION_STOP = _script(
     "the session normally.",
     "CORTEX_HOOKS_PROMPT_END",
     "  )",
-    '  printf \'{{"decision":"block","reason":"%s"}}\' \\',
+    '  printf \'{"decision":"block","reason":"%s"}\' \\',
     '    "$(printf \'%s\' "$MSG" | sed \'s/\\\\/\\\\\\\\/g; s/"/\\"/g\')"',
     "  exit 0",
     "fi",
