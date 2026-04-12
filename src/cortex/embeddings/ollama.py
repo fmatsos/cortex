@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import numpy as np
@@ -70,7 +70,10 @@ class OllamaEmbedder:
             with self._cache_lock:
                 self._cache[texts[i]] = vector
 
-        return [r for r in results if r is not None]
+        # Every slot is now filled (cache hit or freshly computed).
+        # Cast away the | None — a None here would mean _embed_with_chunking
+        # raised, which propagates before we reach this point.
+        return cast("list[list[float]]", results)
 
     @property
     def dimension(self) -> int:
