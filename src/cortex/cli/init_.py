@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 
 from cortex.config.settings import (
     Settings,
@@ -34,7 +34,6 @@ def init_cmd(
 
     defaults = Settings().model_dump()
     with target.open("w", encoding="utf-8") as f:
-        json.dump(defaults, f, indent=2)
-        f.write("\n")
+        yaml.safe_dump(defaults, f, default_flow_style=False, sort_keys=False)
 
     typer.echo(f"Created config at {target}")

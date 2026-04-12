@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from cortex.cli.app import app
@@ -208,7 +209,7 @@ class TestInitCommand:
         assert result.exit_code == 0
         config_path = home / ".config" / "cortex" / "config.yaml"
         assert config_path.exists()
-        data = json.loads(config_path.read_text())
+        data = yaml.safe_load(config_path.read_text())
         assert "storage" in data
 
     def test_init_local_does_not_overwrite(
