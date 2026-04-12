@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import stat
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import yaml
 from typer.testing import CliRunner
 
 from cortex.cli.app import app
@@ -207,9 +207,9 @@ class TestInitCommand:
         result = cli_runner.invoke(app, ["init"])
 
         assert result.exit_code == 0
-        config_path = home / ".config" / "cortex" / "config.yaml"
+        config_path = home / ".config" / "cortex" / "config.toml"
         assert config_path.exists()
-        data = yaml.safe_load(config_path.read_text())
+        data = tomllib.loads(config_path.read_text())
         assert "storage" in data
 
     def test_init_local_does_not_overwrite(
@@ -218,14 +218,14 @@ class TestInitCommand:
         home = tmp_path / "home"
         monkeypatch.setenv("HOME", str(home))
         with cli_runner.isolated_filesystem():
-            local_path = Path(".agents/cortex/config.yaml")
+            local_path = Path(".agents/cortex/config.toml")
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            local_path.write_text("existing", encoding="utf-8")
+            local_path.write_text("# existing", encoding="utf-8")
 
             result = cli_runner.invoke(app, ["init", "--local"])
 
             assert result.exit_code == 0
-            assert local_path.read_text() == "existing"
+            assert local_path.read_text() == "# existing"
 
 
 class TestHookCommand:

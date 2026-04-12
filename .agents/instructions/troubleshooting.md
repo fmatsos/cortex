@@ -148,7 +148,7 @@ Create default config:
 mkdir -p .agents/cortex
 
 # Copy default config
-cortex config --show > .agents/cortex/config.yaml
+cortex init --local
 ```
 
 ### "Invalid configuration: unknown field"
@@ -167,25 +167,25 @@ cortex config --edit
 ```
 
 Valid fields:
-```yaml
-storage:
-  backend: gob
-  path: .agents/cortex
+```toml
+[storage]
+backend = "chroma"
+path = ".agents/cortex"
 
-embeddings:
-  provider: ollama
-  endpoint: http://localhost:11434
-  model: nomic-embed-text
-  timeout: 30s
+[embeddings]
+provider = "ollama"
+endpoint = "http://localhost:11434"
+model = "nomic-embed-text"
+timeout = 30
 
-search:
-  top_k: 5
-  min_score: 0.5
-  include_obsolete: false
+[search]
+top_k = 5
+min_score = 0.5
+include_obsolete = false
 
-output:
-  format: text
-  colors: true
+[output]
+format = "text"
+colors = true
 ```
 
 ### "Environment variable not recognized"
@@ -229,9 +229,9 @@ cortex config --show  # Should show your values
    ```
 
 3. Check endpoint configuration:
-   ```yaml
-   embeddings:
-     endpoint: http://localhost:11434
+   ```toml
+   [embeddings]
+   endpoint = "http://localhost:11434"
    ```
 
 ### "Model not found: nomic-embed-text"

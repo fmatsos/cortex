@@ -300,14 +300,13 @@ cortex config template validate my-template.yaml
 
 ### Using Templates in Config
 
-```yaml
-# .agents/cortex/config.yaml
-templates:
-  markdown:
-    synthesis:
-      header: "# {{.Intent | title}} Report"
-      learnings_section:
-        content_preview_length: 200
+```toml
+# .agents/cortex/config.toml
+[templates.markdown.synthesis]
+header = "# {{.Intent | title}} Report"
+
+[templates.markdown.synthesis.learnings_section]
+content_preview_length = 200
 ```
 
 ### Template Variables

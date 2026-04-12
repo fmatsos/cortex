@@ -140,7 +140,7 @@ Factory: `internal/storage/factory.go → storage.New(cfg)`
 
 ## Configuration
 
-Config file: `.agents/cortex/config.yaml` (project-local).  
+Config file: `.agents/cortex/config.toml` (project-local).  
 Full hierarchy: **CLI flags > env vars > config file > built-in defaults**.
 
 Key env vars:

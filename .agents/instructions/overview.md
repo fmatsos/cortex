@@ -454,7 +454,7 @@ ChromaDB only supports `str`, `int`, `float`, `bool` in metadata. Lists are seri
 ├── chroma.sqlite3        # ChromaDB main persistence file
 ├── <uuid>/               # ChromaDB segment data directories
 │   └── ...
-└── config.yaml           # Local configuration
+└── config.toml           # Local configuration
 ```
 
 ### ID Prefix Matching
@@ -548,7 +548,7 @@ Configuration is loaded by pydantic-settings with this priority (highest first):
 
 1. CLI flags
 2. `CORTEX_*` environment variables (`__` for nested keys)
-3. `.agents/cortex/config.yaml`
+3. `.agents/cortex/config.toml`
 4. Built-in defaults
 
 ```python
@@ -556,7 +556,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="CORTEX_",
         env_nested_delimiter="__",
-        yaml_file=".agents/cortex/config.yaml",
+        # toml_file set dynamically via settings_customise_sources
     )
     storage: StorageConfig = StorageConfig()
     embeddings: EmbeddingsConfig = EmbeddingsConfig()
@@ -599,7 +599,7 @@ Settings are loaded once in the CLI root command and injected into services.
 
 ### Why pydantic-settings?
 
-**Rationale**: Unified YAML + env var config with type validation
+**Rationale**: Unified TOML + env var config with type validation
 
 **Benefits**:
 - Config, env vars, and defaults in one place

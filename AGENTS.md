@@ -122,4 +122,4 @@ grepai search "database connection pool" --json --compact
 
 ### Configuration Notes
 
-- Config lookup now falls back to `~/.config/cortex/config.yaml` when `.agents/cortex/config.yaml` is missing. Scaffold defaults with `cortex init --global` (or `--local` for the current project).
+- Config lookup now falls back to `~/.config/cortex/config.toml` when `.agents/cortex/config.toml` is missing. Scaffold defaults with `cortex init --global` (or `--local` for the current project).

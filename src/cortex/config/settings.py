@@ -1,6 +1,6 @@
 """Cortex configuration via pydantic-settings.
 
-Priority: CLI flags > CORTEX_* env vars > YAML config file > defaults.
+Priority: CLI flags > CORTEX_* env vars > TOML config file > defaults.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
-    YamlConfigSettingsSource,
+    TomlConfigSettingsSource,
 )
 
 
@@ -96,16 +96,16 @@ class MCPConfig(BaseModel):
 
 def default_local_config_path() -> Path:
     """Return the project-local config path."""
-    return Path(".agents/cortex/config.yaml")
+    return Path(".agents/cortex/config.toml")
 
 
 def default_global_config_path() -> Path:
     """Return the global config path under the user's config directory."""
-    return Path.home() / ".config" / "cortex" / "config.yaml"
+    return Path.home() / ".config" / "cortex" / "config.toml"
 
 
 class Settings(BaseSettings):
-    """Global Cortex settings loaded from YAML + environment variables.
+    """Global Cortex settings loaded from TOML + environment variables.
 
     Env vars use CORTEX_ prefix with __ as nested delimiter.
     Example: CORTEX_EMBEDDINGS__MODEL=all-minilm sets embeddings.model.
@@ -114,8 +114,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="CORTEX_",
         env_nested_delimiter="__",
-        yaml_file_encoding="utf-8",
-        # yaml_file set dynamically via classmethod
+        # toml_file set dynamically via classmethod
     )
 
     storage: StorageConfig = Field(default_factory=StorageConfig)
@@ -137,12 +136,12 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        yaml_path = _get_config_path()
-        if yaml_path and Path(yaml_path).exists():
+        toml_path = _get_config_path()
+        if toml_path and Path(toml_path).exists():
             return (
                 init_settings,
                 env_settings,
-                YamlConfigSettingsSource(settings_cls, yaml_file=yaml_path),
+                TomlConfigSettingsSource(settings_cls, toml_file=toml_path),
             )
         return (init_settings, env_settings)
 

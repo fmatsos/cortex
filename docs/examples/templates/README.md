@@ -38,17 +38,17 @@ Templates can be written in multiple formats:
 
 ### From Config File
 
-Add templates to your `config.yaml`:
+Add templates to your `config.toml`:
 
-```yaml
-templates:
-  markdown:
-    memory:
-      body: "# {{.Title}}\n\n{{.Content}}"
-      frontmatter:
-        include_id: false
-    synthesis:
-      header: "# Synthesis: {{.Intent}}"
+```toml
+[templates.markdown.memory]
+body = "# {{.Title}}\n\n{{.Content}}"
+
+[templates.markdown.memory.frontmatter]
+include_id = false
+
+[templates.markdown.synthesis]
+header = "# Synthesis: {{.Intent}}"
 ```
 
 ### From Command Line

@@ -58,14 +58,14 @@ Available for all commands:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--config` | `.agents/cortex/config.yaml` | Configuration file path |
+| `--config` | `.agents/cortex/config.toml` | Configuration file path |
 | `--help` / `-h` | - | Show command help |
 
 > **Note:** `--json` is a per-command flag, not global. Check each command's documentation for available output options.
 
 **Example**:
 ```bash
-cortex search "query" --config /path/to/config.yaml --json
+cortex search "query" --config /path/to/config.toml --json
 ```
 
 ---
@@ -849,7 +849,7 @@ cortex config
 # Show configuration as JSON
 cortex config --json
 
-# Create default config file at .agents/cortex/config.yaml
+# Create default config file at .agents/cortex/config.toml
 cortex config init
 
 # Show config file path

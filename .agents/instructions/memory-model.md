@@ -391,15 +391,15 @@ Cortex automatically derives session IDs from your git branch name, making sessi
 | `feature/JIRA-456/auth` | `regex` | `pattern: '([A-Z]+-\d+)'` | `session-JIRA-456` |
 | `hotfix/prod/db-leak` | `full` | All segments | `session-hotfix-prod-db-leak` |
 
-Configure in `.agents/cortex/config.yaml`:
-```yaml
-session:
-  auto_derive: true          # Enable auto-derivation (default)
-  pattern_type: prefix       # prefix, regex, or full
-  max_segments: 2           # Number of segments for prefix mode
-  prefix: "session-"        # Prefix for all session IDs
-  separator: "-"            # Separator for branch parts
-  fallback_to_uuid: true    # Use UUID if pattern fails
+Configure in `.agents/cortex/config.toml`:
+```toml
+[session]
+auto_derive = true          # enable auto-derivation (default)
+pattern_type = "prefix"     # prefix, regex, or full
+max_segments = 2            # number of segments for prefix mode
+prefix = "session-"         # prefix for all session IDs
+separator = "-"             # separator for branch parts
+fallback_to_uuid = true     # use UUID if pattern fails
 ```
 
 > **💡 Tip:** Match your team's git branch naming convention for consistent session IDs across your team.

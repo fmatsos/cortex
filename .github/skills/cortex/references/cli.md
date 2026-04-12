@@ -188,7 +188,7 @@ cortex list --level semantic --json | jq 'length'
 
 ## Configuration
 
-Default config: `~/.config/cortex-ai/config.yaml`
+Default config: `~/.config/cortex-ai/config.toml`
 Default storage: `~/.local/share/cortex-ai/`
 Embeddings: Ollama at `http://localhost:11434` with `nomic-embed-text`
 

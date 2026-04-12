@@ -25,7 +25,7 @@ stored in a ChromaDB database in the project-local \fI.agents/cortex\fR director
 .SH GLOBAL OPTIONS
 .TP
 .BI \-\-config " path"
-Path to configuration file (default: \fI.agents/cortex/config.yaml\fR).
+Path to configuration file (default: \fI.agents/cortex/config.toml\fR).
 .TP
 .BI \-\-log\-level " level"
 Log level: debug, info, warning, error (default: info).
@@ -268,7 +268,7 @@ View and manage configuration.
 Output format: yaml, json, text (default: yaml).
 .TP
 .B init
-Create default configuration file at \fI.agents/cortex/config.yaml\fR.
+Create default configuration file at \fI.agents/cortex/config.toml\fR.
 .TP
 .B path
 Show path to the active configuration file.
@@ -406,7 +406,7 @@ cortex completion bash > /etc/bash_completion.d/cortex
 .RE
 .SH FILES
 .TP
-.I .agents/cortex/config.yaml
+.I .agents/cortex/config.toml
 Project-local configuration file.
 .TP
 .I .agents/cortex/chroma.sqlite3
