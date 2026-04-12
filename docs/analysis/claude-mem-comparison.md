@@ -357,8 +357,8 @@ Cortex's model is **richer and more explicit**: each memory carries full provena
 
 | Aspect | Cortex | Claude-Mem |
 |--------|--------|-----------|
-| **Format** | YAML (`cortex.yaml`) + env vars | JSON (`~/.claude-mem/settings.json`) |
-| **Location** | `.agents/cortex/config.yaml` (per-project) | `~/.claude-mem/settings.json` (global) |
+| **Format** | TOML (`config.toml`) + env vars | JSON (`~/.claude-mem/settings.json`) |
+| **Location** | `.agents/cortex/config.toml` (per-project) | `~/.claude-mem/settings.json` (global) |
 | **Scope** | Per-project or global | Global only |
 | **Schema validation** | `cortex config schema` | Not documented |
 | **Template generation** | `cortex config template` | Not documented |

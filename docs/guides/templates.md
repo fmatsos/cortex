@@ -20,7 +20,7 @@ Complete guide for customizing Cortex markdown exports using templates.
 
 Cortex allows you to customize the markdown output of memory and synthesis exports using Go templates. Templates can be configured in three ways:
 
-1. **Config File** - Set defaults in your `config.yaml`
+1. **Config File** - Set defaults in your `config.toml`
 2. **Command Line** - Override with `--memory-template` or `--synthesis-template` flags
 3. **Inline** - Specify template strings directly in config
 
@@ -103,28 +103,29 @@ Plain Go template (memory body only):
 
 ### From Config File
 
-Add to `.agents/cortex/config.yaml`:
+Add to `.agents/cortex/config.toml`:
 
-```yaml
-templates:
-  markdown:
-    memory:
-      frontmatter:
-        include_id: false
-        include_dates: true
-        date_format: "2006-01-02"
-      body: |
-        # {{.Title}}
-        
-        {{if .Tags}}**Tags:** {{range .Tags}}#{{.}}{{end}}{{end}}
-        
-        {{.Content}}
-    
-    synthesis:
-      header: "# {{.Intent | title}} - Knowledge Synthesis"
-      learnings_section:
-        item_template: "### {{.Title}} ({{printf \"%.0f%%\" (mul .Score 100)}})\n\n{{.Preview}}"
-        content_preview_length: 400
+```toml
+[templates.markdown.memory.frontmatter]
+include_id = false
+include_dates = true
+date_format = "2006-01-02"
+
+[templates.markdown.memory]
+body = """
+# {{.Title}}
+
+{{if .Tags}}**Tags:** {{range .Tags}}#{{.}}{{end}}{{end}}
+
+{{.Content}}
+"""
+
+[templates.markdown.synthesis]
+header = "# {{.Intent | title}} - Knowledge Synthesis"
+
+[templates.markdown.synthesis.learnings_section]
+item_template = "### {{.Title}} ({{printf \"%.0f%%\" (mul .Score 100)}})\n\n{{.Preview}}"
+content_preview_length = 400
 ```
 
 ### From Command Line

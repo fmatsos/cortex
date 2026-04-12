@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import tomli_w
 import typer
-import yaml
 
 from cortex.config.settings import (
     Settings,
@@ -33,7 +33,6 @@ def init_cmd(
         return
 
     defaults = Settings().model_dump()
-    with target.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(defaults, f, default_flow_style=False, sort_keys=False)
+    target.write_bytes(tomli_w.dumps(defaults).encode())
 
     typer.echo(f"Created config at {target}")

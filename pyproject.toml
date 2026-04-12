@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "typer[all]>=0.15",
     "pydantic>=2.10",
-    "pydantic-settings[yaml]>=2.7",
+    "pydantic-settings[toml]>=2.7",
     "chromadb>=0.6",
     "httpx>=0.28",
     "mcp>=1.9",
@@ -16,7 +16,7 @@ dependencies = [
     "rich>=13.9",
     "cachetools>=5.5",
     "numpy>=2.2",
-    "PyYAML>=6.0",
+    "tomli-w>=1.0",
 ]
 
 [project.scripts]
@@ -30,7 +30,6 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.15",
     "types-cachetools>=5.5",
-    "types-PyYAML>=6.0",
 ]
 
 [build-system]

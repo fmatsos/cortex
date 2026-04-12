@@ -569,14 +569,14 @@ CORTEX_EMBEDDINGS_MAX_RETRIES=3
 
 ### Config File
 
-```yaml
-# .agents/cortex/config.yaml
-embeddings:
-  provider: ollama
-  endpoint: http://localhost:11434
-  model: nomic-embed-text
-  timeout: 30s
-  max_retries: 3
+```toml
+# .agents/cortex/config.toml
+[embeddings]
+provider = "ollama"
+endpoint = "http://localhost:11434"
+model = "nomic-embed-text"
+timeout = 30
+max_retries = 3
 ```
 
 ### Verify Setup

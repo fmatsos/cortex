@@ -174,7 +174,7 @@ sequenceDiagram
 │   ├── session-abc123.gob    # Session ABC123 memories
 │   ├── session-def456.gob    # Session DEF456 memories
 │   └── session-xyz789.gob    # Session XYZ789 memories
-└── config.yaml               # Local configuration (if present)
+└── config.toml               # Local configuration (if present)
 ```
 
 ### File Formats

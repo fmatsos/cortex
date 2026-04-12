@@ -385,15 +385,15 @@ cortex transfer-working --session session-fix-sil-123
 | `feature/JIRA-456/oauth` | `regex: ([A-Z]+-\d+)` | `session-JIRA-456` |
 | `hotfix/prod/db-leak` | `full` | `session-hotfix-prod-db-leak` |
 
-Configure via `.agents/cortex/config.yaml`:
+Configure via `.agents/cortex/config.toml`:
 
-```yaml
-session:
-  auto_derive: true          # Enable auto-derivation
-  pattern_type: prefix       # prefix, regex, or full
-  max_segments: 2           # First 2 segments for prefix mode
-  prefix: "session-"        # Prefix for session IDs
-  separator: "-"            # Separator for branch parts
+```toml
+[session]
+auto_derive = true          # enable auto-derivation
+pattern_type = "prefix"     # prefix, regex, or full
+max_segments = 2            # first 2 segments for prefix mode
+prefix = "session-"         # prefix for session IDs
+separator = "-"             # separator for branch parts
 ```
 
 > **📖 Details:** See [Configuration Reference](docs/guides/configuration.md#session-section) for all session options.
@@ -455,7 +455,7 @@ ChromaDB stores memories in three collections, persisted under `.agents/cortex/`
 ├── chroma.sqlite3            # ChromaDB persistence file
 ├── <uuid>/                   # ChromaDB segment data
 │   └── ...
-└── config.yaml               # Local configuration
+└── config.toml               # Local configuration
 ```
 
 Collections:
@@ -469,28 +469,28 @@ Collections:
 
 ### Quick Configuration
 
-```yaml
-# .agents/cortex/config.yaml
-storage:
-  path: .agents/cortex
+```toml
+# .agents/cortex/config.toml
+[storage]
+path = ".agents/cortex"
 
-embeddings:
-  provider: ollama
-  endpoint: http://localhost:11434
-  model: nomic-embed-text
-  timeout: 30
+[embeddings]
+provider = "ollama"
+endpoint = "http://localhost:11434"
+model = "nomic-embed-text"
+timeout = 30
 
-search:
-  top_k: 5
-  min_score: 0.5
+[search]
+top_k = 5
+min_score = 0.5
 
-consolidation:
-  similarity_threshold: 0.85
-  auto_transfer_on_session_end: true
+[consolidation]
+similarity_threshold = 0.85
+auto_transfer_on_session_end = true
 
-autoprune:
-  episodic_retention_days: 90
-  duplicates_threshold: 0.92
+[autoprune]
+episodic_retention_days = 90
+duplicates_threshold = 0.92
 ```
 
 Environment variables use `CORTEX_` prefix with `__` as nested delimiter:

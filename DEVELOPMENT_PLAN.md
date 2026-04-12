@@ -709,26 +709,26 @@ func isValidType(t string) bool {
 
 ### 7.1 Configuration File
 
-```yaml
-# ~/.config/cortex-ai/config.yaml
-storage:
-  backend: gob                              # gob | sqlite
-  path: ~/.local/share/cortex-ai
+```toml
+# ~/.config/cortex/config.toml
+[storage]
+backend = "chroma"  # chroma | sqlite
+path = "~/.local/share/cortex-ai"
 
-embeddings:
-  provider: ollama
-  model: nomic-embed-text
-  endpoint: http://localhost:11434
-  timeout: 30s
+[embeddings]
+provider = "ollama"
+model = "nomic-embed-text"
+endpoint = "http://localhost:11434"
+timeout = 30
 
-search:
-  top_k: 5
-  min_score: 0.5
-  include_obsolete: false
+[search]
+top_k = 5
+min_score = 0.5
+include_obsolete = false
 
-output:
-  format: text                              # text | json
-  colors: true
+[output]
+format = "text"  # text | json
+colors = true
 ```
 
 ### 7.2 Environment Variables
