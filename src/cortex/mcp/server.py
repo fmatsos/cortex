@@ -607,10 +607,6 @@ def cortex_choose_working_consolidation(session_id: str = "") -> dict[str, Any]:
 def run_server(transport: str = "stdio", address: str = ":8080") -> None:
     """Start the Cortex MCP server with the specified transport."""
     if transport == "sse":
-        # Parse address
-        host, _, port_str = address.rpartition(":")
-        host = host or "127.0.0.1"
-        int(port_str) if port_str else 8080
         mcp.run(transport="sse")
     else:
         mcp.run(transport="stdio")
