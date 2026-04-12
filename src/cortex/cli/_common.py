@@ -45,7 +45,7 @@ def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
     from cortex.models.memory import Memory
 
     m: Memory = memory
-    level_val = m.level if isinstance(m.level, str) else m.level.value
+    level_val = str(m.level)
 
     if compact:
         return {
@@ -57,7 +57,7 @@ def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
         }
 
     # Build context dict, stripping empty-string values
-    source_val = m.context.source if isinstance(m.context.source, str) else m.context.source.value
+    source_val = str(m.context.source)
     ctx_raw = {
         "session_id": m.context.session_id,
         "task_id": m.context.task_id,

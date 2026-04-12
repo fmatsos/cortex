@@ -81,7 +81,7 @@ def search(
 
     for r in results:
         m = r.memory
-        level_val = m.level if isinstance(m.level, str) else m.level.value
+        level_val = str(m.level)
         table.add_row(
             f"{r.score:.3f}",
             m.id[:8],

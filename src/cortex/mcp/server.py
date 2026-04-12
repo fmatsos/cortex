@@ -132,7 +132,7 @@ def cortex_create(
                 user_prompt=user_prompt,
             )
         )
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,
@@ -295,7 +295,7 @@ def cortex_promote_memory(memory_id: str, target_level: str = "semantic") -> dic
         else:
             mem_svc = MemoryService(storage, embedder)
             memory = mem_svc.promote(memory_id, target)
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,
@@ -321,7 +321,7 @@ def cortex_demote_memory(memory_id: str, target_level: str = "episodic") -> dict
     svc, storage = _get_svc()
     try:
         memory = svc.demote(memory_id, target)
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,

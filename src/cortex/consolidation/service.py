@@ -79,7 +79,7 @@ class ConsolidationService:
                 return ConsolidateResult(
                     action="merged",
                     memory_id=merged.id,
-                    level=merged.level if isinstance(merged.level, str) else merged.level.value,
+                    level=str(merged.level),
                     similarity=score,
                     message=f"Merged with existing memory (score={score:.3f})",
                 )
@@ -113,7 +113,7 @@ class ConsolidationService:
         return ConsolidateResult(
             action="created",
             memory_id=memory.id,
-            level=memory.level if isinstance(memory.level, str) else memory.level.value,
+            level=str(memory.level),
             message="Created new memory",
         )
 

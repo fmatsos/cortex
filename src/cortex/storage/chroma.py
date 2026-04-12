@@ -34,16 +34,12 @@ def _meta_to_dict(memory: Memory) -> dict[str, Any]:
     """Serialize Memory fields to a flat Chroma-compatible metadata dict."""
     return {
         "title": memory.title,
-        "level": memory.level if isinstance(memory.level, str) else memory.level.value,
+        "level": str(memory.level),
         "tags": json.dumps(memory.tags),
         "session_id": memory.context.session_id or "",
         "task_id": memory.context.task_id or "",
         "author": memory.context.author or "",
-        "source": (
-            memory.context.source
-            if isinstance(memory.context.source, str)
-            else memory.context.source.value
-        ),
+        "source": str(memory.context.source),
         "ctx_tags": json.dumps(memory.context.tags),
         "related_memories": json.dumps(memory.context.related_memories),
         "created_at": memory.created_at.isoformat(),
@@ -120,7 +116,7 @@ class ChromaStorage:
         }
 
     def _col(self, level: MemoryLevel | str) -> Collection:
-        key = level if isinstance(level, str) else level.value
+        key = str(level)
         return self._collections[key]
 
     # ------------------------------------------------------------------
@@ -128,7 +124,7 @@ class ChromaStorage:
     # ------------------------------------------------------------------
 
     def save(self, memory: Memory) -> None:
-        level = memory.level if isinstance(memory.level, str) else memory.level.value
+        level = str(memory.level)
         col = self._col(level)
         embedding = memory.embedding if memory.embedding else None
         col.add(
@@ -222,7 +218,7 @@ class ChromaStorage:
         raise KeyError(f"Memory not found: {memory_id!r}")
 
     def update(self, memory: Memory) -> None:
-        level = memory.level if isinstance(memory.level, str) else memory.level.value
+        level = str(memory.level)
 
         # Find which collection currently holds this memory and retrieve its
         # existing embedding so we can carry it forward without triggering
@@ -248,7 +244,7 @@ class ChromaStorage:
 
         target_col = self._col(level)
 
-        if current_level.value == level:
+        if str(current_level) == level:
             # Same collection — update in place.
             target_col.update(
                 ids=[memory.id],
