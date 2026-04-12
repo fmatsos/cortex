@@ -54,7 +54,6 @@ class AutopruneService:
 
         for level in [MemoryLevel.episodic, MemoryLevel.semantic]:
             items = self._storage.get_all_with_embeddings(level)
-            seen_ids: set[str] = set()
             deleted_ids: set[str] = set()
 
             for i, (mem_a, vec_a) in enumerate(items):
@@ -63,8 +62,6 @@ class AutopruneService:
 
                 for mem_b, vec_b in items[i + 1 :]:
                     if mem_b.id in deleted_ids or not vec_b:
-                        continue
-                    if mem_b.id in seen_ids:
                         continue
 
                     score = cosine_similarity(vec_a, vec_b)
@@ -79,8 +76,6 @@ class AutopruneService:
                         stats.details.append(
                             f"Removed duplicate {to_delete.id[:8]} (score={score:.3f})"
                         )
-
-                seen_ids.add(mem_a.id)
 
         return stats
 
