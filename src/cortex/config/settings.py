@@ -94,6 +94,16 @@ class MCPConfig(BaseModel):
     address: str = ":8080"
 
 
+def default_local_config_path() -> Path:
+    """Return the project-local config path."""
+    return Path(".agents/cortex/config.yaml")
+
+
+def default_global_config_path() -> Path:
+    """Return the global config path under the user's config directory."""
+    return Path.home() / ".config" / "cortex" / "config.yaml"
+
+
 class Settings(BaseSettings):
     """Global Cortex settings loaded from YAML + environment variables.
 
@@ -142,9 +152,12 @@ def _get_config_path() -> str:
     env_path = os.environ.get("CORTEX_CONFIG", "")
     if env_path:
         return env_path
-    default = Path(".agents/cortex/config.yaml")
-    if default.exists():
-        return str(default)
+    local_default = default_local_config_path()
+    if local_default.exists():
+        return str(local_default)
+    global_default = default_global_config_path()
+    if global_default.exists():
+        return str(global_default)
     return ""
 
 

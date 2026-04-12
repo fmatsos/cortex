@@ -132,7 +132,7 @@ def cortex_create(
                 user_prompt=user_prompt,
             )
         )
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,
@@ -295,7 +295,7 @@ def cortex_promote_memory(memory_id: str, target_level: str = "semantic") -> dic
         else:
             mem_svc = MemoryService(storage, embedder)
             memory = mem_svc.promote(memory_id, target)
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,
@@ -321,7 +321,7 @@ def cortex_demote_memory(memory_id: str, target_level: str = "episodic") -> dict
     svc, storage = _get_svc()
     try:
         memory = svc.demote(memory_id, target)
-        level_val = memory.level if isinstance(memory.level, str) else memory.level.value
+        level_val = str(memory.level)
         return {
             "id": memory.id,
             "level": level_val,
@@ -607,10 +607,6 @@ def cortex_choose_working_consolidation(session_id: str = "") -> dict[str, Any]:
 def run_server(transport: str = "stdio", address: str = ":8080") -> None:
     """Start the Cortex MCP server with the specified transport."""
     if transport == "sse":
-        # Parse address
-        host, _, port_str = address.rpartition(":")
-        host = host or "127.0.0.1"
-        int(port_str) if port_str else 8080
         mcp.run(transport="sse")
     else:
         mcp.run(transport="stdio")

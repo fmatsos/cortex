@@ -6,10 +6,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import numpy as np
+
 from cortex.embeddings.base import Embedder
 from cortex.memory.service import MemoryService
 from cortex.models.memory import Memory, MemoryContext, MemoryLevel, MemorySource
 from cortex.models.results import ConsolidateResult
+from cortex.search.cosine import normalize
 from cortex.session import get_git_branch
 from cortex.storage.base import SearchOptions, Storage
 from cortex.utils import dedupe_list
@@ -58,7 +61,6 @@ class ConsolidationService:
         self._storage = storage
         self._embedder = embedder
         self._threshold = similarity_threshold
-        self._memory_svc = MemoryService(storage, embedder)
 
     def consolidate(self, inp: ConsolidateInput) -> ConsolidateResult:
         """Run the consolidation logic and return a result."""
@@ -77,7 +79,7 @@ class ConsolidationService:
                 return ConsolidateResult(
                     action="merged",
                     memory_id=merged.id,
-                    level=merged.level if isinstance(merged.level, str) else merged.level.value,
+                    level=str(merged.level),
                     similarity=score,
                     message=f"Merged with existing memory (score={score:.3f})",
                 )
@@ -111,7 +113,7 @@ class ConsolidationService:
         return ConsolidateResult(
             action="created",
             memory_id=memory.id,
-            level=memory.level if isinstance(memory.level, str) else memory.level.value,
+            level=str(memory.level),
             message="Created new memory",
         )
 
@@ -171,10 +173,6 @@ class ConsolidationService:
         # Average embeddings (fetch stored embedding since deserialized embedding is always [])
         stored_embedding = self._storage.get_embedding(existing.id)
         if stored_embedding and new_vector:
-            import numpy as np
-
-            from cortex.search.cosine import normalize
-
             averaged = np.mean([stored_embedding, new_vector], axis=0).tolist()
             existing.embedding = normalize(averaged)
 

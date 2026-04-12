@@ -15,7 +15,9 @@ from cortex.cli import (
     edit,
     export_,
     get,
+    hook,
     import_,
+    init_,
     install_man,
     list_,
     mcp_,
@@ -51,6 +53,8 @@ app.command("config")(config_.config_cmd)
 app.command("start-mcp-server")(mcp_.start_mcp_server)
 app.command("session")(session_.session_cmd)
 app.command("install-man")(install_man.install_man)
+app.command("init")(init_.init_cmd)
+app.command("hook")(hook.hook_cmd)
 
 
 @app.callback()

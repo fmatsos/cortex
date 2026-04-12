@@ -87,7 +87,7 @@ def list_memories(
     table.add_column("Updated", width=12)
 
     for m in memories:
-        level_val = m.level if isinstance(m.level, str) else m.level.value
+        level_val = str(m.level)
         table.add_row(
             m.id[:8],
             level_val,

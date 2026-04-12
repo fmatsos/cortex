@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 
@@ -29,7 +29,7 @@ def print_json(data: Any) -> None:
     typer.echo(json.dumps(data, indent=2, default=str))
 
 
-def error(message: str, exit_code: int = 1) -> None:
+def error(message: str, exit_code: int = 1) -> NoReturn:
     """Print an error message to stderr and exit."""
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(exit_code)
@@ -45,7 +45,7 @@ def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
     from cortex.models.memory import Memory
 
     m: Memory = memory
-    level_val = m.level if isinstance(m.level, str) else m.level.value
+    level_val = str(m.level)
 
     if compact:
         return {
@@ -57,7 +57,7 @@ def memory_to_dict(memory: Any, *, compact: bool = False) -> dict[str, Any]:
         }
 
     # Build context dict, stripping empty-string values
-    source_val = m.context.source if isinstance(m.context.source, str) else m.context.source.value
+    source_val = str(m.context.source)
     ctx_raw = {
         "session_id": m.context.session_id,
         "task_id": m.context.task_id,

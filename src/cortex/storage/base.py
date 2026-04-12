@@ -2,52 +2,36 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from cortex.models.memory import Memory, MemoryLevel
 from cortex.models.results import SearchResult
 
 
+@dataclass
 class SearchOptions:
     """Options for semantic search across memory layers."""
 
-    def __init__(
-        self,
-        top_k: int = 5,
-        min_score: float = 0.5,
-        filter_levels: list[MemoryLevel] | None = None,
-        include_obsolete: bool = False,
-        session_id: str = "",
-        freshness_weight: float = 0.0,
-    ) -> None:
-        self.top_k = top_k
-        self.min_score = min_score
-        self.filter_levels = filter_levels
-        self.include_obsolete = include_obsolete
-        self.session_id = session_id
-        self.freshness_weight = freshness_weight
+    top_k: int = 5
+    min_score: float = 0.5
+    filter_levels: list[MemoryLevel] | None = field(default=None)
+    include_obsolete: bool = False
+    session_id: str = ""
+    freshness_weight: float = 0.0
 
 
+@dataclass
 class ListOptions:
     """Options for listing memories with filtering and pagination."""
 
-    def __init__(
-        self,
-        level: MemoryLevel | None = None,
-        session_id: str = "",
-        include_obsolete: bool = False,
-        limit: int = 0,
-        offset: int = 0,
-        reverse: bool = False,
-        git_branch: str = "",
-    ) -> None:
-        self.level = level
-        self.session_id = session_id
-        self.include_obsolete = include_obsolete
-        self.limit = limit
-        self.offset = offset
-        self.reverse = reverse
-        self.git_branch = git_branch
+    level: MemoryLevel | None = None
+    session_id: str = ""
+    include_obsolete: bool = False
+    limit: int = 0
+    offset: int = 0
+    reverse: bool = False
+    git_branch: str = ""
 
 
 @runtime_checkable
