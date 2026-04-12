@@ -84,7 +84,7 @@ _SESSION_STOP = _script(
     "# ── One-shot memory review ────────────────────────────────────────────────────",
     'if [ ! -f "$REVIEW_FLAG" ]; then',
     '  touch "$REVIEW_FLAG"',
-    "  MSG=$(cat <<'CORTEX_HOOKS_PROMPT_END'",
+    "  MSG=$(cat <<CORTEX_HOOKS_PROMPT_END",
     "Memory review: Please save any relevant context from this session to working memory first",
     "using 'cortex consolidate --level working --session $SESSION_ID --content \"...\"'. Then",
     "consolidate to episodic memory any completed work, decisions, or outcomes worth keeping in",
