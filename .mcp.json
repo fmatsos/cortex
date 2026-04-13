@@ -2,8 +2,11 @@
   "mcpServers": {
     "cortex": {
       "type": "stdio",
-      "command": "uvx --from . cortex",
+      "command": "uvx",
       "args": [
+        "--from",
+        ".",
+        "cortex",
         "start-mcp-server"
       ],
       "env": {}
