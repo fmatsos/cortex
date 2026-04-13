@@ -37,8 +37,9 @@ htmlcov/
 # Local data
 .local/
 .config/
-.agents/cortex/logs/
-.agents/cortex/chroma/
+.agents/cortex/
+!.agents/cortex/config.yaml
+!.agents/cortex/config.toml
 
 # Temporary files
 *.tmp

@@ -68,7 +68,7 @@ Preferred over `create` when unsure if something already exists.
 Automatically detects and merges duplicates.
 
 ```bash
-cortex consolidate \
+uvx --from . cortex consolidate \
   --level semantic \
   --content "API endpoints follow RESTful conventions. Use nouns for resources, HTTP verbs for actions. Documented in docs/api/conventions.md." \
   --tags "api,conventions,architecture"
@@ -136,14 +136,14 @@ cortex autoprune             # actually run
 
 ### New task (2 commands)
 ```bash
-cortex search "topic of your task" --level semantic
+uvx --from . cortex search "topic of your task" --level semantic
 cortex search "topic of your task" --level episodic
 # Read results before starting work
 ```
 
 ### Store a lesson after fixing a bug
 ```bash
-cortex create \
+uvx --from . cortex create \
   --title "Brief description of the bug and fix" \
   --level episodic \
   --content "Symptoms: ... Root cause: ... Fix: ... Files affected: ..." \
@@ -153,7 +153,7 @@ cortex create \
 
 ### Store a convention or pattern you discovered
 ```bash
-cortex consolidate \
+uvx --from . cortex consolidate \
   --level semantic \
   --content "Describe the pattern, when to use it, why it matters, examples." \
   --tags "<domain>,patterns"
@@ -171,7 +171,7 @@ cortex list --level episodic | head -20
 
 ### Check what you know about a topic
 ```bash
-cortex search "topic" --level semantic --top 10
+uvx --from . cortex search "topic" --level semantic --top 10
 ```
 
 ---
@@ -180,7 +180,7 @@ cortex search "topic" --level semantic --top 10
 
 All commands support `--json` for structured output:
 ```bash
-cortex search "auth" --json | jq '.[].title'
+uvx --from . cortex search "auth" --json | jq '.[].title'
 cortex list --level semantic --json | jq 'length'
 ```
 

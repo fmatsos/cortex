@@ -65,7 +65,7 @@ Available for all commands:
 
 **Example**:
 ```bash
-cortex search "query" --config /path/to/config.toml --json
+uvx --from . cortex search "query" --config /path/to/config.toml --json
 ```
 
 ---
@@ -93,7 +93,7 @@ sequenceDiagram
 
 **Usage**:
 ```bash
-cortex search "<query>" [flags]
+uvx --from . cortex search "<query>" [flags]
 ```
 
 **Required Arguments**:
@@ -157,7 +157,7 @@ Create a new memory with embeddings.
 
 **Usage**:
 ```bash
-cortex create --title "<title>" --level <level> --content "<content>" [flags]
+uvx --from . cortex create --title "<title>" --level <level> --content "<content>" [flags]
 ```
 
 **Required Flags**:
@@ -235,7 +235,7 @@ List memories with optional filtering.
 
 **Usage**:
 ```bash
-cortex list [flags]
+uvx --from . cortex list [flags]
 ```
 
 **Flags**:
@@ -299,7 +299,7 @@ Get a specific memory by ID.
 
 **Usage**:
 ```bash
-cortex get <id> [flags]
+uvx --from . cortex get <id> [flags]
 ```
 
 **Required Arguments**:
@@ -353,7 +353,7 @@ Permanently delete a memory.
 
 **Usage**:
 ```bash
-cortex delete <id> [flags]
+uvx --from . cortex delete <id> [flags]
 ```
 
 **Required Arguments**:
@@ -396,7 +396,7 @@ List memories filtered by a specific memory level.
 
 **Usage**:
 ```bash
-cortex list-consolidated [flags]
+uvx --from . cortex list-consolidated [flags]
 ```
 
 **Flags**:
@@ -440,7 +440,7 @@ flowchart LR
 
 **Usage**:
 ```bash
-cortex transfer-working --session <session-id> [flags]
+uvx --from . cortex transfer-working --session <session-id> [flags]
 ```
 
 **Required Flags**:
@@ -506,7 +506,7 @@ flowchart TD
 
 **Usage**:
 ```bash
-cortex consolidate --level <level> --content "<content>" [flags]
+uvx --from . cortex consolidate --level <level> --content "<content>" [flags]
 ```
 
 **Required Flags**:
@@ -594,7 +594,7 @@ flowchart TD
 
 **Usage**:
 ```bash
-cortex autoprune [flags]
+uvx --from . cortex autoprune [flags]
 ```
 
 **Flags**:
@@ -652,7 +652,7 @@ Export memories to Markdown format.
 
 **Usage**:
 ```bash
-cortex export [flags]
+uvx --from . cortex export [flags]
 ```
 
 **Flags**:
@@ -728,7 +728,7 @@ Import memories from Markdown files.
 
 **Usage**:
 ```bash
-cortex import <files...> [flags]
+uvx --from . cortex import <files...> [flags]
 ```
 
 **Required Arguments**:
@@ -786,7 +786,7 @@ Initialise Cortex in the current project by injecting agent rules into `AGENTS.m
 
 **Usage**:
 ```bash
-cortex init [flags]
+uvx --from . cortex init [flags]
 ```
 
 **Flags**:
@@ -827,7 +827,7 @@ Manage configuration.
 
 **Usage**:
 ```bash
-cortex config [subcommand] [flags]
+uvx --from . cortex config [subcommand] [flags]
 ```
 
 Without a subcommand, displays the current configuration.
@@ -904,7 +904,7 @@ Display database statistics.
 
 **Usage**:
 ```bash
-cortex stats [flags]
+uvx --from . cortex stats [flags]
 ```
 
 **Flags**:
@@ -956,7 +956,7 @@ Generate shell completion scripts.
 
 **Usage**:
 ```bash
-cortex completion <shell> [flags]
+uvx --from . cortex completion <shell> [flags]
 ```
 
 **Supported Shells**:
@@ -984,19 +984,19 @@ cortex completion powershell > cortex.ps1
 
 **Bash**:
 ```bash
-cortex completion bash | sudo tee /etc/bash_completion.d/cortex
+uvx --from . cortex completion bash | sudo tee /etc/bash_completion.d/cortex
 source /etc/bash_completion.d/cortex
 ```
 
 **Zsh**:
 ```bash
-cortex completion zsh > "${fpath[1]}/_cortex"
+uvx --from . cortex completion zsh > "${fpath[1]}/_cortex"
 # Restart shell or run: compinit
 ```
 
 **Fish**:
 ```bash
-cortex completion fish > ~/.config/fish/completions/cortex.fish
+uvx --from . cortex completion fish > ~/.config/fish/completions/cortex.fish
 ```
 
 ---
@@ -1007,7 +1007,7 @@ Start MCP server for AI assistant integration.
 
 **Usage**:
 ```bash
-cortex start-mcp-server [flags]
+uvx --from . cortex start-mcp-server [flags]
 ```
 
 **Flags**:
@@ -1081,7 +1081,7 @@ Validate a custom template file for memory or synthesis exports.
 
 **Usage**:
 ```bash
-cortex validate-template <file> [flags]
+uvx --from . cortex validate-template <file> [flags]
 ```
 
 **Flags**:
@@ -1135,7 +1135,7 @@ Manage hook scripts for Claude Code and GitHub Copilot.
 
 **Usage**:
 ```bash
-cortex hooks <subcommand> [flags]
+uvx --from . cortex hooks <subcommand> [flags]
 ```
 
 **Subcommands**:
@@ -1173,7 +1173,7 @@ Session management utilities.
 
 **Usage**:
 ```bash
-cortex session <subcommand>
+uvx --from . cortex session <subcommand>
 ```
 
 **Subcommands**:
@@ -1195,7 +1195,7 @@ Manage Cortex agent skills.
 
 **Usage**:
 ```bash
-cortex skills <subcommand> [flags]
+uvx --from . cortex skills <subcommand> [flags]
 ```
 
 **Subcommands**:
@@ -1232,7 +1232,7 @@ Human-readable output with colors and formatting.
 
 **Example**:
 ```bash
-cortex search "database"
+uvx --from . cortex search "database"
 ```
 
 **Output**:
@@ -1250,7 +1250,7 @@ Machine-readable JSON output for scripting.
 
 **Example**:
 ```bash
-cortex search "database" --json
+uvx --from . cortex search "database" --json
 ```
 
 **Output**:

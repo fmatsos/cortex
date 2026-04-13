@@ -98,7 +98,7 @@ Use 2–5 tags. Good tag vocabulary: `architecture`, `bug`, `performance`,
 
 ### Source: set to `llm` when you create a memory yourself
 ```bash
-cortex create ... --source llm
+uvx --from . cortex create ... --source llm
 # or MCP: source: "llm"
 ```
 

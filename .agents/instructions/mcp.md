@@ -73,9 +73,9 @@ The MCP server supports two transport modes:
 The stdio transport communicates via standard input/output streams. This is the default mode used by CLI tools like Claude Code and Cursor.
 
 ```bash
-cortex start-mcp-server
+uvx --from . cortex start-mcp-server
 # or explicitly:
-cortex start-mcp-server --transport stdio
+uvx --from . cortex start-mcp-server --transport stdio
 ```
 
 ### SSE Transport
@@ -83,7 +83,7 @@ cortex start-mcp-server --transport stdio
 The SSE (Server-Sent Events) transport runs an HTTP server for web-based integrations.
 
 ```bash
-cortex start-mcp-server --transport sse --address :8080
+uvx --from . cortex start-mcp-server --transport sse --address :8080
 ```
 
 **Endpoints:**
@@ -142,7 +142,7 @@ Add the following to your Claude Code MCP configuration (`~/.config/claude-code/
 {
   "mcpServers": {
     "cortex": {
-      "command": "cortex",
+      "command": "uvx --from . cortex",
       "args": ["start-mcp-server"]
     }
   }
@@ -158,7 +158,7 @@ Add to your Cursor MCP settings:
   "mcp": {
     "servers": {
       "cortex": {
-        "command": "cortex",
+        "command": "uvx --from . cortex",
         "args": ["start-mcp-server"]
       }
     }
@@ -209,19 +209,19 @@ graph TB
 
 | Tool | Category | Purpose | Key Parameters |
 |------|----------|---------|----------------|
-| `cortex_search` | Memory | Find memories by meaning | `query`, `top_k`, `min_score`, `level` |
-| `cortex_create` | Memory | Create a memory in a layer | `title`, `content`, `level`, `tags` |
-| `cortex_list` | Memory | List memories | `level`, `include_obsolete` |
-| `cortex_get` | Memory | Get memory by ID | `id` |
-| `cortex_consolidate` | Memory | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
-| `cortex_promote_memory` | Workflow | Promote memory to a higher layer | `memory_id`, `revised_content`, `tags` |
-| `cortex_update_memory` | Workflow | Update memory content/title/tags | `memory_id`, `title`, `content`, `tags` |
-| `cortex_mark_obsolete` | Workflow | Soft-delete a memory | `memory_id`, `reason` |
-| `cortex_review_session` | Workflow | Review session memories for actions | `session_id`, `task_summary` |
-| `cortex_think_about_memory_maintenance` | Workflow | Periodic memory health review | `focus_level`, `focus_tags` |
-| `cortex_think_about_task_completion` | Workflow | Post-task reflection for knowledge capture | `task_description`, `outcome` |
-| `cortex_choose_memory_layer` | Decision | Ask the model to choose a memory layer | `content` |
-| `cortex_choose_working_consolidation` | Decision | Ask the model to pick working memories to consolidate | `working_memories` |
+| `uvx --from . cortex_search` | Memory | Find memories by meaning | `query`, `top_k`, `min_score`, `level` |
+| `uvx --from . cortex_create` | Memory | Create a memory in a layer | `title`, `content`, `level`, `tags` |
+| `uvx --from . cortex_list` | Memory | List memories | `level`, `include_obsolete` |
+| `uvx --from . cortex_get` | Memory | Get memory by ID | `id` |
+| `uvx --from . cortex_consolidate` | Memory | Consolidate into a layer with dedup | `synthesis`, `memory_level`, `context` |
+| `uvx --from . cortex_promote_memory` | Workflow | Promote memory to a higher layer | `memory_id`, `revised_content`, `tags` |
+| `uvx --from . cortex_update_memory` | Workflow | Update memory content/title/tags | `memory_id`, `title`, `content`, `tags` |
+| `uvx --from . cortex_mark_obsolete` | Workflow | Soft-delete a memory | `memory_id`, `reason` |
+| `uvx --from . cortex_review_session` | Workflow | Review session memories for actions | `session_id`, `task_summary` |
+| `uvx --from . cortex_think_about_memory_maintenance` | Workflow | Periodic memory health review | `focus_level`, `focus_tags` |
+| `uvx --from . cortex_think_about_task_completion` | Workflow | Post-task reflection for knowledge capture | `task_description`, `outcome` |
+| `uvx --from . cortex_choose_memory_layer` | Decision | Ask the model to choose a memory layer | `content` |
+| `uvx --from . cortex_choose_working_consolidation` | Decision | Ask the model to pick working memories to consolidate | `working_memories` |
 
 ### cortex_search
 
@@ -749,7 +749,7 @@ mkdir -p .agents/cortex
 The MCP server logs to stderr. To capture logs:
 
 ```bash
-cortex start-mcp-server 2>mcp.log
+uvx --from . cortex start-mcp-server 2>mcp.log
 ```
 
 ## Best Practices for LLM Integration

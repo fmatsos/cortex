@@ -269,7 +269,7 @@ Markdown export output can be customized via the configuration file.
 ### Getting the Schema
 
 ```bash
-cortex config schema markdown
+uvx --from . cortex config schema markdown
 cortex config schema markdown -o markdown-template.schema.json
 ```
 
@@ -295,7 +295,7 @@ synthesis:
 ### Validating Templates
 
 ```bash
-cortex config template validate my-template.yaml
+uvx --from . cortex config template validate my-template.yaml
 ```
 
 ### Using Templates in Config

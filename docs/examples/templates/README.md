@@ -68,7 +68,7 @@ cortex export --intent "auth" --format markdown --synthesis-template synthesis-c
 Validate your custom templates before using them:
 
 ```bash
-cortex validate-template memory-custom.yaml
+uvx --from . cortex validate-template memory-custom.yaml
 cortex validate-template synthesis-custom.yaml
 ```
 

@@ -218,7 +218,7 @@ When reporting issues, please include:
 Enable debug logging for more detail:
 
 ```bash
-cortex --log-level debug <command>
+uvx --from . cortex --log-level debug <command>
 ```
 
 ## Feature Requests
