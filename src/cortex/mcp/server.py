@@ -11,8 +11,10 @@ Features:
 from __future__ import annotations
 
 import atexit
+import functools
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +30,22 @@ from cortex.models.memory import MemoryLevel, MemorySource
 from cortex.session import derive_session_id
 from cortex.storage.base import ListOptions, SearchOptions
 from cortex.storage.chroma import ChromaStorage
+
+_logger = logging.getLogger(__name__)
+_verbose_level: int = 0
+
+
+def _log_tool(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if _verbose_level >= 2:
+            _logger.debug("tool call tool=%s", func.__name__)
+        if _verbose_level >= 3:
+            _logger.debug("tool args %s", kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper
+
 
 mcp = FastMCP("cortex")
 
@@ -112,6 +130,7 @@ _search_cache = _TTLCache(ttl=30.0)
 
 
 @mcp.tool()
+@_log_tool
 def cortex_choose_memory_layer(
     description: str,
     is_permanent: bool = False,
@@ -205,6 +224,7 @@ def cortex_choose_working_consolidation(session_id: str = "") -> dict[str, Any]:
 
 
 @mcp.tool()
+@_log_tool
 def cortex_consolidate(
     synthesis: str,
     agent_name: str = "",
@@ -274,6 +294,7 @@ def cortex_consolidate(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_create(
     content: str,
     title: str,
@@ -343,6 +364,7 @@ def cortex_create(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_demote_memory(
     memory_id: str,
     target_level: str = "episodic",
@@ -424,6 +446,7 @@ def cortex_get_related(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_link(
     memory_id: str,
     related_id: str,
@@ -488,6 +511,7 @@ def cortex_list(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_mark_obsolete(memory_id: str) -> dict[str, Any]:
     """Soft-delete a memory by marking it as obsolete.
 
@@ -506,6 +530,7 @@ def cortex_mark_obsolete(memory_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+@_log_tool
 def cortex_promote_memory(
     memory_id: str,
     target_level: str = "semantic",
@@ -540,6 +565,7 @@ def cortex_promote_memory(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_review_session(session_id: str = "") -> dict[str, Any]:
     """Review working memories for the current session.
 
@@ -644,6 +670,7 @@ def cortex_search(
 
 
 @mcp.tool()
+@_log_tool
 def cortex_think_about_memory_maintenance() -> str:
     """Think through memory maintenance for the current session.
 
@@ -685,6 +712,7 @@ def cortex_think_about_memory_maintenance() -> str:
 
 
 @mcp.tool()
+@_log_tool
 def cortex_think_about_task_completion() -> str:
     """Think through what to capture at task completion.
 
@@ -702,6 +730,7 @@ def cortex_think_about_task_completion() -> str:
 
 
 @mcp.tool()
+@_log_tool
 def cortex_update_memory(
     memory_id: str,
     content: str = "",
@@ -737,8 +766,22 @@ def cortex_update_memory(
 # ------------------------------------------------------------------
 
 
-def run_server(transport: str = "stdio", address: str = ":8080") -> None:
+def run_server(transport: str = "stdio", address: str = ":8080", verbose_level: int = 0) -> None:
     """Start the Cortex MCP server with the specified transport."""
+    global _verbose_level
+    _verbose_level = verbose_level
+
+    settings = get_settings()
+    if verbose_level >= 1:
+        _logger.info("starting MCP server transport=%s", transport)
+        _logger.info("initializing storage path=%s", settings.storage.path)
+        _logger.info(
+            "initializing embedder model=%s endpoint=%s",
+            settings.embeddings.model,
+            settings.embeddings.endpoint,
+        )
+        _logger.info("MCP server ready")
+
     if transport == "sse":
         mcp.run(transport="sse")
     else:

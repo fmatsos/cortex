@@ -358,3 +358,54 @@ class TestTransferWorkingCommand:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["transferred"] == 1
+
+
+class TestStartMcpServerCommand:
+    def test_default_no_verbose(self, cli_runner: CliRunner) -> None:
+        """Default: no flags, verbose_level=0, silent."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":8080", verbose_level=0)
+
+    def test_v_flag_info_level(self, cli_runner: CliRunner) -> None:
+        """-v: verbose_level=1, INFO logging."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "-v"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":8080", verbose_level=1)
+
+    def test_vv_flag_debug_level(self, cli_runner: CliRunner) -> None:
+        """-vv: verbose_level=2, DEBUG logging with tool calls."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "-vv"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":8080", verbose_level=2)
+
+    def test_vvv_flag_trace_level(self, cli_runner: CliRunner) -> None:
+        """-vvv: verbose_level=3, DEBUG logging with arguments."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "-vvv"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":8080", verbose_level=3)
+
+    def test_vvv_takes_precedence(self, cli_runner: CliRunner) -> None:
+        """Multiple flags: -vvv takes precedence."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "-v", "-vv", "-vvv"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":8080", verbose_level=3)
+
+    def test_transport_flag(self, cli_runner: CliRunner) -> None:
+        """--transport flag is passed through."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "--transport", "sse", "-v"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="sse", address=":8080", verbose_level=1)
+
+    def test_address_flag(self, cli_runner: CliRunner) -> None:
+        """--address flag is passed through."""
+        with patch("cortex.mcp.server.run_server") as mock_run:
+            result = cli_runner.invoke(app, ["start-mcp-server", "--address", ":9000", "-v"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(transport="stdio", address=":9000", verbose_level=1)
