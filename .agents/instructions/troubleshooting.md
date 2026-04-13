@@ -91,7 +91,7 @@ go mod tidy
 
 Check available commands:
 ```bash
-cortex --help  # List all commands
+uvx --from . cortex --help  # List all commands
 cortex [command] --help  # Get help for specific command
 ```
 

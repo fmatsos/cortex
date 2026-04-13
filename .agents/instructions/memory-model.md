@@ -292,7 +292,7 @@ flowchart LR
 
 **Working → Episodic**:
 ```bash
-cortex transfer-working --session dev-2024
+uvx --from . cortex transfer-working --session dev-2024
 ```
 
 **Episodic → Semantic** (manual):
@@ -469,7 +469,7 @@ graph TB
 
 **Example**:
 ```bash
-cortex create \
+uvx --from . cortex create \
   --title "Fixed race condition in auth middleware" \
   --level episodic \
   --content "Added mutex lock to token refresh. Root cause was concurrent access." \
@@ -543,7 +543,7 @@ graph TB
 
 **Example**:
 ```bash
-cortex create \
+uvx --from . cortex create \
   --title "Database query timeout convention" \
   --level semantic \
   --content "All database queries must use context with timeout" \
@@ -759,14 +759,14 @@ cortex create --level semantic \
 
 **Bad**: Storing temporary notes as semantic
 ```bash
-cortex create --level semantic \
+uvx --from . cortex create --level semantic \
   --title "TODO: Check auth timeout" \
   --content "Need to investigate this tomorrow"
 ```
 
 **Good**: Use working memory for temporary context
 ```bash
-cortex create --level working --session daily-work \
+uvx --from . cortex create --level working --session daily-work \
   --title "TODO: Check auth timeout" \
   --content "Need to investigate tomorrow morning"
 ```
@@ -775,14 +775,14 @@ cortex create --level working --session daily-work \
 
 **Bad**:
 ```bash
-cortex create --level episodic \
+uvx --from . cortex create --level episodic \
   --title "Fixed bug" \
   --content "Changed the code"
 ```
 
 **Good**:
 ```bash
-cortex create --level episodic \
+uvx --from . cortex create --level episodic \
   --title "Fixed auth timeout by adding retry logic" \
   --content "Root cause: network instability. Solution: 3 retries with exponential backoff."
 ```
@@ -838,14 +838,14 @@ cortex consolidate --level semantic \
 
 **Bad**:
 ```bash
-cortex create --level semantic \
+uvx --from . cortex create --level semantic \
   --title "Convention" \
   --content "Some rule"  # How to find this later?
 ```
 
 **Good**:
 ```bash
-cortex create --level semantic \
+uvx --from . cortex create --level semantic \
   --title "Database timeout convention" \
   --content "Use context with timeout" \
   --tags "convention,database,context"

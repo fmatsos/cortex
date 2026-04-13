@@ -458,7 +458,7 @@ In import: parse `private` frontmatter field and set on Memory.
 
 ### Verification
 ```bash
-cortex create --title "Secret" --content "<private>API key is 123</private>" --level episodic
+uvx --from . cortex create --title "Secret" --content "<private>API key is 123</private>" --level episodic
 cortex search "API key"          # → 0 results (private excluded)
 cortex search "API key" --include-private  # → 1 result
 cortex list --include-private    # → shows private memories
@@ -709,7 +709,7 @@ var browseCmd = &cobra.Command{
 
 ### Verification
 ```bash
-cortex browse
+uvx --from . cortex browse
 # Opens interactive TUI with memory list
 
 # Single memory operations:

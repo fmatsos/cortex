@@ -92,16 +92,16 @@ grepai search "database connection pool" --json --compact
 
 ### CLI Commands Reference
 
-| Command | When to use |
-|---------|-------------|
-| `cortex search "<query>" --json` | Find relevant context before starting a task |
-| `cortex create --title "..." --level <level> --content "..." --json` | Store new facts, decisions, or findings |
-| `cortex list [--level <level>] --json` | Browse memories by level |
-| `cortex get <id> --json` | Retrieve a specific memory by ID |
-| `cortex delete <id>` | Permanently remove a memory |
-| `cortex consolidate "<synthesis>" --level <level> --json` | Synthesise related memories into one |
-| `cortex transfer-working --json` | Promote all working memories to episodic at session end |
-| `cortex autoprune --json` | Remove duplicate and expired memories |
+| Command                                                                           | When to use |
+|-----------------------------------------------------------------------------------|-------------|
+| `uvx --from . cortex search "<query>" --json`                                     | Find relevant context before starting a task |
+| `uvx --from . cortex create --title "..." --level <level> --content "..." --json` | Store new facts, decisions, or findings |
+| `uvx --from . cortex list [--level <level>] --json`                               | Browse memories by level |
+| `uvx --from . cortex get <id> --json`                                             | Retrieve a specific memory by ID |
+| `uvx --from . cortex delete <id>`                                                 | Permanently remove a memory |
+| `uvx --from . cortex consolidate "<synthesis>" --level <level> --json`            | Synthesise related memories into one |
+| `uvx --from . cortex transfer-working --json`                                     | Promote all working memories to episodic at session end |
+| `uvx --from . cortex autoprune --json`                                            | Remove duplicate and expired memories |
 
 ---
 
@@ -110,16 +110,16 @@ grepai search "database connection pool" --json --compact
 **IMPORTANT: Follow this sequence for EVERY task. Do not skip steps.**
 
 1. **Check Golden Rules** — note which rules apply to the current task
-2. **Search Cortex** — `cortex search "<task topic>" --json` to surface prior context
+2. **Search Cortex** — `uvx --from . cortex search "<task topic>" --json` to surface prior context
 3. **Search code** — `grepai search "<intent>" --json --compact` to find relevant code
 4. **Trace dependencies** — `grepai trace` if modifying or calling existing functions
 5. **Do the work** — apply Golden Rules throughout
 6. **Pre-commit self-check** — run rule 15 checklist
 7. **Verify** — `uv run ruff format src/ tests/ && uv run ruff check src/ tests/ && uv run pytest tests/`
-8. **Store learnings** — `cortex create` for key decisions and findings
+8. **Store learnings** — `uvx --from . cortex create` for key decisions and findings
 9. **Update AGENTS.md** — apply rule 14: add a Golden Rule or update an instruction file in `.agents/instructions/`
-10. **Session end** — `cortex transfer-working --json` to promote working memories to episodic
+10. **Session end** — `uvx --from . cortex transfer-working --json` to promote working memories to episodic
 
 ### Configuration Notes
 
-- Config lookup now falls back to `~/.config/cortex/config.toml` when `.agents/cortex/config.toml` is missing. Scaffold defaults with `cortex init --global` (or `--local` for the current project).
+- Config lookup now falls back to `~/.config/cortex/config.toml` when `.agents/cortex/config.toml` is missing. Scaffold defaults with `uvx --from . cortex init --global` (or `--local` for the current project).
