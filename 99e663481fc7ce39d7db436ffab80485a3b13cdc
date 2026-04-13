@@ -1,0 +1,15 @@
+{
+    "version": "0.1.0",
+    "id": "3248a087-ee22-419b-b59b-1bf594644108",
+    "timestamp": "2026-04-13T08:57:12.270697143Z",
+    "vcs": {
+        "type": "git",
+        "revision": "99e663481fc7ce39d7db436ffab80485a3b13cdc",
+        "origin": "github",
+        "repository": "https://github.com/fmatsos/cortex-ai.git"
+    },
+    "tool": {
+        "name": "chatter-cli"
+    },
+    "files": []
+}
