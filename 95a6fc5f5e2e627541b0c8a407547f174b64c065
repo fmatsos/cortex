@@ -1,0 +1,130 @@
+{
+    "version": "0.1.0",
+    "id": "d7765adc-3ca9-4e5d-9a3a-71982fc58480",
+    "timestamp": "2026-04-13T09:03:10.666658862Z",
+    "vcs": {
+        "type": "git",
+        "revision": "95a6fc5f5e2e627541b0c8a407547f174b64c065",
+        "origin": "github",
+        "repository": "https://github.com/fmatsos/cortex-ai.git"
+    },
+    "tool": {
+        "name": "chatter-cli"
+    },
+    "files": [
+        {
+            "path": "src/cortex/cli/mcp_.py",
+            "conversations": [
+                {
+                    "url": "git+CLAUDE_CODE:blob:9f1a59097285a47d2444456192eb58d22ad87c2d",
+                    "contributor": {
+                        "type": "ai",
+                        "model_id": "2.1.100"
+                    },
+                    "ranges": [
+                        {
+                            "start_line": 5,
+                            "end_line": 5
+                        },
+                        {
+                            "start_line": 18,
+                            "end_line": 18
+                        },
+                        {
+                            "start_line": 31,
+                            "end_line": 34
+                        },
+                        {
+                            "start_line": 38,
+                            "end_line": 44
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "path": "src/cortex/mcp/server.py",
+            "conversations": [
+                {
+                    "url": "git+CLAUDE_CODE:blob:9f1a59097285a47d2444456192eb58d22ad87c2d",
+                    "contributor": {
+                        "type": "ai",
+                        "model_id": "2.1.100"
+                    },
+                    "ranges": [
+                        {
+                            "start_line": 14,
+                            "end_line": 14
+                        },
+                        {
+                            "start_line": 17,
+                            "end_line": 17
+                        },
+                        {
+                            "start_line": 34,
+                            "end_line": 47
+                        },
+                        {
+                            "start_line": 769,
+                            "end_line": 769
+                        },
+                        {
+                            "start_line": 771,
+                            "end_line": 783
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "path": "tests/test_cli.py",
+            "conversations": [
+                {
+                    "url": "git+CLAUDE_CODE:blob:9f1a59097285a47d2444456192eb58d22ad87c2d",
+                    "contributor": {
+                        "type": "ai",
+                        "model_id": "2.1.100"
+                    },
+                    "ranges": [
+                        {
+                            "start_line": 363,
+                            "end_line": 368
+                        },
+                        {
+                            "start_line": 371,
+                            "end_line": 375
+                        },
+                        {
+                            "start_line": 378,
+                            "end_line": 382
+                        },
+                        {
+                            "start_line": 385,
+                            "end_line": 389
+                        },
+                        {
+                            "start_line": 392,
+                            "end_line": 396
+                        },
+                        {
+                            "start_line": 399,
+                            "end_line": 401
+                        },
+                        {
+                            "start_line": 403,
+                            "end_line": 403
+                        },
+                        {
+                            "start_line": 406,
+                            "end_line": 408
+                        },
+                        {
+                            "start_line": 410,
+                            "end_line": 410
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
