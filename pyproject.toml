@@ -1,6 +1,6 @@
 [project]
 name = "cortex-memory"
-version = "0.1.0"
+version = "0.1.1"
 description = "Three-layer semantic memory system for AI assistants"
 readme = "README.md"
 license = { text = "MIT" }
