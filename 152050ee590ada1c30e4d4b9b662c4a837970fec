@@ -1,0 +1,34 @@
+{
+    "version": "0.1.0",
+    "id": "54aeb537-7fba-44b8-a9bd-c1f0c4e35164",
+    "timestamp": "2026-04-13T09:14:50.720009484Z",
+    "vcs": {
+        "type": "git",
+        "revision": "152050ee590ada1c30e4d4b9b662c4a837970fec",
+        "origin": "github",
+        "repository": "https://github.com/fmatsos/cortex-ai.git"
+    },
+    "tool": {
+        "name": "chatter-cli"
+    },
+    "files": [
+        {
+            "path": "pyproject.toml",
+            "conversations": [
+                {
+                    "url": "git+CLAUDE_CODE:blob:436584f8f8ca8a101a320730ebcf4378ec6d8328",
+                    "contributor": {
+                        "type": "ai",
+                        "model_id": "2.1.104"
+                    },
+                    "ranges": [
+                        {
+                            "start_line": 3,
+                            "end_line": 3
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
