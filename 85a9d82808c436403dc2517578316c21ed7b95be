@@ -1,0 +1,38 @@
+{
+    "version": "0.1.0",
+    "id": "79da0f18-be8f-4881-ac00-43b1a629ae7c",
+    "timestamp": "2026-04-13T09:22:16.782710106Z",
+    "vcs": {
+        "type": "git",
+        "revision": "85a9d82808c436403dc2517578316c21ed7b95be",
+        "origin": "github",
+        "repository": "https://github.com/fmatsos/cortex-ai.git"
+    },
+    "tool": {
+        "name": "chatter-cli"
+    },
+    "files": [
+        {
+            "path": ".mcp.json",
+            "conversations": [
+                {
+                    "url": "git+CLAUDE_CODE:blob:7775b971f4b0236f366a89d9f3b2e29fcbbc05a0",
+                    "contributor": {
+                        "type": "ai",
+                        "model_id": "2.1.104"
+                    },
+                    "ranges": [
+                        {
+                            "start_line": 5,
+                            "end_line": 5
+                        },
+                        {
+                            "start_line": 7,
+                            "end_line": 9
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
