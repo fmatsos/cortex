@@ -87,3 +87,16 @@ test("config.json : absent = agnostique, client inconnu = erreur", async () => {
   await Bun.write(join(root, "config.json"), "{}");
   expect((await backendFor(root)).interactive("p")).toEqual(["claude", "p"]);
 });
+
+test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
+  const { confine } = await import("./backends/backend");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  await Bun.write(join(root, "wiki/.keep"), "");
+  await Bun.write(join(root, "raw/.keep"), "");
+  const sh = (mode: "read" | "write", f: string) =>
+    Bun.spawnSync(confine(root, ["sh", "-c", `touch ${join(root, f)}`], mode), { stderr: "pipe" }).exitCode;
+  expect(sh("write", "wiki/ok.md")).toBe(0);
+  expect(sh("write", "raw/non.md")).not.toBe(0);
+  expect(sh("write", "BRAIN.md")).not.toBe(0);
+  expect(sh("read", "wiki/non.md")).not.toBe(0);
+});

@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { join } from "node:path";
 /** Pont (Bridge) entre les commandes (compile, ask) et les agents. Chaque client implémente `Backend`. */
 export type Mode = "write" | "read";
 export type Config = { client?: string; model?: string };
@@ -19,4 +21,23 @@ export const interactiveWith = (fallback: (prompt: string) => string[]) => (prom
 export async function load<T>(pkg: string): Promise<T> {
   try { return (await import(pkg)) as T; }
   catch { throw new Error(`SDK absent : bun add --cwd cli ${pkg}`); }
+}
+
+/**
+ * Enferme une commande d'agent : tout le dépôt en lecture seule, sauf wiki/ en mode écriture.
+ * Vaut pour n'importe quelle CLI (moteur par défaut, sessions interactives) ; le reste du système reste inscriptible
+ * (état propre de l'agent : ~/.claude, ~/.codex…).
+ * Linux : bubblewrap. macOS : sandbox-exec (Seatbelt, celui qu'utilisent Codex et Claude Code).
+ */
+export function confine(root: string, cmd: string[], mode: Mode): string[] {
+  const r = realpathSync(root); // macOS : /var → /private/var, le profil doit viser le chemin réel
+  const wiki = join(r, "wiki");
+  if (process.platform === "darwin") {
+    const q = (p: string) => JSON.stringify(p); // chaîne SBPL entre guillemets, échappée
+    const write = mode === "write" ? `(require-not (subpath ${q(wiki)}))` : "";
+    const profile = `(version 1)(allow default)(deny file-write* (require-all (subpath ${q(r)}) ${write}))`;
+    return ["sandbox-exec", "-p", profile, ...cmd];
+  }
+  if (!Bun.which("bwrap")) throw new Error("bubblewrap (bwrap) introuvable : il confine l'agent à wiki/. Installe-le (apt install bubblewrap).");
+  return ["bwrap", "--dev-bind", "/", "/", "--ro-bind", r, r, ...(mode === "write" ? ["--bind", wiki, wiki] : []), "--die-with-parent", "--", ...cmd];
 }

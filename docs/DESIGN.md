@@ -86,11 +86,14 @@ Garde-fous vérifiés le 2026-11-04 par des essais où l'agent tentait d'écrire
 
 | Client | Mécanisme | Résultat |
 |---|---|---|
+| Défaut (agnostique, n'importe quelle CLI) | dépôt en lecture seule sauf `wiki/` : bubblewrap sous Linux, `sandbox-exec` sous macOS | `raw/` en « EROFS: read-only file system », `wiki/` inscriptible |
 | Claude (Agent SDK) | `canUseTool` sur chaque appel d'outil, `settingSources: ["project"]`, rien d'approuvé d'office | écriture et shell hors de `wiki/` refusés |
 | Codex (SDK) | bac à sable `workspace-write` lancé depuis `wiki/` | `raw/` et `BRAIN.md` en « Read-only file system » (`/tmp` reste toujours inscriptible) |
 | opencode v2 (API REST de `opencode serve`) | règles de permission, la dernière qui correspond l'emporte | `edit` refusé hors de `wiki/*`, shell refusé hors de `brain` |
 
-Dans tous les cas, `git status` avant et après l'agent reste le filet de sécurité commun.
+Les sessions interactives, quel que soit le client, passent aussi par ce confinement : une validation humaine trop rapide ne peut pas écrire hors de `wiki/`. Dans tous les cas, `git status` avant et après l'agent reste le filet de sécurité commun.
+
+*Prérequis :* `bwrap` sous Linux (`apt install bubblewrap`). Sous macOS, `sandbox-exec` est intégré au système. La variante macOS n'est pas encore testée sur une vraie machine.
 
 ## 4. Arborescence
 

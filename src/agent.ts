@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { readDocs } from "./lib";
 import { backendFor, type Mode } from "./backends/index";
+import { confine } from "./backends/backend";
 
 async function git(root: string, ...args: string[]) {
   const p = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "ignore" });
@@ -30,7 +31,8 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
   const backend = await backendFor(root);
   prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
-  if (!batch) return Bun.spawn(backend.interactive(prompt), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited;
+  // session interactive confinée elle aussi : une validation humaine trop rapide ne peut pas écrire hors de wiki/
+  if (!batch) return Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited;
   try { console.log(await backend.run(root, prompt, mode)); return 0; }
   catch (e) { console.error(`✗ ${(e as Error).message}`); return 1; }
 }
