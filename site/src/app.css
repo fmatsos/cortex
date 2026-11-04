@@ -606,3 +606,11 @@ mark {
 		background: none;
 	}
 }
+
+/* pied de page toujours en bas : le corps est une colonne d'au moins la hauteur de l'écran, <main> prend le reste
+   (le conteneur de SvelteKit est en display: contents, ses enfants sont donc ceux de body) */
+body {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+}

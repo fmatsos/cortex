@@ -7,12 +7,19 @@
 	import { search } from "#lib/search-state.svelte.js";
 	import { theme } from "#lib/theme.svelte.js";
 	import Icon from "#lib/components/icon.svelte";
+	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import ThemeSwitch from "#lib/components/theme-switch.svelte";
 	import { toRoute } from "#lib/links.js";
 
-	let { children } = $props();
+	let { children, data } = $props();
+	const f = $derived(data.footer);
+	const fmtDate = (d: string) => {
+		const t = new Date(d);
+		return `${t.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })} à ${t.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+	};
+	const plural = (n: number, one: string, many: string) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
 	let header = $state<HTMLElement | null>(null);
 
 	// favoris, historique de recherche et thème : propres à ce navigateur (localStorage)
@@ -62,7 +69,7 @@
 <!-- ordre du DOM = ordre visuel (marque, navigation, recherche, thème) à toutes les largeurs : la tabulation suit l'œil -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
 	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
-		<a href={toRoute("/")} class="py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}>Cortex</a>
+		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} class="text-primary" />Cortex</a>
 		<nav aria-label="Navigation principale" class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}
@@ -77,9 +84,26 @@
 	</div>
 </header>
 
-<main id="contenu-principal" tabindex="-1" class="anchor-target mx-auto max-w-7xl px-4 py-8 lg:px-8 outline-none">
+<main id="contenu-principal" tabindex="-1" class="anchor-target mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8 outline-none">
 	{@render children()}
 </main>
+
+<footer class="text-muted-foreground border-t text-sm print:hidden">
+	<div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+		<p>
+			<a href={toRoute("/")} class="text-foreground font-semibold tracking-tight">Cortex</a>
+			<span aria-hidden="true">&nbsp;·&nbsp;</span>généré le <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>
+		</p>
+		<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label="Statistiques du wiki">
+			<li><a href="{toRoute('/search')}?q=" class="hover:text-foreground">{plural(f.pages, "page", "pages")}</a>
+				<span class="text-xs">({plural(f.concepts, "concept", "concepts")}, {plural(f.entities, "entité", "entités")}, {plural(f.syntheses, "synthèse", "synthèses")}, {plural(f.sources, "source", "sources")})</span></li>
+			<li><a href={toRoute("/graph")} class="hover:text-foreground">{plural(f.links, "lien", "liens")}</a></li>
+			<li><a href={toRoute("/tags")} class="hover:text-foreground">{plural(f.tags, "tag", "tags")}</a></li>
+			<li><a href="{toRoute('/search')}?q=-is%3Aunverified" class="hover:text-foreground">{f.verified} / {f.pages} relues</a></li>
+			<li><a href={toRoute("/log")} class="hover:text-foreground">{plural(f.log, "entrée", "entrées")} au journal</a></li>
+		</ul>
+	</div>
+</footer>
 
 <OfflineStatus />
 <style>

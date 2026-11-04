@@ -582,6 +582,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   await Bun.write(join(root, "documents/notes.txt"), "à ne jamais vider");
   expect(() => checkOut(root, join(root, "documents"))).toThrow("ne ressemble pas à un export"); // dossier non vide sans _app/
   const out = join(root, ".cortex/site");
+  process.env.SOURCE_DATE_EPOCH = "1793790000"; // heure d'export figée : deux exports restent identiques à l'octet
   await exportSite(root, out, () => {});
 
   const html = (p: string) => readFileSync(join(out, p), "utf8");

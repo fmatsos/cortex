@@ -310,6 +310,9 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   await size("data.json", data);
   await size("graph.json", graph);
   const idxBytes = await size("search-index.json", search);
+  // date et heure d'export (SOURCE_DATE_EPOCH si fourni, pour un export reproductible) : hors de la version du cache
+  const at = process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000) : new Date();
+  await Bun.write(join(dataDir, "build.json"), JSON.stringify({ generatedAt: at.toISOString(), links: graph.links.length }));
   say(`${data.pages.length} pages, ${graph.links.length} liens, index de recherche ${(idxBytes / 1024).toFixed(0)} Ko`);
 
   // Vite et SvelteKit ne se chargent qu'ici : les autres commandes restent aussi rapides
