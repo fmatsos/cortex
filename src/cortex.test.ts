@@ -251,7 +251,7 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à cortex", async 
   expect(ok("Bash", { command: "cortex log --json add update \"x\"" })).toBe(false);
   expect(ok("Bash", { command: "cortex search x; sed -i s/a/b/ raw/x.md" })).toBe(false);
   expect(ok("Bash", { command: "echo x > raw/a.md" })).toBe(false);
-  expect(ok("Read", { file_path: "/etc/passwd" }, "read")).toBe(true);
+  expect(ok("Read", { file_path: "/etc/passwd" }, "read")).toBe(false); // reads are confined to the root (REL-07)
   expect(ok("WebFetch", { url: "https://x" })).toBe(false);
 });
 

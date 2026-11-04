@@ -10,6 +10,8 @@ export default function claude(cfg: Config): Backend {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
     async run(root, prompt, mode) {
       const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk");
+      const { schemaText } = await import("../schema");
+      const schema = await schemaText(root);
       let out: string | undefined;
       for await (const m of query({
         prompt,
@@ -18,7 +20,10 @@ export default function claude(cfg: Config): Backend {
           model: cfg.model,
           effort: cfg.effort as any, // low | medium | high | xhigh | max
           pathToClaudeCodeExecutable: cli("claude"),
-          settingSources: ["project"], // CLAUDE.md, without the ~/.claude permissions that would bypass the guard
+          // No settings file is loaded: a permissions.allow rule or a hook (project, user or local) is
+          // evaluated before canUseTool and could bypass the guard. The schema is passed explicitly instead.
+          settingSources: [],
+          systemPrompt: { type: "preset", preset: "claude_code", append: schema },
           permissionMode: "default", // acceptEdits/bypass would skip canUseTool
           allowedTools: [], // nothing approved by default: every call goes through canUseTool
           canUseTool: async (tool, input) => {
@@ -47,7 +52,7 @@ const CORTEX_CMD = {
   read: new RegExp(`^cortex (search( |$)|${LOG_READ})`),
   write: new RegExp(`^cortex (search|index|lint|new|log add)( |$)|^cortex ${LOG_READ}`),
 };
-const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite"]);
+const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
 /** Real path (symlinks resolved), including for a file not yet created. */
@@ -56,6 +61,22 @@ function real(p: string): string {
   const tail: string[] = [];
   while (!existsSync(cur) && dirname(cur) !== cur) { tail.unshift(cur.slice(dirname(cur).length + 1)); cur = dirname(cur); }
   return join(realpathSync(cur), ...tail);
+}
+
+const inside = (p: string, dir: string) => p === dir || p.startsWith(dir + sep);
+
+/** Reads (Read, Glob, Grep, LS) are confined to the wiki root: every path argument, symlinks resolved. */
+function readViolation(root: string, tool: string, input: Record<string, any>): string | undefined {
+  const rr = real(root);
+  const base = String(input.path ?? root);
+  const paths = [base];
+  if (input.file_path !== undefined) paths.push(String(input.file_path));
+  // Glob: the static prefix of the pattern (before the first wildcard) must stay in the root too
+  if (tool === "Glob" && typeof input.pattern === "string") {
+    const pre = input.pattern.split(/[*?[{]/)[0];
+    paths.push(isAbsolute(pre) ? pre : join(isAbsolute(base) ? base : resolve(root, base), pre));
+  }
+  return paths.find((p) => p.startsWith("~") || !inside(real(isAbsolute(p) ? p : resolve(root, p)), rr));
 }
 
 export type Verdict = { allow: true } | { allow: false; reason: string };
@@ -81,7 +102,11 @@ export function unquote(cmd: string): string | undefined {
 
 /** Pure function: is a tool requested by the agent allowed? Writes limited to wiki/, Bash limited to cortex. */
 export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode): Verdict {
-  if (READ_ONLY.has(tool)) return { allow: true };
+  if (tool === "TodoWrite") return { allow: true };
+  if (READ_ONLY.has(tool)) {
+    const bad = readViolation(root, tool, input);
+    return bad === undefined ? { allow: true } : { allow: false, reason: `Lecture refusée hors du dépôt du wiki : ${bad}` };
+  }
   if (tool === "Bash") {
     const raw = String(input.command ?? "").trim();
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
