@@ -61,7 +61,7 @@
 
 <!-- ordre du DOM = ordre visuel (marque, navigation, recherche, thème) à toutes les largeurs : la tabulation suit l'œil -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
-	<div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
+	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
 		<a href={toRoute("/")} class="py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}>Second cerveau</a>
 		<nav aria-label="Navigation principale" class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
@@ -77,7 +77,7 @@
 	</div>
 </header>
 
-<main id="contenu-principal" tabindex="-1" class="anchor-target px-4 py-8 lg:px-8 outline-none">
+<main id="contenu-principal" tabindex="-1" class="anchor-target mx-auto max-w-7xl px-4 py-8 lg:px-8 outline-none">
 	{@render children()}
 </main>
 
