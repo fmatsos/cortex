@@ -15,10 +15,20 @@
 	const rel = $derived(allRel ? related : related.slice(0, SHOWN));
 </script>
 
-{#snippet title(l: Link)}
-	<a href={toPage(l.id)} class="text-link flex items-start gap-1.5 underline-offset-3 hover:underline">
+{#snippet row(l: Link, why: RelatedEntry["why"] = [])}
+	<a href={toPage(l.id)} class="hover:bg-muted focus-visible:ring-ring/50 group -mx-2 flex items-start gap-2 rounded-md px-2 py-1.5 focus-visible:ring-3 focus-visible:outline-none">
 		<Icon name={typeIcon(l.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" />
-		<span class="min-w-0">{l.title}</span>
+		<span class="min-w-0">
+			<span class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
+			{#if why.length}
+				<span class="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
+					{#each why as w, i (w.label)}
+						{#if i}<span aria-hidden="true">·</span>{/if}
+						<span class="inline-flex items-center gap-1" title={w.detail}><Icon name={w.icon} size={12} />{w.label}{#if w.detail}<span class="sr-only"> : {w.detail}</span>{/if}</span>
+					{/each}
+				</span>
+			{/if}
+		</span>
 	</a>
 {/snippet}
 
@@ -35,8 +45,8 @@
 		<h2 id="h-back" class="mb-2 flex items-center gap-2 font-semibold" title="Pages qui citent celle-ci">
 			<Icon name="backlink" size={20} />Rétroliens <span class="text-muted-foreground font-normal">{backlinks.length}</span>
 		</h2>
-		<ul class="space-y-1.5">
-			{#each back as l (l.id)}<li>{@render title(l)}</li>{/each}
+		<ul class="divide-border/60 divide-y">
+			{#each back as l (l.id)}<li>{@render row(l)}</li>{/each}
 		</ul>
 		{@render more(backlinks.length, allBack, () => (allBack = !allBack))}
 	</section>
@@ -46,21 +56,8 @@
 		<h2 id="h-rel" class="mb-2 flex items-center gap-2 font-semibold">
 			<Icon name="related" size={20} />Pages liées <span class="text-muted-foreground font-normal">{related.length}</span>
 		</h2>
-		<ul class="space-y-2.5">
-			{#each rel as l (l.id)}
-				<li>
-					{@render title(l)}
-					{#if l.why.length}
-						<ul class="text-muted-foreground mt-0.5 ml-[1.375rem] flex flex-wrap gap-x-2.5 gap-y-0.5 text-xs" aria-label="Pourquoi">
-							{#each l.why as w (w.label)}
-								<li class="inline-flex items-center gap-1" title={w.detail}>
-									<Icon name={w.icon} size={14} />{w.label}{#if w.detail}<span class="sr-only"> : {w.detail}</span>{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</li>
-			{/each}
+		<ul class="divide-border/60 divide-y">
+			{#each rel as l (l.id)}<li>{@render row(l, l.why)}</li>{/each}
 		</ul>
 		{@render more(related.length, allRel, () => (allRel = !allRel))}
 	</section>
