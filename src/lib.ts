@@ -13,9 +13,12 @@ export function findRoot(from = process.cwd()): string {
 export type Doc = { path: string; fm: Record<string, any>; body: string };
 
 export function parseDoc(path: string, txt: string): Doc {
-  const m = txt.match(/^---\n([\s\S]*?)\n---\n?/);
+  txt = txt.replace(/^﻿/, ""); // BOM
+  const m = txt.match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---\r?\n?/);
   if (!m) return { path, fm: {}, body: txt };
-  return { path, fm: (Bun.YAML.parse(m[1]) as any) ?? {}, body: txt.slice(m[0].length) };
+  const fm = (m[1] === undefined ? null : Bun.YAML.parse(m[1])) ?? {};
+  if (typeof fm !== "object" || Array.isArray(fm)) throw new Error("frontmatter invalide : objet YAML attendu");
+  return { path, fm: fm as Record<string, any>, body: txt.slice(m[0].length) };
 }
 
 /** `.md` files under `dir` (relative to root), paths returned relative to root. */
