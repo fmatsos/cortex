@@ -12,42 +12,56 @@
 	}
 }
 
+/*
+ * Direction « papier minéral, encre pétrole » : fond teinté, surfaces blanches, action pétrole,
+ * couleurs sémantiques réservées aux données. Chaque paire texte/fond est mesurée par cli/src/theme.test.ts
+ * (WCAG 2.2 AA) ; le bloc sombre est écrit deux fois (système, puis forcé) et le test vérifie qu'ils restent identiques.
+ */
 :root {
 	--anchor-offset: 5rem; /* hauteur de l'en-tête collant : les ancres arrivent dessous (plus haut sur mobile : recherche en seconde ligne) */
 	color-scheme: light dark;
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0 0);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.48 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
-	--destructive: oklch(0.52 0.22 27);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.88 0 0);
-	--ring: oklch(0.55 0.12 260);
-	--radius: 0.625rem;
-	--link: oklch(0.45 0.17 260);
-	--mark: oklch(0.92 0.14 95);
-	/* un hue par type de page (Concept, Entity, Synthesis, Source) : badges, légende et graphe */
-	--type-concept: oklch(0.55 0.2 262);
-	--type-entity: oklch(0.62 0.17 50);
-	--type-synthesis: oklch(0.55 0.17 150);
-	--type-source: oklch(0.55 0.05 250);
-	--type-autre: oklch(0.55 0 0);
+	--background: #f7f8fa;
+	--foreground: #172a34;
+	--card: #ffffff;
+	--card-foreground: #172a34;
+	--popover: #ffffff;
+	--popover-foreground: #172a34;
+	--primary: #075e75;
+	--primary-foreground: #ffffff;
+	--secondary: #e8edf1;
+	--secondary-foreground: #172a34;
+	--muted: #e8edf1;
+	--muted-foreground: #52616b;
+	--accent: #e1f1f3;
+	--accent-foreground: #103b47;
+	--destructive: #a81f37;
+	--border: #cbd5de;
+	--input: #7d8d9a; /* bordure d'un champ : ≥ 3:1 sur le fond et sur une carte */
+	--ring: #176b83;
+	--radius: 0.75rem;
+	--link: #075e75;
+	--link-visited: #5b3f99;
+	--mark: #f4e3a7;
+	/* un hue par type de page (Concept, Entity, Synthesis, Source) : badges, légende et graphe ; lisibles aussi en texte */
+	--type-concept: #315bc5;
+	--type-entity: #9a4d07;
+	--type-synthesis: #247342;
+	--type-source: #546875;
+	--type-autre: #5b6870;
 	/* un hue par type d'entrée du journal */
-	--kind-add: oklch(0.55 0.15 150);
-	--kind-ingest: oklch(0.55 0.2 262);
-	--kind-query: oklch(0.55 0.18 305);
-	--kind-lint: oklch(0.62 0.15 75);
-	--kind-update: oklch(0.55 0.08 210);
+	--kind-add: #247342;
+	--kind-ingest: #315bc5;
+	--kind-query: #7844a1;
+	--kind-lint: #8a5a0a;
+	--kind-update: #176b83;
+	/* graphe : relations (≥ 3:1 sur le fond) et favoris */
+	--graph-edge: #7d8d9a;
+	--favorite: #8a5a0a;
+	/* encart « Note personnelle » (intention de l'humain) et encart « Avertissement » (limite de la source) */
+	--note-background: #fff3da;
+	--note-foreground: #624300;
+	--warning-background: #fdece4;
+	--warning-foreground: #8a2a0b;
 }
 
 @media (max-width: 639px) {
@@ -59,71 +73,85 @@
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
 		color-scheme: dark;
-		--background: oklch(0.145 0 0);
-		--foreground: oklch(0.985 0 0);
-		--card: oklch(0.205 0 0);
-		--card-foreground: oklch(0.985 0 0);
-		--popover: oklch(0.205 0 0);
-		--popover-foreground: oklch(0.985 0 0);
-		--primary: oklch(0.922 0 0);
-		--primary-foreground: oklch(0.205 0 0);
-		--secondary: oklch(0.269 0 0);
-		--secondary-foreground: oklch(0.985 0 0);
-		--muted: oklch(0.269 0 0);
-		--muted-foreground: oklch(0.72 0 0);
-		--accent: oklch(0.269 0 0);
-		--accent-foreground: oklch(0.985 0 0);
-		--destructive: oklch(0.72 0.19 22);
-		--border: oklch(1 0 0 / 12%);
-		--input: oklch(1 0 0 / 18%);
-		--ring: oklch(0.7 0.12 260);
-		--link: oklch(0.78 0.12 260);
-		--mark: oklch(0.45 0.1 95);
-		--type-concept: oklch(0.74 0.15 262);
-		--type-entity: oklch(0.8 0.15 60);
-		--type-synthesis: oklch(0.78 0.15 150);
-		--type-source: oklch(0.75 0.05 250);
-		--type-autre: oklch(0.75 0 0);
-		--kind-add: oklch(0.78 0.15 150);
-		--kind-ingest: oklch(0.74 0.15 262);
-		--kind-query: oklch(0.76 0.14 305);
-		--kind-lint: oklch(0.82 0.14 80);
-		--kind-update: oklch(0.76 0.09 210);
+		--background: #101820;
+		--foreground: #e9f0f4;
+		--card: #182630;
+		--card-foreground: #e9f0f4;
+		--popover: #182630;
+		--popover-foreground: #e9f0f4;
+		--primary: #79d6e5;
+		--primary-foreground: #10232b;
+		--secondary: #23323e;
+		--secondary-foreground: #e9f0f4;
+		--muted: #23323e;
+		--muted-foreground: #acbdc9;
+		--accent: #23434b;
+		--accent-foreground: #d8f5f8;
+		--destructive: #ff9aae;
+		--border: #354956;
+		--input: #7c929f;
+		--ring: #79d6e5;
+		--link: #79d6e5;
+		--link-visited: #c9b8f2;
+		--mark: #514218;
+		--type-concept: #9cb7ff;
+		--type-entity: #f4ba76;
+		--type-synthesis: #83d7a4;
+		--type-source: #aec2cd;
+		--type-autre: #b4c0c8;
+		--kind-add: #83d7a4;
+		--kind-ingest: #9cb7ff;
+		--kind-query: #d2b0f5;
+		--kind-lint: #f0c775;
+		--kind-update: #80d2db;
+		--graph-edge: #7c929f;
+		--favorite: #f0c775;
+		--note-background: #342b1b;
+		--note-foreground: #f2d591;
+		--warning-background: #3b2420;
+		--warning-foreground: #ffbfa3;
 	}
 }
 
 :root[data-theme="dark"] {
 	color-scheme: dark;
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.922 0 0);
-	--primary-foreground: oklch(0.205 0 0);
-	--secondary: oklch(0.269 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.72 0 0);
-	--accent: oklch(0.269 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.72 0.19 22);
-	--border: oklch(1 0 0 / 12%);
-	--input: oklch(1 0 0 / 18%);
-	--ring: oklch(0.7 0.12 260);
-	--link: oklch(0.78 0.12 260);
-	--mark: oklch(0.45 0.1 95);
-	--type-concept: oklch(0.74 0.15 262);
-	--type-entity: oklch(0.8 0.15 60);
-	--type-synthesis: oklch(0.78 0.15 150);
-	--type-source: oklch(0.75 0.05 250);
-	--type-autre: oklch(0.75 0 0);
-	--kind-add: oklch(0.78 0.15 150);
-	--kind-ingest: oklch(0.74 0.15 262);
-	--kind-query: oklch(0.76 0.14 305);
-	--kind-lint: oklch(0.82 0.14 80);
-	--kind-update: oklch(0.76 0.09 210);
+	--background: #101820;
+	--foreground: #e9f0f4;
+	--card: #182630;
+	--card-foreground: #e9f0f4;
+	--popover: #182630;
+	--popover-foreground: #e9f0f4;
+	--primary: #79d6e5;
+	--primary-foreground: #10232b;
+	--secondary: #23323e;
+	--secondary-foreground: #e9f0f4;
+	--muted: #23323e;
+	--muted-foreground: #acbdc9;
+	--accent: #23434b;
+	--accent-foreground: #d8f5f8;
+	--destructive: #ff9aae;
+	--border: #354956;
+	--input: #7c929f;
+	--ring: #79d6e5;
+	--link: #79d6e5;
+	--link-visited: #c9b8f2;
+	--mark: #514218;
+	--type-concept: #9cb7ff;
+	--type-entity: #f4ba76;
+	--type-synthesis: #83d7a4;
+	--type-source: #aec2cd;
+	--type-autre: #b4c0c8;
+	--kind-add: #83d7a4;
+	--kind-ingest: #9cb7ff;
+	--kind-query: #d2b0f5;
+	--kind-lint: #f0c775;
+	--kind-update: #80d2db;
+	--graph-edge: #7c929f;
+	--favorite: #f0c775;
+	--note-background: #342b1b;
+	--note-foreground: #f2d591;
+	--warning-background: #3b2420;
+	--warning-foreground: #ffbfa3;
 }
 
 :root[data-theme="light"] {
@@ -152,12 +180,25 @@
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
 	--color-link: var(--link);
+	--color-link-visited: var(--link-visited);
+	--color-favorite: var(--favorite);
+	--color-graph-edge: var(--graph-edge);
+	--color-note-background: var(--note-background);
+	--color-note-foreground: var(--note-foreground);
+	--color-warning-background: var(--warning-background);
+	--color-warning-foreground: var(--warning-foreground);
 	--radius-sm: calc(var(--radius) * 0.6);
-	--radius-md: calc(var(--radius) * 0.8);
+	--radius-md: 0.5rem; /* boutons, champs : 0,5 rem */
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) * 1.4);
 	--radius-2xl: calc(var(--radius) * 1.8);
-	--radius-4xl: calc(var(--radius) * 2.6);
+	--radius-4xl: calc(var(--radius) * 2.6); /* pastilles : entièrement arrondies */
+}
+
+/* titres de page fluides : 28 px sur mobile, 40 px dès ~1150 px de large (tous les h1 du site sont en text-3xl) */
+@theme {
+	--text-3xl: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem);
+	--text-3xl--line-height: 1.15;
 }
 
 @layer base {
@@ -179,25 +220,53 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+		line-height: 1.6;
+		text-rendering: optimizeLegibility;
+	}
+	h1,
+	h2,
+	h3 {
+		text-wrap: balance;
 	}
 	:focus-visible {
 		outline: 2px solid var(--ring);
 		outline-offset: 2px;
 	}
+	/* mouvement réduit : plus de transition, d'animation ni de défilement fluide, quel que soit le composant */
 	@media (prefers-reduced-motion: reduce) {
 		html {
 			scroll-behavior: auto;
 		}
+		*,
+		::before,
+		::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
+}
+
+/* corps de lecture : 17 px, interligne 1,75, ~68 caractères (dans le calque components : un utilitaire de la page garde la main) */
+@layer components {
+	.wiki {
+		font-size: 1.0625rem;
+		line-height: 1.75;
+		max-width: 68ch;
 	}
 }
 
 /* corps d'une page wiki (HTML produit par l'export) */
 .wiki {
-	line-height: 1.7;
 	overflow-wrap: anywhere;
 }
 .wiki > * + * {
 	margin-top: 1rem;
+}
+.wiki p,
+.wiki li {
+	text-wrap: pretty;
 }
 .wiki h1,
 .wiki h2,
@@ -209,18 +278,31 @@
 	scroll-margin-top: var(--anchor-offset);
 }
 .wiki h1 {
-	font-size: 1.6rem;
+	font-size: 1.75rem;
 }
 .wiki h2 {
-	font-size: 1.3rem;
+	font-size: 1.4rem;
 }
 .wiki h3 {
-	font-size: 1.1rem;
+	font-size: 1.2rem;
+}
+.wiki h4 {
+	font-size: 1.0625rem;
 }
 .wiki a {
 	color: var(--link);
 	text-decoration: underline;
 	text-underline-offset: 3px;
+}
+/* liens déjà consultés : teinte distincte, pour les liens de contenu seulement (pas la navigation) ;
+   les listes de pages (classe text-link) et `.link-content` en profitent aussi */
+.wiki a:visited,
+a.text-link:visited,
+a.link-content:visited {
+	color: var(--link-visited);
+}
+.wiki .fn-ref a:visited {
+	color: var(--link);
 }
 .wiki ul,
 .wiki ol {
@@ -235,43 +317,57 @@
 .wiki li + li {
 	margin-top: 0.35rem;
 }
-.wiki .note-perso {
+
+/* encarts : note personnelle (jaune) et avertissement (rouille), deux fonctions distinctes ; l'icône du titre vient du pack
+   (masque CSS : le HTML exporté ne porte pas de SVG ; cli/src/icons.test.ts vérifie qu'elle suit lib/icons.ts) */
+.wiki .note-perso,
+.wiki .callout-warning {
 	margin: 1.25rem 0;
 	padding: 0.85rem 1rem;
 	border-radius: var(--radius-md);
-	border: 1px solid oklch(0.85 0.09 85);
-	border-left: 4px solid oklch(0.75 0.15 75);
-	background: oklch(0.97 0.035 90);
+	border: 1px solid;
+	border-left-width: 4px;
 	color: var(--foreground);
 }
-.wiki .note-perso-titre {
+.wiki .note-perso {
+	--callout: var(--note-foreground);
+	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M5 5.5A2.5 2.5 0 0 1 7.5 3h9A2.5 2.5 0 0 1 19 5.5V14l-5 5H7.5A2.5 2.5 0 0 1 5 16.5z'/%3E%3Cpath d='M14 19v-3.5a1.5 1.5 0 0 1 1.5-1.5H19'/%3E%3C/svg%3E");
+	background: var(--note-background);
+}
+.wiki .callout-warning {
+	--callout: var(--warning-foreground);
+	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M10.3 4.5 3.2 17a2 2 0 0 0 1.7 3h14.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9.5v4M12 17h.01'/%3E%3C/svg%3E");
+	background: var(--warning-background);
+}
+.wiki .note-perso,
+.wiki .callout-warning {
+	border-color: color-mix(in oklch, var(--callout) 35%, transparent);
+	border-left-color: var(--callout);
+}
+.wiki .note-perso-titre,
+.wiki .callout-warning-titre {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
 	margin: 0 0 0.3rem;
-	font-size: 0.8rem;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-	text-transform: uppercase;
-	color: oklch(0.48 0.1 70);
+	font-size: 0.875rem;
+	font-weight: 650;
+	line-height: 1.4;
+	color: var(--callout);
 }
-.wiki .note-perso > p:last-child {
+.wiki .note-perso-titre::before,
+.wiki .callout-warning-titre::before {
+	content: "";
+	flex: none;
+	width: 1.15rem;
+	height: 1.15rem;
+	background: currentColor;
+	-webkit-mask: var(--callout-icon) center / contain no-repeat;
+	mask: var(--callout-icon) center / contain no-repeat;
+}
+.wiki .note-perso > p:last-child,
+.wiki .callout-warning > p:last-child {
 	margin-bottom: 0;
-}
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) .wiki .note-perso {
-		border-color: oklch(0.45 0.07 80);
-		border-left-color: oklch(0.72 0.14 75);
-		background: oklch(0.27 0.035 80);
-	}
-	:root:not([data-theme="light"]) .wiki .note-perso-titre {
-		color: oklch(0.82 0.12 80);
-	}
-}
-:root[data-theme="dark"] .wiki .note-perso {
-	border-color: oklch(0.45 0.07 80);
-	border-left-color: oklch(0.72 0.14 75);
-	background: oklch(0.27 0.035 80);
-}
-:root[data-theme="dark"] .wiki .note-perso-titre {
-	color: oklch(0.82 0.12 80);
 }
 .wiki blockquote {
 	border-left: 3px solid var(--border);
@@ -295,20 +391,50 @@
 	background: none;
 	padding: 0;
 }
+
+/* tableaux : cadre, lignes alternées, en-tête marqué ; le défilement horizontal est signalé par une ombre sur le bord
+   qui cache encore du contenu (dégradés `local` qui masquent l'ombre `scroll` une fois au bout) */
 .wiki table {
 	display: block;
+	width: fit-content;
+	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
-	font-size: 0.93rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	background:
+		linear-gradient(to right, var(--card) 30%, transparent) left center / 2rem 100% no-repeat local,
+		linear-gradient(to left, var(--card) 30%, transparent) right center / 2rem 100% no-repeat local,
+		linear-gradient(to right, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+		linear-gradient(to left, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll var(--card);
 }
 .wiki th,
 .wiki td {
 	border: 1px solid var(--border);
-	padding: 0.4rem 0.7rem;
+	padding: 0.5rem 0.75rem;
 	text-align: left;
+	vertical-align: top;
+}
+.wiki tr > :first-child {
+	border-left: 0;
+}
+.wiki tr > :last-child {
+	border-right: 0;
+}
+.wiki thead th {
+	border-top: 0;
+}
+.wiki tbody tr:last-child > * {
+	border-bottom: 0;
 }
 .wiki th {
-	background: var(--muted);
+	background: color-mix(in oklch, var(--muted) 90%, transparent);
+	font-weight: 600;
+}
+.wiki tbody tr:nth-child(even) > td {
+	background: color-mix(in oklch, var(--muted) 45%, transparent);
 }
 .wiki img {
 	max-width: 100%;
@@ -370,4 +496,96 @@ mark {
 .note-item:target {
 	background: var(--mark);
 	border-radius: 0.2rem;
+}
+
+/* impression : l'article seul, en noir sur blanc quel que soit le thème, sans commandes ni navigation */
+@media print {
+	:root:not([data-theme="light"]),
+	:root[data-theme="dark"],
+	:root[data-theme="light"] {
+		color-scheme: light;
+		--background: #ffffff;
+		--foreground: #000000;
+		--card: #ffffff;
+		--muted: #f0f0f0;
+		--muted-foreground: #333333;
+		--border: #8a8a8a;
+		--link: #000000;
+		--link-visited: #000000;
+		--mark: #e6e6e6;
+		--note-background: #ffffff;
+		--note-foreground: #000000;
+		--warning-background: #ffffff;
+		--warning-foreground: #000000;
+		/* le reste : la palette claire, reprise telle quelle (cli/src/theme.test.ts vérifie qu'elle ne dérive pas) */
+		--card-foreground: #172a34;
+		--popover: #ffffff;
+		--popover-foreground: #172a34;
+		--primary: #075e75;
+		--primary-foreground: #ffffff;
+		--secondary: #e8edf1;
+		--secondary-foreground: #172a34;
+		--accent: #e1f1f3;
+		--accent-foreground: #103b47;
+		--destructive: #a81f37;
+		--input: #7d8d9a;
+		--ring: #176b83;
+		--type-concept: #315bc5;
+		--type-entity: #9a4d07;
+		--type-synthesis: #247342;
+		--type-source: #546875;
+		--type-autre: #5b6870;
+		--kind-add: #247342;
+		--kind-ingest: #315bc5;
+		--kind-query: #7844a1;
+		--kind-lint: #8a5a0a;
+		--kind-update: #176b83;
+		--graph-edge: #7d8d9a;
+		--favorite: #8a5a0a;
+	}
+	header.sticky,
+	nav,
+	aside,
+	button,
+	article > details,
+	[role="status"],
+	.no-print {
+		display: none !important;
+	}
+	main {
+		max-width: none;
+		padding: 0;
+	}
+	article {
+		max-width: none;
+	}
+	.wiki {
+		max-width: none;
+		font-size: 11pt;
+		line-height: 1.5;
+	}
+	.wiki a[href^="http"]::after {
+		content: " (" attr(href) ")";
+		font-size: 0.85em;
+		overflow-wrap: anywhere;
+	}
+	.wiki h1,
+	.wiki h2,
+	.wiki h3,
+	.wiki h4 {
+		break-after: avoid;
+	}
+	.wiki .note-perso,
+	.wiki .callout-warning,
+	.wiki table,
+	.wiki pre,
+	.wiki blockquote,
+	.wiki img,
+	.note-item {
+		break-inside: avoid;
+	}
+	.wiki table {
+		display: table;
+		background: none;
+	}
 }
