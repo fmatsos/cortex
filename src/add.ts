@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
@@ -11,6 +13,9 @@ import { appendLog } from "./log";
 import { paint } from "./style";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
+/** Cap on any fetched body (HTML and PDF), checked on content-length and while streaming. */
+export const MAX_BODY_BYTES = 20 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
 export type Extract = {
@@ -18,18 +23,95 @@ export type Extract = {
   url?: string; author?: string; published?: string; partial?: string; blob?: Uint8Array; blobExt?: string;
 };
 
+/** `publicOnly`: MCP path, refuses loopback/private/link-local targets (the CLI stays permissive). `maxBytes`: body cap, injectable for tests. */
+export type FetchOpts = { publicOnly?: boolean; maxBytes?: number };
+
+/** IPv4 in dotted form → private/loopback/link-local/CGNAT/unspecified/multicast-reserved? */
+function privateV4(ip: string): boolean {
+  const [a, b] = ip.split(".").map(Number);
+  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+
+/** Any address that must not be reached from the MCP path; IPv6 is expanded to 8 groups to catch the IPv4-embedding forms. */
+export function privateIp(ip: string): boolean {
+  if (isIP(ip) === 4) return privateV4(ip);
+  let tail: number[] = [];
+  let h = ip.split("%")[0].toLowerCase();
+  const v4 = h.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4) { const o = v4[1].split(".").map(Number); tail = [o[0] << 8 | o[1], o[2] << 8 | o[3]]; h = h.slice(0, -v4[1].length) + "0:0"; }
+  const [l, r = ""] = h.split("::");
+  const [lg, rg] = [l, r].map((x) => (x ? x.split(":") : []));
+  const g = h.includes("::") ? [...lg, ...Array(8 - lg.length - rg.length).fill("0"), ...rg] : lg;
+  const n = g.map((x) => parseInt(x, 16));
+  if (tail.length) n.splice(6, 2, ...tail);
+  const embedded = (a: number, b: number) => privateV4(`${a >> 8}.${a & 255}.${b >> 8}.${b & 255}`);
+  if (n.slice(0, 5).every((x) => x === 0) && (n[5] === 0 || n[5] === 0xffff)) return n[5] === 0xffff ? embedded(n[6], n[7]) : true; // ::, ::1, ::a.b.c.d, ::ffff:a.b.c.d
+  if (n[0] === 0x64 && n[1] === 0xff9b && n.slice(2, 6).every((x) => x === 0)) return embedded(n[6], n[7]); // NAT64
+  if (n[0] === 0x2002) return embedded(n[1], n[2]); // 6to4
+  return (n[0] & 0xfe00) === 0xfc00 || (n[0] & 0xffc0) === 0xfe80;
+}
+
+/** Refuses a non-http(s) URL, or a host (literal or resolved, ANY address) in a non-public range. */
+async function assertPublic(url: string): Promise<void> {
+  const u = new URL(url);
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Schéma refusé : ${u.protocol} (http(s) uniquement).`);
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const addrs = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
+  if (addrs.some(privateIp)) throw new Error(`Adresse refusée : ${host} pointe vers un réseau local ou privé (accès MCP limité aux adresses publiques).`);
+}
+
+/** Body read as a stream, aborted past `max` (a bare `res.text()` would load a multi-GB response in memory). */
+async function readCapped(res: Response, max: number): Promise<Uint8Array> {
+  const tooBig = () => new Error(`Réponse trop volumineuse (> ${Math.round(max / 1024 / 1024)} Mo) : rien n'est écrit.`);
+  if (Number(res.headers.get("content-length")) > max) { await res.body?.cancel(); throw tooBig(); }
+  if (!res.body) return new Uint8Array();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let n = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    n += value.length;
+    if (n > max) { await reader.cancel(); throw tooBig(); }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+/** GET with a body cap; with `publicOnly`, redirects are followed by hand so every hop is checked. */
+async function fetchCapped(url: string, o: FetchOpts): Promise<{ res: Response; bytes: Uint8Array; url: string }> {
+  const signal = AbortSignal.timeout(30_000);
+  let cur = url;
+  for (let hop = 0; ; hop++) {
+    if (o.publicOnly) await assertPublic(cur);
+    const res = await fetch(cur, { headers: { "user-agent": UA, "accept-language": "fr,en;q=0.8" }, signal, redirect: o.publicOnly ? "manual" : "follow" });
+    const next = res.headers.get("location");
+    if (o.publicOnly && res.status >= 300 && res.status < 400 && next) {
+      await res.body?.cancel();
+      if (hop >= MAX_REDIRECTS) throw new Error(`Trop de redirections (> ${MAX_REDIRECTS}) sur ${url}.`);
+      cur = new URL(next, cur).href;
+      continue;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} sur ${url} (paywall, blocage anti-bot ?) : rien n'est écrit.`);
+    return { res, bytes: await readCapped(res, o.maxBytes ?? MAX_BODY_BYTES), url: o.publicOnly ? cur : res.url };
+  }
+}
+
 /**
  * Web page → Markdown. defuddle first; Readability + Turndown in parallel, kept if clearly longer
  * (defuddle sometimes truncates without warning, cf. OKF at step 0).
  */
-export async function extractUrl(url: string): Promise<Extract> {
-  const res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "fr,en;q=0.8" }, signal: AbortSignal.timeout(30_000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status} sur ${url} (paywall, blocage anti-bot ?) : rien n'est écrit.`);
+export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Extract> {
+  const { res, bytes, url: finalUrl } = await fetchCapped(url, opts);
   const type = res.headers.get("content-type") ?? "";
-  if (type.includes("pdf")) return extractPdf(new Uint8Array(await res.arrayBuffer()), url);
-  const html = await res.text();
+  if (type.includes("pdf")) return extractPdf(bytes, url);
+  const html = new TextDecoder().decode(bytes);
   const d = await Defuddle(parseHTML(html).document, url, { markdown: true });
-  const doc = parseHTML(html).document;
+  const doc = parseHTML(html).document; // second DOM on purpose: Readability mutates its input (REL-26: a clone is not clearly cheaper)
   const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute("href");
   const r = new Readability(doc as any).parse(); // mutates doc: canonical read beforehand
   const rb = r?.content ? new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" }).turndown(r.content) : "";
@@ -42,7 +124,7 @@ export async function extractUrl(url: string): Promise<Extract> {
   const paywall = /Il reste \d+ ?% de l.article|This post is for paid subscribers/i.test(html);
   return {
     title: d.title || r?.title || url, content, kind: "article",
-    url: canonical ? new URL(canonical, res.url).href : res.url,
+    url: canonical ? new URL(canonical, finalUrl).href : finalUrl,
     author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist: defuddle returns a numeric id */, published: d.published || undefined,
     extractor: useRb ? "readability/0.6+turndown" : "defuddle/0.19.6+linkedom",
     partial: paywall ? "paywall : contenu partiel" : undefined,
@@ -71,14 +153,14 @@ export async function findDuplicate(root: string, urls: (string | undefined)[], 
   }
 }
 
-export async function add(root: string, input: string, opts: { note?: string; dryRun?: boolean; now?: Date; text?: string }): Promise<{ id: string; duplicate: boolean; ex?: Extract }> {
+export async function add(root: string, input: string, opts: { note?: string; dryRun?: boolean; now?: Date; text?: string } & FetchOpts): Promise<{ id: string; duplicate: boolean; ex?: Extract }> {
   const now = opts.now ?? new Date();
   let ex: Extract;
   const isUrl = /^https?:\/\//.test(input);
   if (isUrl) {
     const known = await findDuplicate(root, [input]); // before the fetch: no needless request
     if (known) return { id: known, duplicate: true };
-    ex = await extractUrl(input);
+    ex = await extractUrl(input, opts);
   }
   else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)
   else {
