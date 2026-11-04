@@ -8,6 +8,14 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<!-- repli sans JavaScript : la lecture reste possible (pages prérendues), mais recherche, favoris, thème et graphe en ont besoin -->
+		<noscript>
+			<p class="bg-muted text-foreground border-b px-4 py-2 text-center text-sm">
+				JavaScript est désactivé : la lecture des pages fonctionne, mais la recherche, les favoris, le thème et le graphe en ont besoin.
+				Parcourez le wiki depuis <a class="underline underline-offset-4" href="%sveltekit.assets%/">l'accueil (catalogue complet)</a>
+				ou <a class="underline underline-offset-4" href="%sveltekit.assets%/tags/">les tags</a>.
+			</p>
+		</noscript>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>
