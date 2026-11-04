@@ -95,7 +95,7 @@ export function buildServer(root: string): McpServer {
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Donne soit input (URL ou chemin), soit text.");
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input doit être une URL http(s) ; pour un fichier local, utilise cortex add ou cortex inbox.");
-    const r = await add(root, input ?? "-", { note, text: txt });
+    const r = await add(root, input ?? "-", { note, text: txt, publicOnly: true });
     return json({ id: r.id, duplicate: r.duplicate, ...(r.ex && { title: r.ex.title, partial: r.ex.partial }) });
   }));
 
