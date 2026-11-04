@@ -4,9 +4,10 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
-import { newestFirst, readLog } from "./log";
+import { openWiki, type Wiki } from "./context";
+import { type LogEntry, newestFirst } from "./log";
 import { type Page, type RawFm, type Stamp, pageId, pageRoute, toRawSource, toResource } from "./doc";
-import { isReservedPage, parseDoc, rawPath, readPages, related, sha256, slugify, wikiLinks } from "./lib";
+import { isReservedPage, parseDoc, rawPath, related, sha256, slugify, wikiLinks } from "./lib";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 
@@ -164,8 +165,8 @@ const rawPartial = (root: string, resource: string) => {
  * Journal: wiki/log.jsonl as structured entries (most recent first). The text is rendered as inline HTML; the cited
  * pages become links (missing page: ignored), the sources the wiki Source page that cites them (raw/ is not published).
  */
-function renderLog(root: string, paths: Set<string>, byPath: Map<string, Page>, sourcePage: Map<string, Page>, link: (d: Page) => Link): LogEntryData[] {
-  return newestFirst(readLog(root).entries).map((e) => {
+function renderLog(root: string, entries: LogEntry[], paths: Set<string>, byPath: Map<string, Page>, sourcePage: Map<string, Page>, link: (d: Page) => Link): LogEntryData[] {
+  return newestFirst(entries).map((e) => {
     const sources = (e.sources ?? []).map((id) => {
       const raw = rawPath(root, id), page = raw && sourcePage.get(toResource(raw));
       return { id, ...(page && { page: link(page) }) };
@@ -197,10 +198,11 @@ export function graphLinks(directed: Set<string>): GraphData["links"] {
   return out;
 }
 
-export async function buildSiteData(root: string, say: (m: string) => void = warn) {
-  const read = await readPages(root);
-  for (const e of read.errors) say(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
-  const docs = read.pages.filter((d) => !isReservedPage(d.path)).sort((a, b) => a.path.localeCompare(b.path));
+export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn) {
+  const root = w.root;
+  const all = await w.pages();
+  for (const e of w.errors.pages) say(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
+  const docs = all.filter((d) => !isReservedPage(d.path)).sort((a, b) => a.path.localeCompare(b.path));
   const paths = new Set<string>(docs.map((d) => d.path));
   const byPath = new Map(docs.map((d) => [d.path, d]));
   const link = (d: Page): Link => ({ id: pageId(d.path), title: String(d.fm.title ?? pageId(d.path)), type: String(d.fm.type ?? "") });
@@ -255,9 +257,11 @@ export async function buildSiteData(root: string, say: (m: string) => void = war
     links: edges,
   };
 
-  const data: SiteData = { pages, tags, log: renderLog(root, paths, byPath, resourcePage, link) };
+  const data: SiteData = { pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
   return { data, graph, search: buildSearch(pages) };
 }
+
+export const buildSiteData = (root: string, say: (m: string) => void = warn) => buildSiteDataCtx(openWiki(root), say);
 
 /** Precomputed search index: inverted index over the full content (folded word → pages) + autocomplete vocabulary. */
 function buildSearch(pages: PageData[]): SearchIndex {
@@ -307,7 +311,7 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   checkOut(root, out);
   const t0 = performance.now();
   const dataDir = join(root, ".cortex/site-data");
-  const { data, graph, search } = await buildSiteData(root, say);
+  const { data, graph, search } = await buildSiteDataCtx(openWiki(root), say);
   mkdirSync(dataDir, { recursive: true });
   const parts: string[] = [];
   const size = async (name: string, v: unknown) => { const s = JSON.stringify(v); parts.push(s); await Bun.write(join(dataDir, name), s); return s.length; };

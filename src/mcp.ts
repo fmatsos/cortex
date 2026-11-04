@@ -5,7 +5,8 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { add } from "./add";
 import { fromResource, toResource } from "./doc";
-import { readPages, related } from "./lib";
+import { openWiki } from "./context";
+import { related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
 import { search } from "./search";
@@ -71,7 +72,7 @@ export function buildServer(root: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de pages (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ path, limit }) => json(related((await readPages(root)).pages, path).slice(0, limit ?? 10).map((r) => ({ ...r, path: toResource(r.path) })))));
+  }, safe(async ({ path, limit }) => json(related(await openWiki(root).pages(), path).slice(0, limit ?? 10).map((r) => ({ ...r, path: toResource(r.path) })))));
 
   s.registerTool("lint", {
     description: "Contrôles mécaniques du wiki : erreurs et avertissements (liens cassés, orphelins, sources en attente, pages à relire…). Les contradictions entre pages restent à ta charge.",

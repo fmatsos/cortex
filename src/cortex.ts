@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { add, describe } from "./add";
 import { toResource } from "./doc";
 import { inbox } from "./inbox";
-import { regenerate } from "./index";
-import { KINDS, kindLabel, logAdd, newestFirst, readLog } from "./log";
+import { openWiki } from "./context";
+import { regenerateCtx } from "./index";
+import { KINDS, kindLabel, logAddCtx, newestFirst } from "./log";
 import { search } from "./search";
-import { lint } from "./lint";
+import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
 import { CortexError, findRoot } from "./lib";
-import { newPage } from "./naming";
+import { newPageCtx } from "./naming";
 import { fail, paint, warn } from "./style";
 
 const HELP = `cortex — second cerveau
@@ -69,11 +70,12 @@ try {
   const isLogAdd = cmd === "log" && tokens![first + 1]?.kind === "positional" && (tokens![first + 1] as { value?: string }).value === "add";
   // config init creates cortex.json, the root marker: it runs where it is called
   const root = cmd === "config" && args[0] === "init" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
+  const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {
       if (!args[0]) throw usage("Usage : cortex add <url|fichier|-> --note \"…\"");
       for (const input of args) {
-        try {
+        try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
           console.log(describe(r, o["dry-run"]));
         } catch (e) {
@@ -100,10 +102,10 @@ try {
     }
     case "new":
       if (args.length !== 2) throw usage('Usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"');
-      console.log(await newPage(root, args[0], args[1]));
+      console.log(await newPageCtx(wiki, args[0], args[1]));
       break;
     case "index":
-      await regenerate(root);
+      await regenerateCtx(wiki);
       console.log(`${paint.ok("✓")} wiki/index.md et wiki/log.md régénérés.`);
       break;
     case "log": {
@@ -111,14 +113,14 @@ try {
       if (isLogAdd) {
         const [, kind, ...text] = args;
         if (!kind || !text.length) throw usage(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
-        const e = await logAdd(root, kind, text.join(" "), o.source, o.page);
+        const e = await logAddCtx(wiki, kind, text.join(" "), o.source, o.page);
         console.log(`${paint.ok("+")} ${paint.dim(e.at)} ${paint.bold(kindLabel(e.kind))} : ${e.text}`);
         break;
       }
       if (args.length) throw usage(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
       if (o.kind && !KINDS.includes(o.kind as any)) throw usage(`--kind attend ${KINDS.join(" | ")}`);
       const limit = int("--limit", o.limit, { min: 1 }) ?? 20;
-      const { entries, errors } = readLog(root);
+      const { entries, errors } = wiki.journal();
       for (const x of errors) warn(`wiki/log.jsonl:${x.line} : ${x.msg}`);
       const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, limit);
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
@@ -127,7 +129,7 @@ try {
       break;
     }
     case "lint": {
-      const issues = await lint(root);
+      const issues = await lintCtx(wiki);
       if (o.json) console.log(JSON.stringify(issues, null, 2));
       else {
         const icon = { error: paint.error("✗"), warning: paint.warn("!"), info: "·" };
@@ -141,12 +143,12 @@ try {
     }
     case "compile":
       if (!args.length && !o.pending) throw usage("Usage : cortex compile <id…> | --pending [--batch]");
-      await (await import("./agent")).compile(root, args, { pending: o.pending, batch: o.batch });
+      await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch });
       break;
     case "ask": {
       const q = args.join(" ");
       if (!q) throw usage('Usage : cortex ask "<question>" [--file]');
-      await (await import("./agent")).ask(root, q, { file: o.file, interactive: o.interactive });
+      await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive });
       break;
     }
     case "export": {

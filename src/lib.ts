@@ -79,10 +79,6 @@ export function slugify(s: string, max = 50): string {
   return out.slice(1) || "source";
 }
 
-/** UUID v7: timestamped then random, sorted in creation order (default naming, see naming.ts). */
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const newId = (at = new Date()) => Bun.randomUUIDv7("hex", at);
-
 /** Raw id: the last segment of a source's folder (unique under raw/). */
 export const RAW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 

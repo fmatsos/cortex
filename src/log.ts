@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import { pageId, pageLink } from "./doc";
-import { localIso, RAW_ID, isReservedPage, rawPath, readPages, slugify } from "./lib";
+import { openWiki, type Wiki } from "./context";
+import { localIso, RAW_ID, isReservedPage, rawPath, slugify } from "./lib";
 
 /**
  * Journal: wiki/log.jsonl (one entry per line, chronological order, append-only) is the source of truth;
@@ -64,8 +65,6 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
 
 /** Title of each wiki page (path → title): pages are named by their title, not by their file name. */
 export type Titles = Map<string, string>;
-export const pageTitles = async (root: string): Promise<Titles> =>
-  new Map((await readPages(root)).pages.filter((d) => d.fm.title).map((d) => [d.path, d.fm.title!]));
 
 const words = (s: string) => `-${slugify(s, Infinity)}-`;
 /** The text already names the page: its file name or its title, whole words, ignoring accents and case. */
@@ -92,27 +91,33 @@ export function renderLogMd(entries: LogEntry[], titles: Titles = new Map()): st
   return out;
 }
 
-export async function writeLogMd(root: string) {
-  await Bun.write(join(root, "wiki/log.md"), renderLogMd(readLog(root).entries, await pageTitles(root)));
+export async function writeLogMdCtx(w: Wiki) {
+  await Bun.write(join(w.root, "wiki/log.md"), renderLogMd(w.journal().entries, await w.titles()));
 }
+export const writeLogMd = (root: string) => writeLogMdCtx(openWiki(root));
 
 /** Appends a line to wiki/log.jsonl (a single append) then regenerates wiki/log.md. */
-export async function appendLog(root: string, entry: Omit<LogEntry, "at">, d = new Date()) {
+export async function appendLogCtx(w: Wiki, entry: Omit<LogEntry, "at">, d = new Date()) {
   const e: LogEntry = { at: localIso(d), kind: entry.kind, text: entry.text.replace(/\s*[\r\n]+\s*/g, " ").trim() };
   if (entry.sources?.length) e.sources = entry.sources;
   if (entry.pages?.length) e.pages = entry.pages;
   const bad = parseEntry(e);
   if (typeof bad === "string") throw new Error(`Entrée de journal invalide : ${bad}`);
-  const f = join(root, "wiki/log.jsonl");
+  const f = join(w.root, "wiki/log.jsonl");
   mkdirSync(dirname(f), { recursive: true });
   // the file ends with a newline; otherwise (hand edit) the entry would stick to the previous one
   const prev = existsSync(f) ? readFileSync(f, "utf8") : "";
+  const journal = w.journal(); // read before the append: the memo then gets the new entry, as a re-read would
   await appendFile(f, `${prev && !prev.endsWith("\n") ? "\n" : ""}${JSON.stringify(e)}\n`);
-  await writeLogMd(root);
+  journal.entries.push(e);
+  await writeLogMdCtx(w);
+  return e;
 }
+export const appendLog = (root: string, entry: Omit<LogEntry, "at">, d = new Date()) => appendLogCtx(openWiki(root), entry, d);
 
 /** `cortex log add`: validates references (existing pages under wiki/, existing raw ids) before writing. */
-export async function logAdd(root: string, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()): Promise<LogEntry> {
+export async function logAddCtx(w: Wiki, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()): Promise<LogEntry> {
+  const root = w.root;
   if (!KINDS.includes(kind as Kind)) throw new Error(`kind inconnu : ${kind} (${KINDS.join(" | ")})`);
   if (!text.trim()) throw new Error("texte vide");
   const wiki = resolve(root, "wiki");
@@ -124,6 +129,7 @@ export async function logAdd(root: string, kind: string, text: string, sources: 
   });
   for (const s of sources)
     if (!rawPath(root, s)) throw new Error(`source raw introuvable : ${s}`);
-  await appendLog(root, { kind: kind as Kind, text, sources: [...new Set(sources)], pages: [...new Set(pp)] }, d);
-  return readLog(root).entries.at(-1)!;
+  return appendLogCtx(w, { kind: kind as Kind, text, sources: [...new Set(sources)], pages: [...new Set(pp)] }, d);
 }
+export const logAdd = (root: string, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()) =>
+  logAddCtx(openWiki(root), kind, text, sources, pages, d);

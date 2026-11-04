@@ -15,7 +15,7 @@ export type { Backend, Mode } from "./backend";
  */
 const CLIENTS = { claude, codex, opencode } satisfies Record<Client, (cfg: Config) => Backend>;
 
-export async function backendFor(root: string): Promise<Backend> {
-  const cfg = await loadConfig(root);
+export async function backendFor(root: string, config?: Config): Promise<Backend> {
+  const cfg = config ?? await loadConfig(root);
   return cfg.client ? CLIENTS[cfg.client](cfg) : agnostic();
 }
