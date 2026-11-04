@@ -31,9 +31,9 @@ test("section courante : dernier titre passé sous la ligne, dernière section t
 
 test("pages liées : motifs courts et dédupliqués, sources communes nommées", () => {
 	const labels = (r: { label: string }[]) => r.map((x) => x.label);
-	expect(labels(relatedReasons(["source partagée", "source partagée", "tag partagé : llm", "tag partagé : agents", "tag partagé : llm"])))
+	expect(labels(relatedReasons([{ kind: "source", value: "/raw/a/source.md" }, { kind: "source", value: "/raw/b/source.md" }, { kind: "tag", value: "llm" }, { kind: "tag", value: "agents" }, { kind: "tag", value: "llm" }])))
 		.toEqual(["source commune", "llm, agents"]);
-	expect(relatedReasons(["lien sortant", "lien entrant", "source partagée"], ["Chroma Research", "OpenAI"]))
+	expect(relatedReasons([{ kind: "out" }, { kind: "in" }, { kind: "source", value: "/raw/a/source.md" }], ["Chroma Research", "OpenAI"]))
 		.toEqual([{ icon: "copy-link", label: "citée ici" }, { icon: "backlink", label: "cite cette page" }, { icon: "source", label: "2 sources communes", detail: "Chroma Research · OpenAI" }]);
 	expect(relatedReasons([])).toEqual([]);
 	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "source commune", detail: "Titre" }]); // the server knows the source even without an exported reason
@@ -43,7 +43,7 @@ test("pages liées : motifs courts et dédupliqués, sources communes nommées",
 
 test("pages liées : une destination déjà en rétrolien n'est pas répétée", () => {
 	const link = (id: string) => ({ id, title: id, type: "Concept" });
-	const out = relatedEntries([link("a"), link("b")], [{ ...link("a"), reasons: ["lien entrant"] }, { ...link("c"), reasons: ["tag partagé : x"] }]);
+	const out = relatedEntries([link("a"), link("b")], [{ ...link("a"), reasons: [{ kind: "in" as const }] }, { ...link("c"), reasons: [{ kind: "tag" as const, value: "x" }] }]);
 	expect(out).toEqual([{ id: "c", title: "c", type: "Concept", why: [{ icon: "tags", label: "x" }] }]);
 });
 

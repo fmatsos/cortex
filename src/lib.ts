@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { RelatedReason } from "../site/src/lib/types";
 import { fromResource, type Page, type RawSource, toPage, toRawSource } from "./doc";
 
 /** Error with a category the CLI maps to an exit code: `usage` → 2, anything else → 1. */
@@ -100,7 +101,7 @@ export function normUrl(u: string): string {
   } catch { return u; }
 }
 
-export type Related = { path: string; title: string; score: number; reasons: string[] };
+export type Related = { path: string; title: string; score: number; reasons: RelatedReason[] };
 
 /** Site-root folders a Markdown link can point into. */
 export const LINK_DIRS = ["wiki", "raw"] as const;
@@ -145,13 +146,13 @@ export function related(docs: Page[], path: string, graph: LinkGraph = linkGraph
   const hits: Related[] = [];
   for (const d of pages) {
     if (d === me) continue;
-    const reasons: string[] = [];
+    const reasons: RelatedReason[] = [];
     let score = 0;
-    const plus = (n: number, why: string) => { score += n; reasons.push(why); };
-    if (out?.has(d.path)) plus(3, "lien sortant");
-    if (inc?.has(d.path)) plus(3, "lien entrant");
-    for (const r of resources(d)) if (mine.has(r)) plus(2, `source partagée : ${r}`);
-    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, `tag partagé : ${t}`);
+    const plus = (n: number, why: RelatedReason) => { score += n; reasons.push(why); };
+    if (out?.has(d.path)) plus(3, { kind: "out" });
+    if (inc?.has(d.path)) plus(3, { kind: "in" });
+    for (const r of resources(d)) if (mine.has(r)) plus(2, { kind: "source", value: r });
+    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, { kind: "tag", value: t });
     if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
   }
   return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));

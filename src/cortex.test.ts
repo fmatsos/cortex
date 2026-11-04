@@ -533,6 +533,30 @@ async function mcpRoot() {
   return root;
 }
 
+// captured from the MCP `related` tool before reasons became structured (`related` on /wiki/concepts/a.md, mcpRoot fixture)
+const GOLDEN_MCP_RELATED = `[
+ {
+  "path": "/wiki/concepts/b.md",
+  "title": "Beta",
+  "score": 6,
+  "reasons": [
+   "lien sortant",
+   "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
+   "tag partagé : ctx"
+  ]
+ },
+ {
+  "path": "/wiki/entities/c.md",
+  "title": "Gamma",
+  "score": 6,
+  "reasons": [
+   "lien entrant",
+   "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
+   "tag partagé : llm"
+  ]
+ }
+]`;
+
 test("related : liens, rétroliens, sources et tags, classés par force", async () => {
   const { related } = await import("./mcp");
   const { readPages } = await import("./lib");
@@ -540,8 +564,11 @@ test("related : liens, rétroliens, sources et tags, classés par force", async 
   const a = related(docs, "/wiki/concepts/a.md");
   // B: outgoing link 3 + source 2 + tag ctx 1 = 6; C: incoming link 3 + source 2 + tag llm 1 = 6; index.md excluded
   expect(a.map((r) => r.path)).toEqual(["wiki/concepts/b.md", "wiki/entities/c.md"]);
-  expect(a[0]).toMatchObject({ score: 6, reasons: ["lien sortant", "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md", "tag partagé : ctx"] });
-  expect(a[1].reasons).toContain("lien entrant");
+  expect(a[0]).toMatchObject({ score: 6, reasons: [{ kind: "out" }, { kind: "source", value: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" }, { kind: "tag", value: "ctx" }] });
+  expect(a[1].reasons).toContainEqual({ kind: "in" });
+  // the MCP tool keeps handing the external agent the French text, byte for byte as before the structured reasons
+  const { relatedForAgent } = await import("./mcp");
+  expect(JSON.stringify(relatedForAgent(a), null, 1)).toBe(GOLDEN_MCP_RELATED);
   // no direct link: only the shared source (B and C have no common tag)
   expect(related(docs, "wiki/concepts/b.md").map((r) => [r.path, r.score])).toEqual([["wiki/concepts/a.md", 6], ["wiki/entities/c.md", 2]]);
   expect(() => related(docs, "/wiki/concepts/nope.md")).toThrow("introuvable");
@@ -618,7 +645,7 @@ test("cortex mcp : initialize, tools/list, search, get, add sans réseau (JSON-R
     expect(today[0]).toMatchObject({ kind: "add", sources: [added.id] });
     expect(today.every((e: any) => e.kind === "add")).toBe(true);
     expect((await call(11, "log", { kind: "inconnu" })).isError).toBe(true);
-    expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toContain("wiki/concepts/b.md");
+    expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toBe(GOLDEN_MCP_RELATED);
   } finally { proc.stdin.end(); proc.kill(); }
 });
 
@@ -765,6 +792,8 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(pageA.md).toStartWith("---\ntype: Concept\ntitle: Alpha");
   expect(pageA.md).toContain("resource: https://exemple.org/article");
   expect(pageA.md).toContain("Voir [Beta](/wiki/concepts/b.md#x)");
+  // related reasons are structured data; a shared source carries no value (raw/ is not published)
+  for (const r of pageA.related) for (const x of r.reasons) { expect(["out", "in", "source", "tag"]).toContain(x.kind); if (x.kind === "source") expect(x.value).toBeUndefined(); }
   // table of contents: h2/h3 headings with stable anchors (duplicate suffixed), reused by the HTML ids; occurrence count per note
   expect(pageA.toc.map((t: any) => [t.level, t.id, t.text])).toEqual([[2, "premiere-partie", "Première partie"], [3, "detail", "Détail"], [2, "premiere-partie-1", "Première partie"], [2, "notes", "Notes"]]);
   for (const t of pageA.toc) expect(pageA.html).toContain(`id="${t.id}"`);
