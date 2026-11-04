@@ -90,6 +90,23 @@ export function anchors(html: string): string {
   });
 }
 
+/**
+ * Tableaux : chacun est enveloppé dans un conteneur `.table-wrap`, la région qui défile (horizontalement, et verticalement
+ * pour un tableau haut). `tabindex="0"` la rend atteignable et défilable au clavier, `role="region"` et `aria-label` la nomment
+ * par le titre qui précède. Ajouté après l'assainissement : le contenu auteur ne peut ni écrire ces attributs ni cette classe.
+ */
+export function wrapTables(html: string): string {
+  const total = (html.match(/<table[\s>]/g) ?? []).length;
+  if (!total) return html;
+  let n = 0, heading = "";
+  return html.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>|<table[\s>][\s\S]*?<\/table>/g, (m, h?: string) => {
+    if (h !== undefined) { heading = plain(h); return m; }
+    n++;
+    const name = `Tableau${total > 1 ? ` ${n} sur ${total}` : ""}${heading ? ` : ${heading}` : ""}`;
+    return `<div class="table-wrap" role="region" tabindex="0" aria-label="${esc(name)}">${m}</div>`;
+  });
+}
+
 export function render(body: string, from: string, pages: Set<string>) {
   const defs = new Map<string, string>();
   const text = body.replace(/^\[\^([\w-]+)\]:[ \t]*(.*(?:\n[ \t]+\S.*)*)$/gm, (_, k, v) => (defs.set(k, v.replace(/\n[ \t]+/g, " ").trim()), ""));
@@ -99,13 +116,13 @@ export function render(body: string, from: string, pages: Set<string>) {
     const n = order.indexOf(k) + 1, c = (seen.set(k, (seen.get(k) ?? 0) + 1), seen.get(k));
     return `<sup class="fn-ref"><a href="#fn-${k}" id="fnref-${k}-${c}" aria-label="Note ${n}">${n}</a></sup>`;
   });
-  const html = anchors(noteCallouts(md(withRefs))).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
+  const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
     if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // pages de navigation du site
     if (!pages.has(page)) return `<span class="lien-manquant" title="${page.startsWith("raw/") ? "source brute, non publiée" : "page à écrire"}">${label}</span>`;
     return `<a href="${rel(from, route(page))}${frag && `#${frag}`}">${label}</a>`;
-  });
+  }));
   const notes: Note[] = order.map((k, i) => ({
     n: i + 1, id: k, refs: seen.get(k) ?? 1, // refs : nombre d'occurrences dans le texte (un retour ↩ par occurrence)
     html: defs.has(k) ? inline(defs.get(k)!) : "",
