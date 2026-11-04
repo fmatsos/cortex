@@ -1,12 +1,15 @@
 import { join } from "node:path";
-import { readDocs } from "./lib";
+import { isReservedPage, readDocs } from "./lib";
+import { warn } from "./style";
 import { writeLogMd } from "./log";
 
 const ORDER: [string, string][] = [["Concept", "Concepts"], ["Entity", "Entités"], ["Synthesis", "Synthèses"], ["Source", "Sources"]];
 
 /** wiki/index.md generated from the frontmatters (OKF-reserved: no frontmatter). */
 export async function renderIndex(root: string): Promise<string> {
-  const pages = (await readDocs(root, "wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
+  const read = await readDocs(root, "wiki");
+  for (const e of read.errors) warn(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
+  const pages = read.docs.filter((d) => !isReservedPage(d.path));
   let idx = "# Index\n";
   for (const [type, heading] of ORDER) {
     idx += `\n## ${heading}\n`;

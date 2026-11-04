@@ -72,7 +72,7 @@ export function buildServer(root: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de pages (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ path, limit }) => json(related(await readDocs(root, "wiki"), path).slice(0, limit ?? 10).map((r) => ({ ...r, path: `/${r.path}` })))));
+  }, safe(async ({ path, limit }) => json(related((await readDocs(root, "wiki")).docs, path).slice(0, limit ?? 10).map((r) => ({ ...r, path: `/${r.path}` })))));
 
   s.registerTool("lint", {
     description: "Contrôles mécaniques du wiki : erreurs et avertissements (liens cassés, orphelins, sources en attente, pages à relire…). Les contradictions entre pages restent à ta charge.",

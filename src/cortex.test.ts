@@ -181,7 +181,7 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
     expect(await Bun.file(urls).text()).toBe(`# commentaire\n\n${ko}\n`);
     expect(readdirSync(join(root, "inbox")).sort()).toEqual([".gitkeep", "urls.txt"]);
     const raws = (await import("./lib")).readDocs(root, "raw");
-    expect((await raws).map((d) => d.fm.note).sort()).toEqual(["", "ma note", "pourquoi je garde ça"]);
+    expect((await raws).docs.map((d) => d.fm.note).sort()).toEqual(["", "ma note", "pourquoi je garde ça"]);
     expect(out.some((l) => l.startsWith(`✗ ${ko}`))).toBe(true);
 
     // second run: only the failure comes back, nothing new
@@ -534,7 +534,7 @@ async function mcpRoot() {
 test("related : liens, rétroliens, sources et tags, classés par force", async () => {
   const { related } = await import("./mcp");
   const { readDocs } = await import("./lib");
-  const docs = await readDocs(await mcpRoot(), "wiki");
+  const { docs } = await readDocs(await mcpRoot(), "wiki");
   const a = related(docs, "/wiki/concepts/a.md");
   // B: outgoing link 3 + source 2 + tag ctx 1 = 6; C: incoming link 3 + source 2 + tag llm 1 = 6; index.md excluded
   expect(a.map((r) => r.path)).toEqual(["wiki/concepts/b.md", "wiki/entities/c.md"]);

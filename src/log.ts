@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
-import { localIso, RAW_ID, rawPath, readDocs, slugify } from "./lib";
+import { localIso, RAW_ID, isReservedPage, rawPath, readDocs, slugify } from "./lib";
 
 /**
  * Journal: wiki/log.jsonl (one entry per line, chronological order, append-only) is the source of truth;
@@ -64,7 +64,7 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
 /** Title of each wiki page (path → title): pages are named by their title, not by their file name. */
 export type Titles = Map<string, string>;
 export const pageTitles = async (root: string): Promise<Titles> =>
-  new Map((await readDocs(root, "wiki")).filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
+  new Map((await readDocs(root, "wiki")).docs.filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
 
 const words = (s: string) => `-${slugify(s, Infinity)}-`;
 /** The text already names the page: its file name or its title, whole words, ignoring accents and case. */
@@ -118,7 +118,7 @@ export async function logAdd(root: string, kind: string, text: string, sources: 
   const pp = pages.map((p) => {
     const rel = normalize(p.trim().replace(/^\/+/, ""));
     const abs = resolve(root, rel);
-    if (!abs.startsWith(wiki + sep) || !rel.endsWith(".md") || /^wiki\/(index|log)\.md$/.test(rel) || !existsSync(abs)) throw new Error(`page introuvable sous wiki/ : ${p}`);
+    if (!abs.startsWith(wiki + sep) || !rel.endsWith(".md") || isReservedPage(rel) || !existsSync(abs)) throw new Error(`page introuvable sous wiki/ : ${p}`);
     return rel.split(sep).join("/");
   });
   for (const s of sources)

@@ -5,15 +5,14 @@ import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { newestFirst, readLog } from "./log";
-import { type Doc, parseDoc, rawPath, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
+import { type Doc, isReservedPage, parseDoc, rawPath, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 import { sanitizeHtml } from "./sanitize";
-import { paint } from "./style";
+import { paint, warn } from "./style";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
 const iso = (x: unknown) => (x == null ? undefined : x instanceof Date ? x.toISOString() : String(x));
 const stamp = (x: any) => (x?.at ? { by: String(x.by ?? ""), at: iso(x.at)! } : undefined);
-const isWiki = (d: Doc) => !/^wiki\/(index|log)\.md$/.test(d.path);
 const route = (path: string) => `${path.replace(/\.md$/, "")}/`; // wiki/concepts/x.md → wiki/concepts/x/
 const id = (path: string) => path.replace(/^wiki\//, "").replace(/\.md$/, "");
 
@@ -199,8 +198,10 @@ export function graphLinks(directed: Set<string>): GraphData["links"] {
   return out;
 }
 
-export async function buildSiteData(root: string) {
-  const docs = (await readDocs(root, "wiki")).filter(isWiki).sort((a, b) => a.path.localeCompare(b.path));
+export async function buildSiteData(root: string, say: (m: string) => void = warn) {
+  const read = await readDocs(root, "wiki");
+  for (const e of read.errors) say(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
+  const docs = read.docs.filter((d) => !isReservedPage(d.path)).sort((a, b) => a.path.localeCompare(b.path));
   const paths = new Set<string>(docs.map((d) => d.path));
   const byPath = new Map(docs.map((d) => [d.path, d]));
   const link = (d: Doc): Link => ({ id: id(d.path), title: String(d.fm.title ?? id(d.path)), type: String(d.fm.type ?? "") });
@@ -307,7 +308,7 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   checkOut(root, out);
   const t0 = performance.now();
   const dataDir = join(root, ".cortex/site-data");
-  const { data, graph, search } = await buildSiteData(root);
+  const { data, graph, search } = await buildSiteData(root, say);
   mkdirSync(dataDir, { recursive: true });
   const parts: string[] = [];
   const size = async (name: string, v: unknown) => { const s = JSON.stringify(v); parts.push(s); await Bun.write(join(dataDir, name), s); return s.length; };

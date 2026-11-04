@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseDoc, slugify, type Doc } from "./lib";
+import { isReservedPage, readDocs, slugify } from "./lib";
 import { naming } from "./naming";
 import { pattern } from "./template";
 import { readLog, renderLogMd } from "./log";
@@ -13,21 +13,11 @@ const time = (x: unknown) => (x == null ? NaN : new Date(x as any).getTime()); /
 export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   const out: Issue[] = [];
   const push = (level: Issue["level"], path: string, msg: string) => out.push({ level, path, msg });
-  // file by file: an invalid YAML is reported without stopping the lint
-  const safe = async (dir: string) => {
-    const docs: Doc[] = [];
-    if (!existsSync(join(root, dir))) return docs;
-    for (const f of new Bun.Glob("**/*.md").scanSync(join(root, dir))) {
-      const path = `${dir}/${f}`;
-      try { docs.push(parseDoc(path, await Bun.file(join(root, path)).text())); }
-      catch (e) { push("error", path, `YAML invalide : ${(e as Error).message.split("\n")[0]}`); }
-    }
-    return docs;
-  };
-
   const tpl = await naming(root), pagePat = pattern(tpl.page_path), rawPat = pattern(tpl.raw_path);
-  const wiki = (await safe("wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
-  const raw = await safe("raw");
+  const [w, r] = [await readDocs(root, "wiki"), await readDocs(root, "raw")];
+  for (const e of [...w.errors, ...r.errors]) push("error", e.path, `YAML invalide : ${e.msg}`);
+  const wiki = w.docs.filter((d) => !isReservedPage(d.path));
+  const raw = r.docs;
   const inbound = new Map<string, number>();
   const cites = new Map<string, string[]>(); // raw resource → Source pages that cite it
   const titles = new Map<string, string>();
