@@ -133,6 +133,10 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à brain", async (
   expect(ok("Bash", { command: "brain log add update \"x `id`\"" })).toBe(false);
   expect(ok("Bash", { command: "brain log add update \"x\" ; rm -rf wiki" })).toBe(false); // chaînage
   expect(ok("Bash", { command: "brain log add update \"x\" && brain index" })).toBe(false);
+  // guillemet échappé hors guillemets : le shell y voit un caractère littéral, pas une chaîne — ce qui suit s'exécuterait
+  expect(ok("Bash", { command: "brain search \\'; touch /tmp/pwn; \\'" })).toBe(false);
+  expect(ok("Bash", { command: 'brain search \\"; touch /tmp/pwn; \\"' })).toBe(false);
+  expect(ok("Bash", { command: "brain search a\\ b" })).toBe(false);
   expect(ok("Bash", { command: "brain log add update \"x" })).toBe(false); // guillemet non fermé
   expect(ok("Bash", { command: "brain log add update x > wiki/log.jsonl" })).toBe(false);
   expect(ok("Bash", { command: "brain log add update \"x\"\nrm -rf wiki" })).toBe(false);

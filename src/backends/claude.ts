@@ -62,12 +62,13 @@ export type Verdict = { allow: true } | { allow: false; reason: string };
 /**
  * Remplace chaque chaîne entre guillemets par `Q` : le shell la prend pour du texte (celui d'une entrée de journal
  * contient `;`, `|`, `>`…). Refusé (undefined) : guillemet non fermé, ou `$`, accent grave, `\` dans des guillemets
- * doubles (l'expansion s'y exécuterait). Les guillemets simples sont littéraux.
+ * doubles (l'expansion s'y exécuterait), ou `\` hors guillemets (échappement d'un guillemet). Les guillemets simples sont littéraux.
  */
 export function unquote(cmd: string): string | undefined {
   let out = "";
   for (let i = 0; i < cmd.length; i++) {
     const q = cmd[i];
+    if (q === "\\") return undefined; // hors guillemets, \' ou \" serait un guillemet littéral pour le shell, et ce qui suit, une commande
     if (q !== "'" && q !== '"') { out += q; continue; }
     const j = cmd.indexOf(q, i + 1);
     if (j < 0 || (q === '"' && /[$`\\]/.test(cmd.slice(i + 1, j)))) return undefined;
