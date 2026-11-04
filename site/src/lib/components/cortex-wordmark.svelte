@@ -30,21 +30,21 @@
 			fill: none;
 			/* même lumière que dans le logo : la couleur du fond, qui file à l'intérieur du tracé */
 			stroke: var(--background, #fff);
-			stroke-width: 9;
+			stroke-width: 6;
 			stroke-linecap: round;
 			stroke-linejoin: round;
 		}
 		.trace tspan {
-			stroke-dasharray: 70 600;
-			stroke-dashoffset: 670;
+			stroke-dasharray: 45 600;
+			stroke-dashoffset: 645;
 			opacity: 0;
 			animation: lettre 4s ease-in-out infinite;
 		}
 	}
 	@keyframes lettre {
-		0% { stroke-dashoffset: 670; opacity: 0; }
-		2% { opacity: 0.85; }
-		16% { stroke-dashoffset: 0; opacity: 0.85; }
+		0% { stroke-dashoffset: 645; opacity: 0; }
+		2% { opacity: 0.4; }
+		16% { stroke-dashoffset: 0; opacity: 0.4; }
 		18%, 100% { stroke-dashoffset: 0; opacity: 0; }
 	}
 </style>

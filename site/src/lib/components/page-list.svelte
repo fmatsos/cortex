@@ -9,7 +9,7 @@
 	 * `filter` : filtre par type (quand la liste en mélange plusieurs), utile sur une page de tag ; faux pour une liste déjà d'un seul type.
 	 */
 	type P = { id: string; type: string; title: string; description: string; status: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
-	let { pages, filter = true, showFav = false }: { pages: P[]; filter?: boolean; showFav?: boolean } = $props();
+	let { pages, filter = true, showFav = false, showType = true }: { pages: P[]; filter?: boolean; showFav?: boolean; showType?: boolean } = $props();
 
 	let only = $state("");
 	const types = $derived(TYPES.map((t) => t.type).filter((t) => pages.some((p) => p.type === t)));
@@ -35,6 +35,6 @@
 
 <ul class="divide-border divide-y">
 	{#each shown as p (p.id)}
-		<li class="py-3.5"><ResultRow doc={p} href={toPage(p.id)} {showFav} /></li>
+		<li class="py-3.5"><ResultRow doc={p} href={toPage(p.id)} {showFav} {showType} /></li>
 	{/each}
 </ul>

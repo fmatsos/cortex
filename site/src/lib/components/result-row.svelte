@@ -16,10 +16,10 @@
 	 */
 	type RowDoc = { id: string; type: string; title: string; description?: string; status?: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
 	let {
-		doc, href, titleHtml, descriptionHtml, snippetHtml, compact = false, selected = false, showFav = false, onopen,
+		doc, href, titleHtml, descriptionHtml, snippetHtml, compact = false, selected = false, showFav = false, showType = true, onopen,
 	}: {
 		doc: RowDoc; href?: string; titleHtml?: string; descriptionHtml?: string; snippetHtml?: string;
-		compact?: boolean; selected?: boolean; showFav?: boolean; onopen?: () => void;
+		compact?: boolean; selected?: boolean; showFav?: boolean; showType?: boolean; onopen?: () => void;
 	} = $props();
 	const fav = $derived(favs.has(doc.id));
 	const showStatus = $derived(!!doc.status && doc.status !== "stable");
@@ -60,8 +60,9 @@
 			<div class="text-base">
 				{#if href}<a {href} class="text-link link-content font-medium underline-offset-4 hover:underline" onclick={onopen}>{@render title()}</a>{:else}<span class="font-medium">{@render title()}</span>{/if}
 			</div>
-			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-				<TypeBadge type={doc.type} />
+			<!-- showType=false dans une liste déjà regroupée par type (colonnes de l'accueil) ; ligne masquée si vide -->
+			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 empty:hidden">
+				{#if showType}<TypeBadge type={doc.type} />{/if}
 				{@render trust()}
 			</div>
 			{#if desc}<p class="text-muted-foreground mt-1.5 text-[0.9375rem] leading-relaxed">{@html desc}</p>{/if}
