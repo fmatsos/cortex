@@ -41,3 +41,19 @@ test("REL-13 : hors dépôt git, un avertissement est émis une seule fois", asy
   await changed(root, (m) => msgs.push(m));
   expect(msgs.filter((m) => m.level === "warn" && m.text.includes("pas de dépôt git : le périmètre de l'agent n'est pas vérifié"))).toHaveLength(1);
 });
+
+test("REL-30 : racine du wiki dans un sous-dossier d'un dépôt plus grand", async () => {
+  const top = mkdtempSync(join(tmpdir(), "cortex-scope-sub-"));
+  sh(top, "git", "init", "-q");
+  const root = join(top, "brain");
+  for (const f of ["brain/wiki/a.md", "brain/raw/y.md", "autre/z.md"]) put(top, f);
+  sh(top, "git", "add", "-A");
+  sh(top, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
+  const before = await changed(root);
+  expect([...before.keys()]).toEqual([]);
+  put(top, "autre/z.md", "modifié hors de la racine"); // elsewhere in the repository: not reported
+  put(root, "wiki/b.md");
+  put(root, "raw/x.md");
+  expect([...(await changed(root)).keys()].sort()).toEqual(["raw/x.md", "wiki/b.md"]); // root-relative paths
+  expect(await outOfScope(root, before)).toEqual(["raw/x.md"]);
+});

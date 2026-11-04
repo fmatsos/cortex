@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
@@ -8,6 +8,8 @@ import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
 import { type Page, type RawFm, type Stamp, pageId, pageRoute, toRawSource, toResource } from "./doc";
 import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
+import { collator } from "./text";
+import { isUnder } from "./paths";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 
@@ -30,7 +32,6 @@ const unesc = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").repla
 /** Markdown → sanitized HTML (whitelist, see sanitize.ts): the site injects it with `{@html}`, so nothing else comes out. */
 export const md = (s: string) => sanitizeHtml(Bun.markdown.html(s, { tagFilter: true, headings: { ids: true }, autolinks: true }));
 /** List sort: French alphabetical order of the visible titles, not path order. */
-const collator = new Intl.Collator("fr");
 export const byTitle = (a: { title: string; id?: string }, b: { title: string; id?: string }) => collator.compare(a.title, b.title) || collator.compare(a.id ?? "", b.id ?? "");
 const inline = (s: string) => md(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
 export const plain = (html: string) => unesc(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
@@ -110,15 +111,25 @@ export function wrapTables(html: string): string {
 /** The `<a href="/wiki/…">` / `/raw/…` links of rendered HTML (same prefix as the Markdown scan, see `linkPrefix`). */
 const HTML_LINK = new RegExp(`<a href="(${linkPrefix(...LINK_DIRS)}[^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`, "g");
 
+/** Fenced code block (``` or ~~~), up to its closing fence or the end of the text. */
+const FENCE = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm;
+/** Inline code span: a backtick run, a body without blank line, the same run again. */
+const INLINE_CODE = /(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])+?(?<!`)\1(?!`)/g;
+
 export function render(body: string, from: string, pages: Set<string>) {
+  // code is set aside first: footnote definitions and markers are rewritten outside code only, then the code is put back untouched
+  const code: string[] = [];
+  const stash = (m: string) => `\u0000${code.push(m) - 1}\u0000`;
+  const restore = (s: string) => s.replace(/\u0000(\d+)\u0000/g, (_, i) => code[+i]);
   const defs = new Map<string, string>();
-  const text = body.replace(/^\[\^([\w-]+)\]:[ \t]*(.*(?:\n[ \t]+\S.*)*)$/gm, (_, k, v) => (defs.set(k, v.replace(/\n[ \t]+/g, " ").trim()), ""));
+  const text = body.replace(FENCE, stash).replace(INLINE_CODE, stash)
+    .replace(/^\[\^([\w-]+)\]:[ \t]*(.*(?:\n[ \t]+\S.*)*)$/gm, (_, k, v) => (defs.set(k, v.replace(/\n[ \t]+/g, " ").trim()), ""));
   const order: string[] = [], seen = new Map<string, number>();
-  const withRefs = text.replace(/\[\^([\w-]+)\](?!:)/g, (_, k) => {
+  const withRefs = restore(text.replace(/\[\^([\w-]+)\](?!:)/g, (_, k) => {
     if (!order.includes(k)) order.push(k);
     const n = order.indexOf(k) + 1, c = (seen.set(k, (seen.get(k) ?? 0) + 1), seen.get(k));
     return `<sup class="fn-ref"><a href="#fn-${k}" id="fnref-${k}-${c}" aria-label="Note ${n}">${n}</a></sup>`;
-  });
+  }));
   const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(HTML_LINK, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
@@ -128,7 +139,7 @@ export function render(body: string, from: string, pages: Set<string>) {
   }));
   const notes: Note[] = order.map((k, i) => ({
     n: i + 1, id: k, refs: seen.get(k) ?? 1, // refs: number of occurrences in the text (one ↩ back-link per occurrence)
-    html: defs.has(k) ? inline(defs.get(k)!) : "",
+    html: defs.has(k) ? inline(restore(defs.get(k)!)) : "",
   }));
   const toc = [...html.matchAll(/<h([23]) id="([^"]+)">([\s\S]*?)<\/h\1>/g)].map((m) => ({ level: +m[1] as 2 | 3, id: m[2], text: plain(m[3]) }));
   const warnings = [...html.matchAll(/<aside class="callout-warning"[^>]*>([\s\S]*?)<\/aside>/g)].map((m) => plain(m[1].replace(/<p class="callout-warning-titre">[^<]*<\/p>/, "")));
@@ -141,11 +152,10 @@ export function render(body: string, from: string, pages: Set<string>) {
  */
 function rawReader(root: string) {
   const cache = new Map<string, RawFm | undefined>();
-  let rawDir: string | undefined; // real path of raw/ (resolved once), the only place a source may be read from
   const fm = (resource: string): RawFm | undefined => {
     if (cache.has(resource)) return cache.get(resource);
     const f = join(root, resource);
-    const v = existsSync(f) && realpathSync(f).startsWith((rawDir ??= realpathSync(join(root, "raw")) + sep)) ? toRawSource(parseDoc(f, readFileSync(f, "utf8"))).fm : undefined;
+    const v = existsSync(f) && isUnder(root, "raw", f) ? toRawSource(parseDoc(f, readFileSync(f, "utf8"))).fm : undefined;
     cache.set(resource, v);
     return v;
   };

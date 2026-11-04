@@ -1,5 +1,5 @@
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { isUnder } from "../paths";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
@@ -52,19 +52,8 @@ const CORTEX_CMD = { read: toRegex("read"), write: toRegex("write") };
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-/** Real path (symlinks resolved), including for a file not yet created. */
-function real(p: string): string {
-  let cur = p;
-  const tail: string[] = [];
-  while (!existsSync(cur) && dirname(cur) !== cur) { tail.unshift(cur.slice(dirname(cur).length + 1)); cur = dirname(cur); }
-  return join(realpathSync(cur), ...tail);
-}
-
-const inside = (p: string, dir: string) => p === dir || p.startsWith(dir + sep);
-
 /** Reads (Read, Glob, Grep, LS) are confined to the wiki root: every path argument, symlinks resolved. */
 function readViolation(root: string, tool: string, input: Record<string, any>): string | undefined {
-  const rr = real(root);
   const base = String(input.path ?? root);
   const paths = [base];
   if (input.file_path !== undefined) paths.push(String(input.file_path));
@@ -73,7 +62,7 @@ function readViolation(root: string, tool: string, input: Record<string, any>): 
     const pre = input.pattern.split(/[*?[{]/)[0];
     paths.push(isAbsolute(pre) ? pre : join(isAbsolute(base) ? base : resolve(root, base), pre));
   }
-  return paths.find((p) => p.startsWith("~") || !inside(real(isAbsolute(p) ? p : resolve(root, p)), rr));
+  return paths.find((p) => p.startsWith("~") || !isUnder(root, ".", p, { self: true }));
 }
 
 export type Verdict = { allow: true } | { allow: false; reason: string };
@@ -115,8 +104,7 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
     if (mode === "read") return { allow: false, reason: "Lecture seule : relance avec --file pour écrire une synthèse." };
     const p = String(input.file_path ?? input.notebook_path ?? "");
     if (!p) return { allow: false, reason: "Chemin manquant." };
-    const target = real(isAbsolute(p) ? p : resolve(root, p));
-    return target.startsWith(real(join(root, "wiki")) + sep) ? { allow: true }
+    return isUnder(root, "wiki", p) ? { allow: true }
       : { allow: false, reason: `Écriture refusée hors de wiki/ : ${p}` };
   }
   return { allow: false, reason: `Outil non autorisé pour cortex : ${tool}` };

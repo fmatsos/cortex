@@ -42,7 +42,7 @@ async function fixture() {
   await w(wiki("concepts", 2), page(
     { type: "Concept", title: "Beta", description: "D.", tags: "[llms]", generated: "{ by: x, at: 2026-11-04T11:00:00+01:00 }", verified: "{ by: y, at: 2026-11-04T10:00:00+01:00 }", stale_after: "2026-06-01T00:00:00+00:00" },
     `Voir [Alpha](/${wiki("concepts", 1)}#x) et [cassé](/${wiki("concepts", 99)}). Fait.[^zz]`)); // near-synonym tag, broken link, footnote without entry, modified since review, stale
-  await w(wiki("concepts", 3), page({ type: "Concept", title: "alpha", description: "D.", generated: S }, "Rien.")); // duplicate title, orphan, never reviewed
+  await w(wiki("concepts", 3), page({ type: "Concept", title: "alpha", description: "D.", generated: S }, "Rien. Voir [Beta](../concepts/beta.md).")); // duplicate title, orphan, never reviewed, relative .md link
   await w(wiki("concepts", 4), page({ type: undefined, title: "Gamma", generated: S }, `Voir [Alpha](/${wiki("concepts", 1)}).`)); // missing type and description
   await w(wiki("concepts", 5), page({ type: "Concept", title: "Delta", description: "D.", tags: "[context]", generated: S, sources: `\n  - id: a\n    resource: /${raw(99)}\n  - id: b` }, `Voir [Alpha](/${wiki("concepts", 1)}).[^a]`)); // missing resource files, same tag as Alpha
   // REL-16: type outside the four, status outside the three, tags that is not a list, missing title
@@ -83,6 +83,7 @@ test("T9: lint snapshot on a fixture wiki exercising every rule", async () => {
     ["warning", `wiki/concepts/${id(2)}.md`, "tags quasi synonymes : « llm » et « llms »"],
     ["info", `wiki/concepts/${id(3)}.md`, "jamais relue"],
     ["warning", `wiki/concepts/${id(3)}.md`, `doublon probable de wiki/concepts/${id(1)}.md (même titre)`],
+    ["warning", `wiki/concepts/${id(3)}.md`, "lien relatif vers un .md : ../concepts/beta.md (utilise un lien depuis la racine : /wiki/….md)"],
     ["warning", `wiki/concepts/${id(3)}.md`, "orpheline : aucun lien entrant"],
     ["error", `wiki/concepts/${id(4)}.md`, "description manquante"],
     ["error", `wiki/concepts/${id(4)}.md`, "type manquant"],
