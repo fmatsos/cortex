@@ -409,6 +409,10 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(files(out2)).toEqual(files(out));
   for (const f of files(out)) expect(readFileSync(join(out2, f), "utf8")).toBe(readFileSync(join(out, f), "utf8"));
 
+  // hors ligne : le service worker précache les pages, leurs données, l'index de recherche et le graphe (comparé plus haut : reproductible)
+  const sw = html("service-worker.js");
+  for (const p of ["graph.json", "search-index.json", "wiki/concepts/a/", "wiki/concepts/a/__data.json", "_app/immutable/"]) expect(sw).toContain(p);
+
   const graph = JSON.parse(html("graph.json"));
   expect(graph.nodes.map((n: any) => n.id).sort()).toEqual(["concepts/a", "concepts/b", "entities/c", "sources/s"]);
   expect(graph.nodes.find((n: any) => n.id === "concepts/a")).toMatchObject({ type: "Concept", tags: ["alpha"], degree: 3 });

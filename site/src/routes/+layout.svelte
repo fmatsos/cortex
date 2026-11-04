@@ -4,6 +4,7 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { theme } from "#lib/theme.svelte.js";
 	import SearchBox from "#lib/components/search-box.svelte";
+	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import { toRoute } from "#lib/links.js";
 
 	let { children } = $props();
@@ -32,3 +33,5 @@
 <main id="contenu" class="mx-auto max-w-6xl px-4 py-8">
 	{@render children()}
 </main>
+
+<OfflineStatus />
