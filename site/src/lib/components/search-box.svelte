@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { goto } from "$app/navigation";
+	import { afterNavigate, goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { favs } from "#lib/favs.svelte.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { fold } from "#lib/fold.js";
-	import { type Engine, loadEngine, search, suggest } from "#lib/search-client.js";
+	import { parseQuery, wantsFav } from "#lib/query.js";
+	import { type Engine, esc, loadEngine, search, suggest } from "#lib/search-client.js";
 	import { theme } from "#lib/theme.svelte.js";
 	import { typeLabel } from "#lib/type-meta.js";
 	import type { SearchDoc } from "#lib/types.js";
@@ -22,15 +23,20 @@
 	let input = $state<HTMLInputElement | null>(null);
 	let mac = $state(false);
 	let notice = $state("");
+	let failed = $state(false); // l'index de recherche n'a pas pu être chargé
 	const uid = $props.id(); // identifiant stable : le HTML prérendu est identique à chaque export
 	const listId = `sb-${uid}`;
 
 	onMount(() => { mac = /mac|iphone|ipad/i.test(navigator.platform); });
-	const warm = () => void loadEngine().then((e) => (engine = e));
+	const warm = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
+	// depuis l'en-tête, une navigation vers /search/ (envoi, précédent, suivant) reprend la requête de l'URL
+	afterNavigate((nav) => {
+		if (global && !nav.shallow && nav.to?.url.pathname === toRoute("/search")) value = nav.to.url.searchParams.get("q") ?? "";
+	});
 	const abs = (rel: string) => new URL(rel, location.href).href;
 	const flash = (m: string) => { notice = m; setTimeout(() => (notice = ""), 1800); };
 
-	type Item = { key: string; kind: "filtre" | "terme" | "page" | "commande"; html: string; sub?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
+	type Item = { key: string; kind: "filtre" | "terme" | "page" | "commande" | "tous"; html: string; sub?: string; snippet?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
 	const commands = $derived<Item[]>([
 		["c:graph", "Aller au graphe", () => goto(toRoute("/graph"))],
 		["c:log", "Aller au journal", () => goto(toRoute("/log"))],
@@ -60,15 +66,19 @@
 		out.push(...filters.map(filter));
 		for (const t of terms) out.push({ key: `t:${t}`, kind: "terme", html: t, run: () => { value = t; input?.focus(); } });
 		const seen = new Set<string>();
-		const page = (d: SearchDoc, html: string) => {
+		const page = (d: SearchDoc, html: string, snippet?: string) => {
 			if (seen.has(d.id) || seen.size >= 6) return;
 			seen.add(d.id);
-			out.push({ key: `p:${d.id}`, kind: "page", html, sub: typeLabel(d.type), doc: d, run: (newTab) => { open = false; newTab ? window.open(abs(toPage(d.id)), "_blank", "noopener") : goto(toPage(d.id)); } });
+			out.push({ key: `p:${d.id}`, kind: "page", html, snippet, sub: typeLabel(d.type), doc: d, run: (newTab) => { open = false; newTab ? window.open(abs(toPage(d.id)), "_blank", "noopener") : goto(toPage(d.id)); } });
 		};
-		for (const d of titles) page(d, d.title.replace(/&/g, "&amp;").replace(/</g, "&lt;"));
-		if (!live) for (const h of search(engine, value, has, 6)) page(h.doc, h.title);
+		const { hits, total } = live ? { hits: [], total: 0 } : search(engine, value, has, 6);
+		const found = new Map(hits.map((h) => [h.doc.id, h.snippet]));
+		for (const d of titles) page(d, esc(d.title), found.get(d.id) ?? esc(d.description));
+		for (const h of hits) page(h.doc, h.title, h.snippet);
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((t) => fold(c.html).includes(t))) out.push(c);
+		// accès toujours visible (pied collant) à la liste complète, avec son total exact
+		if (total > 0) out.push({ key: "all", kind: "tous", html: `Tous les résultats pour « ${esc(q)} »`, sub: `${total} page${total > 1 ? "s" : ""}`, run: () => submit() });
 		return out;
 	});
 
@@ -80,7 +90,19 @@
 	const copy = async (d: SearchDoc) => {
 		try { await navigator.clipboard.writeText(abs(toPage(d.id))); flash("Lien copié"); } catch { flash("Copie impossible"); }
 	};
-	const cur = $derived(items[active]);
+	// message à la place d'une liste vide (dans la palette seulement : la page de résultats affiche les siens)
+	const state = $derived.by(() => {
+		if (live || !open || !value.trim()) return undefined;
+		if (failed) return "error";
+		if (!engine) return "loading";
+		if (items.length) return undefined;
+		return wantsFav(parseQuery(value)) && !favs.ids.length ? "nofav" : "none";
+	});
+	const reset = () => { value = ""; input?.focus(); };
+	// l'option active doit exister dans la liste affichée (la liste peut changer sans saisie) et rester visible
+	const act = $derived(open && active < items.length ? active : -1);
+	const cur = $derived(items[act]);
+	$effect(() => { if (cur) document.getElementById(`${listId}-${act}`)?.scrollIntoView({ block: "nearest" }); });
 
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -88,7 +110,7 @@
 			e.preventDefault();
 			open = true;
 			const n = items.length, d = e.key === "ArrowDown" ? 1 : -1;
-			active = active < 0 ? (d > 0 ? 0 : n - 1) : (active + d + n) % n;
+			active = act < 0 ? (d > 0 ? 0 : n - 1) : (act + d + n) % n;
 		} else if (e.key === "Enter") {
 			e.preventDefault();
 			if (open && cur) cur.run(e.ctrlKey || e.metaKey);
@@ -128,33 +150,38 @@
 		aria-expanded={open && items.length > 0}
 		aria-controls={listId}
 		aria-autocomplete="list"
-		aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
+		aria-activedescendant={act >= 0 ? `${listId}-${act}` : undefined}
 		autocomplete="off"
 		spellcheck="false"
 		class="pr-14"
-		onfocus={() => { warm(); open = true; }}
+		onfocus={() => { if (!engine) warm(); open = true; }}
 		onblur={() => { open = false; active = -1; }}
-		oninput={() => { warm(); open = true; active = -1; }}
+		oninput={() => { if (!engine && !failed) warm(); open = true; active = -1; }}
 		{onkeydown}
 	/>
 	{#if global && !value}
 		<kbd class="text-muted-foreground pointer-events-none absolute top-1/2 right-2 hidden -translate-y-1/2 rounded border px-1.5 text-xs sm:block">{mod} K</kbd>
 	{/if}
-	{#if open && (items.length || value.trim())}
+	{#if open && (items.length || (!live && value.trim()))}
 		<div class="bg-popover text-popover-foreground absolute right-0 z-50 mt-1 w-[min(34rem,calc(100vw-2rem))] rounded-lg border p-1 shadow-lg">
 			{#if !live}<FilterChips bind:value class="px-1.5 pt-1 pb-1.5" />{/if}
-			<ul id={listId} role="listbox" aria-label="Suggestions" class="max-h-96 overflow-auto">
+			<ul id={listId} role="listbox" aria-label="Suggestions" class="max-h-96 scroll-pb-10 overflow-auto">
 				{#each items as item, i (item.key)}
-					{@const sel = i === active}
+					{@const sel = i === act}
 					<!-- mousedown plutôt que click : le champ garde le focus, donc la liste ne se ferme pas avant l'action -->
-					<li id="{listId}-{i}" role="option" aria-selected={sel} class="cursor-pointer rounded-md px-2 py-1.5 text-sm {sel ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}" onmousedown={(e) => { e.preventDefault(); item.run(e.ctrlKey || e.metaKey); }}>
+					<li id="{listId}-{i}" role="option" aria-selected={sel} class="cursor-pointer rounded-md px-2 py-1.5 text-sm {sel ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'} {item.kind === 'tous' ? `sticky bottom-0 mt-1 border-t font-medium ${sel ? '' : 'bg-popover'}` : ''}" onmousedown={(e) => { e.preventDefault(); item.run(e.ctrlKey || e.metaKey); }}>
 						<div class="flex items-baseline justify-between gap-3">
-							<span class="min-w-0 truncate">
+							<span class="min-w-0 {sel ? 'line-clamp-2' : 'truncate'}">
 								{#if item.kind === "terme"}<span class="text-muted-foreground">Terme · </span>{:else if item.kind === "filtre"}<span class="text-muted-foreground">Filtre · </span>{:else if item.kind === "commande"}<span class="text-muted-foreground">Commande · </span>{/if}
 								{#if item.doc && favs.has(item.doc.id)}<span aria-label="favori" class="text-amber-500">★ </span>{/if}{@html item.html}
 							</span>
-							{#if item.sub}<span class="text-muted-foreground shrink-0 text-xs">{item.sub}</span>{/if}
+							<span class="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs">
+								{#if item.doc?.status === "draft"}<span class="rounded border px-1">brouillon</span>{/if}
+								{#if item.doc?.needsReview}<span class="rounded border border-amber-500/60 px-1">à relire</span>{/if}
+								{#if item.sub}<span>{item.sub}</span>{/if}
+							</span>
 						</div>
+						{#if item.snippet}<p class="text-muted-foreground mt-0.5 text-xs {sel ? 'line-clamp-2' : 'line-clamp-1'}">{@html item.snippet}</p>{/if}
 						{#if sel && item.doc}
 							<div class="text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
 								<span><kbd class="rounded border px-1">↵</kbd> ouvrir</span>
@@ -166,6 +193,16 @@
 					</li>
 				{/each}
 			</ul>
+			{#if state}
+				<div class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-3 text-sm" role="status">
+					{#if state === "loading"}Chargement de l'index…
+					{:else if state === "error"}Index de recherche indisponible.<button type="button" tabindex="-1" class="text-foreground underline underline-offset-4" onmousedown={(e) => { e.preventDefault(); warm(); }}>Réessayer</button>
+					{:else}
+						{state === "nofav" ? "Aucun favori : ajoutez-en avec l'étoile ★ d'une page." : `Aucun résultat pour « ${value.trim()} ».`}
+						<button type="button" tabindex="-1" class="text-foreground underline underline-offset-4" onmousedown={(e) => { e.preventDefault(); reset(); }}>Réinitialiser</button>
+					{/if}
+				</div>
+			{/if}
 			{#if notice}<p class="text-muted-foreground px-2 py-1 text-xs" role="status">{notice}</p>{/if}
 		</div>
 	{/if}

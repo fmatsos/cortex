@@ -52,8 +52,28 @@ export function parseQuery(q: string): Parsed {
 
 export const isEmpty = (p: Parsed) => !p.words.length && !p.phrases.length && !p.exclude.length && !p.ops.length;
 
-/** Retire de la requête la puce (jeton brut) `raw`, en nettoyant les espaces. */
-export const removeToken = (q: string, raw: string) => q.replace(raw, "").replace(/\s{2,}/g, " ").trimStart();
+/** Retire de la requête toutes les occurrences du jeton brut `raw` (jeton entier : `#llm` ne touche pas `#llm2`), en nettoyant les espaces. */
+export const removeToken = (q: string, raw: string) =>
+	q.replace(new RegExp(`(^|\\s)${raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`, "g"), "").replace(/\s{2,}/g, " ").trimStart();
+
+/** Puce de filtre : un libellé et le ou les jetons de la saisie qu'elle représente (un filtre répété donne une seule puce). */
+export type Chip = { label: string; raws: string[] };
+export function chips(p: Parsed): Chip[] {
+	const out = new Map<string, Chip>();
+	const all: [string, string][] = [
+		...p.ops.map((o): [string, string] => [`${o.neg ? "sans " : ""}${o.key === "tag" ? "#" : `${o.key}:`}${o.value}`, o.raw]),
+		...p.phrases.map((x): [string, string] => [`« ${x.text} »`, x.raw]),
+		...p.exclude.map((x): [string, string] => [`sans ${x.text}`, x.raw]),
+	];
+	for (const [label, raw] of all) {
+		const c = out.get(label);
+		if (c) c.raws.push(raw); else out.set(label, { label, raws: [raw] });
+	}
+	return [...out.values()];
+}
+
+/** La requête demande les favoris (`is:fav`, non nié). */
+export const wantsFav = (p: Parsed) => p.ops.some((o) => o.key === "is" && o.value === "fav" && !o.neg);
 
 export type Doc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; text: string };
 
