@@ -36,6 +36,56 @@ test("add → index → search, idempotent", async () => {
   expect((await search(root, "hydroponie", { in: "raw" }))[0].path).toContain(a.id);
 });
 
+test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", async () => {
+  const { inbox } = await import("./inbox");
+  const { existsSync, readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  await Bun.write(join(root, "BRAIN.md"), "");
+  const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante mots exigé par brain add, sans réseau.</p>".repeat(4)}</article></body></html>`;
+  const srv = Bun.serve({ port: 0, fetch: (req) => new URL(req.url).pathname === "/ok" ? new Response(page, { headers: { "content-type": "text/html" } }) : new Response("non", { status: 404 }) });
+  const sources = () => (existsSync(join(root, "raw")) ? readdirSync(join(root, "raw"), { recursive: true }) : []).filter((f) => String(f).endsWith("source.md")).length;
+  const urls = join(root, "inbox/urls.txt");
+  const [ok, ko] = [`${srv.url}ok`, `${srv.url}ko`];
+  const log = console.log, err = console.error; // sorties du CLI : rendues muettes
+  const out: string[] = [];
+  console.log = (...a) => void out.push(a.join(" ")); console.error = (...a) => void out.push(a.join(" "));
+  try {
+    expect(await inbox(root)).toBe(0); // inbox absente
+    expect(out.at(-1)).toBe("Inbox vide.");
+
+    await Bun.write(urls, `# commentaire\n\n${ok} pourquoi je garde ça\n${ko}\n`);
+    await Bun.write(join(root, "inbox/avec.md"), "# Avec note\n\nUne idée sur la fermentation lactique des légumes.\n");
+    await Bun.write(join(root, "inbox/avec.md.note"), "ma note\n");
+    await Bun.write(join(root, "inbox/sans.txt"), "# Sans note\n\nUne autre idée sur la lacto-fermentation, très différente.\n");
+    await Bun.write(join(root, "inbox/.gitkeep"), "");
+
+    // dry-run : rien ne bouge
+    expect(await inbox(root, { dryRun: true })).toBe(1);
+    expect(sources()).toBe(0);
+    expect(await Bun.file(urls).text()).toContain(ok);
+    expect(existsSync(join(root, "inbox/avec.md.note"))).toBe(true);
+
+    // vrai passage : 3 sources, l'échec (404) reste, commentaires conservés
+    expect(await inbox(root)).toBe(1);
+    expect(sources()).toBe(3);
+    expect(await Bun.file(urls).text()).toBe(`# commentaire\n\n${ko}\n`);
+    expect(readdirSync(join(root, "inbox")).sort()).toEqual([".gitkeep", "urls.txt"]);
+    const raws = (await import("./lib")).readDocs(root, "raw");
+    expect((await raws).map((d) => d.fm.note).sort()).toEqual(["", "ma note", "pourquoi je garde ça"]);
+    expect(out.some((l) => l.startsWith(`✗ ${ko}`))).toBe(true);
+
+    // second passage : seul l'échec revient, rien de nouveau
+    expect(await inbox(root)).toBe(1);
+    expect(sources()).toBe(3);
+
+    // l'URL déjà présente quitte l'inbox sans nouvelle source
+    await Bun.write(urls, `${ok}\n`);
+    expect(await inbox(root)).toBe(0);
+    expect(await Bun.file(urls).text()).toBe("");
+    expect(sources()).toBe(3);
+  } finally { console.log = log; console.error = err; srv.stop(true); }
+});
+
 test("lint : erreurs bloquantes et avertissements", async () => {
   const { lint } = await import("./lint");
   const root = mkdtempSync(join(tmpdir(), "brain-"));

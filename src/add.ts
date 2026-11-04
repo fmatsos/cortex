@@ -114,3 +114,9 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   await appendLog(root, `**Add** \`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, now);
   return { id, duplicate: false, ex };
 }
+
+/** Ligne de compte rendu d'un `add` réussi, partagée par `brain add` et `brain inbox`. */
+export function describe(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
+  if (r.duplicate || !r.ex) return `= déjà présent : ${r.id}`;
+  return `${dryRun ? "~ (dry-run)" : "+"} ${r.id}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;
+}
