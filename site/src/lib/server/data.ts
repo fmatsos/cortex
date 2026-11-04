@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SiteData } from "#lib/types.js";
 
-/** Données écrites par `brain export` dans $BRAIN_SITE_DATA (le site ne lit jamais le wiki lui-même). */
+/** Données écrites par `cortex export` dans $CORTEX_SITE_DATA (le site ne lit jamais le wiki lui-même). */
 export const dataFile = (name: string): string => {
-	const dir = process.env.BRAIN_SITE_DATA;
-	if (!dir) throw new Error("BRAIN_SITE_DATA manquant : le site se construit avec `brain export`.");
+	const dir = process.env.CORTEX_SITE_DATA;
+	if (!dir) throw new Error("CORTEX_SITE_DATA manquant : le site se construit avec `cortex export`.");
 	return readFileSync(join(dir, name), "utf8");
 };
 

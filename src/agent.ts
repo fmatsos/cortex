@@ -33,7 +33,7 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
   // session interactive confinée elle aussi : une validation humaine trop rapide ne peut pas écrire hors de wiki/
   if (!batch) {
-    // Ctrl+C vise l'agent ; sans ce gestionnaire, brain mourrait aussi (même groupe de processus) avant de vérifier la page Source et de basculer le statut
+    // Ctrl+C vise l'agent ; sans ce gestionnaire, cortex mourrait aussi (même groupe de processus) avant de vérifier la page Source et de basculer le statut
     const keep = () => {};
     process.on("SIGINT", keep);
     try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited; }
@@ -65,7 +65,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
     const id = d.path.split("/").at(-2)!;
     if (!String(d.fm.note ?? "").trim()) { console.error(`✗ ${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
     if (d.fm.status !== "pending") console.log(`(${id} est déjà ${d.fm.status} : recompilation)`);
-    const prompt = `Applique le workflow INGEST de BRAIN.md à la source /${d.path}.` +
+    const prompt = `Applique le workflow INGEST de CORTEX.md à la source /${d.path}.` +
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
     console.log(`→ compile ${id}${opts.batch ? " (batch)" : ""}`);
     const before = await changed(root);
@@ -81,8 +81,8 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
 }
 
 export async function ask(root: string, question: string, opts: { file?: boolean; interactive?: boolean }) {
-  const prompt = `Applique le workflow QUERY de BRAIN.md à la question : « ${question} ».` +
-    (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au journal (brain log add query \"…\" --page wiki/syntheses/….md) et lance brain index."
+  const prompt = `Applique le workflow QUERY de CORTEX.md à la question : « ${question} ».` +
+    (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
   const code = await run(root, prompt, !opts.interactive, opts.file ? "write" : "read");

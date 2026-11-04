@@ -114,7 +114,7 @@ test("graphe : liens orientés, un seul lien (mutual) pour une paire réciproque
 
 /** Racine jetable : une source raw partielle citée par une page Source, des titres à accents. */
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const page = (path: string, type: string, title: string, extra: string, body: string) => {
     mkdirSync(join(root, path, ".."), { recursive: true });
     writeFileSync(join(root, path), `---\ntype: ${type}\ntitle: ${title}\ndescription: D ${title}.\ntags: [t]\n${extra}---\n${body}\n`);
@@ -124,7 +124,7 @@ function fixture() {
     writeFileSync(join(root, `raw/2026/11/${id}/source.md`), `---\ntype: RawSource\ntitle: R\nurl: https://exemple.org/${id}\nnote: n\n${partial}status: compiled\n---\nSECRET\n`);
   };
   const src = (id: string) => `sources:\n  - id: s\n    resource: /raw/2026/11/${id}/source.md\n    title: S\n`;
-  writeFileSync(join(root, "BRAIN.md"), "");
+  writeFileSync(join(root, "CORTEX.md"), "");
   raw("20261104-aaaa-partiel", "partial: true  # paywall\n");
   raw("20261104-bbbb-complet", "");
   page("wiki/sources/zz-partiel.md", "Source", "Zèbre partiel", src("20261104-aaaa-partiel"), "Résumé.[^s]\n\n[^s]: S.");
@@ -181,7 +181,7 @@ test("export : partial, tri par titre (collation française), liens orientés, r
 });
 
 test("version du site : l'empreinte du frontend change avec le CSS ou un composant", () => {
-  const dir = mkdtempSync(join(tmpdir(), "brain-site-"));
+  const dir = mkdtempSync(join(tmpdir(), "cortex-site-"));
   mkdirSync(join(dir, "src/lib"), { recursive: true });
   writeFileSync(join(dir, "src/app.css"), "a{color:red}");
   writeFileSync(join(dir, "src/lib/x.svelte"), "<p>x</p>");

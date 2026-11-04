@@ -33,7 +33,7 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   if (client && !(client in CLIENTS)) err(`client inconnu « ${client} » (${Object.keys(CLIENTS).join(", ")}).`);
   const allowed = client && EFFORTS[client];
   if (effort && allowed && !allowed.includes(effort)) err(`effort « ${effort} » invalide pour ${client} (${allowed.join(", ")}).`);
-  if (!client && (model || effort)) out.push({ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($BRAIN_AGENT, $BRAIN_AGENT_BATCH)." });
+  if (!client && (model || effort)) out.push({ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." });
   return out;
 }
 
@@ -49,11 +49,11 @@ export async function readConfig(root: string): Promise<Record<string, unknown>>
 export async function loadConfig(root: string): Promise<Config> {
   const c = await readConfig(root);
   const e = lintConfig(c).find((i) => i.level === "error");
-  if (e) throw new Error(`config.json : ${e.msg} (brain config lint)`);
+  if (e) throw new Error(`config.json : ${e.msg} (cortex config lint)`);
   return Object.fromEntries(Object.entries(c).filter(([, v]) => v != null)) as Config;
 }
 
-/** brain config init|lint|get|set|remove. Toute écriture est validée avant d'être faite. */
+/** cortex config init|lint|get|set|remove. Toute écriture est validée avant d'être faite. */
 export async function configCmd(root: string, [sub, key, value]: string[]): Promise<number> {
   const f = configFile(root);
   const save = async (c: Record<string, unknown>) => {
@@ -68,7 +68,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "init":
       if (await f.exists()) throw new Error("config.json existe déjà.");
       await save({ client: null, model: null, effort: null }); // null = non défini : le CLI reste agnostique
-      console.log("config.json créé (agnostique). Renseigne-le avec brain config set client claude|codex|opencode.");
+      console.log("config.json créé (agnostique). Renseigne-le avec cortex config set client claude|codex|opencode.");
       return 0;
     case "lint": {
       if (!(await f.exists())) { console.log("Pas de config.json : mode agnostique."); return 0; }
@@ -87,7 +87,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     }
     case "set":
       checkKey();
-      if (!value) throw new Error(`Usage : brain config set ${key} <valeur>`);
+      if (!value) throw new Error(`Usage : cortex config set ${key} <valeur>`);
       await save({ ...(await readConfig(root)), [key]: value });
       return 0;
     case "remove": {
@@ -98,7 +98,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       return 0;
     }
     default:
-      throw new Error("Usage : brain config init | lint | get [clé] | set <clé> <valeur> | remove <clé>");
+      throw new Error("Usage : cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>");
   }
 }
 

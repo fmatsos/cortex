@@ -155,7 +155,7 @@ function originUrl(root: string, resource: string): string | undefined {
   return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
 }
 
-/** Extraction partielle (`partial:` dans le frontmatter raw, écrit par `brain add` en cas de paywall). */
+/** Extraction partielle (`partial:` dans le frontmatter raw, écrit par `cortex add` en cas de paywall). */
 const rawPartial = (root: string, resource: string) => {
   const p = rawFm(root, resource)?.partial;
   return p != null && p !== false && String(p).trim() !== "" && !/^(false|no|non|0)$/i.test(String(p).trim());
@@ -302,7 +302,7 @@ export function frontendFingerprint(siteDir = SITE_DIR): string {
 export async function exportSite(root: string, out: string, say: (m: string) => void = console.log) {
   checkOut(root, out);
   const t0 = performance.now();
-  const dataDir = join(root, ".brain/site-data");
+  const dataDir = join(root, ".cortex/site-data");
   const { data, graph, search } = await buildSiteData(root);
   mkdirSync(dataDir, { recursive: true });
   const parts: string[] = [];
@@ -314,7 +314,7 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
 
   // Vite et SvelteKit ne se chargent qu'ici : les autres commandes restent aussi rapides
   // version = empreinte des données ET du frontend : même wiki et même code, même site ; l'un ou l'autre change, le cache change
-  Object.assign(process.env, { BRAIN_SITE_DATA: dataDir, BRAIN_SITE_OUT: resolve(out), BRAIN_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) });
+  Object.assign(process.env, { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) });
   const cwd = process.cwd(), log = console.log;
   console.log = () => {}; // SvelteKit et l'adapter bavardent (« npm run preview »…) ; les erreurs passent par console.error
   try {

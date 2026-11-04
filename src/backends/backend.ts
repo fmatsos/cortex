@@ -13,12 +13,12 @@ export interface Backend {
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 
-/** BRAIN_AGENT remplace la commande interactive de n'importe quel backend. */
+/** CORTEX_AGENT remplace la commande interactive de n'importe quel backend. */
 /** Option de CLI seulement si la valeur est définie. */
 export const flag = (name: string, v?: string) => (v ? [name, v] : []);
 
 export const interactiveWith = (fallback: (prompt: string) => string[]) => (prompt: string) =>
-  process.env.BRAIN_AGENT ? [...split(process.env.BRAIN_AGENT), prompt] : fallback(prompt);
+  process.env.CORTEX_AGENT ? [...split(process.env.CORTEX_AGENT), prompt] : fallback(prompt);
 
 /**
  * CLI de l'agent déjà installée : les SDK la pilotent au lieu d'embarquer leur propre binaire

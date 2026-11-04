@@ -6,7 +6,7 @@
 	let { data } = $props();
 </script>
 
-<svelte:head><title>#{data.tag} · Second cerveau</title></svelte:head>
+<svelte:head><title>#{data.tag} · Cortex</title></svelte:head>
 
 <p class="text-sm">
 	<a href={toRoute("/tags")} class="text-link touch-target focus-visible:ring-ring/50 -ml-1 inline-flex min-h-6 items-center gap-1.5 rounded-md px-1 underline underline-offset-4 focus-visible:ring-3">

@@ -11,25 +11,25 @@ import { ask, compile } from "./agent";
 import { configCmd } from "./backends/index";
 import { findRoot } from "./lib";
 
-const HELP = `brain — second cerveau
+const HELP = `cortex — second cerveau
 
-  brain add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]
-  brain inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
-  brain search "<requête>" [--in wiki|raw] [--json] [--limit N]
-  brain index
-  brain lint [--json]
-  brain log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
-  brain log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
-  brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
-  brain ask "<question>" [--file] [--interactive]
-  brain export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .brain/site)
-  brain mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
-  brain config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
+  cortex add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]
+  cortex inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
+  cortex search "<requête>" [--in wiki|raw] [--json] [--limit N]
+  cortex index
+  cortex lint [--json]
+  cortex log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
+  cortex log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
+  cortex compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
+  cortex ask "<question>" [--file] [--interactive]
+  cortex export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .cortex/site)
+  cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
+  cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
 
 Agent : config.json (client claude|codex|opencode, model, effort). Sans client :
-$BRAIN_AGENT (interactif, défaut « claude »), $BRAIN_AGENT_BATCH (défaut « claude -p »).
+$CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut « claude -p »).
 
-Racine : $BRAIN_ROOT, sinon le premier dossier parent qui contient BRAIN.md.`;
+Racine : $CORTEX_ROOT, sinon le premier dossier parent qui contient CORTEX.md.`;
 
 const { values: o, positionals: [cmd, ...args] } = parseArgs({
   allowPositionals: true,
@@ -44,7 +44,7 @@ try {
   const root = findRoot();
   switch (cmd) {
     case "add": {
-      if (!args[0]) throw new Error("Usage : brain add <url|fichier|-> --note \"…\"");
+      if (!args[0]) throw new Error("Usage : cortex add <url|fichier|-> --note \"…\"");
       for (const input of args) {
         try {
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
@@ -54,7 +54,7 @@ try {
           process.exitCode = 1;
         }
       }
-      if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation (BRAIN.md).");
+      if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation (CORTEX.md).");
       break;
     }
     case "inbox":
@@ -62,7 +62,7 @@ try {
       break;
     case "search": {
       const q = args.join(" ");
-      if (!q) throw new Error('Usage : brain search "<requête>"');
+      if (!q) throw new Error('Usage : cortex search "<requête>"');
       if (o.in && o.in !== "wiki" && o.in !== "raw") throw new Error("--in attend wiki ou raw");
       const hits = await search(root, q, { in: o.in as any, limit: o.limit ? Number(o.limit) : undefined });
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
@@ -76,16 +76,16 @@ try {
       console.log("wiki/index.md et wiki/log.md régénérés.");
       break;
     case "log": {
-      // `add` n'est le sous-commande que juste après `log` : `brain log --json add …` ne doit rien écrire (les gardes des agents reposent là-dessus)
+      // `add` n'est le sous-commande que juste après `log` : `cortex log --json add …` ne doit rien écrire (les gardes des agents reposent là-dessus)
       const raw = process.argv.slice(2);
       if (args[0] === "add" && raw[raw.indexOf("log") + 1] === "add") {
         const [, kind, ...text] = args;
-        if (!kind || !text.length) throw new Error(`Usage : brain log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
+        if (!kind || !text.length) throw new Error(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
         const e = await logAdd(root, kind, text.join(" "), o.source, o.page);
         console.log(`+ ${e.at} ${kindLabel(e.kind)} : ${e.text}`);
         break;
       }
-      if (args.length) throw new Error(`Usage : brain log [--limit N] [--json] [--kind k] | brain log add …`);
+      if (args.length) throw new Error(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
       if (o.kind && !KINDS.includes(o.kind as any)) throw new Error(`--kind attend ${KINDS.join(" | ")}`);
       const { entries, errors } = readLog(root);
       for (const x of errors) console.error(`! wiki/log.jsonl:${x.line} : ${x.msg}`);
@@ -108,18 +108,18 @@ try {
       break;
     }
     case "compile":
-      if (!args.length && !o.pending) throw new Error("Usage : brain compile <id…> | --pending [--batch]");
+      if (!args.length && !o.pending) throw new Error("Usage : cortex compile <id…> | --pending [--batch]");
       await compile(root, args, { pending: o.pending, batch: o.batch });
       break;
     case "ask": {
       const q = args.join(" ");
-      if (!q) throw new Error('Usage : brain ask "<question>" [--file]');
+      if (!q) throw new Error('Usage : cortex ask "<question>" [--file]');
       await ask(root, q, { file: o.file, interactive: o.interactive });
       break;
     }
     case "export": {
       const { exportSite } = await import("./export"); // Vite, Svelte et force-graph ne se chargent qu'ici
-      await exportSite(root, o.out ?? join(root, ".brain/site"));
+      await exportSite(root, o.out ?? join(root, ".cortex/site"));
       break;
     }
     case "mcp":

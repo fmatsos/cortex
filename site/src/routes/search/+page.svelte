@@ -79,7 +79,7 @@
 	const fix = (raws: string[]) => { search.q = raws.reduce(removeToken, search.q); };
 </script>
 
-<svelte:head><title>Recherche · Second cerveau</title></svelte:head>
+<svelte:head><title>Recherche · Cortex</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">Recherche</h1>
 <SearchBox variant="main" live class="mt-4" />

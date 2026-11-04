@@ -14,7 +14,7 @@ import {
 //  - le socle (ressources `_app/`, pages hors `wiki/`, index de recherche, graphe) est précaché à l'installation ;
 //  - les pages du wiki sont gardées au fil des consultations (cache `runtime`, borné), ou toutes d'un coup sur demande
 //    explicite (« Télécharger tout le wiki », message `download-all`).
-// `version` = empreinte des données ET du frontend (BRAIN_SITE_VERSION) : un changement de l'un ou de l'autre change les caches.
+// `version` = empreinte des données ET du frontend (CORTEX_SITE_VERSION) : un changement de l'un ou de l'autre change les caches.
 
 // Les chemins du manifeste sont relatifs au chemin de base : on les résout contre la portée du service worker,
 // donc le site marche sous n'importe quel sous-chemin.

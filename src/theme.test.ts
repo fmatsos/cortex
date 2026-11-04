@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * Contrastes du thème du site (WCAG 2.2 AA), calculés depuis les variables de cli/site/src/app.css :
  * le CSS reste la seule source, le test échoue dès qu'une paire texte/fond passe sous son seuil.
- * `BRAIN_CONTRAST_TABLE=1 bun test cli/src/theme.test.ts` affiche le tableau des ratios.
+ * `CORTEX_CONTRAST_TABLE=1 bun test cli/src/theme.test.ts` affiche le tableau des ratios.
  */
 const CSS = readFileSync(join(import.meta.dir, "../site/src/app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -122,7 +122,7 @@ const rows = Object.entries(THEMES).flatMap(([theme, t]) =>
 );
 
 test("contrastes WCAG 2.2 AA, thèmes clair et sombre", () => {
-  if (process.env.BRAIN_CONTRAST_TABLE) console.table(rows);
+  if (process.env.CORTEX_CONTRAST_TABLE) console.table(rows);
   const failures = rows.filter((r) => r.ratio < r.seuil).map((r) => `${r.thème} · ${r.paire} : ${r.ratio} < ${r.seuil}`);
   expect(failures).toEqual([]);
   expect(rows.length).toBe(specs.length * 2);

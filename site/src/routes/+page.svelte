@@ -18,11 +18,11 @@
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
-<svelte:head><title>Second cerveau</title></svelte:head>
+<svelte:head><title>Cortex</title></svelte:head>
 
 <!-- la recherche est la porte d'entrée : un grand champ, des exemples qui donnent des résultats, les recherches récentes -->
 <section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-accueil" class="text-3xl font-semibold tracking-tight">Second cerveau</h1>
+	<h1 id="h-accueil" class="text-3xl font-semibold tracking-tight">Cortex</h1>
 	<p class="text-muted-foreground mt-2">
 		{data.seed.total} pages et {data.seed.nbTags} tags à parcourir, ou
 		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">le graphe des liens</a>.

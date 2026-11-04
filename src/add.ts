@@ -7,7 +7,7 @@ import TurndownService from "turndown";
 import { localIso, normUrl, randomId4, readDocs, sha256, slugify } from "./lib";
 import { appendLog } from "./log";
 
-const UA = "Mozilla/5.0 (X11; Linux x86_64) brain-cli/0.1";
+const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
 export type Extract = {
@@ -101,7 +101,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   if (ex.published) fm.published = ex.published;
   fm.sha256 = hash;
   if (ex.blob) {
-    const b = `.brain/blobs/${sha256(ex.blob)}.${ex.blobExt}`;
+    const b = `.cortex/blobs/${sha256(ex.blob)}.${ex.blobExt}`;
     await Bun.write(join(root, b), ex.blob);
     fm.blob = b;
   }
@@ -116,7 +116,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   return { id, duplicate: false, ex };
 }
 
-/** Ligne de compte rendu d'un `add` réussi, partagée par `brain add` et `brain inbox`. */
+/** Ligne de compte rendu d'un `add` réussi, partagée par `cortex add` et `cortex inbox`. */
 export function describe(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
   if (r.duplicate || !r.ex) return `= déjà présent : ${r.id}`;
   return `${dryRun ? "~ (dry-run)" : "+"} ${r.id}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;

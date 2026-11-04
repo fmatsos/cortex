@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** Racine du cerveau : $BRAIN_ROOT, sinon le premier dossier parent qui contient BRAIN.md. */
+/** Racine du cerveau : $CORTEX_ROOT, sinon le premier dossier parent qui contient CORTEX.md. */
 export function findRoot(from = process.cwd()): string {
-  if (process.env.BRAIN_ROOT) return process.env.BRAIN_ROOT;
+  if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
   for (let d = from; ; d = dirname(d)) {
-    if (existsSync(join(d, "BRAIN.md"))) return d;
-    if (dirname(d) === d) throw new Error("BRAIN.md introuvable : lance brain dans le dépôt ou définis BRAIN_ROOT.");
+    if (existsSync(join(d, "CORTEX.md"))) return d;
+    if (dirname(d) === d) throw new Error("CORTEX.md introuvable : lance cortex dans le dépôt ou définis CORTEX_ROOT.");
   }
 }
 

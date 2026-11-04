@@ -70,7 +70,7 @@
 </script>
 
 <svelte:head>
-	<title>{p.title} · Second cerveau</title>
+	<title>{p.title} · Cortex</title>
 	<meta name="description" content={p.description} />
 </svelte:head>
 

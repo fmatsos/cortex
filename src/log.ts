@@ -78,7 +78,7 @@ function renderLine(e: LogEntry): string {
 
 /** wiki/log.md : le journal, sections par date (la plus récente d'abord). Déterministe. */
 export function renderLogMd(entries: LogEntry[]): string {
-  let out = "# Log\n\n> Généré depuis `wiki/log.jsonl` : ne pas éditer à la main (`brain log add`, puis `brain index`).\n";
+  let out = "# Log\n\n> Généré depuis `wiki/log.jsonl` : ne pas éditer à la main (`cortex log add`, puis `cortex index`).\n";
   let cur = "";
   for (const e of newestFirst(entries)) {
     if (day(e) !== cur) out += `\n## ${(cur = day(e))}\n`;
@@ -106,7 +106,7 @@ export async function appendLog(root: string, entry: Omit<LogEntry, "at">, d = n
   await writeLogMd(root);
 }
 
-/** `brain log add` : valide les références (pages existantes sous wiki/, ids raw existants) avant d'écrire. */
+/** `cortex log add` : valide les références (pages existantes sous wiki/, ids raw existants) avant d'écrire. */
 export async function logAdd(root: string, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()): Promise<LogEntry> {
   if (!KINDS.includes(kind as Kind)) throw new Error(`kind inconnu : ${kind} (${KINDS.join(" | ")})`);
   if (!text.trim()) throw new Error("texte vide");

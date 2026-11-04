@@ -37,7 +37,7 @@
 	});
 </script>
 
-<svelte:head><title>Tags · Second cerveau</title></svelte:head>
+<svelte:head><title>Tags · Cortex</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">Tags</h1>
 <div class="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3">

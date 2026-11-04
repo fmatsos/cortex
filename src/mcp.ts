@@ -37,8 +37,8 @@ const safe = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async (a: A)
 };
 
 export function buildServer(root: string): McpServer {
-  const s = new McpServer({ name: "brain", version: "0.1.0" }, {
-    instructions: "Second cerveau : wiki en français sous wiki/, sources brutes sous raw/. Cherche dans le wiki d'abord ; une réponse trouvée seulement dans raw/ est un trou à compiler.",
+  const s = new McpServer({ name: "cortex", version: "0.1.0" }, {
+    instructions: "Cortex : wiki en français sous wiki/, sources brutes sous raw/. Cherche dans le wiki d'abord ; une réponse trouvée seulement dans raw/ est un trou à compiler.",
   });
   const readOnly = { readOnlyHint: true };
 
@@ -55,7 +55,7 @@ export function buildServer(root: string): McpServer {
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
       hits: hits.map((h) => ({ path: `/${h.path}`, title: h.title, area: h.area, snippet: h.snippet })),
-      ...(gap && { hint: "Trouvé seulement dans raw/ : un trou à compiler (brain compile)." }),
+      ...(gap && { hint: "Trouvé seulement dans raw/ : un trou à compiler (cortex compile)." }),
     });
   }));
 
@@ -94,7 +94,7 @@ export function buildServer(root: string): McpServer {
     if (!note.trim()) throw new Error("note obligatoire : dis pourquoi cette source est gardée.");
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Donne soit input (URL ou chemin), soit text.");
     // pas de chemin local : un client MCP copierait n'importe quel fichier du poste (clé, secret) dans raw/, puis dans git
-    if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input doit être une URL http(s) ; pour un fichier local, utilise brain add ou brain inbox.");
+    if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input doit être une URL http(s) ; pour un fichier local, utilise cortex add ou cortex inbox.");
     const r = await add(root, input ?? "-", { note, text: txt });
     return json({ id: r.id, duplicate: r.duplicate, ...(r.ex && { title: r.ex.title, partial: r.ex.partial }) });
   }));

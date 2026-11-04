@@ -12,7 +12,7 @@
 </script>
 
 <svelte:head>
-	<title>{title} · Second cerveau</title>
+	<title>{title} · Cortex</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 

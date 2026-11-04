@@ -78,7 +78,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   const md = join(root, "wiki/log.md");
   if (existsSync(md) || journal.entries.length) {
     if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries))
-      push("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : brain index le régénère");
+      push("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : cortex index le régénère");
   }
   return out;
 }

@@ -82,7 +82,7 @@
 	const select = "border-input bg-card focus-visible:border-ring focus-visible:ring-ring/50 h-9 pointer-coarse:h-11 w-full rounded-md border px-2.5 text-sm outline-none focus-visible:ring-3";
 </script>
 
-<svelte:head><title>Journal · Second cerveau</title></svelte:head>
+<svelte:head><title>Journal · Cortex</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">Journal</h1>
 
