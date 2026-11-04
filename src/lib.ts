@@ -44,32 +44,17 @@ export function slugify(s: string, max = 50): string {
   return out.slice(1) || "source";
 }
 
-/** Identifiant des sources raw et des pages wiki : UUID v7 (horodaté puis aléatoire, trié dans l'ordre de création). */
+/** UUID v7 : horodaté puis aléatoire, trié dans l'ordre de création (nommage par défaut, voir naming.ts). */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const newId = (at = new Date()) => Bun.randomUUIDv7("hex", at);
 
-/** Chemin (relatif à root) de la source raw `id`, rangée sous raw/AAAA/MM/ par sa date d'ajout ; undefined si absente. */
+/** Id raw : le dernier segment du dossier d'une source (unique sous raw/). */
+export const RAW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** Chemin (relatif à root) de la source raw `id`, où que le nommage l'ait rangée sous raw/ ; undefined si absente. */
 export function rawPath(root: string, id: string): string | undefined {
-  if (!UUID.test(id) || !existsSync(join(root, "raw"))) return;
-  for (const f of new Bun.Glob(`*/*/${id}/source.md`).scanSync(join(root, "raw"))) return `raw/${f}`;
-}
-
-/** Dossier de chaque type de page wiki. */
-export const TYPE_DIRS: Record<string, string> = { Source: "sources", Concept: "concepts", Entity: "entities", Synthesis: "syntheses" };
-
-/**
- * `cortex new` : crée wiki/<dossier du type>/<uuid>.md (frontmatter minimal, status: draft) et renvoie son chemin.
- * Refuse un titre déjà pris (mettre à jour avant de créer) en nommant la page existante.
- */
-export async function newPage(root: string, type: string, title: string, at = new Date()): Promise<string> {
-  const t = Object.keys(TYPE_DIRS).find((k) => k.toLowerCase() === type.toLowerCase());
-  if (!t) throw new Error(`type inconnu : ${type} (${Object.keys(TYPE_DIRS).join(" | ")})`);
-  if (!title.trim()) throw new Error("titre vide");
-  const same = (await readDocs(root, "wiki")).find((d) => d.fm.title && slugify(String(d.fm.title)) === slugify(title));
-  if (same) throw new Error(`une page porte déjà ce titre : ${same.path} (mets-la à jour plutôt que d'en créer une autre)`);
-  const path = `wiki/${TYPE_DIRS[t]}/${newId(at)}.md`;
-  await Bun.write(join(root, path), `---\n${Bun.YAML.stringify({ type: t, title: title.trim(), status: "draft" }, null, 2)}\n---\n`);
-  return path;
+  if (!RAW_ID.test(id) || !existsSync(join(root, "raw"))) return;
+  for (const f of new Bun.Glob(`**/${id}/source.md`).scanSync(join(root, "raw"))) return `raw/${f}`;
 }
 
 export const sha256 = (s: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(s).digest("hex");

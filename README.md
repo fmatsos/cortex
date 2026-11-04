@@ -83,7 +83,7 @@ wiki/index.md                # generated catalog
 wiki/log.jsonl → wiki/log.md # append-only journal, and its generated view
 ```
 
-Every source and page is named by a [UUID v7](https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7) that Cortex generates (`cortex add`, `cortex new`). The names are unique with no possible collision, and they sort in creation order. Nobody types them: you find a page by its title, through the index or `cortex search`, and `cortex lint` rejects any other file name.
+By default, every source and page is named by a [UUID v7](https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7) that Cortex generates (`cortex add`, `cortex new`). The names are unique with no possible collision, and they sort in creation order. Nobody types them: you find a page by its title, through the index or `cortex search`. Both the naming and the folder structure are [configurable](#naming-and-folder-structure).
 
 ## Usage
 
@@ -101,7 +101,7 @@ Every source and page is named by a [UUID v7](https://www.rfc-editor.org/rfc/rfc
 | `cortex ask "<question>" [--file] [--interactive]` | Answers from the wiki, read-only. `--file` stores the answer in `wiki/syntheses/`. |
 | `cortex export [--out <dir>]` | Builds the static site (default `.cortex/site`). The output directory is emptied first. |
 | `cortex mcp` | Starts an MCP server on stdio. |
-| `cortex config init \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `config.json` (keys `client`, `model`, `effort`). |
+| `cortex config init \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `config.json` (keys `client`, `model`, `effort`, `raw_path`, `page_path`). |
 
 ### Choosing the agent
 
@@ -117,6 +117,31 @@ cortex config init
 cortex config set client codex   # claude | codex | opencode
 cortex config set effort high    # low…max for Claude, minimal…xhigh for Codex, a model variant for opencode
 ```
+
+### Naming and folder structure
+
+Two templates in `config.json` decide where Cortex puts what it creates. `/` makes subfolders.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `raw_path` | `{yyyy}/{mm}/{uuid}` | Folder of a source under `raw/`. Its last segment is the source id, unique across `raw/`. |
+| `page_path` | `{type}/{uuid}` | Path of a page under `wiki/`, without `.md`. |
+
+| Placeholder | Value |
+|---|---|
+| `{uuid}` | UUID v7: time-ordered, unique |
+| `{yyyy}` `{mm}` `{dd}` `{hh}` `{mi}` `{ss}` | Creation date and time, local time |
+| `{slug}` | Title in lowercase words joined by dashes, 50 characters at most |
+| `{rand}` | 4 random characters `[a-z0-9]` |
+| `{kind}` | `raw_path` only: `article`, `pdf`, `note`… |
+| `{type}` | `page_path` only: `sources`, `concepts`, `entities` or `syntheses` |
+
+```sh
+cortex config set raw_path "{yyyy}{mm}{dd}-{rand}-{slug}"   # raw/20261104-k3xz-context-rot/
+cortex config set page_path "{type}/{slug}"                 # wiki/concepts/context-rot.md
+```
+
+`cortex config` rejects an invalid template: an unknown placeholder, a character other than letters, digits, `.`, `_`, `-` and `/`, an empty or `..` segment, or a last segment with no placeholder. A name that is already taken gets `-2`, `-3`… appended. Existing files are never renamed: `cortex lint` warns about the ones that do not follow the current templates.
 
 ### MCP server
 

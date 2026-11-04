@@ -4,6 +4,8 @@ import agnostic from "./default";
 import claude from "./claude";
 import codex from "./codex";
 import opencode from "./opencode";
+import { z } from "zod";
+import { checkTemplate, type NamingKey } from "../naming";
 
 export type { Backend, Config, Mode } from "./backend";
 
@@ -19,22 +21,39 @@ const EFFORTS: Record<string, string[] | undefined> = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"],
 };
-export const CONFIG_KEYS = ["client", "model", "effort"] as const;
+const str = (k: string) => z.string({ error: `« ${k} » doit être une chaîne ou null.` }).nullish();
+const template = (k: NamingKey) => str(k).superRefine((v, ctx) => {
+  const e = v && checkTemplate(k, v);
+  if (e) ctx.addIssue({ code: "custom", message: e, input: v });
+});
+const SHAPE = {
+  client: z.enum(Object.keys(CLIENTS) as [string, ...string[]], { error: (i) => `client inconnu « ${i.input} » (${Object.keys(CLIENTS).join(", ")}).` }).nullish(),
+  model: str("model"),
+  effort: str("effort"),
+  raw_path: template("raw_path"),
+  page_path: template("page_path"),
+};
+export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
+
+/** Schéma de config.json ; null vaut « non défini ». */
+export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
+  const allowed = c.client && EFFORTS[c.client];
+  if (c.effort && allowed && !allowed.includes(c.effort))
+    ctx.addIssue({ code: "custom", path: ["effort"], message: `effort « ${c.effort} » invalide pour ${c.client} (${allowed.join(", ")}).`, input: c.effort });
+});
 export type ConfigIssue = { level: "error" | "warning"; msg: string };
 
-/** Contrôles de config.json ; null vaut « non défini ». */
+const issueMsg = (i: z.core.$ZodIssue) =>
+  i.code === "unrecognized_keys" ? `propriété inconnue « ${i.keys.join(", ")} » (${CONFIG_KEYS.join(", ")}).`
+  : !i.path.length && i.code === "invalid_type" ? "config.json doit contenir un objet JSON."
+  : i.message;
+
+/** Contrôles de config.json : erreurs du schéma zod, puis avertissements. */
 export function lintConfig(c: unknown): ConfigIssue[] {
-  if (!c || typeof c !== "object" || Array.isArray(c)) return [{ level: "error", msg: "config.json doit contenir un objet JSON." }];
-  const cfg = c as Record<string, unknown>, out: ConfigIssue[] = [];
-  const err = (msg: string) => out.push({ level: "error", msg });
-  for (const k of Object.keys(cfg)) if (!(CONFIG_KEYS as readonly string[]).includes(k)) err(`propriété inconnue « ${k} » (${CONFIG_KEYS.join(", ")}).`);
-  for (const k of CONFIG_KEYS) if (cfg[k] != null && typeof cfg[k] !== "string") err(`« ${k} » doit être une chaîne ou null.`);
-  const { client, model, effort } = cfg as Config;
-  if (client && !(client in CLIENTS)) err(`client inconnu « ${client} » (${Object.keys(CLIENTS).join(", ")}).`);
-  const allowed = client && EFFORTS[client];
-  if (effort && allowed && !allowed.includes(effort)) err(`effort « ${effort} » invalide pour ${client} (${allowed.join(", ")}).`);
-  if (!client && (model || effort)) out.push({ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." });
-  return out;
+  const r = ConfigSchema.safeParse(c);
+  if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
+  return !r.data.client && (r.data.model || r.data.effort)
+    ? [{ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
 }
 
 const configFile = (root: string) => Bun.file(join(root, "config.json"));
@@ -67,7 +86,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
   switch (sub) {
     case "init":
       if (await f.exists()) throw new Error("config.json existe déjà.");
-      await save({ client: null, model: null, effort: null }); // null = non défini : le CLI reste agnostique
+      await save({ client: null, model: null, effort: null, raw_path: null, page_path: null }); // null = non défini : agnostique, nommage par défaut (UUID v7)
       console.log("config.json créé (agnostique). Renseigne-le avec cortex config set client claude|codex|opencode.");
       return 0;
     case "lint": {

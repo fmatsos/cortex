@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseDoc, slugify, UUID, type Doc } from "./lib";
+import { parseDoc, slugify, type Doc } from "./lib";
+import { naming, pattern } from "./naming";
 import { readLog, renderLogMd } from "./log";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
@@ -23,6 +24,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
     return docs;
   };
 
+  const tpl = await naming(root), pagePat = pattern(tpl.page_path), rawPat = pattern(tpl.raw_path);
   const wiki = (await safe("wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
   const raw = await safe("raw");
   const inbound = new Map<string, number>();
@@ -32,7 +34,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const d of wiki) {
     const { fm, path } = d;
     if (!fm.type) push("error", path, "type manquant");
-    if (!UUID.test(path.split("/").at(-1)!.replace(/\.md$/, ""))) push("error", path, "nom de fichier : UUID v7 attendu (crée la page avec cortex new)");
+    if (!pagePat.test(path.replace(/^wiki\//, "").replace(/\.md$/, ""))) push("warning", path, `nom hors du modèle page_path « ${tpl.page_path} » (les pages se créent par cortex new)`);
     if (!fm.description) push("error", path, "description manquante");
     const ids = new Set((fm.sources ?? []).map((s: any) => s.id));
     for (const s of fm.sources ?? []) {
@@ -55,10 +57,15 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const d of wiki) if (d.fm.type !== "Source" && !inbound.get(d.path)) push("warning", d.path, "orpheline : aucun lien entrant");
   for (const [res, pages] of cites) if (pages.length > 1) push("warning", pages[1], `doublon probable de ${pages[0]} (même source raw ${res})`);
 
+  const rawIds = new Map<string, string>();
   for (const d of raw) {
     const { fm, path } = d;
     if (fm.type !== "RawSource") push("error", path, "type: RawSource attendu");
-    if (!/^raw\/\d{4}\/\d\d\/[^/]+\/source\.md$/.test(path) || !UUID.test(path.split("/").at(-2)!)) push("error", path, "chemin : raw/AAAA/MM/<UUID v7>/source.md attendu (cortex add)");
+    const dir = path.replace(/^raw\//, "").replace(/\/source\.md$/, "");
+    if (!path.endsWith("/source.md") || !rawPat.test(dir)) push("warning", path, `chemin hors du modèle raw_path « ${tpl.raw_path} » (les sources s'ajoutent par cortex add)`);
+    const id = dir.split("/").at(-1)!;
+    if (rawIds.has(id)) push("error", path, `id raw en double : ${id} (aussi ${rawIds.get(id)}) ; le journal ne peut pas distinguer les deux`);
+    else rawIds.set(id, path);
     if (fm.status === "pending") {
       if (!String(fm.note ?? "").trim()) push("warning", path, "note manquante : à demander avant de compiler");
       if (now.getTime() - time(fm.fetched_at) > 7 * DAY) push("warning", path, "en attente depuis plus de 7 jours");

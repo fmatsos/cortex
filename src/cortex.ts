@@ -9,7 +9,8 @@ import { search } from "./search";
 import { lint } from "./lint";
 import { ask, compile } from "./agent";
 import { configCmd } from "./backends/index";
-import { findRoot, newPage } from "./lib";
+import { findRoot } from "./lib";
+import { newPage } from "./naming";
 
 const HELP = `cortex — second cerveau
 
@@ -17,7 +18,7 @@ const HELP = `cortex — second cerveau
   cortex inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
   cortex search "<requête>" [--in wiki|raw] [--json] [--limit N]
   cortex index
-  cortex new <Source|Concept|Entity|Synthesis> "<titre>"   (crée wiki/<type>/<uuid>.md, status: draft ; affiche son chemin)
+  cortex new <Source|Concept|Entity|Synthesis> "<titre>"   (crée la page selon page_path, status: draft ; affiche son chemin)
   cortex lint [--json]
   cortex log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
   cortex log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
@@ -25,7 +26,7 @@ const HELP = `cortex — second cerveau
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .cortex/site)
   cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
-  cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
+  cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort, raw_path, page_path)
 
 Agent : config.json (client claude|codex|opencode, model, effort). Sans client :
 $CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut « claude -p »).

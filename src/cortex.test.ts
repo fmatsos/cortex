@@ -46,8 +46,8 @@ test("add → index → search, idempotent", async () => {
   expect((await search(root, "hydroponie", { in: "raw" }))[0].path).toContain(a.id);
 });
 
-test("cortex new : page nommée par UUID v7, titre unique, lint des noms, journal nommé par titre", async () => {
-  const { newPage } = await import("./lib");
+test("cortex new : page nommée par UUID v7 par défaut, titre unique, lint des noms, journal nommé par titre", async () => {
+  const { newPage } = await import("./naming");
   const { lint } = await import("./lint");
   const { logAdd } = await import("./log");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
@@ -61,16 +61,58 @@ test("cortex new : page nommée par UUID v7, titre unique, lint des noms, journa
   expect((await newPage(root, "Synthesis", "Autre")).startsWith("wiki/syntheses/")).toBe(true);
 
   await Bun.write(join(root, "wiki/concepts/a-la-main.md"), "---\ntype: Concept\ntitle: Main\ndescription: D.\n---\nx\n");
-  await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\nnote: n\nstatus: compiled\n---\nx\n");
-  const errs = (await lint(root)).filter((i) => i.level === "error").map((i) => `${i.path} ${i.msg}`);
-  expect(errs).toContain("wiki/concepts/a-la-main.md nom de fichier : UUID v7 attendu (crée la page avec cortex new)");
-  expect(errs).toContain("raw/2026/11/20261104-abcd-x/source.md chemin : raw/AAAA/MM/<UUID v7>/source.md attendu (cortex add)");
-  expect(errs.some((e) => e.startsWith(p) && e.includes("UUID"))).toBe(false);
-  expect(rawPath(root, "20261104-abcd-x")).toBeUndefined(); // ancien format : refusé
+  for (const d of ["2026/11/20261104-abcd-x", "2025/01/20261104-abcd-x"]) await Bun.write(join(root, `raw/${d}/source.md`), "---\ntype: RawSource\nnote: n\nstatus: compiled\n---\nx\n");
+  const issues = (await lint(root)).map((i) => `${i.level} ${i.path} ${i.msg}`);
+  expect(issues).toContain("warning wiki/concepts/a-la-main.md nom hors du modèle page_path « {type}/{uuid} » (les pages se créent par cortex new)");
+  expect(issues).toContain("warning raw/2026/11/20261104-abcd-x/source.md chemin hors du modèle raw_path « {yyyy}/{mm}/{uuid} » (les sources s'ajoutent par cortex add)");
+  expect(issues.filter((i) => i.includes("id raw en double : 20261104-abcd-x"))).toHaveLength(1);
+  expect(issues.some((i) => i.includes(p) && i.includes("modèle"))).toBe(false);
 
   // log.md nomme les pages par leur titre, et ne les répète pas quand le texte les nomme déjà
   await logAdd(root, "ingest", "Créé context-rot.", [], [p, "wiki/concepts/a-la-main.md"]);
   expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("- **Ingest** Créé context-rot. (pages : [Main](/wiki/concepts/a-la-main.md))\n");
+});
+
+test("nommage configurable : modèles validés, placeholders, sous-dossiers, collisions", async () => {
+  const { checkTemplate, expand, pattern, newPage } = await import("./naming");
+  const { lintConfig } = await import("./backends/index");
+  const { lint } = await import("./lint");
+  const at = new Date("2026-11-04T09:05:07");
+  // validation
+  expect(checkTemplate("raw_path", "{yyyy}/{mm}/{uuid}")).toBeUndefined();
+  expect(checkTemplate("page_path", "{type}/{yyyy}{mm}{dd}-{slug}")).toBeUndefined();
+  expect(checkTemplate("raw_path", "{type}/{uuid}")).toContain("placeholder inconnu {type}"); // {type} : pages seulement
+  expect(checkTemplate("page_path", "{kind}/{uuid}")).toContain("placeholder inconnu {kind}");
+  expect(checkTemplate("page_path", "../{uuid}")).toContain("segments vides");
+  expect(checkTemplate("page_path", "{type}//{uuid}")).toContain("segments vides");
+  expect(checkTemplate("page_path", "{type}/a b{uuid}")).toContain("seuls lettres");
+  expect(checkTemplate("page_path", "{uuid}/page")).toContain("dernier segment");
+  expect(lintConfig({ page_path: "{oops}" })[0].msg).toContain("placeholder inconnu {oops}");
+  expect(lintConfig({ raw_path: "{yyyy}/{rand}-{slug}", page_path: null })).toEqual([]);
+  // valeurs et motifs
+  const v = { at, title: "Le C++26 refusé", type: "Concept", kind: "pdf" };
+  expect(expand("{type}/{yyyy}{mm}{dd}-{hh}{mi}{ss}-{slug}", v)).toBe("concepts/20261104-090507-le-c-26-refuse");
+  expect(expand("{kind}/{rand}", v)).toMatch(/^pdf\/[a-z0-9]{4}$/);
+  for (const t of ["{type}/{uuid}", "{yyyy}/{mm}/{dd}-{rand}-{slug}", "{type}/{yyyy}{mm}{dd}-{slug}"]) {
+    expect(pattern(t).test(expand(t, v))).toBe(true);
+    expect(pattern(t).test(`${expand(t, v)}-2`)).toBe(true); // suffixe de collision
+    expect(pattern(t).test(`x/${expand(t, v)}`)).toBe(false);
+  }
+
+  // un wiki en nommage horodaté, sans dossier par type
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "config.json"), JSON.stringify({ raw_path: "{yyyy}{mm}{dd}-{rand}-{slug}", page_path: "{yyyy}/{slug}" }));
+  const note = join(root, "n.md");
+  await Bun.write(note, "# Ma note\n\nUne idée.\n");
+  const a = await add(root, note, { note: "n", now: at });
+  expect(a.id).toMatch(/^20261104-[a-z0-9]{4}-ma-note$/);
+  expect(rawPath(root, a.id)).toBe(`raw/${a.id}/source.md`);
+  expect(await newPage(root, "Concept", "Context rot", at)).toBe("wiki/2026/context-rot.md");
+  await Bun.write(join(root, "wiki/2026/context-rot.md"), "---\ntype: Concept\ntitle: Autre titre\n---\n"); // le nom est pris, pas le titre
+  expect(await newPage(root, "Entity", "Context  rot!", at)).toBe("wiki/2026/context-rot-2.md");
+  const issues = (await lint(root)).filter((i) => i.msg.includes("modèle"));
+  expect(issues).toEqual([]);
 });
 
 test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", async () => {
@@ -190,7 +232,7 @@ test("journal : parse et sérialise une entrée, champs vides omis, entrées inv
   expect(parseEntry(ok)).toEqual(ok);
   expect(parseEntry({ at: "2026-11-04", kind: "lint", text: "0 erreur" })).toEqual({ at: "2026-11-04", kind: "lint", text: "0 erreur" });
   for (const bad of [null, [], { ...ok, kind: "creation" }, { ...ok, at: "hier" }, { ...ok, at: "2026-13-45" }, { ...ok, at: "2026-11-04T10:00:00" }, { ...ok, text: "" }, { ...ok, text: "a\nb" },
-    { ...ok, extra: 1 }, { ...ok, sources: [] }, { ...ok, sources: ["x"] }, { ...ok, pages: ["concepts/a.md"] }, { ...ok, pages: "wiki/a.md" }, { at: "2026-11-04", kind: "add" }])
+    { ...ok, extra: 1 }, { ...ok, sources: [] }, { ...ok, sources: ["../x"] }, { ...ok, sources: ["a b"] }, { ...ok, pages: ["concepts/a.md"] }, { ...ok, pages: "wiki/a.md" }, { at: "2026-11-04", kind: "add" }])
     expect(typeof parseEntry(bad)).toBe("string");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   await Bun.write(join(root, "wiki/log.jsonl"), `${JSON.stringify(ok)}\n\nn'importe quoi\n{"at":"2026-11-04","kind":"zz","text":"x"}\n`);

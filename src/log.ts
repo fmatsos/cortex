@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
-import { localIso, rawPath, readDocs, slugify, UUID } from "./lib";
+import { localIso, RAW_ID, rawPath, readDocs, slugify } from "./lib";
 
 /**
  * Journal : wiki/log.jsonl (une entrée par ligne, ordre chronologique, append-only) est la source de vérité ;
@@ -26,7 +26,7 @@ export function parseEntry(v: unknown): LogEntry | string {
   if (typeof o.at !== "string" || !AT.test(o.at) || Number.isNaN(Date.parse(o.at))) return "at : ISO 8601 avec décalage, ou AAAA-MM-JJ";
   if (!KINDS.includes(o.kind as Kind)) return `kind : ${KINDS.join("|")}`;
   if (typeof o.text !== "string" || !o.text.trim() || /[\r\n]/.test(o.text)) return "text : une ligne non vide";
-  for (const [k, ok] of [["sources", (s: string) => UUID.test(s)], ["pages", (s: string) => /^wiki\/.+\.md$/.test(s)]] as const) {
+  for (const [k, ok] of [["sources", (s: string) => RAW_ID.test(s)], ["pages", (s: string) => /^wiki\/.+\.md$/.test(s)]] as const) {
     if (o[k] === undefined) continue;
     const a = o[k];
     if (!Array.isArray(a) || !a.length || a.some((s) => typeof s !== "string" || !ok(s))) return `${k} : liste non vide ${k === "sources" ? "d'ids raw" : "de chemins wiki/….md"} (champ omis s'il est vide)`;
@@ -61,13 +61,13 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
   return all.filter((e) => days.includes(day(e)));
 }
 
-/** Titre de chaque page wiki (chemin → titre) : les pages se nomment par leur titre, pas par leur UUID. */
+/** Titre de chaque page wiki (chemin → titre) : les pages se nomment par leur titre, pas par leur nom de fichier. */
 export type Titles = Map<string, string>;
 export const pageTitles = async (root: string): Promise<Titles> =>
   new Map((await readDocs(root, "wiki")).filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
 
 const words = (s: string) => `-${slugify(s, Infinity)}-`;
-/** Le texte nomme déjà la page : son id (UUID) ou son titre, mots entiers, sans accents ni casse. */
+/** Le texte nomme déjà la page : son nom de fichier ou son titre, mots entiers, sans accents ni casse. */
 const namesPage = (text: string, p: string, title?: string) =>
   text.includes(p.replace(/\.md$/, "").split("/").at(-1)!) || (!!title && words(text).includes(words(title)));
 const namesId = (text: string, id: string) => text.includes(`\`${id}\``);

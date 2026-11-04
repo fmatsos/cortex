@@ -1,10 +1,12 @@
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
-import { localIso, newId, normUrl, readDocs, sha256 } from "./lib";
+import { localIso, normUrl, readDocs, sha256 } from "./lib";
+import { expand, free, naming, rawIdTaken } from "./naming";
 import { appendLog } from "./log";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
@@ -91,7 +93,9 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
-  const id = newId(now);
+  // dossier selon raw_path (config.json) ; son dernier segment est l'id, unique sous raw/
+  const rel = free(expand((await naming(root)).raw_path, { at: now, title: ex.title, kind: ex.kind }), (p) => rawIdTaken(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p)));
+  const id = rel.split("/").at(-1)!;
   if (opts.dryRun) return { id, duplicate: false, ex };
 
   const fm: Record<string, unknown> = { type: "RawSource", title: ex.title };
@@ -109,7 +113,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   if (ex.partial) fm.partial = ex.partial;
   fm.status = "pending";
 
-  const dir = join(root, "raw", iso.slice(0, 4), iso.slice(5, 7), id);
+  const dir = join(root, "raw", rel);
   await mkdir(dir, { recursive: true });
   await Bun.write(join(dir, "source.md"), `---\n${Bun.YAML.stringify(fm, null, 2)}\n---\n${ex.content.trim()}\n`);
   await appendLog(root, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);

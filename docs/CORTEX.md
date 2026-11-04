@@ -20,7 +20,7 @@ Tu es le mainteneur de ce wiki personnel. L'humain (`human:franck`) choisit les 
 ## Arborescence
 
 ```
-raw/YYYY/MM/<uuid>/source.md # sources extraites (+ assets/)
+raw/YYYY/MM/<uuid>/source.md # sources extraites (+ assets/) ; nommage par défaut
 wiki/index.md                # catalogue (réservé OKF, sans frontmatter)
 wiki/log.jsonl               # journal append-only, source de vérité (une entrée JSON par ligne)
 wiki/log.md                  # généré depuis log.jsonl (réservé OKF)
@@ -30,8 +30,8 @@ wiki/entities/<uuid>.md      # type: Entity — personne, outil, projet, organis
 wiki/syntheses/<uuid>.md     # type: Synthesis — réponse rangée, comparaison, thèse
 ```
 
-- **Identifiants : des UUID v7**, pour les sources raw comme pour les pages wiki (horodatés puis aléatoires : uniques, sans collision de noms, triés dans l'ordre de création). Tu n'en inventes jamais : `cortex add` nomme une source, `cortex new` crée une page. Le nom d'un fichier ne dit rien de son contenu : une page se trouve par son **titre** (index, `cortex search`), et un lien se repère par son texte.
-- **Un identifiant est définitif.** On ne renomme pas une page : on change son titre, son UUID reste.
+- **Identifiants : des UUID v7 par défaut**, pour les sources raw comme pour les pages wiki (horodatés puis aléatoires : uniques, sans collision de noms, triés dans l'ordre de création). Le nommage et l'arborescence se règlent dans `config.json` (`raw_path`, `page_path` : voir le README de Cortex) ; l'arborescence ci-dessus est celle par défaut. Tu n'inventes jamais un nom : `cortex add` nomme une source, `cortex new` crée une page, selon la config. Une page se trouve par son **titre** (index, `cortex search`), pas par son nom de fichier.
+- **Un nom est définitif.** On ne renomme pas une page : on change son titre, son chemin reste.
 
 ## Format d'une source raw (`raw/.../source.md`)
 
@@ -76,7 +76,7 @@ Corps en prose. Une affirmation.[^chroma-context-rot] Voir [Context engineering]
 ```
 
 - **`generated.at`** : mets-le à jour à chaque modification significative. **`generated.by`** désigne toujours l'acteur réel.
-- **Liens :** des liens Markdown relatifs à la racine (`/wiki/<type>/<uuid>.md`), avec le titre de la page cible comme texte. Un lien pointe toujours vers une page existante. Pour un concept à écrire, crée-le avec `cortex new` (une ébauche en `status: draft` suffit), puis lie-le.
+- **Liens :** des liens Markdown relatifs à la racine (`/wiki/…md`, le chemin affiché par `cortex new`), avec le titre de la page cible comme texte. Un lien pointe toujours vers une page existante. Pour un concept à écrire, crée-le avec `cortex new` (une ébauche en `status: draft` suffit), puis lie-le.
 - **Page relue puis modifiée :** garde l'entrée `verified` (c'est un événement passé), mais repasse en `status: draft`. Un `generated.at` postérieur à `verified.at` signifie qu'il faut relire la page.
 - **Dépréciation :** une page contredite par une source plus récente n'est pas supprimée. Elle passe en `status: deprecated`, avec en tête un lien vers ce qui la remplace.
 - **Page `Source` :** elle contient un résumé, 3 à 7 points clés, la `note` de l'humain, et des liens vers les concepts et entités touchés.
@@ -163,7 +163,7 @@ cortex add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]   # → ra
 cortex inbox [--dry-run]                                              # add sur inbox/ (urls.txt, fichiers), puis la vide
 cortex search "<termes>" [--in wiki|raw] [--json]                     # BM25, wiki d'abord
 cortex index                                                          # régénère wiki/index.md et wiki/log.md
-cortex new <Source|Concept|Entity|Synthesis> "<titre>"               # crée wiki/<type>/<uuid>.md (draft) et affiche son chemin
+cortex new <Source|Concept|Entity|Synthesis> "<titre>"               # crée la page (draft) selon page_path et affiche son chemin
 cortex log [--limit N] [--json] [--kind k]                            # lit le journal, le plus récent d'abord
 cortex log add <kind> "<texte>" [--source <id>]… [--page <chemin>]…   # ajoute une entrée à wiki/log.jsonl
 cortex lint [--json]                                                  # contrôles mécaniques
@@ -186,6 +186,7 @@ cortex export [--out <dossier>]                                       # le wiki 
 - **`cortex export` publie le wiki en site statique** (navigation, recherche instantanée, graphe des liens) sans LLM ni serveur. Il ne lit que `wiki/` : `raw/` n'est jamais publié, les sources pointent vers leur URL d'origine. Le dossier de sortie est vidé à chaque export.
 - **`cortex ask` est en lecture seule.** `--file` autorise à ranger la réponse dans `wiki/syntheses/` (en `draft`), avec l'entrée de journal, puis l'index et `log.md` sont régénérés.
 - **L'agent est choisi par `config.json`** à la racine (`{ "client": "claude" | "codex" | "opencode", "model": "…", "effort": "…" }`), géré par `cortex config`, qui valide chaque écriture. `effort` prend le vocabulaire du client : `low`…`max` pour Claude, `minimal`…`xhigh` pour Codex, le nom d'une variante du modèle pour opencode. Modèle et effort valent pour le batch comme pour l'interactif.
+- **`config.json` règle aussi le nommage** : `raw_path` (dossier d'une source sous `raw/`, dont le dernier segment est l'id raw ; défaut `{yyyy}/{mm}/{uuid}`) et `page_path` (chemin d'une page sous `wiki/`, sans `.md` ; défaut `{type}/{uuid}`). Placeholders : `{uuid}` `{yyyy}` `{mm}` `{dd}` `{hh}` `{mi}` `{ss}` `{slug}` `{rand}`, plus `{kind}` (raw) et `{type}` (pages). Un nom déjà pris reçoit `-2`, `-3`… ; `cortex lint` signale ce qui ne suit pas le modèle.
   - **Sans `client`, le CLI reste agnostique** : `$CORTEX_AGENT` pour le mode interactif (défaut `claude`), `$CORTEX_AGENT_BATCH` pour `--batch` et `ask` (défaut `claude -p`, qui reçoit le prompt sur son entrée standard). L'agent tourne dans un bac à sable (bubblewrap sous Linux, `sandbox-exec` sous macOS) où tout le dépôt est en lecture seule, sauf `wiki/`.
   - **Avec un `client`**, `--batch` et `ask` passent par son SDK ou son API, et tes écritures sont bloquées hors de `wiki/` **avant** d'avoir lieu. Claude : un contrôle de chaque appel d'outil (Bash limité à `cortex search|index|lint`). Codex : un bac à sable OS lancé depuis `wiki/`. opencode : des règles de permission (`edit` limité à `wiki/*`, shell limité à `cortex`).
   - Le mode interactif lance la CLI du client (`claude`, `codex`, `opencode --prompt`), sauf si `$CORTEX_AGENT` est défini. Il est confiné de la même façon.

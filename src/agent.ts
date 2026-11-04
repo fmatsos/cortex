@@ -51,7 +51,7 @@ async function markCompiled(root: string, path: string) {
 }
 
 async function isCited(root: string, path: string) {
-  return (await readDocs(root, "wiki/sources")).some((d) => (d.fm.sources ?? []).some((s: any) => s.resource === `/${path}`));
+  return (await readDocs(root, "wiki")).some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s: any) => s.resource === `/${path}`));
 }
 
 export async function compile(root: string, ids: string[], opts: { pending?: boolean; batch?: boolean }) {
@@ -75,7 +75,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
     if (await isCited(root, d.path)) {
       if (d.fm.status === "pending") await markCompiled(root, d.path);
       console.log(`✓ ${id} compilée`);
-    } else { console.error(`✗ ${id} : aucune page wiki/sources ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
+    } else { console.error(`✗ ${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
   }
   await (await import("./index")).regenerate(root);
 }
