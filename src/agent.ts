@@ -9,6 +9,7 @@ import { confine } from "./backends/sandbox";
 import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
+import { askPrompt, compilePrompt, scopePrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
   const p = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "ignore" });
@@ -58,8 +59,7 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "la racine du cerveau contient ton répertoire personnel : l'agent ne pourrait plus écrire son état (~/.claude…). Utilise un dossier dédié." }); return 1; }
   const backend = await backendFor(root, await w.config());
-  prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
-    (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
+  prompt = scopePrefix(root, mode === "write", (await w.config()).language) + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
   if (!batch) {
     // Ctrl+C targets the agent; without this handler, cortex would die too (same process group) before checking the Source page and flipping the status
@@ -114,8 +114,8 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const id = rawId(d.path);
     if (!String(d.fm.note ?? "").trim()) { say("fail", `${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); ok = false; continue; }
     if (d.fm.status !== "pending") say("info", paint.dim(`(${id} est déjà ${d.fm.status} : recompilation)`));
-    const prompt = `Applique le workflow INGEST de ${agentFile((await w.config()).client)} à la source ${toResource(d.path)}.` +
-      (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
+    const cfg = await w.config();
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), batch: opts.batch, language: cfg.language });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     const code = await run(w, prompt, !!opts.batch, "write", sink);
@@ -139,9 +139,8 @@ export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: 
   const { say, done } = collector(report);
   const sink: Report = (m) => say(m.level, m.text, m.mark);
   const root = w.root;
-  const prompt = `Applique le workflow QUERY de ${agentFile((await w.config()).client)} à la question : « ${question} ».` +
-    (opts.file ? " Range la réponse dans une page créée par cortex new Synthesis \"<titre>\" (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
-      : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
+  const cfg = await w.config();
+  const prompt = askPrompt({ agentFile: agentFile(cfg.client), question, file: opts.file, language: cfg.language });
   const before = await changed(root, sink);
   const code = await run(w, prompt, !opts.interactive, opts.file ? "write" : "read", sink);
   const after = await changed(root, sink);
