@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
-import { readDocs } from "./lib";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { readDocs, type Doc } from "./lib";
 import { backendFor, loadConfig, type Mode } from "./backends/index";
 import { confine } from "./backends/backend";
 import { agentFile } from "./schema";
@@ -71,11 +72,26 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
   catch (e) { fail((e as Error).message); return 1; }
 }
 
-/** Flips pending → compiled by line replacement: never a YAML re-serialization (raw is immutable, comments included). */
-async function markCompiled(root: string, path: string) {
-  const f = Bun.file(join(root, path));
-  const txt = await f.text();
-  await Bun.write(f, txt.replace(/^status: pending$/m, "status: compiled"));
+/** Flips pending → compiled by line replacement inside the frontmatter only: never a YAML re-serialization (raw is immutable, comments included). Atomic (tmp + rename); throws when no status line matched. */
+export async function markCompiled(root: string, path: string) {
+  const file = join(root, path);
+  const txt = await readFile(file, "utf8");
+  const fmEnd = txt.match(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---/)?.[0].length ?? 0;
+  const head = txt.slice(0, fmEnd).replace(/^(status:[ \t]*)["']?pending["']?([ \t]*\r?)$/m, "$1compiled$2");
+  if (head === txt.slice(0, fmEnd)) throw new Error(`statut pending introuvable dans ${path}`);
+  await writeFile(`${file}.tmp`, head + txt.slice(fmEnd));
+  await rename(`${file}.tmp`, file);
+}
+
+/** Resolves a raw source by id (folder name): exact match wins, else a unique prefix; ambiguous or unknown → error. */
+export function resolveRawId(docs: Doc[], id: string): Doc {
+  const idOf = (d: Doc) => d.path.split("/").at(-2) ?? "";
+  const exact = docs.find((d) => idOf(d) === id);
+  if (exact) return exact;
+  const hits = docs.filter((d) => id !== "" && idOf(d).startsWith(id));
+  if (hits.length > 1) throw new Error(`id ambigu : ${hits.map(idOf).join(", ")}`);
+  if (!hits.length) throw new Error(`Source introuvable : ${id}`);
+  return hits[0]!;
 }
 
 async function isCited(root: string, path: string) {
@@ -86,7 +102,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
   const raw = await readDocs(root, "raw");
   const targets = opts.pending
     ? raw.filter((d) => d.fm.status === "pending")
-    : ids.map((id) => raw.find((d) => d.path.split("/").at(-2) === id || d.path.split("/").at(-2)?.includes(id)) ?? (() => { throw new Error(`Source introuvable : ${id}`); })());
+    : ids.map((id) => resolveRawId(raw, id));
   if (!targets.length) { console.log("Rien à compiler."); return; }
 
   for (const d of targets) {
@@ -101,7 +117,10 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
     const stray = await outOfScope(root, before);
     if (stray.length) { warn(`l'agent a modifié hors de wiki/ : ${stray.join(", ")}`, "⚠"); process.exitCode = 1; }
     if (await isCited(root, d.path)) {
-      if (d.fm.status === "pending") await markCompiled(root, d.path);
+      if (d.fm.status === "pending") {
+        try { await markCompiled(root, d.path); }
+        catch (e) { fail(`${id} : ${(e as Error).message}`); process.exitCode = 1; continue; }
+      }
       console.log(`${paint.ok("✓")} ${id} compilée`);
     } else { fail(`${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
   }
