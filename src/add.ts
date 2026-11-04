@@ -138,6 +138,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
 }
 
 export async function extractPdf(bytes: Uint8Array, url?: string, name = "document"): Promise<Extract> {
+  if (!Bun.which("pdftotext")) throw new Error("pdftotext introuvable : il extrait le texte des PDF. Installe-le (apt install poppler-utils).");
   const p = Bun.spawn(["pdftotext", "-layout", "-", "-"], { stdin: bytes, stdout: "pipe", stderr: "pipe" });
   const out = await new Response(p.stdout).text();
   if ((await p.exited) !== 0) throw new Error(`pdftotext a échoué : ${await new Response(p.stderr).text()}`);
@@ -186,7 +187,7 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
-  // folder according to raw_path (config.json); its last segment is the id, unique under raw/
+  // folder according to raw_path (cortex.json); its last segment is the id, unique under raw/
   const base = expand((await w.naming()).raw_path, { at: now, title: ex.title, kind: ex.kind });
   const tried = new Set<string>(); // folders another writer took between the probe and the mkdir
   const taken = (p: string) => tried.has(p) || !!rawPath(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p));

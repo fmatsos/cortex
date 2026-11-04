@@ -6,6 +6,7 @@ import { openWiki } from "./context";
 import { buildSiteData } from "./export";
 import { fromResource, type Page } from "./doc";
 import { isReservedPage, readPages, related, type Related } from "./lib";
+import { mcpRoot } from "./test-helpers";
 
 /** The pre-REL-10 `related`, verbatim: it recomputes every page's links per call. The oracle for T10. */
 function relatedOld(docs: Page[], path: string): Related[] {
@@ -28,21 +29,6 @@ function relatedOld(docs: Page[], path: string): Related[] {
     if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
   }
   return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-}
-
-/** Same fixture as `mcpRoot()` in cortex.test.ts: 3 pages linked by links, tags and a shared source. */
-async function smallRoot() {
-  const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  const res = "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md";
-  const page = (type: string, title: string, tags: string, body: string) =>
-    `---\ntype: ${type}\ntitle: ${title}\ndescription: D ${title}.\ntags: [${tags}]\nsources:\n  - id: x\n    resource: ${res}\n    title: X\n---\n${body}\n`;
-  await Bun.write(join(root, "cortex.json"), "{}");
-  await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\ntitle: X\nnote: n\nstatus: compiled\n---\nUn texte sur le zythum.\n");
-  await Bun.write(join(root, "wiki/concepts/a.md"), page("Concept", "Alpha", "llm, ctx", "Voir [B](/wiki/concepts/b.md)."));
-  await Bun.write(join(root, "wiki/concepts/b.md"), page("Concept", "Beta", "ctx", "Rien."));
-  await Bun.write(join(root, "wiki/entities/c.md"), page("Entity", "Gamma", "llm", "Voir [A](/wiki/concepts/a.md#x)."));
-  await Bun.write(join(root, "wiki/index.md"), "# Index\n- [Alpha](/wiki/concepts/a.md)\n- [Beta](/wiki/concepts/b.md)\n- [Gamma](/wiki/entities/c.md)\n");
-  return root;
 }
 
 /**
@@ -76,7 +62,7 @@ async function bigRoot(n: number, links: number) {
 
 test("T10 related : liens précalculés == related d'avant, sur la fixture mcpRoot", async () => {
   const { linkGraph } = await import("./lib");
-  const { pages } = await readPages(await smallRoot());
+  const { pages } = await readPages(await mcpRoot());
   const graph = linkGraph(pages);
   for (const p of ["/wiki/concepts/a.md", "wiki/concepts/b.md", "wiki/entities/c.md"]) {
     const old = relatedOld(pages, p);
@@ -103,7 +89,7 @@ test("T10 related : même sortie que l'ancien sur un wiki dense (liens doubles, 
 });
 
 test("openWiki : links() et backlinks() sont mémoïsés et cohérents", async () => {
-  const w = openWiki(await smallRoot());
+  const w = openWiki(await mcpRoot());
   expect(await w.links()).toBe(await w.links());
   expect(await w.backlinks()).toBe(await w.backlinks());
   expect([...(await w.links()).get("wiki/concepts/a.md")!]).toEqual(["wiki/concepts/b.md"]);

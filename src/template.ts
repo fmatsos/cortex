@@ -4,7 +4,7 @@ import { localIso, slugify } from "./lib";
  * Pure part of the naming: placeholders, template validation, expansion, matching pattern.
  * No config access, so that config.ts (which validates the templates) and naming.ts (which reads them) both import it without a cycle.
  *
- * Naming and layout of raw sources and wiki pages: one template per kind, in config.json.
+ * Naming and layout of raw sources and wiki pages: one template per kind, in cortex.json.
  * `raw_path` gives the folder of a source under raw/ (containing source.md), its last segment is the raw id;
  * `page_path` gives the path of a page under wiki/, without `.md`. `/` creates subfolders.
  * Only the CLI applies these templates (`cortex add`, `cortex new`): neither the agent nor the human invents a name.
@@ -29,10 +29,16 @@ const PLACEHOLDERS: Record<string, { for?: NamingKey; re: string; value: (v: Var
   ss: { re: "\\d{2}", value: (v) => localIso(v.at).slice(17, 19), doc: "seconde" },
   slug: { re: "[a-z0-9]+(?:-[a-z0-9]+)*", value: (v) => slugify(v.title), doc: "titre en minuscules et tirets (50 caractères au plus)" },
   rand: { re: "[a-z0-9]{4}", value: () => rand4(), doc: "4 caractères aléatoires [a-z0-9]" },
-  type: { for: "page_path", re: `(?:${Object.values(TYPE_DIRS).join("|")})`, value: (v) => TYPE_DIRS[v.type!], doc: "dossier du type : sources, concepts, entities, syntheses" },
-  kind: { for: "raw_path", re: "[a-z]+", value: (v) => v.kind!, doc: "nature de la source : article, pdf, note…" },
+  type: { for: "page_path", re: `(?:${Object.values(TYPE_DIRS).join("|")})`, value: (v) => TYPE_DIRS[need(v.type, "type")], doc: "dossier du type : sources, concepts, entities, syntheses" },
+  kind: { for: "raw_path", re: "[a-z]+", value: (v) => need(v.kind, "kind"), doc: "nature de la source : article, pdf, note…" },
 };
 export type Vars = { at: Date; title: string; type?: PageType; kind?: string };
+
+/** A placeholder whose variable the caller did not supply is a bug, not the text « undefined » in a path. */
+function need<T>(v: T | undefined, name: string): T {
+  if (v === undefined) throw new Error(`placeholder {${name}} sans valeur : le contexte d'appel ne la fournit pas.`);
+  return v;
+}
 
 function rand4(): string {
   const a = "abcdefghijklmnopqrstuvwxyz0123456789";

@@ -59,7 +59,7 @@ export async function outOfScope(root: string, before: Map<string, string>, repo
   return [...after].filter(([p, h]) => before.get(p) !== h && !p.startsWith("wiki/")).map(([p]) => p);
 }
 
-/** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by config.json. */
+/** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by cortex.json. */
 async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report): Promise<number> {
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "la racine du cerveau contient ton répertoire personnel : l'agent ne pourrait plus écrire son état (~/.claude…). Utilise un dossier dédié." }); return 1; }

@@ -157,7 +157,7 @@ Fix what is mechanical. **Propose** to the human what needs judgment (merge, dep
 ```
 cortex add <url|file|-> --note "why I keep this" [--dry-run]         # → raw/, status: pending, Add entry in the journal
 cortex inbox [--dry-run]                                             # add on inbox/ (urls.txt, files), then empties it
-cortex search "<terms>" [--in wiki|raw] [--json]                     # BM25, wiki first
+cortex search "<terms>" [--in wiki|raw] [--json] [--limit N]         # BM25, wiki first
 cortex index                                                         # regenerates wiki/index.md and wiki/log.md
 cortex new <Source|Concept|Entity|Synthesis> "<title>"               # creates the page (draft) per page_path, prints its path
 cortex log [--limit N] [--json] [--kind k]                           # reads the journal, newest first
@@ -182,11 +182,7 @@ cortex export [--out <dir>]                                          # the wiki 
 - **`cortex mcp` exposes the wiki to an external agent**: `search`, `get`, `related`, `lint`, `log` (JSON entries of the last days, `kind` filter) read-only, and `add` (URL or text, into `raw/` only, `note` mandatory). It never modifies `wiki/`: ingesting stays the job of `cortex compile`.
 - **`cortex export` publishes the wiki as a static site** (navigation, instant search, link graph) with no LLM and no server. It only reads `wiki/`: `raw/` is never published, sources point to their original URL. The output directory is emptied on every export.
 - **`cortex ask` is read-only.** `--file` allows storing the answer as a Synthesis page (in `draft`), with its journal entry; the index and `log.md` are then regenerated.
-- **`cortex.json` picks the agent** (`{ "client": "claude" | "codex" | "opencode", "model": "…", "effort": "…" }`). `cortex config` manages it and validates every write. `effort` uses the client's vocabulary: `low`…`max` for Claude, `minimal`…`xhigh`, `max`, `ultra` or `persistent` for Codex, the name of a model variant for opencode. Model and effort apply to batch and interactive runs alike.
-- **`cortex.json` also sets**:
-  - `language`: the wiki language (rule 7);
-  - `schema`: a Markdown file, relative to the root, that replaces the built-in schema;
-  - the naming: `raw_path` (folder of a source under `raw/`, whose last segment is the raw id; default `{yyyy}/{mm}/{uuid}`) and `page_path` (path of a page under `wiki/`, without `.md`; default `{type}/{uuid}`). Placeholders: `{uuid}` `{yyyy}` `{mm}` `{dd}` `{hh}` `{mi}` `{ss}` `{slug}` `{rand}`, plus `{kind}` (raw) and `{type}` (pages). A name already taken gets `-2`, `-3`…; `cortex lint` reports what does not follow the templates.
+- **`cortex.json` configures the agent (`client`: `claude`, `codex` or `opencode`, with `model` and `effort`), the wiki language (rule 7), the schema file and the naming of sources and pages** (`raw_path`, `page_path`). `cortex config` manages it and validates every write: `cortex help` lists the keys, and a rejected value names what is allowed (clients, `effort` vocabulary of the client, naming placeholders). A name already taken gets `-2`, `-3`…; `cortex lint` reports what does not follow the templates. Model and effort apply to batch and interactive runs alike.
 - **Agent file:** `cortex config init` writes this schema to `CLAUDE.md` (Claude, or no client) or `AGENTS.md` (Codex, opencode); `cortex schema --write` rewrites it.
   - **Without `client`, the CLI stays agent-agnostic**: `$CORTEX_AGENT` for interactive mode (default `claude`), `$CORTEX_AGENT_BATCH` for `--batch` and `ask` (default `claude -p`, which reads the prompt on standard input). The agent runs in a sandbox (bubblewrap on Linux, `sandbox-exec` on macOS) where the whole repository is read-only except `wiki/`.
   - **With a `client`**, `--batch` and `ask` go through its SDK or API, and your writes outside `wiki/` are blocked **before** they happen. Claude: every tool call is checked (Bash limited to `cortex search|index|lint|new|log`). Codex: an OS sandbox started from `wiki/`. opencode: permission rules (`edit` limited to `wiki/*`, shell limited to `cortex`).

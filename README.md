@@ -102,7 +102,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex export [--out <dir>]` | Builds the static site (default `.cortex/site`). The output directory is emptied first. |
 | `cortex mcp` | Starts an MCP server on stdio. |
 | `cortex schema [--write]` | Prints the agent schema, or rewrites `CLAUDE.md` / `AGENTS.md` with it. |
-| `cortex config init [client] \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `cortex.json` (keys `client`, `model`, `effort`, `language`, `schema`, `raw_path`, `page_path`). `init` also writes the agent schema. |
+| `cortex config init [client] \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `cortex.json` (`cortex help` lists the keys; an invalid key or value is rejected with what is allowed). `init` also writes the agent schema. |
 
 ### Choosing the agent
 
