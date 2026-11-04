@@ -8,7 +8,8 @@ import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { localIso, normUrl, readDocs, sha256 } from "./lib";
-import { expand, free, naming, rawIdTaken } from "./naming";
+import { free, naming, rawIdTaken } from "./naming";
+import { expand } from "./template";
 import { appendLog } from "./log";
 import { paint } from "./style";
 

@@ -1,133 +1,19 @@
-import { join } from "node:path";
 import type { Backend, Config } from "./backend";
+import { loadConfig, type Client } from "../config";
 import agnostic from "./default";
 import claude from "./claude";
 import codex from "./codex";
 import opencode from "./opencode";
-import { z } from "zod";
-import { checkTemplate, type NamingKey } from "../naming";
-import { paint } from "../style";
 
-export type { Backend, Config, Mode } from "./backend";
+export type { Backend, Mode } from "./backend";
 
 /**
  * Bridge: the commands (compile, ask: the abstraction, in agent.ts) only know `Backend`.
  * Implementations: default.ts (agnostic, subprocess, no SDK), claude.ts, codex.ts, opencode.ts.
  * cortex.json at the root chooses the client; without `client`, the CLI stays agnostic.
+ * Only agent.ts imports this module: capture commands (add, new, lint) never load the agent backends.
  */
-const CLIENTS: Record<string, (cfg: Config) => Backend> = { claude, codex, opencode };
-
-// effort: vocabulary of each SDK; opencode = variant name, specific to each model (checked by opencode at launch)
-const EFFORTS: Record<string, string[] | undefined> = {
-  claude: ["low", "medium", "high", "xhigh", "max"],
-  codex: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"],
-};
-const str = (k: string) => z.string({ error: `« ${k} » doit être une chaîne ou null.` }).nullish();
-const template = (k: NamingKey) => str(k).superRefine((v, ctx) => {
-  const e = v && checkTemplate(k, v);
-  if (e) ctx.addIssue({ code: "custom", message: e, input: v });
-});
-const SHAPE = {
-  client: z.enum(Object.keys(CLIENTS) as [string, ...string[]], { error: (i) => `client inconnu « ${i.input} » (${Object.keys(CLIENTS).join(", ")}).` }).nullish(),
-  model: str("model"),
-  effort: str("effort"),
-  language: str("language"),
-  schema: str("schema"),
-  raw_path: template("raw_path"),
-  page_path: template("page_path"),
-};
-export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
-
-/** Schema of cortex.json; null means « not set ». */
-export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
-  const allowed = c.client && EFFORTS[c.client];
-  if (c.effort && allowed && !allowed.includes(c.effort))
-    ctx.addIssue({ code: "custom", path: ["effort"], message: `effort « ${c.effort} » invalide pour ${c.client} (${allowed.join(", ")}).`, input: c.effort });
-});
-export type ConfigIssue = { level: "error" | "warning"; msg: string };
-
-const issueMsg = (i: z.core.$ZodIssue) =>
-  i.code === "unrecognized_keys" ? `propriété inconnue « ${i.keys.join(", ")} » (${CONFIG_KEYS.join(", ")}).`
-  : !i.path.length && i.code === "invalid_type" ? "cortex.json doit contenir un objet JSON."
-  : i.message;
-
-/** Checks of cortex.json: zod schema errors, then warnings. */
-export function lintConfig(c: unknown): ConfigIssue[] {
-  const r = ConfigSchema.safeParse(c);
-  if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
-  return !r.data.client && (r.data.model || r.data.effort)
-    ? [{ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
-}
-
-const configFile = (root: string) => Bun.file(join(root, "cortex.json"));
-
-/** Raw content of cortex.json ({} if absent); invalid JSON = error. */
-export async function readConfig(root: string): Promise<Record<string, unknown>> {
-  const f = configFile(root);
-  if (!(await f.exists())) return {};
-  try { return await f.json(); } catch { throw new Error("cortex.json : JSON invalide."); }
-}
-
-export async function loadConfig(root: string): Promise<Config> {
-  const c = await readConfig(root);
-  const e = lintConfig(c).find((i) => i.level === "error");
-  if (e) throw new Error(`cortex.json : ${e.msg} (cortex config lint)`);
-  return Object.fromEntries(Object.entries(c).filter(([, v]) => v != null)) as Config;
-}
-
-/** cortex config init|lint|get|set|remove. Every write is validated before being made. */
-export async function configCmd(root: string, [sub, key, value]: string[]): Promise<number> {
-  const f = configFile(root);
-  const save = async (c: Record<string, unknown>) => {
-    const e = lintConfig(c).filter((i) => i.level === "error");
-    if (e.length) throw new Error(e.map((i) => i.msg).join(" "));
-    await Bun.write(f, JSON.stringify(c, null, 2) + "\n");
-  };
-  const checkKey = () => {
-    if (!(CONFIG_KEYS as readonly string[]).includes(key ?? "")) throw new Error(`Propriété attendue : ${CONFIG_KEYS.join(", ")}.`);
-  };
-  switch (sub) {
-    case "init": {
-      // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
-      if (await f.exists()) throw new Error("cortex.json existe déjà.");
-      await save({ client: key ?? null, model: null, effort: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
-      console.log(`${paint.ok("✓")} cortex.json créé${key ? ` (client ${key})` : " (agnostique)"}.`);
-      const { writeSchema } = await import("../schema");
-      const w = await writeSchema(root, false);
-      console.log(w.written ? `${paint.ok("✓")} ${w.file} créé : le schéma que suit l'agent.` : `${paint.dim("=")} ${w.file} existe déjà : inchangé (cortex schema --write le remplace).`);
-      return 0;
-    }
-    case "lint": {
-      if (!(await f.exists())) { console.log("Pas de cortex.json : mode agnostique."); return 0; }
-      let issues: ConfigIssue[];
-      try { issues = lintConfig(await readConfig(root)); } catch (e) { issues = [{ level: "error", msg: (e as Error).message }]; }
-      for (const i of issues) console.log(`${i.level === "error" ? paint.error("✗") : paint.warn("!")} ${i.msg}`);
-      if (!issues.length) console.log(`${paint.ok("✓")} cortex.json valide.`);
-      return issues.some((i) => i.level === "error") ? 1 : 0;
-    }
-    case "get": {
-      const c = await readConfig(root);
-      if (!key) { console.log(JSON.stringify(c, null, 2)); return 0; }
-      checkKey();
-      if (c[key] != null) console.log(c[key]);
-      return 0;
-    }
-    case "set":
-      checkKey();
-      if (!value) throw new Error(`Usage : cortex config set ${key} <valeur>`);
-      await save({ ...(await readConfig(root)), [key]: value });
-      return 0;
-    case "remove": {
-      checkKey();
-      const c = await readConfig(root);
-      delete c[key];
-      await save(c);
-      return 0;
-    }
-    default:
-      throw new Error("Usage : cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>");
-  }
-}
+const CLIENTS = { claude, codex, opencode } satisfies Record<Client, (cfg: Config) => Backend>;
 
 export async function backendFor(root: string): Promise<Backend> {
   const cfg = await loadConfig(root);

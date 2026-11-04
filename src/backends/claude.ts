@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
+import type { Effort } from "../config";
 import { warn } from "../style";
 
 // --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
@@ -18,7 +19,7 @@ export default function claude(cfg: Config): Backend {
         options: {
           cwd: root,
           model: cfg.model,
-          effort: cfg.effort as any, // low | medium | high | xhigh | max
+          effort: cfg.effort as Effort<"claude"> | undefined, // validated against EFFORTS.claude by loadConfig; the schema types it as a plain string (opencode takes free-form variants)
           pathToClaudeCodeExecutable: cli("claude"),
           // No settings file is loaded: a permissions.allow rule or a hook (project, user or local) is
           // evaluated before canUseTool and could bypass the guard. The schema is passed explicitly instead.

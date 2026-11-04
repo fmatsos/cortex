@@ -7,8 +7,7 @@ import { regenerate } from "./index";
 import { KINDS, kindLabel, logAdd, newestFirst, readLog } from "./log";
 import { search } from "./search";
 import { lint } from "./lint";
-import { ask, compile } from "./agent";
-import { configCmd } from "./backends/index";
+import { configCmd } from "./config-cmd";
 import { CortexError, findRoot } from "./lib";
 import { newPage } from "./naming";
 import { fail, paint, warn } from "./style";
@@ -141,12 +140,12 @@ try {
     }
     case "compile":
       if (!args.length && !o.pending) throw usage("Usage : cortex compile <id…> | --pending [--batch]");
-      await compile(root, args, { pending: o.pending, batch: o.batch });
+      await (await import("./agent")).compile(root, args, { pending: o.pending, batch: o.batch });
       break;
     case "ask": {
       const q = args.join(" ");
       if (!q) throw usage('Usage : cortex ask "<question>" [--file]');
-      await ask(root, q, { file: o.file, interactive: o.interactive });
+      await (await import("./agent")).ask(root, q, { file: o.file, interactive: o.interactive });
       break;
     }
     case "export": {
