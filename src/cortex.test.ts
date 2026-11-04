@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,10 @@ import { renderIndex } from "./index";
 import { localIso, normUrl, rawPath, slugify } from "./lib";
 import { ftsQuery, search } from "./search";
 import { UUID_RE } from "./template";
+
+// The export test freezes SOURCE_DATE_EPOCH: put the environment back so later tests are unaffected.
+const epoch0 = process.env.SOURCE_DATE_EPOCH;
+afterEach(() => { if (epoch0 === undefined) delete process.env.SOURCE_DATE_EPOCH; else process.env.SOURCE_DATE_EPOCH = epoch0; });
 
 const UUID = new RegExp(`^${UUID_RE}$`);
 const newId = (at = new Date()) => Bun.randomUUIDv7("hex", at);
@@ -124,30 +128,27 @@ test("schema: built-in file, written to CLAUDE.md or AGENTS.md at init, language
   const { configCmd } = await import("./config-cmd");
   const { agentFile } = await import("./config");
   const { schemaText, writeSchema } = await import("./schema");
-  const log = console.log; console.log = () => {};
-  try {
-    for (const [client, file] of [[undefined, "CLAUDE.md"], ["claude", "CLAUDE.md"], ["codex", "AGENTS.md"], ["opencode", "AGENTS.md"]] as const) {
-      const root = mkdtempSync(join(tmpdir(), "cortex-"));
-      expect(await configCmd(root, ["init", ...(client ? [client] : [])])).toBe(0);
-      expect(agentFile(client)).toBe(file);
-      const txt = await Bun.file(join(root, file)).text();
-      expect(txt).toContain("## INGEST workflow");
-      expect(txt).toContain("Wiki language: **English**");
-      expect(existsSync(join(root, file === "CLAUDE.md" ? "AGENTS.md" : "CLAUDE.md"))).toBe(false);
-    }
+  for (const [client, file] of [[undefined, "CLAUDE.md"], ["claude", "CLAUDE.md"], ["codex", "AGENTS.md"], ["opencode", "AGENTS.md"]] as const) {
     const root = mkdtempSync(join(tmpdir(), "cortex-"));
-    await Bun.write(join(root, "CLAUDE.md"), "mine");
-    await configCmd(root, ["init"]);
-    expect(await Bun.file(join(root, "CLAUDE.md")).text()).toBe("mine"); // an existing file is kept…
-    await configCmd(root, ["set", "language", "French"]);
-    await writeSchema(root, true); // …until cortex schema --write
-    expect(await Bun.file(join(root, "CLAUDE.md")).text()).toContain("Wiki language: **French**");
-    await Bun.write(join(root, "my-schema.md"), "Custom, in {{language}}.\n");
-    await configCmd(root, ["set", "schema", "my-schema.md"]);
-    expect(await schemaText(root)).toBe("Custom, in French.\n");
-    await configCmd(root, ["set", "schema", "missing.md"]);
-    await expect(schemaText(root)).rejects.toThrow("schéma introuvable");
-  } finally { console.log = log; }
+    expect((await configCmd(root, ["init", ...(client ? [client] : [])])).ok).toBe(true);
+    expect(agentFile(client)).toBe(file);
+    const txt = await Bun.file(join(root, file)).text();
+    expect(txt).toContain("## INGEST workflow");
+    expect(txt).toContain("Wiki language: **English**");
+    expect(existsSync(join(root, file === "CLAUDE.md" ? "AGENTS.md" : "CLAUDE.md"))).toBe(false);
+  }
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "CLAUDE.md"), "mine");
+  await configCmd(root, ["init"]);
+  expect(await Bun.file(join(root, "CLAUDE.md")).text()).toBe("mine"); // an existing file is kept…
+  await configCmd(root, ["set", "language", "French"]);
+  await writeSchema(root, true); // …until cortex schema --write
+  expect(await Bun.file(join(root, "CLAUDE.md")).text()).toContain("Wiki language: **French**");
+  await Bun.write(join(root, "my-schema.md"), "Custom, in {{language}}.\n");
+  await configCmd(root, ["set", "schema", "my-schema.md"]);
+  expect(await schemaText(root)).toBe("Custom, in French.\n");
+  await configCmd(root, ["set", "schema", "missing.md"]);
+  await expect(schemaText(root)).rejects.toThrow("schéma introuvable");
 });
 
 test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", async () => {
@@ -160,12 +161,11 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
   const sources = () => (existsSync(join(root, "raw")) ? readdirSync(join(root, "raw"), { recursive: true }) : []).filter((f) => String(f).endsWith("source.md")).length;
   const urls = join(root, "inbox/urls.txt");
   const [ok, ko] = [`${srv.url}ok`, `${srv.url}ko`];
-  const log = console.log, err = console.error; // CLI outputs: muted
-  const out: string[] = [];
-  console.log = (...a) => void out.push(a.join(" ")); console.error = (...a) => void out.push(a.join(" "));
   try {
-    expect(await inbox(root)).toBe(0); // inbox absent
-    expect(out.at(-1)).toBe("Inbox vide.");
+    const empty = await inbox(root); // inbox absent
+    expect(empty.ok).toBe(true);
+    expect(empty.messages.at(-1)).toMatchObject({ level: "info" });
+    expect(empty.messages.at(-1)!.text).toContain("Inbox vide.");
 
     await Bun.write(urls, `# commentaire\n\n${ok} pourquoi je garde ça\n${ko}\n`);
     await Bun.write(join(root, "inbox/avec.md"), "# Avec note\n\nUne idée sur la fermentation lactique des légumes.\n");
@@ -174,30 +174,31 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
     await Bun.write(join(root, "inbox/.gitkeep"), "");
 
     // dry-run: nothing moves
-    expect(await inbox(root, { dryRun: true })).toBe(1);
+    expect((await inbox(root, { dryRun: true })).ok).toBe(false);
     expect(sources()).toBe(0);
     expect(await Bun.file(urls).text()).toContain(ok);
     expect(existsSync(join(root, "inbox/avec.md.note"))).toBe(true);
 
     // real run: 3 sources, the failure (404) stays, comments kept
-    expect(await inbox(root)).toBe(1);
+    const real = await inbox(root);
+    expect(real.ok).toBe(false);
     expect(sources()).toBe(3);
     expect(await Bun.file(urls).text()).toBe(`# commentaire\n\n${ko}\n`);
     expect(readdirSync(join(root, "inbox")).sort()).toEqual([".gitkeep", "urls.txt"]);
     const raws = (await import("./lib")).readDocs(root, "raw");
     expect((await raws).docs.map((d) => d.fm.note).sort()).toEqual(["", "ma note", "pourquoi je garde ça"]);
-    expect(out.some((l) => l.startsWith(`✗ ${ko}`))).toBe(true);
+    expect(real.messages.some((m) => m.level === "fail" && m.text.startsWith(ko))).toBe(true);
 
     // second run: only the failure comes back, nothing new
-    expect(await inbox(root)).toBe(1);
+    expect((await inbox(root)).ok).toBe(false);
     expect(sources()).toBe(3);
 
     // the URL already present leaves the inbox without a new source
     await Bun.write(urls, `${ok}\n`);
-    expect(await inbox(root)).toBe(0);
+    expect((await inbox(root)).ok).toBe(true);
     expect(await Bun.file(urls).text()).toBe("");
     expect(sources()).toBe(3);
-  } finally { console.log = log; console.error = err; srv.stop(true); }
+  } finally { srv.stop(true); }
 });
 
 test("lint : erreurs bloquantes et avertissements", async () => {
@@ -391,21 +392,18 @@ test("cortex config : init, set, get, remove, lint", async () => {
   const { configCmd } = await import("./config-cmd");
   const { lintConfig, loadConfig } = await import("./config");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  const log = console.log; console.log = () => {};
-  try {
-    expect(await configCmd(root, ["init"])).toBe(0);
-    expect(await loadConfig(root)).toEqual({}); // all-null skeleton: agnostic
-    expect(configCmd(root, ["init"])).rejects.toThrow("existe déjà");
-    await configCmd(root, ["set", "client", "codex"]);
-    await configCmd(root, ["set", "effort", "low"]);
-    expect(configCmd(root, ["set", "effort", "turbo"])).rejects.toThrow("invalide pour codex");
-    expect(configCmd(root, ["set", "couleur", "x"])).rejects.toThrow("Propriété attendue");
-    expect(await loadConfig(root)).toEqual({ client: "codex", effort: "low" });
-    await configCmd(root, ["remove", "effort"]);
-    expect(await loadConfig(root)).toEqual({ client: "codex" });
-    await Bun.write(join(root, "cortex.json"), "{ pas du json");
-    expect(await configCmd(root, ["lint"])).toBe(1);
-  } finally { console.log = log; }
+  expect((await configCmd(root, ["init"])).ok).toBe(true);
+  expect(await loadConfig(root)).toEqual({}); // all-null skeleton: agnostic
+  expect(configCmd(root, ["init"])).rejects.toThrow("existe déjà");
+  await configCmd(root, ["set", "client", "codex"]);
+  await configCmd(root, ["set", "effort", "low"]);
+  expect(configCmd(root, ["set", "effort", "turbo"])).rejects.toThrow("invalide pour codex");
+  expect(configCmd(root, ["set", "couleur", "x"])).rejects.toThrow("Propriété attendue");
+  expect(await loadConfig(root)).toEqual({ client: "codex", effort: "low" });
+  await configCmd(root, ["remove", "effort"]);
+  expect(await loadConfig(root)).toEqual({ client: "codex" });
+  await Bun.write(join(root, "cortex.json"), "{ pas du json");
+  expect((await configCmd(root, ["lint"])).ok).toBe(false);
   expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // model-specific variant
   expect(lintConfig({ effort: "high" })[0].level).toBe("warning");
   expect(lintConfig([])[0].level).toBe("error");

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { changed, outOfScope } from "./agent";
+import type { Message } from "./print";
 
 const sh = (cwd: string, ...a: string[]) => Bun.spawnSync(a, { cwd, stderr: "pipe" });
 const put = (root: string, p: string, c = "x") => { mkdirSync(join(root, p, ".."), { recursive: true }); writeFileSync(join(root, p), c); };
@@ -35,8 +36,8 @@ test("T1 : périmètre de l'agent — chemins non ASCII, renommage, suppression"
 
 test("REL-13 : hors dépôt git, un avertissement est émis une seule fois", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-nogit-"));
-  const lines: string[] = [], orig = console.error;
-  console.error = (...a: unknown[]) => { lines.push(a.join(" ")); };
-  try { await changed(root); await changed(root); } finally { console.error = orig; }
-  expect(lines.filter((l) => l.includes("pas de dépôt git : le périmètre de l'agent n'est pas vérifié"))).toHaveLength(1);
+  const msgs: Message[] = [];
+  await changed(root, (m) => msgs.push(m));
+  await changed(root, (m) => msgs.push(m));
+  expect(msgs.filter((m) => m.level === "warn" && m.text.includes("pas de dépôt git : le périmètre de l'agent n'est pas vérifié"))).toHaveLength(1);
 });

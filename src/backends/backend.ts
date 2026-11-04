@@ -1,4 +1,5 @@
 import type { Config } from "../config";
+import type { Report } from "../print";
 /** Bridge between the commands (compile, ask) and the agents. Each client implements `Backend`. */
 export type Mode = "write" | "read";
 export type { Config };
@@ -6,8 +7,8 @@ export type { Config };
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */
   interactive(prompt: string): string[];
-  /** Non-interactive execution; returns the final text, throws on failure. */
-  run(root: string, prompt: string, mode: Mode): Promise<string>;
+  /** Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool call). */
+  run(root: string, prompt: string, mode: Mode, report?: Report): Promise<string>;
 }
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);

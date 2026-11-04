@@ -3,14 +3,13 @@ import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
-import { warn } from "../style";
 
 // --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
 
 export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
-    async run(root, prompt, mode) {
+    async run(root, prompt, mode, report) {
       const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk");
       const { schemaText } = await import("../schema");
       const schema = await schemaText(root);
@@ -31,7 +30,7 @@ export default function claude(cfg: Config): Backend {
           canUseTool: async (tool, input) => {
             const v = guard(root, tool, input as Record<string, any>, mode);
             if (v.allow) return { behavior: "allow", updatedInput: input };
-            warn(`refusé : ${v.reason}`, "  ⊘");
+            report?.({ level: "warn", text: `refusé : ${v.reason}`, mark: "  ⊘" });
             return { behavior: "deny", message: v.reason };
           },
         },
