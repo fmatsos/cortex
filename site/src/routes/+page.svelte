@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from "#lib/components/icon.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
+	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import PageList from "#lib/components/page-list.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
@@ -23,7 +24,7 @@
 
 <!-- la recherche est la porte d'entrée : un grand champ, des exemples qui donnent des résultats, les recherches récentes -->
 <section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-accueil" class="flex items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><span class="titre-anime">Cortex</span></h1>
+	<h1 id="h-accueil" class="flex items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /></h1>
 	<p class="text-muted-foreground mt-2">
 		{data.seed.total} pages et {data.seed.nbTags} tags à parcourir, ou
 		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">le graphe des liens</a>.

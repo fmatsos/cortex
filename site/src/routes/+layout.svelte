@@ -8,6 +8,7 @@
 	import { theme } from "#lib/theme.svelte.js";
 	import Icon from "#lib/components/icon.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
+	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import ThemeSwitch from "#lib/components/theme-switch.svelte";
@@ -69,7 +70,7 @@
 <!-- ordre du DOM = ordre visuel (marque, navigation, recherche, thème) à toutes les largeurs : la tabulation suit l'œil -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
 	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
-		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} animated class="text-primary" /><span class="titre-anime">Cortex</span></a>
+		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} animated class="text-primary" /><CortexWordmark /></a>
 		<nav aria-label="Navigation principale" class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}

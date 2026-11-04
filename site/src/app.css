@@ -615,18 +615,3 @@ body {
 	min-height: 100dvh;
 }
 
-/* le mot « Cortex » suit le logo animé : quand l'influx a atteint les nœuds (vers 2 s sur 4 s), un reflet traverse le mot.
-   Reflet = pétrole mêlé au fond : plus clair que le texte en thème clair, plus sombre en thème sombre, donc visible dans les deux */
-@media (prefers-reduced-motion: no-preference) {
-	.titre-anime {
-		background: linear-gradient(100deg, var(--foreground) 35%, color-mix(in oklab, var(--primary) 65%, var(--background)) 50%, var(--foreground) 65%) 100% 0 / 300% 100% no-repeat;
-		-webkit-background-clip: text;
-		background-clip: text;
-		color: transparent;
-		animation: titre-balaye 4s ease-in-out infinite;
-	}
-}
-@keyframes titre-balaye {
-	0%, 45% { background-position: 100% 0; }
-	75%, 100% { background-position: 0% 0; }
-}
