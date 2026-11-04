@@ -10,6 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # bubblewrap confines the agent; Ubuntu 24.04 restricts the unprivileged user namespaces it needs
+      - run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
