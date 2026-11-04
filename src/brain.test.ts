@@ -83,9 +83,37 @@ test("config.json : absent = agnostique, client inconnu = erreur", async () => {
   await Bun.write(join(root, "config.json"), '{"client":"gpt"}');
   expect(loadConfig(root)).rejects.toThrow("client inconnu");
   await Bun.write(join(root, "config.json"), '{"client":"opencode"}');
-  expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--prompt", "p"]);
+  expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--model", "opencode/big-pickle", "--prompt", "p"]);
+  // effort : traduit dans le vocabulaire de chaque CLI
+  const it = async (cfg: object) => { await Bun.write(join(root, "config.json"), JSON.stringify(cfg)); return (await backendFor(root)).interactive("p"); };
+  expect(await it({ client: "opencode", effort: "high" })).toEqual(["opencode", "--model", "opencode/big-pickle#high", "--prompt", "p"]);
+  expect(await it({ client: "claude", model: "opus", effort: "max" })).toEqual(["claude", "--model", "opus", "--effort", "max", "p"]);
+  expect(await it({ client: "codex", effort: "low" })).toEqual(["codex", "-c", 'model_reasoning_effort="low"', "p"]);
   await Bun.write(join(root, "config.json"), "{}");
   expect((await backendFor(root)).interactive("p")).toEqual(["claude", "p"]);
+});
+
+test("brain config : init, set, get, remove, lint", async () => {
+  const { configCmd, lintConfig, loadConfig } = await import("./backends/index");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  const log = console.log; console.log = () => {};
+  try {
+    expect(await configCmd(root, ["init"])).toBe(0);
+    expect(await loadConfig(root)).toEqual({}); // squelette tout à null : agnostique
+    expect(configCmd(root, ["init"])).rejects.toThrow("existe déjà");
+    await configCmd(root, ["set", "client", "codex"]);
+    await configCmd(root, ["set", "effort", "low"]);
+    expect(configCmd(root, ["set", "effort", "turbo"])).rejects.toThrow("invalide pour codex");
+    expect(configCmd(root, ["set", "couleur", "x"])).rejects.toThrow("Propriété attendue");
+    expect(await loadConfig(root)).toEqual({ client: "codex", effort: "low" });
+    await configCmd(root, ["remove", "effort"]);
+    expect(await loadConfig(root)).toEqual({ client: "codex" });
+    await Bun.write(join(root, "config.json"), "{ pas du json");
+    expect(await configCmd(root, ["lint"])).toBe(1);
+  } finally { console.log = log; }
+  expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // variante propre au modèle
+  expect(lintConfig({ effort: "high" })[0].level).toBe("warning");
+  expect(lintConfig([])[0].level).toBe("error");
 });
 
 test("confinement bubblewrap : wiki/ seul inscriptible", async () => {

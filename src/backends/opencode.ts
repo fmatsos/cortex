@@ -4,9 +4,10 @@ import { interactiveWith, type Backend, type Config } from "./backend";
 // --- opencode v2 : API REST de `opencode serve` (le SDK publié, 1.19.5, ne parle pas la v2) -----
 
 export default function opencode(cfg: Config): Backend {
-  const [providerID, ...id] = (cfg.model ?? "opencode/big-pickle").split("/");
+  const model = cfg.model ?? "opencode/big-pickle";
+  const [providerID, ...id] = model.split("/");
   return {
-    interactive: interactiveWith((p) => ["opencode", "--prompt", p]),
+    interactive: interactiveWith((p) => ["opencode", "--model", cfg.effort ? `${model}#${cfg.effort}` : model, "--prompt", p]),
     async run(root, prompt, mode) {
       const server = await startOpencode();
       try {
@@ -29,7 +30,7 @@ export default function opencode(cfg: Config): Backend {
           rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
         ];
         const { data: session } = await api("POST", "/api/session", {
-          location: { directory: root }, permissions, model: { providerID, id: id.join("/") },
+          location: { directory: root }, permissions, model: { providerID, id: id.join("/"), ...(cfg.effort && { variant: cfg.effort }) }, // effort = variante du modèle opencode
         });
         await api("POST", `/api/session/${session.id}/prompt`, { text: prompt });
         await api("POST", `/api/experimental/session/${session.id}/wait`);

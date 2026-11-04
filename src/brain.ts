@@ -6,6 +6,7 @@ import { renderIndex } from "./index";
 import { search } from "./search";
 import { lint } from "./lint";
 import { ask, compile } from "./agent";
+import { configCmd } from "./backends/index";
 import { findRoot } from "./lib";
 
 const HELP = `brain — second cerveau
@@ -16,8 +17,10 @@ const HELP = `brain — second cerveau
   brain lint [--json]
   brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
   brain ask "<question>" [--file] [--interactive]
+  brain config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
 
-Agent : $BRAIN_AGENT (interactif, défaut « claude »), $BRAIN_AGENT_BATCH (défaut « claude -p »).
+Agent : config.json (client claude|codex|opencode, model, effort). Sans client :
+$BRAIN_AGENT (interactif, défaut « claude »), $BRAIN_AGENT_BATCH (défaut « claude -p »).
 
 Racine : $BRAIN_ROOT, sinon le premier dossier parent qui contient BRAIN.md.`;
 
@@ -85,6 +88,9 @@ try {
       await ask(root, q, { file: o.file, interactive: o.interactive });
       break;
     }
+    case "config":
+      process.exitCode = await configCmd(root, args);
+      break;
     default:
       console.log(HELP);
       if (cmd && !o.help) process.exitCode = 1;

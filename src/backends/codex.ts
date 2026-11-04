@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { cli, interactiveWith, load, type Backend, type Config } from "./backend";
+import { cli, flag, interactiveWith, load, type Backend, type Config } from "./backend";
 
 // --- Codex SDK : bac à sable OS ; en écriture, seul wiki/ est inscriptible ----------------------
 
 export default function codex(cfg: Config): Backend {
   return {
-    interactive: interactiveWith((p) => ["codex", p]),
+    interactive: interactiveWith((p) => ["codex", ...flag("-m", cfg.model), ...flag("-c", cfg.effort && `model_reasoning_effort="${cfg.effort}"`), p]),
     async run(root, prompt, mode) {
       const { Codex } = await load<typeof import("@openai/codex-sdk")>("@openai/codex-sdk");
       const thread = new Codex({ codexPathOverride: cli("codex") }).startThread({
@@ -15,6 +15,7 @@ export default function codex(cfg: Config): Backend {
         approvalPolicy: "never",
         skipGitRepoCheck: true,
         model: cfg.model,
+        modelReasoningEffort: cfg.effort as any, // minimal | low | medium | high | xhigh…
       });
       return (await thread.run(prompt)).finalResponse;
     },

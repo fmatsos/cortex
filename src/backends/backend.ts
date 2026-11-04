@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 /** Pont (Bridge) entre les commandes (compile, ask) et les agents. Chaque client implémente `Backend`. */
 export type Mode = "write" | "read";
-export type Config = { client?: string; model?: string };
+export type Config = { client?: string; model?: string; effort?: string };
 
 export interface Backend {
   /** Commande de la session interactive : l'agent présente son plan avant d'écrire. */
@@ -14,6 +14,9 @@ export interface Backend {
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 
 /** BRAIN_AGENT remplace la commande interactive de n'importe quel backend. */
+/** Option de CLI seulement si la valeur est définie. */
+export const flag = (name: string, v?: string) => (v ? [name, v] : []);
+
 export const interactiveWith = (fallback: (prompt: string) => string[]) => (prompt: string) =>
   process.env.BRAIN_AGENT ? [...split(process.env.BRAIN_AGENT), prompt] : fallback(prompt);
 

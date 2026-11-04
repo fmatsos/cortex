@@ -1,12 +1,12 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { cli, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
+import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 
 // --- Claude Agent SDK : chaque appel d'outil passe par le garde-fou, avant exécution ------------
 
 export default function claude(cfg: Config): Backend {
   return {
-    interactive: interactiveWith((p) => ["claude", p]),
+    interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
     async run(root, prompt, mode) {
       const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk");
       let out: string | undefined;
@@ -15,6 +15,7 @@ export default function claude(cfg: Config): Backend {
         options: {
           cwd: root,
           model: cfg.model,
+          effort: cfg.effort as any, // low | medium | high | xhigh | max
           pathToClaudeCodeExecutable: cli("claude"),
           settingSources: ["project"], // CLAUDE.md, sans les autorisations de ~/.claude qui court-circuiteraient le garde-fou
           permissionMode: "default", // acceptEdits/bypass sauteraient canUseTool
