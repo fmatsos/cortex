@@ -40,8 +40,8 @@
 
 {#if backlinks.length}
 	<section aria-labelledby="h-back" class="bg-muted/50 rounded-lg border p-3">
-		<h2 id="h-back" class="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase" title="Pages qui citent celle-ci">
-			<Icon name="backlink" size={14} />Rétroliens <span class="font-normal">{backlinks.length}</span>
+		<h2 id="h-back" class="mb-2 flex items-center gap-2 font-semibold" title="Pages qui citent celle-ci">
+			<Icon name="backlink" size={20} class="text-muted-foreground" />Rétroliens <span class="text-muted-foreground text-sm font-normal">{backlinks.length}</span>
 		</h2>
 		<ul class="divide-border/60 divide-y">
 			{#each back as l (l.id)}<li>{@render row(l)}</li>{/each}
@@ -51,8 +51,8 @@
 {/if}
 {#if related.length}
 	<section aria-labelledby="h-rel" class="bg-muted/50 rounded-lg border p-3">
-		<h2 id="h-rel" class="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
-			<Icon name="related" size={14} />Pages liées <span class="font-normal">{related.length}</span>
+		<h2 id="h-rel" class="mb-2 flex items-center gap-2 font-semibold">
+			<Icon name="related" size={20} class="text-muted-foreground" />Pages liées <span class="text-muted-foreground text-sm font-normal">{related.length}</span>
 		</h2>
 		<ul class="divide-border/60 divide-y">
 			{#each rel as l (l.id)}<li>{@render row(l, l.why)}</li>{/each}

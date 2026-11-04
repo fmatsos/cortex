@@ -162,7 +162,7 @@
 		{/if}
 		<RelatedPages backlinks={p.backlinks} {related} />
 		<section aria-labelledby="h-prov" class="bg-muted/50 rounded-lg border p-3">
-			<h2 id="h-prov" class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">Provenance</h2>
+			<h2 id="h-prov" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="generated" size={20} class="text-muted-foreground" />Provenance</h2>
 			<dl class="space-y-2">
 				{#if p.generated}
 					<div class="flex items-start gap-2">
