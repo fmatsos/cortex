@@ -82,7 +82,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
 
 export async function ask(root: string, question: string, opts: { file?: boolean; interactive?: boolean }) {
   const prompt = `Applique le workflow QUERY de CORTEX.md à la question : « ${question} ».` +
-    (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
+    (opts.file ? " Range la réponse dans une page créée par cortex new Synthesis \"<titre>\" (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
   const code = await run(root, prompt, !opts.interactive, opts.file ? "write" : "read");

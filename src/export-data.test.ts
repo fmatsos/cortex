@@ -92,9 +92,10 @@ test("encarts : l'avertissement de source partielle sort de la note personnelle"
   expect(noteCallouts(md("> ⚠️ une citation ordinaire"))).toContain("<blockquote>");
 
   // sur les pages réelles (si CORTEX_ROOT est défini)
-  if (ROOT) for (const slug of ["raspberry-pi5-16go-500-euros", "how-codex-is-built"]) {
-    const d = parseDoc(`wiki/sources/${slug}.md`, await Bun.file(join(ROOT, `wiki/sources/${slug}.md`)).text());
-    const r = render(d.body, `wiki/sources/${slug}/`, new Set());
+  const real = ROOT ? (await readDocs(ROOT, "wiki/sources")).filter((d) => /^(Raspberry Pi 5 16 Go|How Codex is built)/.test(String(d.fm.title))) : [];
+  if (ROOT) expect(real).toHaveLength(2);
+  for (const d of real) {
+    const r = render(d.body, `${d.path.replace(/\.md$/, "")}/`, new Set());
     expect(r.html.match(/class="callout-warning"/g)).toHaveLength(1);
     expect(r.html).toMatch(/<aside class="note-perso"[^]*?<\/aside><aside class="callout-warning"/);
     expect(r.html).not.toContain("⚠");
@@ -126,16 +127,16 @@ function fixture() {
   };
   const src = (id: string) => `sources:\n  - id: s\n    resource: /raw/2026/11/${id}/source.md\n    title: S\n`;
   writeFileSync(join(root, "CORTEX.md"), "");
-  raw("20261104-aaaa-partiel", "partial: true  # paywall\n");
-  raw("20261104-bbbb-complet", "");
-  page("wiki/sources/zz-partiel.md", "Source", "Zèbre partiel", src("20261104-aaaa-partiel"), "Résumé.[^s]\n\n[^s]: S.");
-  page("wiki/sources/complet.md", "Source", "Complet", src("20261104-bbbb-complet"), "Résumé.[^s]\n\n[^s]: S.");
+  raw("01a1a5c9-5e80-7075-ae13-aab03b0a8697", "partial: true  # paywall\n");
+  raw("01a1a5c9-5e80-7075-ae13-aab03b0a8698", "");
+  page("wiki/sources/zz-partiel.md", "Source", "Zèbre partiel", src("01a1a5c9-5e80-7075-ae13-aab03b0a8697"), "Résumé.[^s]\n\n[^s]: S.");
+  page("wiki/sources/complet.md", "Source", "Complet", src("01a1a5c9-5e80-7075-ae13-aab03b0a8698"), "Résumé.[^s]\n\n[^s]: S.");
   page("wiki/concepts/avertie.md", "Concept", "Avertie", "", "> [!note] Note personnelle\n> n\n>\n> ⚠️ Aperçu public seulement.\n\nTexte avec `<b>` et <img src=x onerror=alert(1)> et [x](javascript:alert(1)).");
   page("wiki/concepts/etude.md", "Concept", "Étude", "", "Texte. [Zèbre](/wiki/sources/zz-partiel.md)");
   page("wiki/concepts/abeille.md", "Concept", "Abeille", "", "Texte. [Étude](/wiki/concepts/etude.md)");
   page("wiki/concepts/zebre.md", "Concept", "Zèbre", "", "Texte. [Abeille](/wiki/concepts/abeille.md) [Étude](/wiki/concepts/etude.md)");
   writeFileSync(join(root, "wiki/index.md"), "# Index\n");
-  writeFileSync(join(root, "wiki/log.jsonl"), JSON.stringify({ at: "2026-11-04T10:00:00+01:00", kind: "ingest", text: "Compilé : [Étude](/wiki/concepts/etude.md) et `20261104-aaaa-partiel`.", sources: ["20261104-aaaa-partiel"], pages: ["wiki/concepts/abeille.md"] }) + "\n");
+  writeFileSync(join(root, "wiki/log.jsonl"), JSON.stringify({ at: "2026-11-04T10:00:00+01:00", kind: "ingest", text: "Compilé : [Étude](/wiki/concepts/etude.md) et `01a1a5c9-5e80-7075-ae13-aab03b0a8697`.", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"], pages: ["wiki/concepts/abeille.md"] }) + "\n");
   return root;
 }
 
@@ -177,7 +178,7 @@ test("export : partial, tri par titre (collation française), liens orientés, r
   // journal : texte replié (sans accents, minuscules) pour la recherche locale, titres des pages et ids inclus
   const e = data.log[0];
   expect(e.search).toBe(e.search.toLowerCase());
-  for (const t of ["ingest", "compile", "etude", "abeille", "20261104-aaaa-partiel"]) expect(e.search).toContain(t);
+  for (const t of ["ingest", "compile", "etude", "abeille", "01a1a5c9-5e80-7075-ae13-aab03b0a8697"]) expect(e.search).toContain(t);
   expect(e.search).not.toMatch(/[éè<>]/);
 });
 

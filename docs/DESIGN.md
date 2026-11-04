@@ -125,9 +125,7 @@ cortex/
 
 Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [CORTEX.md](CORTEX.md), qui fait foi.
 
-**Identifiants :**
-- raw : `YYYYMMDD-<4 caractères aléatoires>-<slug>` ;
-- wiki : un slug stable, sans UUID.
+**Identifiants : UUID v7**, pour les sources raw (`raw/AAAA/MM/<uuid>/source.md`, mois d'ajout) comme pour les pages wiki (`wiki/<type>/<uuid>.md`). Décision du 2026-11-04, qui remplace `YYYYMMDD-<4 caractères>-<slug>` et les slugs lisibles : l'unicité est garantie sans dépendre du titre (deux sources de même titre le même jour, une page renommée), au prix de noms de fichiers illisibles. Horodaté puis aléatoire (74 bits), l'UUID v7 se trie dans l'ordre de création ; `Bun.randomUUIDv7()`, sans dépendance. Ni l'agent ni l'humain n'en écrivent : `cortex add` nomme une source, `cortex new <type> "<titre>"` crée une page (refusée si le titre existe déjà : on met à jour avant de créer). Une page se trouve par son titre (index, recherche) ; le journal (`log.md`) la nomme par son titre. `cortex lint` refuse tout autre nom. Le chemin d'une source raw se retrouve par son id (`rawPath`, recherche de `raw/*/*/<id>/`), jamais en découpant l'id. Un lien vers une page à écrire n'est plus possible : on crée d'abord l'ébauche (`cortex new`, en `draft`).
 
 ## 6. CLI `cortex`
 

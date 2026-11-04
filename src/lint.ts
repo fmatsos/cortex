@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseDoc, slugify, type Doc } from "./lib";
+import { parseDoc, slugify, UUID, type Doc } from "./lib";
 import { readLog, renderLogMd } from "./log";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
@@ -32,6 +32,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const d of wiki) {
     const { fm, path } = d;
     if (!fm.type) push("error", path, "type manquant");
+    if (!UUID.test(path.split("/").at(-1)!.replace(/\.md$/, ""))) push("error", path, "nom de fichier : UUID v7 attendu (crée la page avec cortex new)");
     if (!fm.description) push("error", path, "description manquante");
     const ids = new Set((fm.sources ?? []).map((s: any) => s.id));
     for (const s of fm.sources ?? []) {
@@ -57,6 +58,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const d of raw) {
     const { fm, path } = d;
     if (fm.type !== "RawSource") push("error", path, "type: RawSource attendu");
+    if (!/^raw\/\d{4}\/\d\d\/[^/]+\/source\.md$/.test(path) || !UUID.test(path.split("/").at(-2)!)) push("error", path, "chemin : raw/AAAA/MM/<UUID v7>/source.md attendu (cortex add)");
     if (fm.status === "pending") {
       if (!String(fm.note ?? "").trim()) push("warning", path, "note manquante : à demander avant de compiler");
       if (now.getTime() - time(fm.fetched_at) > 7 * DAY) push("warning", path, "en attente depuis plus de 7 jours");
@@ -77,7 +79,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const e of journal.errors) push("error", `wiki/log.jsonl:${e.line}`, e.msg);
   const md = join(root, "wiki/log.md");
   if (existsSync(md) || journal.entries.length) {
-    if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries))
+    if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries, new Map(wiki.filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]))))
       push("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : cortex index le régénère");
   }
   return out;

@@ -44,7 +44,7 @@ export default function claude(cfg: Config): Backend {
 const LOG_READ = "log( --json| --limit \\d+| --kind \\w+)*$";
 const CORTEX_CMD = {
   read: new RegExp(`^cortex (search( |$)|${LOG_READ})`),
-  write: new RegExp(`^cortex (search|index|lint|log add)( |$)|^cortex ${LOG_READ}`),
+  write: new RegExp(`^cortex (search|index|lint|new|log add)( |$)|^cortex ${LOG_READ}`),
 };
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
@@ -86,7 +86,7 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
     if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash : pas d'enchaînement ni de redirection, texte entre guillemets sans $ ni accent grave (${raw.slice(0, 80)}). Lance cortex seul.` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limité à ${mode === "read" ? "cortex search|log" : "cortex search|index|lint|log add"}.` };
+      : { allow: false, reason: `Bash limité à ${mode === "read" ? "cortex search|log" : "cortex search|index|lint|new|log add"}.` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Lecture seule : relance avec --file pour écrire une synthèse." };

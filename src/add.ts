@@ -4,7 +4,7 @@ import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
-import { localIso, normUrl, randomId4, readDocs, sha256, slugify } from "./lib";
+import { localIso, newId, normUrl, readDocs, sha256 } from "./lib";
 import { appendLog } from "./log";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
@@ -91,7 +91,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
-  const id = `${iso.slice(0, 10).replaceAll("-", "")}-${randomId4()}-${slugify(ex.title)}`;
+  const id = newId(now);
   if (opts.dryRun) return { id, duplicate: false, ex };
 
   const fm: Record<string, unknown> = { type: "RawSource", title: ex.title };

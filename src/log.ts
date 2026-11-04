@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
-import { localIso } from "./lib";
+import { localIso, rawPath, readDocs, slugify, UUID } from "./lib";
 
 /**
  * Journal : wiki/log.jsonl (une entrée par ligne, ordre chronologique, append-only) est la source de vérité ;
@@ -16,7 +16,6 @@ const LABEL: Record<Kind, string> = { add: "Add", ingest: "Ingest", query: "Quer
 export const kindLabel = (k: string) => LABEL[k as Kind] ?? k;
 
 const AT = /^\d{4}-\d\d-\d\d(T\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d))?$/;
-const RAW_ID = /^\d{8}-[a-z0-9]{4}-[a-z0-9-]+$/;
 const KEYS = new Set(["at", "kind", "text", "sources", "pages"]);
 
 /** Entrée valide ou message d'erreur (une seule erreur par ligne : la première). */
@@ -27,7 +26,7 @@ export function parseEntry(v: unknown): LogEntry | string {
   if (typeof o.at !== "string" || !AT.test(o.at) || Number.isNaN(Date.parse(o.at))) return "at : ISO 8601 avec décalage, ou AAAA-MM-JJ";
   if (!KINDS.includes(o.kind as Kind)) return `kind : ${KINDS.join("|")}`;
   if (typeof o.text !== "string" || !o.text.trim() || /[\r\n]/.test(o.text)) return "text : une ligne non vide";
-  for (const [k, ok] of [["sources", (s: string) => RAW_ID.test(s)], ["pages", (s: string) => /^wiki\/.+\.md$/.test(s)]] as const) {
+  for (const [k, ok] of [["sources", (s: string) => UUID.test(s)], ["pages", (s: string) => /^wiki\/.+\.md$/.test(s)]] as const) {
     if (o[k] === undefined) continue;
     const a = o[k];
     if (!Array.isArray(a) || !a.length || a.some((s) => typeof s !== "string" || !ok(s))) return `${k} : liste non vide ${k === "sources" ? "d'ids raw" : "de chemins wiki/….md"} (champ omis s'il est vide)`;
@@ -62,33 +61,38 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
   return all.filter((e) => days.includes(day(e)));
 }
 
-/** Le texte nomme déjà la page par son slug (mot entier : `concepts/{a, b}` nomme `a` et `b`). */
-const namesPage = (text: string, p: string) =>
-  new RegExp(`(?<![\\w-])${p.replace(/\.md$/, "").split("/").at(-1)!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`).test(text);
-/** Le texte nomme déjà l'id raw, en entier ou abrégé (`AAAAMMJJ-xxxx`, `xxxx`). */
-const namesId = (text: string, id: string) => [id, id.slice(0, 13), id.split("-")[1]].some((f) => text.includes(`\`${f}\``));
+/** Titre de chaque page wiki (chemin → titre) : les pages se nomment par leur titre, pas par leur UUID. */
+export type Titles = Map<string, string>;
+export const pageTitles = async (root: string): Promise<Titles> =>
+  new Map((await readDocs(root, "wiki")).filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
+
+const words = (s: string) => `-${slugify(s, Infinity)}-`;
+/** Le texte nomme déjà la page : son id (UUID) ou son titre, mots entiers, sans accents ni casse. */
+const namesPage = (text: string, p: string, title?: string) =>
+  text.includes(p.replace(/\.md$/, "").split("/").at(-1)!) || (!!title && words(text).includes(words(title)));
+const namesId = (text: string, id: string) => text.includes(`\`${id}\``);
 
 /** Une ligne de log.md : le texte, puis les sources et pages que le texte ne nomme pas déjà. */
-function renderLine(e: LogEntry): string {
+function renderLine(e: LogEntry, titles: Titles): string {
   const src = (e.sources ?? []).filter((s) => !namesId(e.text, s)).map((s) => `\`${s}\``);
-  const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p)).map((p) => `[${p.replace(/^wiki\/|\.md$/g, "")}](/${p})`);
+  const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p, titles.get(p))).map((p) => `[${titles.get(p) ?? p.replace(/^wiki\/|\.md$/g, "")}](/${p})`);
   const refs = [src.length && `sources : ${src.join(", ")}`, pages.length && `pages : ${pages.join(", ")}`].filter(Boolean).join(" ; ");
   return `- **${kindLabel(e.kind)}** ${e.text}${refs ? ` (${refs})` : ""}\n`;
 }
 
 /** wiki/log.md : le journal, sections par date (la plus récente d'abord). Déterministe. */
-export function renderLogMd(entries: LogEntry[]): string {
+export function renderLogMd(entries: LogEntry[], titles: Titles = new Map()): string {
   let out = "# Log\n\n> Généré depuis `wiki/log.jsonl` : ne pas éditer à la main (`cortex log add`, puis `cortex index`).\n";
   let cur = "";
   for (const e of newestFirst(entries)) {
     if (day(e) !== cur) out += `\n## ${(cur = day(e))}\n`;
-    out += renderLine(e);
+    out += renderLine(e, titles);
   }
   return out;
 }
 
 export async function writeLogMd(root: string) {
-  await Bun.write(join(root, "wiki/log.md"), renderLogMd(readLog(root).entries));
+  await Bun.write(join(root, "wiki/log.md"), renderLogMd(readLog(root).entries, await pageTitles(root)));
 }
 
 /** Ajoute une ligne à wiki/log.jsonl (un seul append) puis régénère wiki/log.md. */
@@ -118,7 +122,7 @@ export async function logAdd(root: string, kind: string, text: string, sources: 
     return rel.split(sep).join("/");
   });
   for (const s of sources)
-    if (!RAW_ID.test(s) || !existsSync(join(root, "raw", s.slice(0, 4), s.slice(4, 6), s, "source.md"))) throw new Error(`source raw introuvable : ${s}`);
+    if (!rawPath(root, s)) throw new Error(`source raw introuvable : ${s}`);
   await appendLog(root, { kind: kind as Kind, text, sources: [...new Set(sources)], pages: [...new Set(pp)] }, d);
   return readLog(root).entries.at(-1)!;
 }

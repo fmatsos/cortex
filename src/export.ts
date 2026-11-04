@@ -5,7 +5,7 @@ import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { newestFirst, readLog } from "./log";
-import { type Doc, parseDoc, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
+import { type Doc, parseDoc, rawPath, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 import { sanitizeHtml } from "./sanitize";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
@@ -168,7 +168,7 @@ const rawPartial = (root: string, resource: string) => {
 function renderLog(root: string, paths: Set<string>, byPath: Map<string, Doc>, sourcePage: Map<string, Doc>, link: (d: Doc) => Link): LogEntryData[] {
   return newestFirst(readLog(root).entries).map((e) => {
     const sources = (e.sources ?? []).map((id) => {
-      const page = sourcePage.get(`/raw/${id.slice(0, 4)}/${id.slice(4, 6)}/${id}/source.md`);
+      const raw = rawPath(root, id), page = raw && sourcePage.get(`/${raw}`);
       return { id, ...(page && { page: link(page) }) };
     });
     let html = inline(render(e.text, "log/", paths).html);

@@ -9,7 +9,7 @@ import { search } from "./search";
 import { lint } from "./lint";
 import { ask, compile } from "./agent";
 import { configCmd } from "./backends/index";
-import { findRoot } from "./lib";
+import { findRoot, newPage } from "./lib";
 
 const HELP = `cortex — second cerveau
 
@@ -17,6 +17,7 @@ const HELP = `cortex — second cerveau
   cortex inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
   cortex search "<requête>" [--in wiki|raw] [--json] [--limit N]
   cortex index
+  cortex new <Source|Concept|Entity|Synthesis> "<titre>"   (crée wiki/<type>/<uuid>.md, status: draft ; affiche son chemin)
   cortex lint [--json]
   cortex log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
   cortex log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
@@ -71,6 +72,10 @@ try {
       if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log("\n→ Trouvé seulement dans raw/ : un trou à compiler ?");
       break;
     }
+    case "new":
+      if (args.length !== 2) { console.error('usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"'); process.exitCode = 2; break; }
+      console.log(await newPage(root, args[0], args[1]));
+      break;
     case "index":
       await regenerate(root);
       console.log("wiki/index.md et wiki/log.md régénérés.");

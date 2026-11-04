@@ -26,7 +26,7 @@ export default function opencode(cfg: Config): Backend {
           rule("shell", "*", "deny"),
           rule("shell", "cortex search*", "allow"),
           rule("shell", "cortex log --*", "allow"), // lecture du journal ; « cortex log add » n'y correspond pas
-          ...(mode === "write" ? [rule("shell", "cortex index*", "allow"), rule("shell", "cortex lint*", "allow"), rule("shell", "cortex log add *", "allow")] : []),
+          ...(mode === "write" ? [rule("shell", "cortex index*", "allow"), rule("shell", "cortex lint*", "allow"), rule("shell", "cortex new *", "allow"), rule("shell", "cortex log add *", "allow")] : []),
           rule("external_directory", "*", "deny"),
           rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
         ];

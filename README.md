@@ -74,14 +74,16 @@ cortex export && bunx serve .cortex/site
 The resulting layout:
 
 ```
-raw/YYYY/MM/<id>/source.md   # extracted sources, immutable (only `status` changes)
-wiki/sources/<slug>.md       # one Source page per raw source
-wiki/concepts/<slug>.md      # ideas
-wiki/entities/<slug>.md      # people, tools, projects, organizations
-wiki/syntheses/<slug>.md     # stored answers, comparisons, theses
+raw/YYYY/MM/<uuid>/source.md # extracted sources, immutable (only `status` changes)
+wiki/sources/<uuid>.md       # one Source page per raw source
+wiki/concepts/<uuid>.md      # ideas
+wiki/entities/<uuid>.md      # people, tools, projects, organizations
+wiki/syntheses/<uuid>.md     # stored answers, comparisons, theses
 wiki/index.md                # generated catalog
 wiki/log.jsonl → wiki/log.md # append-only journal, and its generated view
 ```
+
+Every source and page is named by a [UUID v7](https://www.rfc-editor.org/rfc/rfc9562#name-uuid-version-7) that Cortex generates (`cortex add`, `cortex new`). The names are unique with no possible collision, and they sort in creation order. Nobody types them: you find a page by its title, through the index or `cortex search`, and `cortex lint` rejects any other file name.
 
 ## Usage
 
@@ -91,6 +93,7 @@ wiki/log.jsonl → wiki/log.md # append-only journal, and its generated view
 | `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line. Any other file is added, with an optional note in `<name>.note`. Successful entries leave the inbox. |
 | `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search. |
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
+| `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>"` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists. |
 | `cortex lint [--json]` | Runs the mechanical checks. Exits with code 1 on errors. |
 | `cortex log [--limit N] [--json] [--kind k]` | Reads the journal, newest first. |
 | `cortex log add <kind> "<text>" [--source <id>]… [--page <path>]…` | Appends a journal entry (`add`, `ingest`, `query`, `lint` or `update`). |

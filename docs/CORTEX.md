@@ -20,18 +20,18 @@ Tu es le mainteneur de ce wiki personnel. L'humain (`human:franck`) choisit les 
 ## Arborescence
 
 ```
-raw/YYYY/MM/<id>/source.md   # sources extraites (+ assets/)
+raw/YYYY/MM/<uuid>/source.md # sources extraites (+ assets/)
 wiki/index.md                # catalogue (réservé OKF, sans frontmatter)
 wiki/log.jsonl               # journal append-only, source de vérité (une entrée JSON par ligne)
 wiki/log.md                  # généré depuis log.jsonl (réservé OKF)
-wiki/sources/<slug>.md       # type: Source — une par source raw
-wiki/concepts/<slug>.md      # type: Concept — une idée
-wiki/entities/<slug>.md      # type: Entity — personne, outil, projet, organisation
-wiki/syntheses/<slug>.md     # type: Synthesis — réponse rangée, comparaison, thèse
+wiki/sources/<uuid>.md       # type: Source — une par source raw
+wiki/concepts/<uuid>.md      # type: Concept — une idée
+wiki/entities/<uuid>.md      # type: Entity — personne, outil, projet, organisation
+wiki/syntheses/<uuid>.md     # type: Synthesis — réponse rangée, comparaison, thèse
 ```
 
-- **Identifiant raw :** `YYYYMMDD-<4 caractères [a-z0-9]>-<slug>`.
-- **Slug du wiki :** en minuscules, mots séparés par des tirets, sans date et stable dans le temps. On ne renomme pas une page, car ses liens casseraient.
+- **Identifiants : des UUID v7**, pour les sources raw comme pour les pages wiki (horodatés puis aléatoires : uniques, sans collision de noms, triés dans l'ordre de création). Tu n'en inventes jamais : `cortex add` nomme une source, `cortex new` crée une page. Le nom d'un fichier ne dit rien de son contenu : une page se trouve par son **titre** (index, `cortex search`), et un lien se repère par son texte.
+- **Un identifiant est définitif.** On ne renomme pas une page : on change son titre, son UUID reste.
 
 ## Format d'une source raw (`raw/.../source.md`)
 
@@ -65,18 +65,18 @@ status: draft                       # draft | stable | deprecated
 generated: { by: claude-code/opus-5.5, at: 2026-11-04T10:00:00+01:00 }
 sources:
   - id: chroma-context-rot
-    resource: /raw/2026/11/20261104-a7k3-context-rot/source.md
+    resource: /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md
     title: "Context Rot (Chroma Research)"
 # verified: { by: "human:franck", at: … }   ← ajouté seulement quand l'humain a relu
 # stale_after: 2027-06-01T00:00:00+00:00    ← pour les sujets périssables (versions, prix)
 ---
-Corps en prose. Une affirmation.[^chroma-context-rot] Voir [Context engineering](/wiki/concepts/context-engineering.md).
+Corps en prose. Une affirmation.[^chroma-context-rot] Voir [Context engineering](/wiki/concepts/01a1a5d1-2b40-7d10-8a77-c03f19e2b5a4.md).
 
 [^chroma-context-rot]: Précision éventuelle (section, page, timestamp).
 ```
 
 - **`generated.at`** : mets-le à jour à chaque modification significative. **`generated.by`** désigne toujours l'acteur réel.
-- **Liens :** des liens Markdown relatifs à la racine (`/wiki/...`). Un lien vers une page qui n'existe pas encore est permis : il marque un concept à écrire.
+- **Liens :** des liens Markdown relatifs à la racine (`/wiki/<type>/<uuid>.md`), avec le titre de la page cible comme texte. Un lien pointe toujours vers une page existante. Pour un concept à écrire, crée-le avec `cortex new` (une ébauche en `status: draft` suffit), puis lie-le.
 - **Page relue puis modifiée :** garde l'entrée `verified` (c'est un événement passé), mais repasse en `status: draft`. Un `generated.at` postérieur à `verified.at` signifie qu'il faut relire la page.
 - **Dépréciation :** une page contredite par une source plus récente n'est pas supprimée. Elle passe en `status: deprecated`, avec en tête un lien vers ce qui la remplace.
 - **Page `Source` :** elle contient un résumé, 3 à 7 points clés, la `note` de l'humain, et des liens vers les concepts et entités touchés.
@@ -99,7 +99,7 @@ Ce fichier n'a pas de frontmatter. Il contient une section par type, et une puce
 # Index
 
 ## Concepts
-- [Context rot](/wiki/concepts/context-rot.md) — <description>
+- [Context rot](/wiki/concepts/01a1a5d1-2b40-7c3e-9f21-5d8e0a4b7c12.md) — <description>
 
 ## Entités
 ## Synthèses
@@ -111,17 +111,17 @@ Ce fichier n'a pas de frontmatter. Il contient une section par type, et une puce
 `wiki/log.jsonl` est le journal : une entrée JSON par ligne, ordre chronologique, append-only. `wiki/log.md` en est **généré** (lisible dans Obsidian, réservé OKF) : les entrées les plus récentes y viennent en premier, regroupées par date. **Tu n'écris jamais le journal à la main** : `cortex log add`.
 
 ```json
-{"at": "2026-11-04T10:00:00+01:00", "kind": "ingest", "text": "créé concepts/context-rot, mis à jour entities/chroma.", "sources": ["20261104-a7k3-context-rot"], "pages": ["wiki/concepts/context-rot.md"]}
+{"at": "2026-11-04T10:00:00+01:00", "kind": "ingest", "text": "créé Context rot, mis à jour Chroma.", "sources": ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"], "pages": ["wiki/concepts/01a1a5d1-2b40-7c3e-9f21-5d8e0a4b7c12.md"]}
 ```
 
 - `kind` : `add` | `ingest` | `query` | `lint` | `update`. `text` : une ligne de Markdown en ligne. `sources` (ids raw) et `pages` (chemins `wiki/….md`) sont facultatifs et validés : donne-les plutôt que de les recopier dans le texte.
 - `cortex log add <kind> "<texte>" [--source <id>]… [--page <chemin>]…` écrit l'entrée avec l'heure courante et régénère `log.md`. Mets le texte entre guillemets doubles, sans `$` ni accent grave (guillemets simples si le texte en contient).
-- `log.md` rend chaque entrée en puce `- **Kind** texte`, suivie des sources et pages que le texte ne nomme pas déjà :
+- `log.md` rend chaque entrée en puce `- **Kind** texte`, suivie des sources et pages (par leur titre) que le texte ne nomme pas déjà :
 
 ```markdown
 ## 2026-11-04
-- **Ingest** créé concepts/context-rot, mis à jour entities/chroma. (sources : `20261104-a7k3-context-rot`)
-- **Lint** 3 orphelins, 1 contradiction (concepts/a vs concepts/b).
+- **Ingest** créé Context rot, mis à jour Chroma. (sources : `01a1a5c9-5e80-7075-ae13-aab03b0a8697`)
+- **Lint** 3 orphelins, 1 contradiction (Context rot vs Context engineering).
 ```
 
 ## Workflow INGEST
@@ -130,8 +130,8 @@ Ce fichier n'a pas de frontmatter. Il contient une section par type, et une puce
 2. Lis `wiki/index.md`, puis cherche les pages liées : `cortex search "<termes>"`.
 3. **Présente à l'humain**, en 5 à 10 lignes, ce que la source apporte, ce qui contredit l'existant, et la liste des pages à créer ou modifier. Attends sa validation ou ses corrections.
 4. Écris :
-   - la page `wiki/sources/<slug>.md` ;
-   - les mises à jour des concepts et entités existants, ou leur création si rien ne s'en approche ;
+   - la page Source, créée par `cortex new Source "<titre>"` (le CLI affiche son chemin, puis tu remplis le fichier) ;
+   - les mises à jour des concepts et entités existants, ou leur création par `cortex new Concept|Entity "<titre>"` si rien ne s'en approche ;
    - les liens dans les deux sens.
 5. Passe la source raw en `status: compiled`, sauf si tu es lancé par `cortex compile`, qui s'en charge après avoir vérifié qu'une page Source la cite.
 6. Lance `cortex index`. Ajoute l'entrée **Ingest** au journal : `cortex log add ingest "…" --source <id> --page wiki/…md` pour chaque page touchée (l'entrée **Add** y est déjà, écrite par `cortex add`).
@@ -143,7 +143,7 @@ Dans ta réponse, ne recopie pas les pages : résume en une ligne par fichier to
 1. Lis `wiki/index.md`, choisis les pages pertinentes et lis-les **en entier**. Ne raisonne pas sur des extraits.
 2. Si le wiki ne suffit pas, cherche dans `raw/` (`cortex search "<termes>" --in raw`). Une réponse trouvée seulement dans `raw/` signale un **trou** : propose de compiler la source concernée.
 3. Réponds en citant les pages du wiki, avec leurs liens. Distingue ce que dit le wiki de ce que tu en déduis.
-4. Si la réponse a de la valeur durable (comparaison, synthèse, décision), propose de la ranger dans `wiki/syntheses/`, puis journal (`cortex log add query "…" --page wiki/syntheses/….md`) et index.
+4. Si la réponse a de la valeur durable (comparaison, synthèse, décision), propose de la ranger dans `wiki/syntheses/` (`cortex new Synthesis "<titre>"`), puis journal (`cortex log add query "…" --page wiki/syntheses/….md`) et index.
 
 ## Workflow LINT
 
@@ -163,6 +163,7 @@ cortex add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]   # → ra
 cortex inbox [--dry-run]                                              # add sur inbox/ (urls.txt, fichiers), puis la vide
 cortex search "<termes>" [--in wiki|raw] [--json]                     # BM25, wiki d'abord
 cortex index                                                          # régénère wiki/index.md et wiki/log.md
+cortex new <Source|Concept|Entity|Synthesis> "<titre>"               # crée wiki/<type>/<uuid>.md (draft) et affiche son chemin
 cortex log [--limit N] [--json] [--kind k]                            # lit le journal, le plus récent d'abord
 cortex log add <kind> "<texte>" [--source <id>]… [--page <chemin>]…   # ajoute une entrée à wiki/log.jsonl
 cortex lint [--json]                                                  # contrôles mécaniques
