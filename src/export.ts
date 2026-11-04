@@ -161,7 +161,7 @@ export async function buildSiteData(root: string) {
 
 /** Index de recherche précalculé : index inversé sur le contenu complet (mot replié → pages) + vocabulaire d'autocomplétion. */
 function buildSearch(pages: PageData[]): SearchIndex {
-  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, text: plain(p.html) }));
+  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, needsReview: p.needsReview, text: plain(p.html) }));
   const terms = buildTerms(docs);
 
   const freq = new Map<string, number>(), keep = new Set<string>();

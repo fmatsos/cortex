@@ -214,6 +214,43 @@ test("export : ancres de titres lisibles, uniques, sans collision avec les ids d
   expect(anchors("<h2 id=\"x\">Un <em>titre</em> &amp; un autre</h2>")).toBe('<h2 id="un-titre-un-autre">Un <em>titre</em> &amp; un autre</h2>');
 });
 
+test("recherche : suggestions de titres et résultats obéissent aux mêmes conditions, total exact", async () => {
+  const { buildTerms, createEngine, rank, search, suggest, suggestTitles } = await import("../site/src/lib/search-engine");
+  const { parseQuery } = await import("../site/src/lib/query");
+  const Fuse = (await import("fuse.js")).default;
+  const doc = (id: string, title: string, tags: string[], type = "Concept", text = "") =>
+    ({ id, title, description: "", type, tags, status: "stable", verified: true, text });
+  const docs = [
+    doc("a", "Harnais d'agent", ["llm"]),
+    doc("b", "Hermes Agent", ["outil"], "Entity", "un agent qui apprend"),
+    doc("c", "Harnais de test", ["llm"]),
+    doc("d", "Agent Skills", ["llm"], "Concept", "le format open source des agents"),
+    ...Array.from({ length: 120 }, (_, i) => doc(`p${i}`, `Page ${i}`, [], "Source", "bruit")),
+  ];
+  const e = createEngine({ docs, terms: buildTerms(docs), vocab: [] }, Fuse);
+  const none = (_id: string) => false, fav = (id: string) => id === "d";
+  const titles = (q: string, isFav = none) => suggestTitles(e, parseQuery(q), isFav).map((d) => d.id);
+  const found = (q: string, isFav = none) => rank(e, parseQuery(q), isFav).map((r) => r.doc.id);
+
+  expect(titles("har")).toEqual(["a", "c"]);
+  expect(titles("har -agent")).toEqual(["c"]); // exclusion : plus de « Harnais d'agent »
+  expect(titles("-agent")).toEqual([]); // sans mot libre, aucun titre
+  expect(titles("#llm har")).toEqual(["a", "c"]);
+  expect(titles("type:entity age")).toEqual(["b"]); // filtre structuré
+  expect(titles('age "format open"')).toEqual(["d"]); // phrase exacte
+  expect(titles("age is:fav", fav)).toEqual(["d"]);
+  expect(titles("age is:fav")).toEqual([]);
+  // cohérence : tout titre proposé figure parmi les résultats de la même requête
+  for (const q of ["har", "har -agent", "#llm har", "type:entity age", 'age "format open"', "-#llm age", "age -type:concept"])
+    for (const id of titles(q)) expect(found(q)).toContain(id);
+  expect(suggest(e, "har -agent", none).titles.map((d) => d.id)).toEqual(["c"]);
+
+  // total exact au-delà de la limite, extraits seulement jusqu'à la limite
+  const r = search(e, "type:source", none, 50);
+  expect([r.hits.length, r.total]).toEqual([50, 120]);
+  expect(search(e, "  ", none, 50)).toEqual({ hits: [], total: 0 });
+});
+
 test("export : encart « Note personnelle » (callout Obsidian)", async () => {
   const { noteCallouts } = await import("./export");
   const html = (m: string) => noteCallouts(Bun.markdown.html(m));
@@ -336,7 +373,7 @@ test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RP
 });
 
 test("requête de recherche : filtres, guillemets, exclusions, accents", async () => {
-  const { parseQuery, matches, removeToken, canonType, isEmpty } = await import("../site/src/lib/query");
+  const { parseQuery, matches, removeToken, canonType, isEmpty, chips, wantsFav } = await import("../site/src/lib/query");
   const p = parseQuery(`context  #Mémoire tag:LLM type:Synthèses status:draft is:fav "Phrase Exacte" -rot -#vieux -"à éviter" -type:source`);
   expect(p.words).toEqual(["context"]);
   expect(p.ops.map((o) => [o.key, o.value, o.neg])).toEqual([
@@ -354,6 +391,19 @@ test("requête de recherche : filtres, guillemets, exclusions, accents", async (
   expect(parseQuery('"jamais fermé').words).toEqual(["jamais", "ferme"]);
   // retrait d'une puce
   expect(removeToken("a #tag b", "#tag")).toBe("a b");
+  // filtre répété : une seule puce (clé unique), qui retire toutes ses occurrences ; retrait par jeton entier
+  const labels = (q: string) => chips(parseQuery(q)).map((c) => c.label);
+  expect(labels("#llm #llm")).toEqual(["#llm"]);
+  expect(labels("#llm tag:LLM")).toEqual(["#llm"]);
+  expect(labels("-x -x type:source -type:source -#llm #llm")).toEqual(["type:Source", "sans type:Source", "sans #llm", "#llm", "sans x"]);
+  expect(labels('"a b" "a b"')).toEqual(["« a b »"]);
+  expect(chips(parseQuery("#llm x #llm"))[0].raws).toEqual(["#llm", "#llm"]);
+  expect(removeToken("#llm x #llm", "#llm")).toBe("x");
+  expect(removeToken("#llm2 #llm", "#llm")).toBe("#llm2");
+  expect(removeToken('a "b c" d', '"b c"')).toBe("a d");
+  expect(removeToken("a -x.y b", "-x.y")).toBe("a b");
+  expect(wantsFav(parseQuery("x is:fav"))).toBe(true);
+  expect(wantsFav(parseQuery("-is:fav"))).toBe(false);
 
   const doc = { id: "concepts/a", title: "Mémoire vive", description: "RAM", type: "Concept", tags: ["Matériel", "ram"], status: "stable", verified: false, text: "La mémoire coûte cher en 2026." };
   const ok = (q: string, fav = false) => matches(doc, parseQuery(q), () => fav);

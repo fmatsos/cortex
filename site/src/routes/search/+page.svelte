@@ -1,27 +1,38 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { replaceState } from "$app/navigation";
+	import { afterNavigate, goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import TypeBadge from "#lib/components/type-badge.svelte";
-	import { toPage } from "#lib/links.js";
+	import { toPage, toRoute } from "#lib/links.js";
+	import { parseQuery, wantsFav } from "#lib/query.js";
 	import { type Engine, loadEngine, search } from "#lib/search-client.js";
 
+	const STEP = 50; // résultats affichés par tranche
 	// page prérendue vide : la requête (?q=) ne se lit que dans le navigateur
 	let q = $state("");
 	let engine = $state<Engine>();
+	let failed = $state(false);
 	let ready = $state(false);
-	const hits = $derived(engine ? search(engine, q, favs.has, 50) : []);
+	let limit = $state(STEP);
+	const res = $derived(engine ? search(engine, q, favs.has, limit) : { hits: [], total: 0 });
+	const noFav = $derived(wantsFav(parseQuery(q)) && !favs.ids.length);
 
-	onMount(async () => {
-		q = new URLSearchParams(location.search).get("q") ?? "";
+	const load = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
+	onMount(load);
+	// l'URL fait foi : à l'arrivée, après un envoi depuis l'en-tête, avec précédent / suivant
+	afterNavigate((nav) => {
+		const p = nav.to?.url.searchParams.get("q") ?? "";
+		if (p !== q.trim()) q = p;
 		ready = true;
-		engine = await loadEngine();
 	});
+	// la saisie met l'URL à jour sur place (sans entrée d'historique)
 	$effect(() => {
-		if (!ready) return;
-		try { replaceState(q.trim() ? `?q=${encodeURIComponent(q.trim())}` : location.pathname, {}); } catch { /* routeur pas encore prêt */ }
+		const t = q.trim();
+		limit = STEP;
+		if (!ready || (new URLSearchParams(location.search).get("q") ?? "") === t) return;
+		void goto(t ? `${toRoute("/search")}?q=${encodeURIComponent(t)}` : toRoute("/search"), { shallow: true, replace: true, keepFocus: true, noScroll: true });
 	});
 </script>
 
@@ -32,12 +43,21 @@
 <FilterChips bind:value={q} class="mt-2" />
 <p class="text-muted-foreground mt-2 text-xs">Filtres : <code>#tag</code> <code>type:concept</code> <code>status:draft</code> <code>is:fav</code> <code>is:unverified</code> · <code>"phrase exacte"</code> · <code>-mot</code> <code>-#tag</code> pour exclure.</p>
 
-<div class="mt-6" aria-live="polite">
-	{#if q.trim() && engine}
-		<p class="text-muted-foreground text-sm">{hits.length} résultat{hits.length > 1 ? "s" : ""}</p>
-	{/if}
+<div class="mt-6">
+	<div role="status" class="text-muted-foreground text-sm">
+		{#if !q.trim()}
+			<!-- rien à afficher -->
+		{:else if failed}
+			Index de recherche indisponible.
+			<button type="button" class="text-foreground underline underline-offset-4" onclick={load}>Réessayer</button>
+		{:else if !engine}
+			Chargement de l'index…
+		{:else if res.total}
+			{res.total > res.hits.length ? `${res.hits.length} sur ${res.total}` : res.total} résultat{res.total > 1 ? "s" : ""}
+		{/if}
+	</div>
 	<ul class="divide-border divide-y">
-		{#each hits as h (h.doc.id)}
+		{#each res.hits as h (h.doc.id)}
 			<li class="py-4">
 				<div class="flex flex-wrap items-center gap-2">
 					<a href={toPage(h.doc.id)} class="text-link font-medium underline-offset-4 hover:underline">{@html h.title}</a>
@@ -48,5 +68,13 @@
 			</li>
 		{/each}
 	</ul>
-	{#if q.trim() && engine && !hits.length}<p class="text-muted-foreground py-8">Aucun résultat pour « {q} ».</p>{/if}
+	{#if res.total > res.hits.length}
+		<button type="button" class="hover:bg-muted mt-4 rounded-md border px-3 py-1.5 text-sm" onclick={() => (limit += STEP)}>Afficher davantage ({res.hits.length} sur {res.total})</button>
+	{/if}
+	{#if q.trim() && engine && !res.total}
+		<p class="text-muted-foreground py-8">
+			{noFav ? "Aucun favori : ajoutez-en avec l'étoile ★ d'une page." : `Aucun résultat pour « ${q.trim()} ».`}
+			<button type="button" class="text-foreground underline underline-offset-4" onclick={() => (q = "")}>Effacer la recherche</button>
+		</p>
+	{/if}
 </div>
