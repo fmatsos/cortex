@@ -14,6 +14,7 @@ export type PageData = {
   stale_after?: string;
   needsReview: boolean; // generated.at postérieur à verified.at
   html: string;
+  md: string; // Markdown source de la page, chemins raw/ remplacés par l'URL d'origine
   sources: SourceRef[];
   notes: Note[];
   backlinks: Link[];

@@ -56,6 +56,16 @@ function render(body: string, from: string, pages: Set<string>) {
   return { html, notes };
 }
 
+/**
+ * Markdown de la page tel qu'il est dans le wiki (frontmatter compris), pour le bouton « Copier le Markdown ».
+ * raw/ n'est pas publié : chaque chemin `/raw/…` devient l'URL d'origine de la source, ou disparaît si elle n'en a pas.
+ */
+function pageMarkdown(root: string, path: string): string {
+  return readFileSync(join(root, path), "utf8")
+    .replace(/\[([^\]]*)\]\((\/raw\/[^)\s]+)\)/g, (_, label: string, p: string) => { const u = originUrl(root, p); return u ? `[${label}](${u})` : label; })
+    .replace(/\/raw\/[^\s)"'\]]+/g, (p) => originUrl(root, p) ?? "(source brute non publiée)");
+}
+
 /** URL d'origine d'une source : lue dans le frontmatter raw. Rien d'autre de raw/ n'est lu ni publié. */
 function originUrl(root: string, resource: string): string | undefined {
   const f = join(root, resource);
@@ -103,7 +113,7 @@ export async function buildSiteData(root: string) {
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
       status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
       stale_after: iso(fm.stale_after), needsReview: !!fm.verified && g > v,
-      html: r.html, sources, notes: r.notes,
+      html: r.html, md: pageMarkdown(root, d.path), sources, notes: r.notes,
       backlinks: (back.get(d.path) ?? []).map(link).sort((a, b) => a.title.localeCompare(b.title)),
       related: related(docs, d.path).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => r.replace(/ : \/raw\/.*$/, "")) })),
     };

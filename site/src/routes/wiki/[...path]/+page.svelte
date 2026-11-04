@@ -8,8 +8,8 @@
 
 	let { data } = $props();
 	const p = $derived(data.page);
-	let copied = $state(false);
-	const copyLink = async () => { try { await navigator.clipboard.writeText(location.href); copied = true; setTimeout(() => (copied = false), 1800); } catch { /* presse-papiers indisponible */ } };
+	let copied = $state<"" | "lien" | "md">("");
+	const copy = async (what: "lien" | "md", text: string) => { try { await navigator.clipboard.writeText(text); copied = what; setTimeout(() => (copied = ""), 1800); } catch { /* presse-papiers indisponible */ } };
 	const day = (iso?: string) => iso?.slice(0, 10);
 	const srcOf = $derived(new Map(p.sources.map((s) => [s.id, s])));
 </script>
@@ -38,7 +38,8 @@
 			<p class="text-muted-foreground mt-2">{p.description}</p>
 			<div class="mt-3 flex flex-wrap gap-2">
 				<FavButton id={p.id} />
-				<Button variant="outline" size="sm" onclick={copyLink}>{copied ? "Lien copié" : "Copier le lien"}</Button>
+				<Button variant="outline" size="sm" onclick={() => copy("lien", location.href)}>{copied === "lien" ? "Lien copié" : "Copier le lien"}</Button>
+				<Button variant="outline" size="sm" onclick={() => copy("md", p.md)}>{copied === "md" ? "Markdown copié" : "Copier le Markdown"}</Button>
 			</div>
 			{#if p.tags.length}
 				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">

@@ -298,6 +298,7 @@ Ajoutées à l'étape 6, documentation vérifiée via Context7 et dates de derni
 **`brain export` produit un site HTML dynamique et interactif** : tout tourne dans le navigateur (JavaScript), sans serveur applicatif, donc n'importe quel serveur de fichiers suffit. C'est une étape déterministe, sans LLM, comme `index` et `lint`.
 - **Une page HTML par page wiki.** Le Markdown est rendu ; les liens `/wiki/…` deviennent des liens relatifs vers les pages HTML ; les notes de bas de page renvoient aux sources.
 - **L'index, les tags et le log** deviennent des pages de navigation, générés depuis les frontmatters, comme `wiki/index.md`.
+- **Bouton « Copier le Markdown »** sur chaque page : le source de la page, frontmatter compris. `raw/` n'étant pas publié, chaque chemin `/raw/…` y devient l'URL d'origine de la source, ou disparaît si elle n'en a pas.
 - **Chaque page affiche ses métadonnées OKF** : type, statut (`draft`, `stable`, `deprecated`), relue ou non, sources, et ses liens entrants (rétroliens).
 - **Une page de graphe interactive**, à la manière de la vue graphe d'Obsidian. Les nœuds sont les pages, colorés par type ; les arêtes, les liens Markdown. On zoome, on déplace, on filtre par type ou tag, on ouvre une page en cliquant son nœud. Les données du graphe sont un JSON produit à l'export.
 - **Une recherche plein texte côté navigateur**, sur un index JSON produit à l'export.

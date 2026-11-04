@@ -410,6 +410,11 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(idx.vocab).toContain("alpha");
   expect(idx.docs.find((d: any) => d.id === "concepts/b").text).toContain("Motlointain"); // contenu complet indexé, pas un extrait
 
+  // « Copier le Markdown » : le source de la page, frontmatter compris, chemin raw/ remplacé par l'URL d'origine
+  const pageA = JSON.parse(readFileSync(join(root, ".brain/site-data/data.json"), "utf8")).pages.find((x: any) => x.id === "concepts/a");
+  expect(pageA.md).toStartWith("---\ntype: Concept\ntitle: Alpha");
+  expect(pageA.md).toContain("resource: https://exemple.org/article");
+  expect(pageA.md).toContain("Voir [Beta](/wiki/concepts/b.md#x)");
   // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
   const all = (readdirSync(out, { recursive: true }) as string[]).filter((f) => statSync(join(out, f)).isFile());
   for (const f of all) {
