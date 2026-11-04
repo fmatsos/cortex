@@ -1,80 +1,206 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, tick } from "svelte";
 	import { afterNavigate, goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
+	import Icon from "#lib/components/icon.svelte";
+	import ResultRow from "#lib/components/result-row.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
+	import SearchFacets from "#lib/components/search-facets.svelte";
 	import { favs } from "#lib/favs.svelte.js";
-	import TypeBadge from "#lib/components/type-badge.svelte";
+	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { parseQuery, wantsFav } from "#lib/query.js";
-	import { type Engine, loadEngine, search } from "#lib/search-client.js";
+	import { diagnose, parseQuery, removeToken, wantsFav, withPassage } from "#lib/query.js";
+	import { type Engine, facetCounts, loadEngine, search as run } from "#lib/search-client.js";
+	import { search } from "#lib/search-state.svelte.js";
+	import { typeIcon } from "#lib/type-meta.js";
 
+	let { data } = $props();
 	const STEP = 50; // résultats affichés par tranche
-	// page prérendue vide : la requête (?q=) ne se lit que dans le navigateur
-	let q = $state("");
+	// page prérendue vide : la requête (?q=) ne se lit que dans le navigateur ; ensuite l'état partagé (search.q) fait foi pour l'écran
 	let engine = $state<Engine>();
 	let failed = $state(false);
 	let ready = $state(false);
 	let limit = $state(STEP);
-	const res = $derived(engine ? search(engine, q, favs.has, limit) : { hits: [], total: 0 });
-	const noFav = $derived(wantsFav(parseQuery(q)) && !favs.ids.length);
+	let filtersOpen = $state(false);
+	let undoBtn = $state<HTMLButtonElement | null>(null);
+
+	const q = $derived(search.q);
+	const t = $derived(q.trim());
+	const parsed = $derived(parseQuery(q));
+	const res = $derived(engine ? run(engine, q, favs.has, limit) : { hits: [], total: 0 });
+	const facets = $derived(engine ? facetCounts(engine, q, favs.has) : undefined);
+	const tagSet = $derived(engine ? new Set(engine.docs.flatMap((d) => d.tags.map(fold))) : undefined);
+	const issues = $derived(diagnose(parsed, tagSet));
+	const noFav = $derived(wantsFav(parsed) && !favs.ids.length);
+	const nOps = $derived(parsed.ops.length);
+	const urlOf = (query: string) => `${toRoute("/search")}?q=${encodeURIComponent(query)}`;
+	const titleOf = (id: string) => engine?.docs.find((d) => d.id === id)?.title ?? "La page";
 
 	const load = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
 	onMount(load);
-	// l'URL fait foi : à l'arrivée, après un envoi depuis l'en-tête, avec précédent / suivant
+	// Filtres : sur grand écran ils sont toujours déployés (colonne de gauche), sur petit écran dans un bloc repliable
+	onMount(() => {
+		const mq = matchMedia("(min-width: 1024px)");
+		const sync = () => { if (mq.matches) filtersOpen = true; };
+		sync();
+		mq.addEventListener("change", sync);
+		return () => mq.removeEventListener("change", sync);
+	});
+	// l'URL fait foi à l'arrivée sur un lien avec ?q= et avec précédent / suivant ; une arrivée sans ?q= garde la requête en cours
 	afterNavigate((nav) => {
-		const p = nav.to?.url.searchParams.get("q") ?? "";
-		if (p !== q.trim()) q = p;
+		const url = nav.to?.url;
+		const p = url?.searchParams.get("q") ?? "";
+		if (url?.searchParams.has("q") || nav.type === "popstate") { if (p !== search.q.trim()) search.q = p; }
 		ready = true;
 	});
 	// la saisie met l'URL à jour sur place (sans entrée d'historique)
 	$effect(() => {
-		const t = q.trim();
+		const v = search.q.trim();
 		limit = STEP;
-		if (!ready || (new URLSearchParams(location.search).get("q") ?? "") === t) return;
-		void goto(t ? `${toRoute("/search")}?q=${encodeURIComponent(t)}` : toRoute("/search"), { shallow: true, replace: true, keepFocus: true, noScroll: true });
+		if (!ready || (new URLSearchParams(location.search).get("q") ?? "") === v) return;
+		void goto(v ? urlOf(v) : toRoute("/search"), { shallow: true, replace: true, keepFocus: true, noScroll: true });
 	});
+
+	// Annonce pour les lecteurs d'écran : nombre de résultats (zéro compris), à la fin de la frappe seulement
+	let announced = $state("");
+	$effect(() => {
+		const msg = !t ? "" : failed ? "Index de recherche indisponible." : !engine ? "Chargement de l'index." : res.total ? `${res.total} résultat${res.total > 1 ? "s" : ""}.` : "Aucun résultat.";
+		const id = setTimeout(() => (announced = msg), 500);
+		return () => clearTimeout(id);
+	});
+
+	// retirer un favori depuis la vue des favoris fait disparaître la ligne : le focus passe à « Annuler »
+	const onRowClick = async (e: MouseEvent) => {
+		const btn = (e.target as Element).closest("button[aria-pressed]");
+		if (!btn) return;
+		await tick();
+		if (!btn.isConnected && favs.removed) undoBtn?.focus();
+	};
+	const fix = (raws: string[]) => { search.q = raws.reduce(removeToken, search.q); };
 </script>
 
 <svelte:head><title>Recherche · Second cerveau</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">Recherche</h1>
-<SearchBox bind:value={q} live class="mt-4 max-w-xl" />
-<FilterChips bind:value={q} class="mt-2" />
-<p class="text-muted-foreground mt-2 text-xs">Filtres : <code>#tag</code> <code>type:concept</code> <code>status:draft</code> <code>is:fav</code> <code>is:unverified</code> · <code>"phrase exacte"</code> · <code>-mot</code> <code>-#tag</code> pour exclure.</p>
+<SearchBox variant="main" live class="mt-4 max-w-3xl" />
+<FilterChips bind:value={search.q} class="mt-3" />
 
-<div class="mt-6">
-	<div role="status" class="text-muted-foreground text-sm">
-		{#if !q.trim()}
-			<!-- rien à afficher -->
-		{:else if failed}
-			Index de recherche indisponible.
-			<button type="button" class="text-foreground underline underline-offset-4" onclick={load}>Réessayer</button>
-		{:else if !engine}
-			Chargement de l'index…
-		{:else if res.total}
-			{res.total > res.hits.length ? `${res.hits.length} sur ${res.total}` : res.total} résultat{res.total > 1 ? "s" : ""}
-		{/if}
-	</div>
-	<ul class="divide-border divide-y">
-		{#each res.hits as h (h.doc.id)}
-			<li class="py-4">
-				<div class="flex flex-wrap items-center gap-2">
-					<a href={toPage(h.doc.id)} class="text-link font-medium underline-offset-4 hover:underline">{@html h.title}</a>
-					<TypeBadge type={h.doc.type} />
-				</div>
-				<p class="text-muted-foreground mt-1 text-sm">{@html h.description}</p>
-				{#if h.snippet}<p class="mt-1 text-sm">{@html h.snippet}</p>{/if}
-			</li>
-		{/each}
-	</ul>
-	{#if res.total > res.hits.length}
-		<button type="button" class="hover:bg-muted mt-4 rounded-md border px-3 py-1.5 text-sm" onclick={() => (limit += STEP)}>Afficher davantage ({res.hits.length} sur {res.total})</button>
-	{/if}
-	{#if q.trim() && engine && !res.total}
-		<p class="text-muted-foreground py-8">
-			{noFav ? "Aucun favori : ajoutez-en avec l'étoile ★ d'une page." : `Aucun résultat pour « ${q.trim()} ».`}
-			<button type="button" class="text-foreground underline underline-offset-4" onclick={() => (q = "")}>Effacer la recherche</button>
+<div class="mt-6 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
+	<aside aria-label="Filtres de la recherche">
+		<details bind:open={filtersOpen} class="rounded-lg border px-3 py-1 lg:border-0 lg:p-0">
+			<summary class="flex min-h-11 items-center gap-2 text-sm font-semibold lg:hidden">
+				<Icon name="filter" size={20} />Filtres{nOps ? ` (${nOps} actif${nOps > 1 ? "s" : ""})` : ""}
+			</summary>
+			{#if facets}
+				<SearchFacets {facets} class="pb-3 lg:pb-0" />
+			{:else}
+				<p class="text-muted-foreground py-2 text-sm">{failed ? "Filtres indisponibles." : "Chargement des filtres…"}</p>
+			{/if}
+		</details>
+	</aside>
+
+	<section aria-label="Résultats" class="min-w-0">
+		<!-- compteur visible (pas annoncé à chaque frappe) ; l'annonce est dans la région de statut ci-dessous -->
+		<p class="text-muted-foreground min-h-6 text-sm">
+			{#if !t}
+				{#if facets}{facets.total} pages dans le wiki.{/if}
+			{:else if failed}
+				<Icon name="error" size={16} class="inline" /> Index de recherche indisponible.
+				<button type="button" class="text-foreground inline-flex min-h-6 items-center gap-1 underline underline-offset-4" onclick={load}><Icon name="retry" size={16} />Réessayer</button>
+			{:else if !engine}
+				Chargement de l'index…
+			{:else if res.total}
+				{res.total > res.hits.length ? `${res.hits.length} sur ${res.total}` : res.total} résultat{res.total > 1 ? "s" : ""}
+			{:else}
+				Aucun résultat
+			{/if}
 		</p>
-	{/if}
+		<p class="sr-only" role="status">{announced}</p>
+
+		{#each issues as issue (issue.text)}
+			<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm">
+				<Icon name="warning" size={20} />
+				<span class="min-w-48 flex-1">{issue.text}</span>
+				<button type="button" class="hover:bg-warning-foreground/10 focus-visible:ring-ring/50 inline-flex min-h-8 items-center gap-1 rounded-md border border-current px-2.5 focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => fix(issue.raws)}>{issue.fix}</button>
+			</div>
+		{/each}
+
+		{#if favs.removed}
+			<p class="bg-muted mt-3 flex flex-wrap items-center gap-x-3 rounded-md border px-3 py-2 text-sm" role="status">
+				« {titleOf(favs.removed)} » retiré des favoris.
+				<button type="button" bind:this={undoBtn} class="text-foreground focus-visible:ring-ring/50 inline-flex min-h-8 items-center gap-1 rounded-md underline underline-offset-4 focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => favs.undo()}>Annuler</button>
+				<button type="button" class="text-muted-foreground hover:text-foreground ml-auto inline-flex min-h-8 min-w-8 items-center justify-center rounded-md pointer-coarse:min-h-11 pointer-coarse:min-w-11" aria-label="Fermer ce message" onclick={() => favs.dismissUndo()}><Icon name="clear" size={16} /></button>
+			</p>
+		{/if}
+		{#if !favs.persisted}
+			<p class="bg-warning-background text-warning-foreground mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-sm" role="status"><Icon name="warning" size={20} />Favoris conservés pour cette session seulement : le navigateur refuse de les enregistrer.</p>
+		{/if}
+
+		{#if t}
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+			<ul class="divide-border mt-2 max-w-[82ch] divide-y" onclick={onRowClick}>
+				{#each res.hits as h (h.doc.id)}
+					<li class="py-4">
+						<ResultRow doc={h.doc} href={withPassage(toPage(h.doc.id), q)} titleHtml={h.title} descriptionHtml={h.description} snippetHtml={h.snippet} showFav onopen={() => search.remember(q)} />
+					</li>
+				{/each}
+			</ul>
+			{#if res.total > res.hits.length}
+				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>Afficher davantage ({res.hits.length} sur {res.total})</button>
+			{/if}
+			{#if engine && !res.total && !issues.length}
+				<div class="max-w-[82ch] py-6">
+					<p class="font-medium">{noFav ? "Aucun favori pour l'instant." : "Aucune page ne correspond à cette recherche."}</p>
+					<p class="text-muted-foreground mt-1 text-[0.9375rem]">
+						{#if noFav}Ajoutez-en avec l'étoile d'une page ou d'un résultat : ils restent dans ce navigateur.
+						{:else}Les filtres se combinent en ET : retirez-en un, ou essayez un mot plus court. Les fautes de frappe légères sont tolérées.{/if}
+					</p>
+					<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-3 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (search.q = "")}><Icon name="clear" size={16} />Effacer la recherche</button>
+				</div>
+			{/if}
+		{:else}
+			<!-- recherche vide : de quoi démarrer (exemples qui donnent des résultats sur ce wiki, tags fréquents, collections, syntaxe) -->
+			<div class="max-w-[82ch] space-y-8 pt-2">
+				{#if data.seed.examples.length}
+					<section aria-labelledby="s-exemples">
+						<h2 id="s-exemples" class="text-lg font-semibold">Essayer</h2>
+						<ul class="mt-2 grid gap-2 sm:grid-cols-2">
+							{#each data.seed.examples as ex (ex.q)}
+								<li><a href={urlOf(ex.q)} class="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 focus-visible:ring-3"><code class="text-link">{ex.q}</code><span class="text-muted-foreground text-sm">{ex.hint}</span></a></li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+				<section aria-labelledby="s-collections">
+					<h2 id="s-collections" class="text-lg font-semibold">Collections</h2>
+					<ul class="mt-2 flex flex-wrap gap-2">
+						{#each data.seed.types.filter((x) => x.count) as ty (ty.type)}
+							<li><a href={urlOf(`type:${ty.type.toLowerCase()}`)} class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm focus-visible:ring-3"><Icon name={typeIcon(ty.type)} size={16} />{ty.plural} <span class="text-muted-foreground">{ty.count}</span></a></li>
+						{/each}
+					</ul>
+				</section>
+				{#if data.seed.tags.length}
+					<section aria-labelledby="s-tags">
+						<h2 id="s-tags" class="text-lg font-semibold">Tags fréquents</h2>
+						<ul class="mt-2 flex flex-wrap gap-2">
+							{#each data.seed.tags as tg (tg.tag)}
+								<li><a href={urlOf(`#${tg.tag}`)} class="hover:bg-muted bg-secondary text-secondary-foreground focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag} <span class="text-muted-foreground">{tg.count}</span></a></li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+				<section aria-labelledby="s-syntaxe">
+					<h2 id="s-syntaxe" class="text-lg font-semibold">Affiner avec des opérateurs</h2>
+					<ul class="mt-2 space-y-2 text-[0.9375rem]">
+						<li class="flex items-center gap-3"><Icon name="operator-tag" size={20} class="text-muted-foreground" /><code>#tag</code> <span class="text-muted-foreground">ou</span> <code>tag:nom</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code>type:concept</code> <span class="text-muted-foreground">concept, entity, synthesis, source</span></li>
+						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>status:draft</code> <code>is:fav</code> <code>is:unverified</code> <code>is:review</code> <code>is:partial</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-phrase" size={20} class="text-muted-foreground" /><code>"phrase exacte"</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-exclude" size={20} class="text-muted-foreground" /><code>-mot</code> <code>-#tag</code> <span class="text-muted-foreground">pour exclure</span></li>
+					</ul>
+					<p class="text-muted-foreground mt-3 text-sm">Les filtres se combinent en ET. Raccourcis : Ctrl K ou / pour chercher, Alt F pour mettre en favori, Alt C pour copier le lien d'un résultat de la palette.</p>
+				</section>
+			</div>
+		{/if}
+	</section>
 </div>

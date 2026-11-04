@@ -1,6 +1,6 @@
 import type Fuse from "fuse.js";
 import { fold } from "./fold";
-import { isEmpty, matches, parseQuery, type Parsed } from "./query";
+import { activeValues, hasText, isEmpty, matches, parseQuery, STATUS_VALUES, TYPE_VALUES, type Parsed } from "./query";
 import type { SearchDoc, SearchIndex } from "./types";
 
 /**
@@ -119,12 +119,22 @@ export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Rank
 	return out.sort((a, b) => b.score - a.score || a.doc.title.localeCompare(b.doc.title));
 }
 
-/** Plages [début, fin[ des mots de `text` qui font partie de `hits` (le repli garde les longueurs). */
-export function ranges(text: string, hits: Set<string>): [number, number][] {
+/**
+ * Plages [début, fin[ de `text` à surligner, triées et sans chevauchement : les mots qui font partie de `hits` et chaque
+ * occurrence des phrases exactes `phrases` (repliées). Le repli doit garder les longueurs, sinon aucune plage.
+ */
+export function ranges(text: string, hits: Set<string>, phrases: string[] = []): [number, number][] {
 	const f = fold(text);
-	if (f.length !== text.length || !hits.size) return [];
+	if (f.length !== text.length || (!hits.size && !phrases.length)) return [];
+	const found: [number, number][] = [];
+	if (hits.size) for (const m of f.matchAll(/[\p{L}\p{N}]+/gu)) if (hits.has(m[0])) found.push([m.index!, m.index! + m[0].length]);
+	for (const ph of phrases) if (ph) for (let at = f.indexOf(ph); at >= 0; at = f.indexOf(ph, at + ph.length)) found.push([at, at + ph.length]);
+	found.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
 	const out: [number, number][] = [];
-	for (const m of f.matchAll(/[\p{L}\p{N}]+/gu)) if (hits.has(m[0])) out.push([m.index!, m.index! + m[0].length]);
+	for (const r of found) {
+		const last = out[out.length - 1];
+		if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]); else out.push([r[0], r[1]]);
+	}
 	return out;
 }
 
@@ -157,14 +167,17 @@ export function search(e: Engine, q: string, isFav: (id: string) => boolean, lim
 	const p = parseQuery(q);
 	if (isEmpty(p)) return { hits: [], total: 0 };
 	const all = rank(e, p, isFav);
+	const phrases = p.phrases.map((x) => x.text), text_ = hasText(p);
 	return { total: all.length, hits: all.slice(0, limit).map(({ doc, hits }) => {
-		const text = doc.text, xs = ranges(text, hits);
+		const text = doc.text, xs = ranges(text, hits, phrases);
 		let snippet: string;
 		if (xs.length) {
+			// extrait centré sur la première occurrence : mot libre ou phrase exacte
 			const from = Math.max(0, xs[0][0] - 60), to = Math.min(text.length, from + 200);
 			snippet = (from > 0 ? "… " : "") + mark(text, xs, from, to) + (to < text.length ? " …" : "");
-		} else snippet = esc(text.slice(0, 160)) + (text.length > 160 ? " …" : "");
-		return { doc, title: mark(doc.title, ranges(doc.title, hits)), description: mark(doc.description, ranges(doc.description, hits)), snippet };
+		} else if (!text_) snippet = ""; // filtres seuls : pas de passage à montrer
+		else snippet = esc(text.slice(0, 160)) + (text.length > 160 ? " …" : "");
+		return { doc, title: mark(doc.title, ranges(doc.title, hits, phrases)), description: mark(doc.description, ranges(doc.description, hits, phrases)), snippet };
 	}) };
 }
 
@@ -181,13 +194,60 @@ export function suggestTitles(e: Engine, p: Parsed, isFav: (id: string) => boole
 }
 
 const count = <T>(xs: T[], f: (x: T) => boolean) => xs.filter(f).length;
-const KEY_HINTS: FilterSuggestion[] = [
+export const KEY_HINTS: FilterSuggestion[] = [
 	{ label: "#tag", insert: "#", hint: "filtrer par tag" },
 	{ label: "type:", insert: "type:", hint: "concept, entity, synthesis, source" },
 	{ label: "status:", insert: "status:", hint: "draft, stable, deprecated" },
 	{ label: "is:fav", insert: "is:fav ", hint: "mes favoris" },
 	{ label: "is:unverified", insert: "is:unverified ", hint: "jamais relues" },
+	{ label: "is:review", insert: "is:review ", hint: "à relire" },
+	{ label: "is:partial", insert: "is:partial ", hint: "sources partielles" },
 ];
+
+/** Pages qui passent les filtres, phrases et exclusions de `p` (et ses mots libres) : le contexte des compteurs. */
+const contextDocs = (e: Engine, p: Parsed, isFav: (id: string) => boolean): SearchDoc[] => (isEmpty(p) ? e.docs : rank(e, p, isFav).map((r) => r.doc));
+/** Le même Parsed sans les opérateurs positifs `keys` : ce que la facette en cours de modification ne doit pas contraindre. */
+const without = (p: Parsed, ...keys: string[]): Parsed => ({ ...p, ops: p.ops.filter((o) => o.neg || !keys.includes(o.key)) });
+
+export type Facets = {
+	total: number;
+	type: Record<string, number>;
+	status: Record<string, number>;
+	flags: { fav: number; unverified: number; review: number; partial: number };
+	tags: { tag: string; count: number }[]; // plus fréquents d'abord
+};
+
+/**
+ * Compteurs des facettes dans le contexte de la requête courante : le nombre de pages que donnerait le choix de chaque valeur.
+ * Pour `type` et `status` (choix unique), on retire seulement la facette en cours de modification ; pour les tags et les
+ * indicateurs (qui s'additionnent), on part des résultats actuels. Trois classements au plus, jamais un par valeur.
+ */
+export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean): Facets {
+	const p = parseQuery(q);
+	const cur = contextDocs(e, p, isFav);
+	const tally = (docs: SearchDoc[], by: (d: SearchDoc) => string) => {
+		const out: Record<string, number> = {};
+		for (const d of docs) out[by(d)] = (out[by(d)] ?? 0) + 1;
+		return out;
+	};
+	const tags = new Map<string, { tag: string; count: number }>();
+	for (const d of cur) for (const t of d.tags) {
+		const k = fold(t), c = tags.get(k);
+		if (c) c.count++; else tags.set(k, { tag: t, count: 1 });
+	}
+	return {
+		total: cur.length,
+		type: tally(contextDocs(e, without(p, "type"), isFav), (d) => d.type),
+		status: tally(contextDocs(e, without(p, "status"), isFav), (d) => fold(d.status)),
+		flags: {
+			fav: count(cur, (d) => isFav(d.id)),
+			unverified: count(cur, (d) => !d.verified),
+			review: count(cur, (d) => !!d.needsReview),
+			partial: count(cur, (d) => !!d.partial),
+		},
+		tags: [...tags.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)),
+	};
+}
 
 /**
  * Autocomplétion : valeurs des filtres (`#`, `type:`, `status:`, `is:` avec leur nombre de pages), termes du vocabulaire
@@ -203,9 +263,11 @@ export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): {
 	const values = (all: [string, string, number][], prefix: string): FilterSuggestion[] =>
 		all.filter(([v]) => v.startsWith(prefix)).sort((a, b) => b[2] - a[2] || a[0].localeCompare(b[0])).slice(0, 8)
 			.map(([, ins, n]) => ({ label: ins.trim(), insert: head + ins, count: n }));
+	// compteurs dans le contexte du reste de la saisie : « #llm type: » compte les types parmi les pages #llm, pas dans tout le wiki
+	const rest = parseQuery(q.slice(0, m.index! + m[1].length));
 	const tagCounts = () => {
-		const c = new Map<string, [string, number]>();
-		for (const d of e.docs) for (const tag of d.tags) c.set(fold(tag), [tag, (c.get(fold(tag))?.[1] ?? 0) + 1]);
+		const have = activeValues(rest, "tag"), c = new Map<string, [string, number]>();
+		for (const d of contextDocs(e, rest, isFav)) for (const tag of d.tags) if (!have.has(fold(tag))) c.set(fold(tag), [tag, (c.get(fold(tag))?.[1] ?? 0) + 1]);
 		return [...c].map(([k, [tag, n]]) => [k, tag, n] as [string, string, number]);
 	};
 	if (t.startsWith("#") || t.startsWith("tag:")) {
@@ -215,11 +277,14 @@ export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): {
 	const op = t.match(/^(type|status|is):(.*)$/);
 	if (op) {
 		const [, key, pre] = op;
+		const docs = contextDocs(e, key === "is" ? rest : without(rest, key), isFav);
 		const all: [string, string, number][] =
-			key === "type" ? ["Concept", "Entity", "Synthesis", "Source"].map((ty) => [ty.toLowerCase(), `type:${ty.toLowerCase()} `, count(e.docs, (d) => d.type === ty)])
-			: key === "status" ? ["draft", "stable", "deprecated"].map((s) => [s, `status:${s} `, count(e.docs, (d) => fold(d.status) === s)])
-			: [["fav", "is:fav ", count(e.docs, (d) => isFav(d.id))], ["unverified", "is:unverified ", count(e.docs, (d) => !d.verified)]];
-		return { ...none, filters: values(all, pre).filter((f) => f.count !== 0 || key !== "is") };
+			key === "type" ? TYPE_VALUES.map((ty) => [ty.toLowerCase(), `type:${ty.toLowerCase()} `, count(docs, (d) => d.type === ty)])
+			: key === "status" ? STATUS_VALUES.map((s) => [s, `status:${s} `, count(docs, (d) => fold(d.status) === s)])
+			: [["fav", "is:fav ", count(docs, (d) => isFav(d.id))], ["unverified", "is:unverified ", count(docs, (d) => !d.verified)],
+				["review", "is:review ", count(docs, (d) => !!d.needsReview)], ["partial", "is:partial ", count(docs, (d) => !!d.partial)]];
+		// les compteurs sont contextuels : une valeur à zéro page mènerait à une impasse, on ne la propose pas
+		return { ...none, filters: values(all, pre).filter((f) => f.count !== 0) };
 	}
 	if (/^[a-z]+:/.test(t) || t.startsWith('"')) return none;
 
