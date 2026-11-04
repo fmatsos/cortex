@@ -7,7 +7,21 @@ export const screenRadius = (degree: number, k: number) =>
 /** Nombre maximal de libellés : proportionnel à la surface visible, et qui croît avec le zoom (jamais plus de 150). */
 export const labelBudget = (w: number, h: number, k: number) => Math.min(150, Math.ceil(((w * h) / 14000) * Math.max(1, k)));
 
-export type Rect = { x: number; y: number; w: number; h: number; force?: boolean };
+/**
+ * Raccourcit `text` pour qu'il tienne en `maxWidth` pixels (UI18) : coupe à la dernière longueur qui rentre, suivie de « … ».
+ * `measure` donne la largeur d'une chaîne (canvas) ; recherche dichotomique : peu de mesures même pour un titre très long.
+ */
+export function truncateToWidth(text: string, maxWidth: number, measure: (s: string) => number): string {
+	if (measure(text) <= maxWidth) return text;
+	let lo = 0, hi = text.length;
+	while (lo < hi) {
+		const mid = Math.ceil((lo + hi) / 2);
+		if (measure(`${text.slice(0, mid).trimEnd()}…`) <= maxWidth) lo = mid; else hi = mid - 1;
+	}
+	return lo > 0 ? `${text.slice(0, lo).trimEnd()}…` : "…";
+}
+
+export type Rect ={ x: number; y: number; w: number; h: number; force?: boolean };
 
 const CELL = 96;
 
