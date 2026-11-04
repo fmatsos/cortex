@@ -72,14 +72,16 @@
 <div class="mt-10 grid gap-6 lg:grid-cols-2 2xl:grid-cols-4">
 	{#each data.collections as c (c.type)}
 		<section aria-labelledby="h-{c.type}" class="bg-muted/40 rounded-lg border p-4">
-			<h2 id="h-{c.type}" class="anchor-target flex items-center gap-2 text-xl font-semibold">
-				<Icon name={typeIcon(c.type)} size={24} style="color: {typeColor(c.type)}" />
-				{c.plural} <span class="text-muted-foreground text-sm font-normal">({c.count})</span>
-			</h2>
+			<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+				<h2 id="h-{c.type}" class="anchor-target flex items-center gap-2 text-xl font-semibold">
+					<Icon name={typeIcon(c.type)} size={24} style="color: {typeColor(c.type)}" />
+					{c.plural} <span class="text-muted-foreground text-sm font-normal">({c.count})</span>
+				</h2>
+				{#if c.count > c.preview.length}
+					<a href={urlOf(`type:${c.type.toLowerCase()}`)} aria-label="Voir tout : {c.plural.toLowerCase()} ({c.count})" class="text-link link-content inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline pointer-coarse:min-h-11">Voir tout<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+				{/if}
+			</div>
 			<PageList pages={c.preview} filter={false} showType={false} />
-			{#if c.count > c.preview.length}
-				<a href={urlOf(`type:${c.type.toLowerCase()}`)} class="text-link link-content mt-2 inline-flex min-h-9 items-center gap-1 underline underline-offset-4 pointer-coarse:min-h-11">Voir tout : {c.plural.toLowerCase()} ({c.count})</a>
-			{/if}
 		</section>
 	{/each}
 </div>
