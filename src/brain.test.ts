@@ -223,6 +223,7 @@ test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RP
     const added = JSON.parse((await call(7, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text);
     expect(added).toMatchObject({ duplicate: false, title: "Idée" });
     expect(JSON.parse((await call(8, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text).id).toBe(added.id);
+    expect((await call(10, "add", { input: "/etc/hostname", note: "fuite" })).isError).toBe(true); // pas de fichier local via MCP
     expect((await call(9, "log", {})).content[0].text).toContain(`**Add** \`${added.id}\``);
     expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toContain("wiki/concepts/b.md");
   } finally { proc.stdin.end(); proc.kill(); }

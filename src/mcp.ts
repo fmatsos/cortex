@@ -111,15 +111,17 @@ export function buildServer(root: string): McpServer {
   }));
 
   s.registerTool("add", {
-    description: "Ajoute une source à raw/ (statut pending ; ne touche jamais au wiki) : une URL, un chemin local (.md, .txt, .pdf) ou un texte. Idempotent : une source déjà présente renvoie son id. La note, qui dit pourquoi l'utilisateur garde la source, est obligatoire. Ne compile pas : l'ingest reste à faire.",
+    description: "Ajoute une source à raw/ (statut pending ; ne touche jamais au wiki) : une URL http(s) ou un texte. Pas de fichier local : un client MCP ne doit pas pouvoir copier un fichier du poste dans le dépôt.",
     inputSchema: z.object({
-      input: z.string().optional().describe("URL ou chemin de fichier local"),
+      input: z.string().optional().describe("URL http(s)"),
       text: z.string().optional().describe("texte à ajouter, à la place de input"),
       note: z.string().describe("pourquoi l'utilisateur garde cette source"),
     }),
   }, safe(async ({ input, text: txt, note }) => {
     if (!note.trim()) throw new Error("note obligatoire : dis pourquoi cette source est gardée.");
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Donne soit input (URL ou chemin), soit text.");
+    // pas de chemin local : un client MCP copierait n'importe quel fichier du poste (clé, secret) dans raw/, puis dans git
+    if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input doit être une URL http(s) ; pour un fichier local, utilise brain add ou brain inbox.");
     const r = await add(root, input ?? "-", { note, text: txt });
     return json({ id: r.id, duplicate: r.duplicate, ...(r.ex && { title: r.ex.title, partial: r.ex.partial }) });
   }));
