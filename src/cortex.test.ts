@@ -21,7 +21,7 @@ test("utilitaires", () => {
 
 test("add → index → search, idempotent", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2000-01-01","kind":"update","text":"ancien"}\n');
   await Bun.write(join(root, "wiki/concepts/x.md"), "---\ntype: Concept\ntitle: Relecture\ndescription: D.\n---\nCorps sur la relecture.\n");
   const note = join(root, "n.md");
@@ -51,7 +51,7 @@ test("cortex new : page nommée par UUID v7 par défaut, titre unique, lint des 
   const { lint } = await import("./lint");
   const { logAdd } = await import("./log");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   const p = await newPage(root, "concept", "Context rot");
   expect(p).toMatch(/^wiki\/concepts\/[0-9a-f-]{36}\.md$/);
   expect(UUID.test(p.slice(14, -3))).toBe(true);
@@ -101,8 +101,8 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
 
   // un wiki en nommage horodaté, sans dossier par type
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
-  await Bun.write(join(root, "config.json"), JSON.stringify({ raw_path: "{yyyy}{mm}{dd}-{rand}-{slug}", page_path: "{yyyy}/{slug}" }));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await Bun.write(join(root, "cortex.json"), JSON.stringify({ raw_path: "{yyyy}{mm}{dd}-{rand}-{slug}", page_path: "{yyyy}/{slug}" }));
   const note = join(root, "n.md");
   await Bun.write(note, "# Ma note\n\nUne idée.\n");
   const a = await add(root, note, { note: "n", now: at });
@@ -115,11 +115,40 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
   expect(issues).toEqual([]);
 });
 
+test("schema: built-in file, written to CLAUDE.md or AGENTS.md at init, language and override from cortex.json", async () => {
+  const { configCmd } = await import("./backends/index");
+  const { schemaText, writeSchema, agentFile } = await import("./schema");
+  const log = console.log; console.log = () => {};
+  try {
+    for (const [client, file] of [[undefined, "CLAUDE.md"], ["claude", "CLAUDE.md"], ["codex", "AGENTS.md"], ["opencode", "AGENTS.md"]] as const) {
+      const root = mkdtempSync(join(tmpdir(), "cortex-"));
+      expect(await configCmd(root, ["init", ...(client ? [client] : [])])).toBe(0);
+      expect(agentFile(client)).toBe(file);
+      const txt = await Bun.file(join(root, file)).text();
+      expect(txt).toContain("## INGEST workflow");
+      expect(txt).toContain("Wiki language: **English**");
+      expect(existsSync(join(root, file === "CLAUDE.md" ? "AGENTS.md" : "CLAUDE.md"))).toBe(false);
+    }
+    const root = mkdtempSync(join(tmpdir(), "cortex-"));
+    await Bun.write(join(root, "CLAUDE.md"), "mine");
+    await configCmd(root, ["init"]);
+    expect(await Bun.file(join(root, "CLAUDE.md")).text()).toBe("mine"); // an existing file is kept…
+    await configCmd(root, ["set", "language", "French"]);
+    await writeSchema(root, true); // …until cortex schema --write
+    expect(await Bun.file(join(root, "CLAUDE.md")).text()).toContain("Wiki language: **French**");
+    await Bun.write(join(root, "my-schema.md"), "Custom, in {{language}}.\n");
+    await configCmd(root, ["set", "schema", "my-schema.md"]);
+    expect(await schemaText(root)).toBe("Custom, in French.\n");
+    await configCmd(root, ["set", "schema", "missing.md"]);
+    await expect(schemaText(root)).rejects.toThrow("schéma introuvable");
+  } finally { console.log = log; }
+});
+
 test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", async () => {
   const { inbox } = await import("./inbox");
   const { existsSync, readdirSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante mots exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
   const srv = Bun.serve({ port: 0, fetch: (req) => new URL(req.url).pathname === "/ok" ? new Response(page, { headers: { "content-type": "text/html" } }) : new Response("non", { status: 404 }) });
   const sources = () => (existsSync(join(root, "raw")) ? readdirSync(join(root, "raw"), { recursive: true }) : []).filter((f) => String(f).endsWith("source.md")).length;
@@ -183,16 +212,16 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à cortex", async 
   const { guard } = await import("./backends/claude");
   const { symlinkSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "wiki/concepts/x.md"), "");
-  symlinkSync("CORTEX.md", join(root, "CLAUDE.md"));
-  symlinkSync("../CORTEX.md", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
+  symlinkSync("cortex.json", join(root, "CLAUDE.md"));
+  symlinkSync("../cortex.json", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
   const ok = (tool: string, input: object, mode: "read" | "write" = "write") => guard(root, tool, input, mode).allow;
   expect(ok("Write", { file_path: join(root, "wiki/concepts/nouveau.md") })).toBe(true);
   expect(ok("Edit", { file_path: "wiki/concepts/x.md" })).toBe(true);
   expect(ok("Write", { file_path: join(root, "wiki/sous/dossier/neuf.md") })).toBe(true);
   expect(ok("Edit", { file_path: join(root, "raw/2026/11/a/source.md") })).toBe(false);
-  expect(ok("Edit", { file_path: join(root, "wiki/../CORTEX.md") })).toBe(false);
+  expect(ok("Edit", { file_path: join(root, "wiki/../cortex.json") })).toBe(false);
   expect(ok("Edit", { file_path: join(root, "CLAUDE.md") })).toBe(false);
   expect(ok("Edit", { file_path: join(root, "wiki/piege.md") })).toBe(false);
   expect(ok("Write", { file_path: join(root, "wiki/x.md") }, "read")).toBe(false);
@@ -267,14 +296,14 @@ test("journal : log.md généré, déterministe, plus récent d'abord, référen
 test("cortex log add : valide kind, pages et sources, écrit une ligne, régénère log.md ; cortex log lit", async () => {
   const { logAdd, readLog } = await import("./log");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\n---\nx\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\n---\n");
   await Bun.write(join(root, "wiki/log.md"), "à écraser");
   await expect(logAdd(root, "creation", "x")).rejects.toThrow("kind inconnu");
   await expect(logAdd(root, "update", "  ")).rejects.toThrow("texte vide");
   await expect(logAdd(root, "update", "x", [], ["wiki/concepts/nope.md"])).rejects.toThrow("page introuvable");
-  await expect(logAdd(root, "update", "x", [], ["wiki/../CORTEX.md"])).rejects.toThrow("page introuvable");
+  await expect(logAdd(root, "update", "x", [], ["wiki/../cortex.json"])).rejects.toThrow("page introuvable");
   await expect(logAdd(root, "update", "x", [], ["wiki/log.md"])).rejects.toThrow("page introuvable");
   await expect(logAdd(root, "update", "x", ["01a1a5c9-5e80-7075-ae13-000000000000"])).rejects.toThrow("source raw introuvable");
   await expect(logAdd(root, "update", "x", ["../../etc"])).rejects.toThrow("source raw introuvable");
@@ -334,20 +363,20 @@ test("lint du journal : ligne invalide = erreur, log.md édité à la main = ave
   expect(m.some((x) => x.startsWith("error wiki/log.jsonl:3 kind"))).toBe(true);
 });
 
-test("config.json : absent = agnostique, client inconnu = erreur", async () => {
+test("cortex.json : absent = agnostique, client inconnu = erreur", async () => {
   const { loadConfig, backendFor } = await import("./backends/index");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   expect(await loadConfig(root)).toEqual({});
-  await Bun.write(join(root, "config.json"), '{"client":"gpt"}');
+  await Bun.write(join(root, "cortex.json"), '{"client":"gpt"}');
   expect(loadConfig(root)).rejects.toThrow("client inconnu");
-  await Bun.write(join(root, "config.json"), '{"client":"opencode"}');
+  await Bun.write(join(root, "cortex.json"), '{"client":"opencode"}');
   expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--model", "opencode/big-pickle", "--prompt", "p"]);
   // effort : traduit dans le vocabulaire de chaque CLI
-  const it = async (cfg: object) => { await Bun.write(join(root, "config.json"), JSON.stringify(cfg)); return (await backendFor(root)).interactive("p"); };
+  const it = async (cfg: object) => { await Bun.write(join(root, "cortex.json"), JSON.stringify(cfg)); return (await backendFor(root)).interactive("p"); };
   expect(await it({ client: "opencode", effort: "high" })).toEqual(["opencode", "--model", "opencode/big-pickle#high", "--prompt", "p"]);
   expect(await it({ client: "claude", model: "opus", effort: "max" })).toEqual(["claude", "--model", "opus", "--effort", "max", "p"]);
   expect(await it({ client: "codex", effort: "low" })).toEqual(["codex", "-c", 'model_reasoning_effort="low"', "p"]);
-  await Bun.write(join(root, "config.json"), "{}");
+  await Bun.write(join(root, "cortex.json"), "{}");
   expect((await backendFor(root)).interactive("p")).toEqual(["claude", "p"]);
 });
 
@@ -366,7 +395,7 @@ test("cortex config : init, set, get, remove, lint", async () => {
     expect(await loadConfig(root)).toEqual({ client: "codex", effort: "low" });
     await configCmd(root, ["remove", "effort"]);
     expect(await loadConfig(root)).toEqual({ client: "codex" });
-    await Bun.write(join(root, "config.json"), "{ pas du json");
+    await Bun.write(join(root, "cortex.json"), "{ pas du json");
     expect(await configCmd(root, ["lint"])).toBe(1);
   } finally { console.log = log; }
   expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // variante propre au modèle
@@ -478,7 +507,7 @@ test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
     Bun.spawnSync(confine(root, ["sh", "-c", `touch ${join(root, f)}`], mode), { stderr: "pipe" }).exitCode;
   expect(sh("write", "wiki/ok.md")).toBe(0);
   expect(sh("write", "raw/non.md")).not.toBe(0);
-  expect(sh("write", "CORTEX.md")).not.toBe(0);
+  expect(sh("write", "cortex.json")).not.toBe(0);
   expect(sh("read", "wiki/non.md")).not.toBe(0);
 });
 
@@ -488,7 +517,7 @@ async function mcpRoot() {
   const res = "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md";
   const page = (type: string, title: string, tags: string, body: string) =>
     `---\ntype: ${type}\ntitle: ${title}\ndescription: D ${title}.\ntags: [${tags}]\nsources:\n  - id: x\n    resource: ${res}\n    title: X\n---\n${body}\n`;
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\ntitle: X\nnote: n\nstatus: compiled\n---\nUn texte sur le zythum.\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), page("Concept", "Alpha", "llm, ctx", "Voir [B](/wiki/concepts/b.md)."));
   await Bun.write(join(root, "wiki/concepts/b.md"), page("Concept", "Beta", "ctx", "Rien."));
@@ -521,7 +550,7 @@ test("get : refuse tout chemin hors de wiki/ et raw/", async () => {
   expect(await getFile(root, "/wiki/concepts/b.md")).toContain("Beta");
   expect(await getFile(root, "wiki/concepts/b.md")).toContain("Beta");
   expect(await getFile(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md")).toContain("zythum");
-  for (const p of ["CORTEX.md", "secret.md", "wiki/../secret.md", "/wiki/../secret.md", "wiki/piege.md", "/etc/passwd", "../x.md"])
+  for (const p of ["cortex.json", "secret.md", "wiki/../secret.md", "/wiki/../secret.md", "wiki/piege.md", "/etc/passwd", "../x.md"])
     expect(getFile(root, p)).rejects.toThrow();
   expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // un dossier n'est pas un fichier
 });
@@ -573,7 +602,7 @@ test("cortex mcp : initialize, tools/list, search, get, add sans réseau (JSON-R
     expect(JSON.parse(s.content[0].text).hits[0]).toMatchObject({ area: "raw", path: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" });
     expect(JSON.parse(s.content[0].text).hint).toContain("trou");
     expect((await call(4, "get", { path: "/wiki/concepts/b.md" })).content[0].text).toContain("Beta");
-    expect((await call(5, "get", { path: "wiki/../CORTEX.md" })).isError).toBe(true);
+    expect((await call(5, "get", { path: "wiki/../cortex.json" })).isError).toBe(true);
     expect((await call(6, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "" })).isError).toBe(true);
     const added = JSON.parse((await call(7, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text);
     expect(added).toMatchObject({ duplicate: false, title: "Idée" });
@@ -641,7 +670,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const fm = (t: string, title: string, extra = "") => `---\ntype: ${t}\ntitle: ${title}\ndescription: Description de ${title}.\ntags: [alpha]\nstatus: stable\ngenerated: { by: test, at: 2026-11-04T10:00:00+01:00 }\n${extra}---\n`;
   const src = `sources:\n  - id: s1\n    resource: /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md\n    title: "Source un"\n`;
-  await Bun.write(join(root, "CORTEX.md"), "");
+  await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\ntitle: Source un\nurl: https://exemple.org/article\nnote: n\nstatus: compiled\n---\nSECRET-DU-CORPS-RAW\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n## Première partie\n\nEncore un fait.[^s1] Et un autre.[^s1]\n\n### Détail\n\n## Première partie\n\n## Notes\n\n[^s1]: précision *utile*\n");
   await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7 800 caractères

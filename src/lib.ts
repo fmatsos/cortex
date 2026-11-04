@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** Racine du cerveau : $CORTEX_ROOT, sinon le premier dossier parent qui contient CORTEX.md. */
+/** Wiki root: $CORTEX_ROOT, otherwise the nearest parent directory holding cortex.json. */
 export function findRoot(from = process.cwd()): string {
   if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
   for (let d = from; ; d = dirname(d)) {
-    if (existsSync(join(d, "CORTEX.md"))) return d;
-    if (dirname(d) === d) throw new Error("CORTEX.md introuvable : lance cortex dans le dépôt ou définis CORTEX_ROOT.");
+    if (existsSync(join(d, "cortex.json"))) return d;
+    if (dirname(d) === d) throw new Error("cortex.json introuvable : lance cortex dans le wiki (cortex config init le crée) ou définis CORTEX_ROOT.");
   }
 }
 

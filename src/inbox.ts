@@ -49,6 +49,6 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
 
   if (!added && !known && !failed) console.log("Inbox vide.");
   else console.log(`${opts.dryRun ? "(dry-run, inbox inchangée) " : ""}${added} ajouté(s), ${known} déjà présent(s), ${failed} échec(s).`);
-  if (noNote && !opts.dryRun) console.error("! note manquante : à renseigner avant compilation (CORTEX.md).");
+  if (noNote && !opts.dryRun) console.error("! note manquante : à renseigner avant compilation.");
   return failed ? 1 : 0;
 }

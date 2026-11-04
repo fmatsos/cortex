@@ -12,7 +12,7 @@ export type { Backend, Config, Mode } from "./backend";
 /**
  * Bridge : les commandes (compile, ask : l'abstraction, dans agent.ts) ne connaissent que `Backend`.
  * Implémentations : default.ts (agnostique, sous-processus, aucun SDK), claude.ts, codex.ts, opencode.ts.
- * config.json à la racine choisit le client ; sans `client`, le CLI reste agnostique.
+ * cortex.json à la racine choisit le client ; sans `client`, le CLI reste agnostique.
  */
 const CLIENTS: Record<string, (cfg: Config) => Backend> = { claude, codex, opencode };
 
@@ -30,12 +30,14 @@ const SHAPE = {
   client: z.enum(Object.keys(CLIENTS) as [string, ...string[]], { error: (i) => `client inconnu « ${i.input} » (${Object.keys(CLIENTS).join(", ")}).` }).nullish(),
   model: str("model"),
   effort: str("effort"),
+  language: str("language"),
+  schema: str("schema"),
   raw_path: template("raw_path"),
   page_path: template("page_path"),
 };
 export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 
-/** Schéma de config.json ; null vaut « non défini ». */
+/** Schéma de cortex.json ; null vaut « non défini ». */
 export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
   const allowed = c.client && EFFORTS[c.client];
   if (c.effort && allowed && !allowed.includes(c.effort))
@@ -45,10 +47,10 @@ export type ConfigIssue = { level: "error" | "warning"; msg: string };
 
 const issueMsg = (i: z.core.$ZodIssue) =>
   i.code === "unrecognized_keys" ? `propriété inconnue « ${i.keys.join(", ")} » (${CONFIG_KEYS.join(", ")}).`
-  : !i.path.length && i.code === "invalid_type" ? "config.json doit contenir un objet JSON."
+  : !i.path.length && i.code === "invalid_type" ? "cortex.json doit contenir un objet JSON."
   : i.message;
 
-/** Contrôles de config.json : erreurs du schéma zod, puis avertissements. */
+/** Contrôles de cortex.json : erreurs du schéma zod, puis avertissements. */
 export function lintConfig(c: unknown): ConfigIssue[] {
   const r = ConfigSchema.safeParse(c);
   if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
@@ -56,19 +58,19 @@ export function lintConfig(c: unknown): ConfigIssue[] {
     ? [{ level: "warning", msg: "model/effort sans client : ignorés par le mode agnostique ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
 }
 
-const configFile = (root: string) => Bun.file(join(root, "config.json"));
+const configFile = (root: string) => Bun.file(join(root, "cortex.json"));
 
-/** Contenu brut de config.json ({} s'il est absent) ; JSON invalide = erreur. */
+/** Contenu brut de cortex.json ({} s'il est absent) ; JSON invalide = erreur. */
 export async function readConfig(root: string): Promise<Record<string, unknown>> {
   const f = configFile(root);
   if (!(await f.exists())) return {};
-  try { return await f.json(); } catch { throw new Error("config.json : JSON invalide."); }
+  try { return await f.json(); } catch { throw new Error("cortex.json : JSON invalide."); }
 }
 
 export async function loadConfig(root: string): Promise<Config> {
   const c = await readConfig(root);
   const e = lintConfig(c).find((i) => i.level === "error");
-  if (e) throw new Error(`config.json : ${e.msg} (cortex config lint)`);
+  if (e) throw new Error(`cortex.json : ${e.msg} (cortex config lint)`);
   return Object.fromEntries(Object.entries(c).filter(([, v]) => v != null)) as Config;
 }
 
@@ -84,17 +86,22 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     if (!(CONFIG_KEYS as readonly string[]).includes(key ?? "")) throw new Error(`Propriété attendue : ${CONFIG_KEYS.join(", ")}.`);
   };
   switch (sub) {
-    case "init":
-      if (await f.exists()) throw new Error("config.json existe déjà.");
-      await save({ client: null, model: null, effort: null, raw_path: null, page_path: null }); // null = non défini : agnostique, nommage par défaut (UUID v7)
-      console.log("config.json créé (agnostique). Renseigne-le avec cortex config set client claude|codex|opencode.");
+    case "init": {
+      // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
+      if (await f.exists()) throw new Error("cortex.json existe déjà.");
+      await save({ client: key ?? null, model: null, effort: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
+      console.log(`cortex.json créé${key ? ` (client ${key})` : " (agnostique)"}.`);
+      const { writeSchema } = await import("../schema");
+      const w = await writeSchema(root, false);
+      console.log(w.written ? `${w.file} créé : le schéma que suit l'agent.` : `${w.file} existe déjà : inchangé (cortex schema --write le remplace).`);
       return 0;
+    }
     case "lint": {
-      if (!(await f.exists())) { console.log("Pas de config.json : mode agnostique."); return 0; }
+      if (!(await f.exists())) { console.log("Pas de cortex.json : mode agnostique."); return 0; }
       let issues: ConfigIssue[];
       try { issues = lintConfig(await readConfig(root)); } catch (e) { issues = [{ level: "error", msg: (e as Error).message }]; }
       for (const i of issues) console.log(`${i.level === "error" ? "✗" : "!"} ${i.msg}`);
-      if (!issues.length) console.log("config.json valide.");
+      if (!issues.length) console.log("cortex.json valide.");
       return issues.some((i) => i.level === "error") ? 1 : 0;
     }
     case "get": {
@@ -117,7 +124,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       return 0;
     }
     default:
-      throw new Error("Usage : cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>");
+      throw new Error("Usage : cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>");
   }
 }
 

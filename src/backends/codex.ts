@@ -9,7 +9,7 @@ export default function codex(cfg: Config): Backend {
     async run(root, prompt, mode) {
       const { Codex } = await load<typeof import("@openai/codex-sdk")>("@openai/codex-sdk");
       const thread = new Codex({ codexPathOverride: cli("codex") }).startThread({
-        // workspace-write n'autorise l'écriture que sous workingDirectory (vérifié : raw/ et CORTEX.md en lecture seule)
+        // workspace-write n'autorise l'écriture que sous workingDirectory (verified: raw/ and the agent file stay read-only)
         workingDirectory: mode === "write" ? join(root, "wiki") : root,
         sandboxMode: mode === "write" ? "workspace-write" : "read-only",
         approvalPolicy: "never",

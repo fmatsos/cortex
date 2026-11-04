@@ -26,24 +26,27 @@ const HELP = `cortex — second cerveau
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .cortex/site)
   cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
-  cortex config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort, raw_path, page_path)
+  cortex schema [--write]                      (le schéma que suit l'agent ; --write le réécrit dans CLAUDE.md ou AGENTS.md)
+  cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>
+                                               (clés : client, model, effort, language, schema, raw_path, page_path)
 
-Agent : config.json (client claude|codex|opencode, model, effort). Sans client :
+Agent : cortex.json (client claude|codex|opencode, model, effort). Sans client :
 $CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut « claude -p »).
 
-Racine : $CORTEX_ROOT, sinon le premier dossier parent qui contient CORTEX.md.`;
+Racine : $CORTEX_ROOT, sinon le premier dossier parent qui contient cortex.json.`;
 
 const { values: o, positionals: [cmd, ...args] } = parseArgs({
   allowPositionals: true,
   options: {
     note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
     json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-    file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
+    file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, write: { type: "boolean" },
   },
 });
 
 try {
-  const root = findRoot();
+  // config init creates cortex.json, the root marker: it runs where it is called
+  const root = cmd === "config" && args[0] === "init" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   switch (cmd) {
     case "add": {
       if (!args[0]) throw new Error("Usage : cortex add <url|fichier|-> --note \"…\"");
@@ -56,7 +59,7 @@ try {
           process.exitCode = 1;
         }
       }
-      if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation (CORTEX.md).");
+      if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation.");
       break;
     }
     case "inbox":
@@ -131,6 +134,12 @@ try {
     case "mcp":
       (await import("./mcp")).serveMcp(root); // chargé à la demande ; reste ouvert tant que le client lit stdin
       break;
+    case "schema": {
+      const { schemaText, writeSchema } = await import("./schema");
+      if (o.write) console.log(`${(await writeSchema(root, true)).file} écrit.`);
+      else process.stdout.write(await schemaText(root));
+      break;
+    }
     case "config":
       process.exitCode = await configCmd(root, args);
       break;

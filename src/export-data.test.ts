@@ -126,7 +126,7 @@ function fixture() {
     writeFileSync(join(root, `raw/2026/11/${id}/source.md`), `---\ntype: RawSource\ntitle: R\nurl: https://exemple.org/${id}\nnote: n\n${partial}status: compiled\n---\nSECRET\n`);
   };
   const src = (id: string) => `sources:\n  - id: s\n    resource: /raw/2026/11/${id}/source.md\n    title: S\n`;
-  writeFileSync(join(root, "CORTEX.md"), "");
+  writeFileSync(join(root, "cortex.json"), "{}");
   raw("01a1a5c9-5e80-7075-ae13-aab03b0a8697", "partial: true  # paywall\n");
   raw("01a1a5c9-5e80-7075-ae13-aab03b0a8698", "");
   page("wiki/sources/zz-partiel.md", "Source", "Zèbre partiel", src("01a1a5c9-5e80-7075-ae13-aab03b0a8697"), "Résumé.[^s]\n\n[^s]: S.");

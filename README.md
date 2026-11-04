@@ -20,7 +20,7 @@ Cortex is a command-line tool for running a personal wiki that an LLM agent main
 You pick the sources, ask the questions and review the pages. Your agent does the bookkeeping: it summarizes, links, updates and flags contradictions. Claude Code, Codex and opencode are supported. Cortex itself never calls an LLM. It captures sources, runs the mechanical checks, publishes the wiki and keeps the agent confined to `wiki/`.
 
 > [!NOTE]
-> Cortex is a personal project. The CLI messages and the agent schema ([`docs/CORTEX.md`](docs/CORTEX.md)) are currently in French, and wikis are written in French by default (change rule 7 of your `CORTEX.md` to switch).
+> Cortex is a personal project. The CLI messages are currently in French. The agent schema is in English, and the wiki language is a setting (`language`).
 
 ## Features
 
@@ -58,12 +58,12 @@ bun link                      # puts `cortex` on your PATH
 
 ## Quick start
 
-A wiki is any directory that contains a `CORTEX.md`. That file is the schema your agent follows: rules, page format and workflows. Cortex finds the wiki by walking up from the current directory to the nearest `CORTEX.md`, or uses `$CORTEX_ROOT`.
+A wiki is any directory that contains a `cortex.json`. Cortex finds it by walking up from the current directory to the nearest `cortex.json`, or uses `$CORTEX_ROOT`.
 
 ```sh
 mkdir -p ~/notes/{raw,wiki,inbox} && cd ~/notes && git init
-cp /path/to/cortex/docs/CORTEX.md .   # the reference schema; adapt it to taste
-ln -s CORTEX.md CLAUDE.md             # optional: Claude Code loads it in any session (AGENTS.md for Codex)
+cortex config init claude             # cortex.json + CLAUDE.md (codex or opencode: AGENTS.md)
+cortex config set language English    # the language your wiki is written in
 
 cortex add https://example.org/article --note "Why I keep this"
 cortex compile --pending              # one interactive agent session per pending source
@@ -101,7 +101,8 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex ask "<question>" [--file] [--interactive]` | Answers from the wiki, read-only. `--file` stores the answer in `wiki/syntheses/`. |
 | `cortex export [--out <dir>]` | Builds the static site (default `.cortex/site`). The output directory is emptied first. |
 | `cortex mcp` | Starts an MCP server on stdio. |
-| `cortex config init \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `config.json` (keys `client`, `model`, `effort`, `raw_path`, `page_path`). |
+| `cortex schema [--write]` | Prints the agent schema, or rewrites `CLAUDE.md` / `AGENTS.md` with it. |
+| `cortex config init [client] \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `cortex.json` (keys `client`, `model`, `effort`, `language`, `schema`, `raw_path`, `page_path`). `init` also writes the agent schema. |
 
 ### Choosing the agent
 
@@ -110,7 +111,7 @@ Without configuration, Cortex stays agent-agnostic:
 - interactive sessions run `$CORTEX_AGENT` (default `claude`);
 - batch runs and `ask` run `$CORTEX_AGENT_BATCH` (default `claude -p`, which reads the prompt on stdin).
 
-Naming a client in `config.json` at the wiki root lets Cortex drive that agent through its SDK or API, and block writes outside `wiki/` *before* they happen:
+Naming a client in `cortex.json` lets Cortex drive that agent through its SDK or API, and block writes outside `wiki/` *before* they happen:
 
 ```sh
 cortex config init
@@ -118,9 +119,23 @@ cortex config set client codex   # claude | codex | opencode
 cortex config set effort high    # low…max for Claude, minimal…xhigh for Codex, a model variant for opencode
 ```
 
+### The agent schema
+
+The schema is what your agent follows: the rules, the page format and the ingest, query and lint workflows. It ships with the CLI ([`src/schema.md`](src/schema.md)). `cortex config init` writes it where the chosen client loads it on its own: `CLAUDE.md` for Claude Code (or no client), `AGENTS.md` for Codex and opencode. An existing file is never overwritten.
+
+| Key | Effect |
+|---|---|
+| `language` | Fills the wiki language into the schema (default `English`). |
+| `schema` | Path, relative to the wiki root, of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
+
+```sh
+cortex schema           # prints the effective schema
+cortex schema --write   # rewrites CLAUDE.md or AGENTS.md, after a CLI update or a config change
+```
+
 ### Naming and folder structure
 
-Two templates in `config.json` decide where Cortex puts what it creates. `/` makes subfolders.
+Two templates in `cortex.json` decide where Cortex puts what it creates. `/` makes subfolders.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -186,8 +201,8 @@ cd site && CORTEX_SITE_DATA=/path/to/wiki/.cortex/site-data bunx --bun vite dev 
 |---|---|
 | `src/` | The CLI. `cortex.ts` is the entry point. `backends/` holds the agent clients. |
 | `site/` | The SvelteKit app built by `cortex export`. It uses Svelte 5, Tailwind v4, shadcn-svelte components and force-graph. |
-| `docs/DESIGN.md` | Architecture and design decisions (French). |
-| `docs/CORTEX.md` | The reference agent schema to copy into a wiki. |
+| `src/schema.md` | The built-in agent schema. |
+| `docs/DESIGN.md` | Architecture and design decisions. |
 | `assets/logo/` | The logo, as SVG and PNG. |
 
 ## License

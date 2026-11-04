@@ -1,7 +1,11 @@
 import { join } from "node:path";
 import { readDocs } from "./lib";
-import { backendFor, type Mode } from "./backends/index";
+import { backendFor, loadConfig, type Mode } from "./backends/index";
 import { confine } from "./backends/backend";
+import { agentFile } from "./schema";
+
+/** The agent file holding the schema (CLAUDE.md or AGENTS.md, per client). */
+const schemaName = async (root: string) => agentFile((await loadConfig(root)).client);
 
 async function git(root: string, ...args: string[]) {
   const p = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "ignore" });
@@ -65,7 +69,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
     const id = d.path.split("/").at(-2)!;
     if (!String(d.fm.note ?? "").trim()) { console.error(`✗ ${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
     if (d.fm.status !== "pending") console.log(`(${id} est déjà ${d.fm.status} : recompilation)`);
-    const prompt = `Applique le workflow INGEST de CORTEX.md à la source /${d.path}.` +
+    const prompt = `Applique le workflow INGEST de ${await schemaName(root)} à la source /${d.path}.` +
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
     console.log(`→ compile ${id}${opts.batch ? " (batch)" : ""}`);
     const before = await changed(root);
@@ -81,7 +85,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
 }
 
 export async function ask(root: string, question: string, opts: { file?: boolean; interactive?: boolean }) {
-  const prompt = `Applique le workflow QUERY de CORTEX.md à la question : « ${question} ».` +
+  const prompt = `Applique le workflow QUERY de ${await schemaName(root)} à la question : « ${question} ».` +
     (opts.file ? " Range la réponse dans une page créée par cortex new Synthesis \"<titre>\" (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
