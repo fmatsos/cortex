@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import { interactiveWith, type Backend, type Config } from "./backend";
+import { toOpencodeRules } from "./policy";
 
 // --- opencode v2: REST API of `opencode serve` (the published SDK, 1.19.5, does not speak v2)----
 
@@ -18,18 +18,7 @@ export default function opencode(cfg: Config): Backend {
           if (!r.ok) throw new Error(`opencode ${method} ${path} → ${r.status} ${await r.text()}`);
           return r.status === 204 ? undefined : r.json();
         };
-        const rule = (action: string, resource: string, effect: "allow" | "deny") => ({ action, resource, effect });
-        // the last matching rule wins; never "ask": nobody would answer
-        const permissions = [
-          rule("edit", "*", "deny"),
-          ...(mode === "write" ? [rule("edit", "wiki/*", "allow"), rule("edit", `${join(root, "wiki")}/*`, "allow")] : []),
-          rule("shell", "*", "deny"),
-          rule("shell", "cortex search*", "allow"),
-          rule("shell", "cortex log --*", "allow"), // journal reading; « cortex log add » does not match it
-          ...(mode === "write" ? [rule("shell", "cortex index*", "allow"), rule("shell", "cortex lint*", "allow"), rule("shell", "cortex new *", "allow"), rule("shell", "cortex log add *", "allow")] : []),
-          rule("external_directory", "*", "deny"),
-          rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
-        ];
+        const permissions = toOpencodeRules(mode, root);
         const { data: session } = await api("POST", "/api/session", {
           location: { directory: root }, permissions, model: { providerID, id: id.join("/"), ...(cfg.effort && { variant: cfg.effort }) }, // effort = opencode model variant
         });

@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
+import { toLabel, toRegex } from "./policy";
 import { warn } from "../style";
 
 // --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
@@ -47,12 +48,8 @@ export default function claude(cfg: Config): Backend {
 
 // --- Permission guard (used by the Claude backend)----------------------------------------------
 
-// `cortex log` for reading: only its options; `cortex log add` is only allowed when writing
-const LOG_READ = "log( --json| --limit \\d+| --kind \\w+)*$";
-const CORTEX_CMD = {
-  read: new RegExp(`^cortex (search( |$)|${LOG_READ})`),
-  write: new RegExp(`^cortex (search|index|lint|new|log add)( |$)|^cortex ${LOG_READ}`),
-};
+// What Bash may run comes from the policy table (policy.ts)
+const CORTEX_CMD = { read: toRegex("read"), write: toRegex("write") };
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
@@ -113,7 +110,7 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
     if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash : pas d'enchaînement ni de redirection, texte entre guillemets sans $ ni accent grave (${raw.slice(0, 80)}). Lance cortex seul.` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limité à ${mode === "read" ? "cortex search|log" : "cortex search|index|lint|new|log add"}.` };
+      : { allow: false, reason: `Bash limité à ${toLabel(mode)}.` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Lecture seule : relance avec --file pour écrire une synthèse." };

@@ -4,7 +4,7 @@ import { join, sep } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { readDocs, type Doc } from "./lib";
 import { backendFor, type Mode } from "./backends/index";
-import { confine } from "./backends/backend";
+import { confine } from "./backends/sandbox";
 import { agentFileFor } from "./config";
 import { fail, paint, warn } from "./style";
 

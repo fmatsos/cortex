@@ -503,7 +503,7 @@ test("export : encart « Note personnelle » (callout Obsidian)", async () => {
 });
 
 test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
-  const { confine } = await import("./backends/backend");
+  const { confine } = await import("./backends/sandbox");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   await Bun.write(join(root, "wiki/.keep"), "");
   await Bun.write(join(root, "raw/.keep"), "");
