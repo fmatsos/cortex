@@ -8,7 +8,6 @@ import type { GraphData, Link, Note, PageData, SearchIndex, SiteData, SourceRef 
 import { type Doc, parseDoc, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
-const TEXT_MAX = 2500; // extrait du contenu indexé par page (le vocabulaire d'autocomplétion, lui, voit tout le texte)
 
 const iso = (x: unknown) => (x == null ? undefined : x instanceof Date ? x.toISOString() : String(x));
 const stamp = (x: any) => (x?.at ? { by: String(x.by ?? ""), at: iso(x.at)! } : undefined);
@@ -128,7 +127,7 @@ export async function buildSiteData(root: string) {
 
 /** Index de recherche précalculé (Fuse) + vocabulaire d'autocomplétion, repliés (sans accents, minuscules). */
 function buildSearch(pages: PageData[]): SearchIndex {
-  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, text: plain(p.html).slice(0, TEXT_MAX) }));
+  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, text: plain(p.html) } /* ponytail: contenu complet, Fuse le parcourt à chaque frappe (19 ms à 47 pages, ~290 ms à ~940) ; au-delà de quelques centaines de pages, index inversé à l'export (DESIGN §10 bis) */));
   const folded = pages.map((p, i) => ({ t: fold(p.title), d: fold(p.description), g: fold(p.tags.join(" ")), x: fold(docs[i].text) }));
   const index = Fuse.createIndex(FUSE_OPTIONS.keys as any, folded).toJSON();
 

@@ -323,7 +323,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   await Bun.write(join(root, "BRAIN.md"), "");
   await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\ntitle: Source un\nurl: https://exemple.org/article\nnote: n\nstatus: compiled\n---\nSECRET-DU-CORPS-RAW\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n[^s1]: précision *utile*\n");
-  await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n");
+  await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7 800 caractères
   await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
   await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "Résumé, voir [Alpha](/wiki/concepts/a.md).\n");
   await Bun.write(join(root, "wiki/index.md"), "# Index\n");
@@ -372,6 +372,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(idx.docs).toHaveLength(4);
   expect(idx.index.records).toHaveLength(4);
   expect(idx.vocab).toContain("alpha");
+  expect(idx.docs.find((d: any) => d.id === "concepts/b").text).toContain("Motlointain"); // contenu complet indexé, pas un extrait
   expect((await import("fuse.js")).default.parseIndex(idx.index).size()).toBe(4); // index rechargeable tel quel
 
   // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
