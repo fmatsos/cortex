@@ -200,6 +200,8 @@ The CLI is mostly **glue**: HTTP fetch, HTML extraction, SQLite, YAML, calls to 
 
 The risk is not the language, it is **changing language** (cf. v1). We choose once and do not go back. The contract is the file format, not the code: the CLI can be rewritten without touching the wiki.
 
+**I/O rule.** Small metadata reads (existence checks, `cortex.json`, the journal, one page) use synchronous `node:fs`: simpler stack traces, no accidental concurrency. Bulk or specialised work goes through `Bun.*`: `Bun.file`/`Bun.write` for file contents, `Bun.CryptoHasher` for hashing, `Bun.YAML` for frontmatter, `Bun.Glob` for scans, `Bun.spawn` for external commands. `node:fs/promises` is kept only where Bun has no equivalent (`rename`, `appendFile`, exclusive-create writes).
+
 ### Dependencies
 
 Exploration of 2026-11-04 on Bun 1.4.3. The documentation was checked via Context7, and each building block was run on real cases.

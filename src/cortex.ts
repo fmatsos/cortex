@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { add, describe } from "./add";
+import { add, formatAdd } from "./add";
 import { toResource } from "./doc";
 import { inbox } from "./inbox";
 import { openWiki } from "./context";
-import { regenerateCtx } from "./index";
+import { regenerateCtx } from "./catalog";
 import { KINDS, kindLabel, logAddCtx, newestFirst } from "./log";
 import { search } from "./search";
 import { lintCtx } from "./lint";
@@ -14,6 +14,7 @@ import { CortexError, findRoot } from "./lib";
 import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
 import { fail, paint, warn } from "./style";
+import { LIMITS } from "./limits";
 
 const HELP = `cortex — second cerveau
 
@@ -82,7 +83,7 @@ try {
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
-          console.log(describe(r, o["dry-run"]));
+          console.log(formatAdd(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);
           ok = false;
@@ -124,7 +125,7 @@ try {
       }
       if (args.length) throw usage(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
       if (o.kind && !KINDS.includes(o.kind as any)) throw usage(`--kind attend ${KINDS.join(" | ")}`);
-      const limit = int("--limit", o.limit, { min: 1 }) ?? 20;
+      const limit = int("--limit", o.limit, { min: 1 }) ?? LIMITS.logEntries;
       const { entries, errors } = wiki.journal();
       for (const x of errors) warn(`wiki/log.jsonl:${x.line} : ${x.msg}`);
       const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, limit);

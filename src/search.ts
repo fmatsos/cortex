@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { isReservedPage, readDocs } from "./lib";
 import { warn } from "./style";
+import { LIMITS } from "./limits";
 
 export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number };
 
@@ -32,7 +33,7 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
   const where = opts.in ? "AND area = $area" : "";
   // title weighted ×5; wiki before raw
   const rows = db.query(`
-    SELECT path, area, title, snippet(docs, 3, '«', '»', '…', 12) AS snippet, bm25(docs, 0, 0, 5, 1) AS score
+    SELECT path, area, title, snippet(docs, 3, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(docs, 0, 0, 5, 1) AS score
     FROM docs WHERE docs MATCH $q ${where}
     ORDER BY area = 'raw', score LIMIT $limit`).all({ $q: ftsQuery(q), $area: opts.in ?? null, $limit: opts.limit ?? 20 }) as Hit[];
   db.close();

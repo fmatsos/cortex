@@ -14,8 +14,7 @@ import { search } from "./search";
 import type { RelatedReason } from "../site/src/lib/types";
 import { mcpInstructions } from "./prompts";
 import { loadConfig } from "./config";
-
-export { related };
+import pkg from "../package.json";
 
 /** A structured related reason as the external agent reads it: the French text the CLI used to emit as data. */
 export const reasonText = (r: RelatedReason): string =>
@@ -43,13 +42,13 @@ export function lastLog(root: string, days: number, kind?: string): LogEntry[] {
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 1));
 /** An error becomes an `isError` tool result the agent can read, not a protocol break. */
-const safe = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async (a: A) => {
+const toolResult = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async (a: A) => {
   try { return await fn(a); }
   catch (e) { return { ...text(`Erreur : ${(e as Error).message}`), isError: true }; }
 };
 
 export function buildServer(root: string, language?: string): McpServer {
-  const s = new McpServer({ name: "cortex", version: "0.1.0" }, {
+  const s = new McpServer({ name: "cortex", version: pkg.version }, {
     instructions: mcpInstructions(language),
   });
   const readOnly = { readOnlyHint: true };
@@ -62,7 +61,7 @@ export function buildServer(root: string, language?: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de résultats (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ q, in: area, limit }) => {
+  }, toolResult(async ({ q, in: area, limit }) => {
     const hits = await search(root, q, { in: area, limit: limit ?? 10 });
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
@@ -75,7 +74,7 @@ export function buildServer(root: string, language?: string): McpServer {
     description: "Lit le contenu brut d'une page .md sous wiki/ ou raw/, par exemple /wiki/concepts/x.md. À utiliser pour lire une page entière après un search ou un related.",
     inputSchema: z.object({ path: z.string().describe("chemin relatif à la racine du dépôt, avec ou sans « / » initial") }),
     annotations: readOnly,
-  }, safe(async ({ path }) => text(await getFile(root, path))));
+  }, toolResult(async ({ path }) => text(await getFile(root, path))));
 
   s.registerTool("related", {
     description: "Pages wiki liées à une page : liens sortants, rétroliens, sources raw et tags partagés, classées par force avec la raison. À utiliser pour explorer le voisinage d'une page avant de répondre ou de proposer une mise à jour.",
@@ -84,13 +83,13 @@ export function buildServer(root: string, language?: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de pages (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
+  }, toolResult(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
 
   s.registerTool("lint", {
     description: "Contrôles mécaniques du wiki : erreurs et avertissements (liens cassés, orphelins, sources en attente, pages à relire…). Les contradictions entre pages restent à ta charge.",
     inputSchema: z.object({}),
     annotations: readOnly,
-  }, safe(async () => {
+  }, toolResult(async () => {
     const issues = await lint(root);
     return json({ issues: issues.filter((i) => i.level !== "info"), pagesJamaisRelues: issues.filter((i) => i.level === "info").length });
   }));
@@ -102,7 +101,7 @@ export function buildServer(root: string, language?: string): McpServer {
       text: z.string().optional().describe("texte à ajouter, à la place de input"),
       note: z.string().describe("pourquoi l'utilisateur garde cette source"),
     }),
-  }, safe(async ({ input, text: txt, note }) => {
+  }, toolResult(async ({ input, text: txt, note }) => {
     if (!note.trim()) throw new Error("note obligatoire : dis pourquoi cette source est gardée.");
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Donne soit input (URL ou chemin), soit text.");
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
@@ -118,7 +117,7 @@ export function buildServer(root: string, language?: string): McpServer {
       kind: z.enum(KINDS).optional().describe("ne garder que ce type d'entrée"),
     }),
     annotations: readOnly,
-  }, safe(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
+  }, toolResult(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
 
   return s;
 }

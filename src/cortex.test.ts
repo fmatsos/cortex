@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { add } from "./add";
-import { renderIndex } from "./index";
+import { renderIndex } from "./catalog";
 import { localIso, normUrl, rawPath, slugify } from "./lib";
 import { ftsQuery, search } from "./search";
 import { UUID_RE } from "./template";
@@ -558,7 +558,7 @@ const GOLDEN_MCP_RELATED = `[
 ]`;
 
 test("related : liens, rétroliens, sources et tags, classés par force", async () => {
-  const { related } = await import("./mcp");
+  const { related } = await import("./lib");
   const { readPages } = await import("./lib");
   const { pages: docs } = await readPages(await mcpRoot());
   const a = related(docs, "/wiki/concepts/a.md");

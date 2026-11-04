@@ -116,7 +116,7 @@ Naming a client in `cortex.json` lets Cortex drive that agent through its SDK or
 ```sh
 cortex config init
 cortex config set client codex   # claude | codex | opencode
-cortex config set effort high    # low…max for Claude, minimal…xhigh for Codex, a model variant for opencode
+cortex config set effort high    # low…max for Claude, minimal…xhigh, max, ultra or persistent for Codex, a model variant for opencode
 ```
 
 ### The agent schema

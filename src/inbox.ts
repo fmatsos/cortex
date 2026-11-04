@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
-import { add, describe } from "./add";
+import { add, formatAdd } from "./add";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 
@@ -22,7 +22,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
   const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>) => {
     try {
       const r = await add(root, input, { note, dryRun: opts.dryRun });
-      say("info", `${describe(r, opts.dryRun)}  ← ${label}`);
+      say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else { added++; noNote ||= !note; }
       if (!opts.dryRun) await onOk();
     } catch (e) {

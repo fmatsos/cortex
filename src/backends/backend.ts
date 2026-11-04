@@ -13,10 +13,10 @@ export interface Backend {
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 
-/** CORTEX_AGENT replaces the interactive command of any backend. */
 /** CLI option only if the value is defined. */
 export const flag = (name: string, v?: string) => (v ? [name, v] : []);
 
+/** CORTEX_AGENT replaces the interactive command of any backend. */
 export const interactiveWith = (fallback: (prompt: string) => string[]) => (prompt: string) =>
   process.env.CORTEX_AGENT ? [...split(process.env.CORTEX_AGENT), prompt] : fallback(prompt);
 
