@@ -17,9 +17,9 @@ test("seules les anciennes versions du wiki de cette portée sont supprimées", 
 	const existing = [
 		"brain-wiki:/:v1", "brain-wiki:/:v1:runtime", "brain-wiki:/:v2", "brain-wiki:/:v2:runtime",
 		"brain-wiki:/autre/:v1", // même wiki sous un autre sous-chemin
-		"autre-app-v1", "workbox-precache-v2", "brain-abcdef012345", // application voisine, ancien nommage
+		"autre-app-v1", "workbox-precache-v2", "brain-abcdef012345", "brain-notes", // applications voisines, ancien nommage du wiki
 	];
-	expect(obsoleteCaches(existing, ROOT, "v2")).toEqual(["brain-wiki:/:v1", "brain-wiki:/:v1:runtime"]);
+	expect(obsoleteCaches(existing, ROOT, "v2")).toEqual(["brain-wiki:/:v1", "brain-wiki:/:v1:runtime", "brain-abcdef012345"]);
 	// la portée racine n'est pas le préfixe d'un sous-chemin
 	expect(obsoleteCaches(["brain-wiki:/brain/:v1"], ROOT, "v1")).toEqual([]);
 });

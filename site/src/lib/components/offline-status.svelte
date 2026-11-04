@@ -186,7 +186,7 @@
 								<p class="mb-2" role="status">Téléchargement terminé.</p>
 							{/if}
 							<Button variant="outline" size="sm" disabled={offline} onclick={() => post({ type: "download-all" })}>
-								<Icon name="kind-ingest" size={16} />{download?.state === "error" ? "Réessayer le téléchargement" : "Télécharger tout le wiki"}
+								<Icon name="download" size={16} />{download?.state === "error" ? "Réessayer le téléchargement" : "Télécharger tout le wiki"}
 							</Button>
 							<p class="text-muted-foreground mt-2 text-xs">
 								{offline ? "Reconnectez-vous pour télécharger." : `Environ ${formatBytes(estimateBytes(left))} (estimation), ${cachedLabel} fichiers déjà conservés.`}

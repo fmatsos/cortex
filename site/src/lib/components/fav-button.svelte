@@ -11,3 +11,4 @@
 	<Icon name="star" size={16} filled={on} class={on ? "text-favorite" : undefined} />
 	{on ? "Retirer des favoris" : "Mettre en favori"}
 </Button>
+<span role="status" class="text-muted-foreground text-sm">{favs.persisted ? "" : "Favoris conservés pour cette session seulement."}</span>

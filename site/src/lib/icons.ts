@@ -75,6 +75,7 @@ export const ICONS = {
 	// types d'entrée du journal
 	"kind-add": `${CIRCLE}<path d="M12 8v8M8 12h8"/>`,
 	"kind-ingest": `<path d="M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14M12 4v10M8 10.5l4 4 4-4"/>`,
+	download: `<path d="M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14M12 4v10M8 10.5l4 4 4-4"/>`,
 	"kind-query": `<path d="M3.5 4.5H20.5M3.5 8.5H11"/><circle cx="13" cy="15" r="4.5"/><path d="m16.3 18.3 3.2 3.2"/>`,
 	"kind-lint": `<path d="m3.5 6.2 1.6 1.6 3-3.2M3.5 12.2l1.6 1.6 3-3.2M3.5 18.2l1.6 1.6 3-3.2M12 6h9M12 12h9M12 18h9"/>`,
 	"kind-update": `<path d="M4.12 10.61A8 8 0 0 1 19.88 10.61M21.5 7.8l-1.62 2.81L17.4 8.55M19.88 13.39A8 8 0 0 1 4.12 13.39M2.5 16.2l1.62-2.81 2.48 2.06"/>`,

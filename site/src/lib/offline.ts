@@ -25,7 +25,8 @@ export function cacheNames(scope: string, version: string) {
 /** Anciennes versions du seul wiki de cette portée : jamais le cache d'une autre application du même domaine. */
 export function obsoleteCaches(existing: readonly string[], scope: string, version: string): string[] {
 	const { prefix, core, runtime } = cacheNames(scope, version);
-	return existing.filter((n) => n.startsWith(prefix) && n !== core && n !== runtime);
+	// brain-<12 hex> : nommage d'avant le préfixe, assez spécifique pour être reconnu sans toucher aux caches voisins
+	return existing.filter((n) => (n.startsWith(prefix) && n !== core && n !== runtime) || /^brain-[0-9a-f]{12}$/.test(n));
 }
 
 /**
