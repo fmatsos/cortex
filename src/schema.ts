@@ -1,11 +1,8 @@
 import { join, resolve } from "node:path";
-import { loadConfig } from "./backends/index";
+import { agentFileFor, loadConfig } from "./config";
 
 /** The schema the agent follows (rules, page format, workflows), shipped with the CLI. */
 export const BUILTIN_SCHEMA = join(import.meta.dir, "schema.md");
-
-/** Agent file the schema is written to: the one the configured client loads on its own. */
-export const agentFile = (client?: string) => (client === "codex" || client === "opencode" ? "AGENTS.md" : "CLAUDE.md");
 
 /** Effective schema: the file named by `schema` in cortex.json (relative to the root), else the built-in one; `{{language}}` filled from `language`. */
 export async function schemaText(root: string): Promise<string> {
@@ -17,7 +14,7 @@ export async function schemaText(root: string): Promise<string> {
 
 /** Writes the effective schema to CLAUDE.md or AGENTS.md (per client). Keeps an existing file unless `overwrite`. */
 export async function writeSchema(root: string, overwrite: boolean): Promise<{ file: string; written: boolean }> {
-  const file = agentFile((await loadConfig(root)).client);
+  const file = await agentFileFor(root);
   const f = Bun.file(join(root, file));
   if (!overwrite && (await f.exists())) return { file, written: false };
   await Bun.write(f, await schemaText(root));

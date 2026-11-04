@@ -1,8 +1,9 @@
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import type { Config } from "../config";
 /** Bridge between the commands (compile, ask) and the agents. Each client implements `Backend`. */
 export type Mode = "write" | "read";
-export type Config = { client?: string; model?: string; effort?: string; language?: string; schema?: string; raw_path?: string; page_path?: string };
+export type { Config };
 
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */

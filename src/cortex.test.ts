@@ -74,8 +74,9 @@ test("cortex new : page nommée par UUID v7 par défaut, titre unique, lint des 
 });
 
 test("nommage configurable : modèles validés, placeholders, sous-dossiers, collisions", async () => {
-  const { checkTemplate, expand, pattern, newPage } = await import("./naming");
-  const { lintConfig } = await import("./backends/index");
+  const { checkTemplate, expand, pattern } = await import("./template");
+  const { newPage } = await import("./naming");
+  const { lintConfig } = await import("./config");
   const { lint } = await import("./lint");
   const at = new Date("2026-11-04T09:05:07");
   // validation
@@ -90,7 +91,7 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
   expect(lintConfig({ page_path: "{oops}" })[0].msg).toContain("placeholder inconnu {oops}");
   expect(lintConfig({ raw_path: "{yyyy}/{rand}-{slug}", page_path: null })).toEqual([]);
   // values and patterns
-  const v = { at, title: "Le C++26 refusé", type: "Concept", kind: "pdf" };
+  const v = { at, title: "Le C++26 refusé", type: "Concept" as const, kind: "pdf" };
   expect(expand("{type}/{yyyy}{mm}{dd}-{hh}{mi}{ss}-{slug}", v)).toBe("concepts/20261104-090507-le-c-26-refuse");
   expect(expand("{kind}/{rand}", v)).toMatch(/^pdf\/[a-z0-9]{4}$/);
   for (const t of ["{type}/{uuid}", "{yyyy}/{mm}/{dd}-{rand}-{slug}", "{type}/{yyyy}{mm}{dd}-{slug}"]) {
@@ -116,8 +117,9 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
 });
 
 test("schema: built-in file, written to CLAUDE.md or AGENTS.md at init, language and override from cortex.json", async () => {
-  const { configCmd } = await import("./backends/index");
-  const { schemaText, writeSchema, agentFile } = await import("./schema");
+  const { configCmd } = await import("./config-cmd");
+  const { agentFile } = await import("./config");
+  const { schemaText, writeSchema } = await import("./schema");
   const log = console.log; console.log = () => {};
   try {
     for (const [client, file] of [[undefined, "CLAUDE.md"], ["claude", "CLAUDE.md"], ["codex", "AGENTS.md"], ["opencode", "AGENTS.md"]] as const) {
@@ -364,7 +366,8 @@ test("lint du journal : ligne invalide = erreur, log.md édité à la main = ave
 });
 
 test("cortex.json : absent = agnostique, client inconnu = erreur", async () => {
-  const { loadConfig, backendFor } = await import("./backends/index");
+  const { loadConfig } = await import("./config");
+  const { backendFor } = await import("./backends/index");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   expect(await loadConfig(root)).toEqual({});
   await Bun.write(join(root, "cortex.json"), '{"client":"gpt"}');
@@ -381,7 +384,8 @@ test("cortex.json : absent = agnostique, client inconnu = erreur", async () => {
 });
 
 test("cortex config : init, set, get, remove, lint", async () => {
-  const { configCmd, lintConfig, loadConfig } = await import("./backends/index");
+  const { configCmd } = await import("./config-cmd");
+  const { lintConfig, loadConfig } = await import("./config");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const log = console.log; console.log = () => {};
   try {

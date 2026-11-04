@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseDoc, slugify, type Doc } from "./lib";
-import { naming, pattern } from "./naming";
+import { naming } from "./naming";
+import { pattern } from "./template";
 import { readLog, renderLogMd } from "./log";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };

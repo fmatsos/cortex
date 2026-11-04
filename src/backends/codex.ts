@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { Effort } from "../config";
 import { cli, flag, interactiveWith, load, type Backend, type Config } from "./backend";
 
 // --- Codex SDK: OS sandbox; when writing, only wiki/ is writable---------------------------------
@@ -15,7 +16,7 @@ export default function codex(cfg: Config): Backend {
         approvalPolicy: "never",
         skipGitRepoCheck: true,
         model: cfg.model,
-        modelReasoningEffort: cfg.effort as any, // minimal | low | medium | high | xhigh…
+        modelReasoningEffort: cfg.effort as Effort<"codex"> | undefined, // validated against EFFORTS.codex by loadConfig (plain string in the schema)
       });
       return (await thread.run(prompt)).finalResponse;
     },
