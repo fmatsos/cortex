@@ -7,7 +7,7 @@ import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteDa
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
 import { type Page, type RawFm, type Stamp, pageId, pageRoute, toRawSource, toResource } from "./doc";
-import { isReservedPage, parseDoc, rawPath, related, sha256, slugify, wikiLinks } from "./lib";
+import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 
@@ -107,6 +107,9 @@ export function wrapTables(html: string): string {
   });
 }
 
+/** The `<a href="/wiki/…">` / `/raw/…` links of rendered HTML (same prefix as the Markdown scan, see `linkPrefix`). */
+const HTML_LINK = new RegExp(`<a href="(${linkPrefix(...LINK_DIRS)}[^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`, "g");
+
 export function render(body: string, from: string, pages: Set<string>) {
   const defs = new Map<string, string>();
   const text = body.replace(/^\[\^([\w-]+)\]:[ \t]*(.*(?:\n[ \t]+\S.*)*)$/gm, (_, k, v) => (defs.set(k, v.replace(/\n[ \t]+/g, " ").trim()), ""));
@@ -116,7 +119,7 @@ export function render(body: string, from: string, pages: Set<string>) {
     const n = order.indexOf(k) + 1, c = (seen.set(k, (seen.get(k) ?? 0) + 1), seen.get(k));
     return `<sup class="fn-ref"><a href="#fn-${k}" id="fnref-${k}-${c}" aria-label="Note ${n}">${n}</a></sup>`;
   });
-  const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
+  const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(HTML_LINK, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
     if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // navigation pages of the site
@@ -133,33 +136,43 @@ export function render(body: string, from: string, pages: Set<string>) {
 }
 
 /**
+ * Reads the frontmatter of raw sources (read-only, confined to raw/). Only `url` and `partial` come out of it, never
+ * the body. Each source is read and parsed at most once per reader: a reader lives for one export (REL-10).
+ */
+function rawReader(root: string) {
+  const cache = new Map<string, RawFm | undefined>();
+  let rawDir: string | undefined; // real path of raw/ (resolved once), the only place a source may be read from
+  const fm = (resource: string): RawFm | undefined => {
+    if (cache.has(resource)) return cache.get(resource);
+    const f = join(root, resource);
+    const v = existsSync(f) && realpathSync(f).startsWith((rawDir ??= realpathSync(join(root, "raw")) + sep)) ? toRawSource(parseDoc(f, readFileSync(f, "utf8"))).fm : undefined;
+    cache.set(resource, v);
+    return v;
+  };
+  return {
+    /** Original URL of a source. Nothing else from raw/ is read or published. */
+    originUrl(resource: string): string | undefined {
+      const u = fm(resource)?.url;
+      return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
+    },
+    /** Partial extraction (`partial:` in the raw frontmatter, written by `cortex add` on a paywall). */
+    partial(resource: string): boolean {
+      const p = fm(resource)?.partial;
+      return p != null && p !== false && String(p).trim() !== "" && !/^(false|no|non|0)$/i.test(String(p).trim());
+    },
+  };
+}
+type RawReader = ReturnType<typeof rawReader>;
+
+/**
  * Page Markdown as it is in the wiki (frontmatter included), for the « Copier le Markdown » button.
  * raw/ is not published: each `/raw/…` path becomes the source's original URL, or disappears if it has none.
  */
-function pageMarkdown(root: string, path: string): string {
+function pageMarkdown(root: string, path: string, raw: RawReader): string {
   return readFileSync(join(root, path), "utf8")
-    .replace(/\[([^\]]*)\]\((\/raw\/[^)\s]+)\)/g, (_, label: string, p: string) => { const u = originUrl(root, p); return u ? `[${label}](${u})` : label; })
-    .replace(/\/raw\/[^\s)"'\]]+/g, (p) => originUrl(root, p) ?? "(source brute non publiée)");
+    .replace(/\[([^\]]*)\]\((\/raw\/[^)\s]+)\)/g, (_, label: string, p: string) => { const u = raw.originUrl(p); return u ? `[${label}](${u})` : label; })
+    .replace(/\/raw\/[^\s)"'\]]+/g, (p) => raw.originUrl(p) ?? "(source brute non publiée)");
 }
-
-/** Frontmatter of a raw source (read-only, confined to raw/). Only `url` and `partial` come out, never the body. */
-function rawFm(root: string, resource: string): RawFm | undefined {
-  const f = join(root, resource);
-  if (!existsSync(f) || !realpathSync(f).startsWith(realpathSync(join(root, "raw")) + sep)) return;
-  return toRawSource(parseDoc(f, readFileSync(f, "utf8"))).fm;
-}
-
-/** Original URL of a source: read from the raw frontmatter. Nothing else from raw/ is read or published. */
-function originUrl(root: string, resource: string): string | undefined {
-  const u = rawFm(root, resource)?.url;
-  return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
-}
-
-/** Partial extraction (`partial:` in the raw frontmatter, written by `cortex add` on a paywall). */
-const rawPartial = (root: string, resource: string) => {
-  const p = rawFm(root, resource)?.partial;
-  return p != null && p !== false && String(p).trim() !== "" && !/^(false|no|non|0)$/i.test(String(p).trim());
-};
 
 /**
  * Journal: wiki/log.jsonl as structured entries (most recent first). The text is rendered as inline HTML; the cited
@@ -208,15 +221,12 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
   const link = (d: Page): Link => ({ id: pageId(d.path), title: String(d.fm.title ?? pageId(d.path)), type: String(d.fm.type ?? "") });
 
   // directed edges: Markdown links between existing wiki pages (source = page containing the link, target = cited page)
-  const directed = new Set<string>(), back = new Map<string, Page[]>();
-  for (const d of docs) for (const t of wikiLinks(d)) {
-    if (t === d.path || !paths.has(t)) continue;
-    directed.add(`${pageId(d.path)}\t${pageId(t)}`);
-    back.set(t, [...(back.get(t) ?? []), d]);
-  }
+  const graph0 = await w.linkGraph(), directed = new Set<string>();
+  for (const [from, targets] of graph0.links) for (const t of targets) directed.add(`${pageId(from)}\t${pageId(t)}`);
   const edges = graphLinks(directed);
-  const resourcePage = new Map<string, Page>(); // raw resource → wiki Source page that cites it
-  for (const d of docs) if (d.fm.type === "Source") for (const s of d.fm.sources ?? []) if (s.resource) resourcePage.set(s.resource, d);
+  const resourcePage = new Map<string, Page>(); // raw resource → wiki Source page that cites it (the last one, if several do)
+  for (const [res, ps] of await w.citations()) resourcePage.set(res, ps[ps.length - 1]);
+  const raw = rawReader(root);
 
   const pages: PageData[] = docs.map((d) => {
     const { fm } = d;
@@ -224,23 +234,23 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
     const sources: SourceRef[] = (fm.sources ?? []).map((s) => {
       const page = s.resource ? resourcePage.get(s.resource) : undefined;
       return {
-        id: String(s.id), title: String(s.title ?? s.id), url: originUrl(root, String(s.resource)),
+        id: String(s.id), title: String(s.title ?? s.id), url: s.resource ? raw.originUrl(String(s.resource)) : undefined,
         ...(page && page !== d && { page: link(page) }),
-        ...(s.resource && rawPartial(root, String(s.resource)) && { partial: true }),
+        ...(s.resource && raw.partial(String(s.resource)) && { partial: true }),
       };
     });
     const g = Date.parse(iso(fm.generated?.at) ?? ""), v = Date.parse(iso(fm.verified?.at) ?? "");
     // partial source: `partial:` extraction of a cited raw source (Source page only: a concept citing a
     // partial source is not itself partial), or partial-content warning callout in the body
-    const partial = (fm.type === "Source" && (fm.sources ?? []).some((s) => s.resource && rawPartial(root, s.resource))) || r.warnings.some(isPartialWarning);
+    const partial = (fm.type === "Source" && (fm.sources ?? []).some((s) => s.resource && raw.partial(s.resource))) || r.warnings.some(isPartialWarning);
     return {
       id: pageId(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? pageId(d.path)),
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
       status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
       stale_after: iso(fm.stale_after), needsReview: !!fm.verified && g > v, partial,
-      html: r.html, md: pageMarkdown(root, d.path), sources, notes: r.notes, toc: r.toc,
-      backlinks: (back.get(d.path) ?? []).map(link).sort(byTitle),
-      related: related(docs, d.path).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => r.replace(/ : \/raw\/.*$/, "")) })),
+      html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
+      backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
+      related: related(docs, d.path, graph0).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => r.replace(/ : \/raw\/.*$/, "")) })),
     };
   });
 
@@ -265,14 +275,22 @@ export const buildSiteData = (root: string, say: (m: string) => void = warn) => 
 
 /** Precomputed search index: inverted index over the full content (folded word → pages) + autocomplete vocabulary. */
 function buildSearch(pages: PageData[]): SearchIndex {
-  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, needsReview: p.needsReview, partial: p.partial, text: plain(p.html.replace(/<p class="(?:note-perso|callout-warning)-titre">[^<]*<\/p>/g, "")) }));
+  const TITLE = /<p class="(?:note-perso|callout-warning)-titre">([^<]*)<\/p>/g;
+  // One tag strip per page: the callout titles leave the indexed text but still feed the autocomplete vocabulary.
+  const titles: string[] = [];
+  const docs = pages.map((p) => {
+    const t: string[] = [];
+    const text = plain(p.html.replace(TITLE, (_, title: string) => (t.push(title), "")));
+    titles.push(plain(t.join(" ")));
+    return { id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, needsReview: p.needsReview, partial: p.partial, text };
+  });
   const terms = buildTerms(docs);
 
   const freq = new Map<string, number>(), keep = new Set<string>();
   const words = (s: string) => fold(s).match(/[\p{L}\p{N}]{3,}/gu) ?? [];
-  pages.forEach((p) => {
+  pages.forEach((p, i) => {
     for (const w of words(`${p.title} ${p.tags.join(" ")}`)) keep.add(w);
-    for (const w of words(`${p.title} ${p.description} ${p.tags.join(" ")} ${plain(p.html)}`)) freq.set(w, (freq.get(w) ?? 0) + 1);
+    for (const w of words(`${p.title} ${p.description} ${p.tags.join(" ")} ${docs[i].text} ${titles[i]}`)) freq.set(w, (freq.get(w) ?? 0) + 1);
   });
   const vocab = [...freq].filter(([w, n]) => keep.has(w) || (w.length >= 4 && n >= 2))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([w]) => w);

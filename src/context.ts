@@ -1,6 +1,6 @@
 import { type Config, loadConfig } from "./config";
 import type { Page, RawSource } from "./doc";
-import { type DocError, readPages, readRawSources } from "./lib";
+import { type DocError, type LinkGraph, linkGraph, readPages, readRawSources } from "./lib";
 import { readLog, type Titles } from "./log";
 import { NAMING_DEFAULTS, type NamingKey } from "./template";
 
@@ -25,6 +25,12 @@ export type Wiki = {
   titles(): Promise<Titles>;
   /** Raw resource → Source pages citing it (one entry per `sources[]` item, pages in path order). */
   citations(): Promise<Map<string, Page[]>>;
+  /** Page path → wiki pages it links to (existing pages only, see `LinkGraph`). Computed once from the page bodies. */
+  links(): Promise<LinkGraph["links"]>;
+  /** Page path → wiki pages linking to it. */
+  backlinks(): Promise<LinkGraph["backlinks"]>;
+  /** `links()` and `backlinks()` together, the form `related()` takes. */
+  linkGraph(): Promise<LinkGraph>;
 };
 
 /** Memoises the result (a promise included: concurrent callers share one read). */
@@ -37,6 +43,7 @@ export function openWiki(root: string): Wiki {
   const errors: Wiki["errors"] = { pages: [], raws: [] };
   const config = once(() => loadConfig(root));
   const pages = once(async () => { const r = await readPages(root); errors.pages = r.errors; return r.pages; });
+  const graph = once(async () => linkGraph(await pages()));
   return {
     root, errors, config, pages,
     naming: once(async () => {
@@ -51,5 +58,8 @@ export function openWiki(root: string): Wiki {
       for (const d of await pages()) if (d.fm.type === "Source") for (const s of d.fm.sources ?? []) if (s.resource) m.set(s.resource, [...(m.get(s.resource) ?? []), d]);
       return m;
     }),
+    linkGraph: graph,
+    links: async () => (await graph()).links,
+    backlinks: async () => (await graph()).backlinks,
   };
 }

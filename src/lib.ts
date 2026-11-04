@@ -102,30 +102,57 @@ export function normUrl(u: string): string {
 
 export type Related = { path: string; title: string; score: number; reasons: string[] };
 
-export const wikiLinks = (d: { body: string }) => new Set([...d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)].map((m) => fromResource(m[1])));
+/** Site-root folders a Markdown link can point into. */
+export const LINK_DIRS = ["wiki", "raw"] as const;
+/** Regex source of a link prefix (`/wiki/`, `/(?:wiki|raw)/`), shared by the Markdown scan below and the export's HTML rewrite. */
+export const linkPrefix = (...dirs: readonly string[]) => `\\/(?:${dirs.join("|")})\\/`;
+const WIKI_LINK = new RegExp(`\\]\\((${linkPrefix("wiki")}[^)#\\s]+)`, "g");
+
+/** Every link to a wiki page in a Markdown body, as root-relative paths, in document order, duplicates kept (callers count or dedupe). */
+export const wikiLinks = (body: string): string[] => [...body.matchAll(WIKI_LINK)].map((m) => fromResource(m[1]));
 const resources = (d: Page) => new Set<string>((d.fm.sources ?? []).flatMap((s) => (s.resource ? [s.resource] : [])));
 
 /**
- * Wiki pages linked to `path`, by decreasing strength: outgoing or incoming link (3 each), shared raw source (2),
- * shared tag (1). Pure: works on pages already read (index.md and log.md excluded).
+ * Link sets of a wiki, computed once: `links` page → pages it links to, `backlinks` page → pages linking to it.
+ * Only existing wiki pages (index.md and log.md excluded) are nodes and targets; a link to a missing page or to
+ * itself is not an edge. Keys are root-relative paths (`wiki/concepts/x.md`).
  */
-export function related(docs: Page[], path: string): Related[] {
+export type LinkGraph = { links: Map<string, Set<string>>; backlinks: Map<string, Set<string>> };
+
+export function linkGraph(docs: Page[]): LinkGraph {
+  const pages = docs.filter((d) => !isReservedPage(d.path));
+  const known = new Set(pages.map((d) => d.path));
+  const links = new Map<string, Set<string>>(), backlinks = new Map<string, Set<string>>();
+  for (const d of pages) { links.set(d.path, new Set()); backlinks.set(d.path, new Set()); }
+  for (const d of pages) for (const t of wikiLinks(d.body)) {
+    if (t === d.path || !known.has(t)) continue;
+    links.get(d.path)!.add(t);
+    backlinks.get(t)!.add(d.path);
+  }
+  return { links, backlinks };
+}
+
+/**
+ * Wiki pages linked to `path`, by decreasing strength: outgoing or incoming link (3 each), shared raw source (2),
+ * shared tag (1). Pure: works on pages already read (index.md and log.md excluded). `graph` is the precomputed
+ * `linkGraph(docs)` (the context memoises it); without it, it is built here, which only suits a single call.
+ */
+export function related(docs: Page[], path: string, graph: LinkGraph = linkGraph(docs)): Related[] {
   const pages = docs.filter((d) => !isReservedPage(d.path));
   const me = pages.find((d) => d.path === fromResource(path));
   if (!me) throw new Error(`Page wiki introuvable : ${path}`);
-  const out = wikiLinks(me), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
+  const out = graph.links.get(me.path), inc = graph.backlinks.get(me.path), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
   const hits: Related[] = [];
   for (const d of pages) {
     if (d === me) continue;
     const reasons: string[] = [];
     let score = 0;
     const plus = (n: number, why: string) => { score += n; reasons.push(why); };
-    if (out.has(d.path)) plus(3, "lien sortant");
-    if (wikiLinks(d).has(me.path)) plus(3, "lien entrant");
+    if (out?.has(d.path)) plus(3, "lien sortant");
+    if (inc?.has(d.path)) plus(3, "lien entrant");
     for (const r of resources(d)) if (mine.has(r)) plus(2, `source partagée : ${r}`);
     for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, `tag partagé : ${t}`);
     if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
   }
   return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
 }
-

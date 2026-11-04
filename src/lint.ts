@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { fromResource, rawId, REPORTED_FIELDS, toResource } from "./doc";
+import { rawId, REPORTED_FIELDS, toResource } from "./doc";
 import { openWiki, type Wiki } from "./context";
-import { isReservedPage, slugify } from "./lib";
+import { isReservedPage, slugify, wikiLinks } from "./lib";
 import { pattern } from "./template";
 import { renderLogMd } from "./log";
 
@@ -33,9 +33,9 @@ export async function lintCtx(w: Wiki, now = new Date()): Promise<Issue[]> {
       if (!s.resource || !existsSync(join(root, s.resource))) push("error", path, `source introuvable : ${s.resource}`);
     }
     for (const [, id] of d.body.matchAll(/\[\^([\w-]+)\]/g)) if (!ids.has(id)) push("error", path, `note [^${id}] sans entrée sources[]`);
-    for (const [, l] of d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)) {
-      inbound.set(fromResource(l), (inbound.get(fromResource(l)) ?? 0) + 1);
-      if (!existsSync(join(root, l))) push("error", path, `lien cassé : ${l}`);
+    for (const l of wikiLinks(d.body)) { // duplicates kept: one error per broken link occurrence
+      inbound.set(l, (inbound.get(l) ?? 0) + 1);
+      if (!existsSync(join(root, l))) push("error", path, `lien cassé : /${l}`);
     }
     const g = time(fm.generated?.at), v = time(fm.verified?.at);
     if (!fm.verified) push("info", path, "jamais relue");
