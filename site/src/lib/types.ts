@@ -26,7 +26,7 @@ export type SiteData = {
   log: string; // HTML
 };
 export type GraphData = {
-  nodes: { id: string; title: string; type: string; tags: string[]; degree: number }[];
+  nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];
   links: { source: string; target: string }[];
 };
 export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; text: string };
