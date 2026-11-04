@@ -4,13 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { add } from "./add";
 import { renderIndex } from "./index";
-import { localIso, newId, normUrl, rawPath, slugify, UUID } from "./lib";
+import { localIso, normUrl, rawPath, slugify } from "./lib";
 import { ftsQuery, search } from "./search";
+import { UUID_RE } from "./template";
+
+const UUID = new RegExp(`^${UUID_RE}$`);
+const newId = (at = new Date()) => Bun.randomUUIDv7("hex", at);
 
 test("utilitaires", () => {
   expect(localIso(new Date())).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
   const ids = Array.from({ length: 1000 }, () => newId(new Date("2026-11-04T10:00:00Z")));
-  expect(ids.every((id) => UUID.test(id))).toBe(true);
+  expect(ids.every((id) => UUID.test(id) && id[14] === "7")).toBe(true); // v7
   expect(new Set(ids).size).toBe(1000); // same millisecond: always distinct
   expect(newId(new Date("2026-01-01")) < newId(new Date("2026-11-04"))).toBe(true); // creation order
   expect(UUID.test("20261104-abcd-x")).toBe(false);

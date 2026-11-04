@@ -7,11 +7,12 @@ import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
+import { openWiki, type Wiki } from "./context";
 import { rawId } from "./doc";
-import { localIso, normUrl, readRawSources, serializeDoc, sha256 } from "./lib";
-import { free, naming, rawIdTaken } from "./naming";
+import { localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
+import { free } from "./naming";
 import { expand } from "./template";
-import { appendLog } from "./log";
+import { appendLogCtx } from "./log";
 import { paint } from "./style";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
@@ -148,19 +149,23 @@ export function extractText(txt: string, name?: string): Extract {
 }
 
 /** Source already present (one of the normalized URLs or same fingerprint) → its id, otherwise undefined. */
-export async function findDuplicate(root: string, urls: (string | undefined)[], hash?: string): Promise<string | undefined> {
+export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?: string): Promise<string | undefined> {
   const u = new Set(urls.filter(Boolean).map((x) => normUrl(x!)));
-  for (const d of (await readRawSources(root)).raws) {
+  for (const d of await w.raws()) {
     if ((hash && d.fm.sha256 === hash) || (d.fm.url && u.has(normUrl(String(d.fm.url))))) return rawId(d.path);
   }
 }
 
-export async function add(root: string, input: string, opts: { note?: string; dryRun?: boolean; now?: Date; text?: string } & FetchOpts): Promise<{ id: string; duplicate: boolean; ex?: Extract }> {
+type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string } & FetchOpts;
+type AddResult = { id: string; duplicate: boolean; ex?: Extract };
+
+export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<AddResult> {
+  const root = w.root;
   const now = opts.now ?? new Date();
   let ex: Extract;
   const isUrl = /^https?:\/\//.test(input);
   if (isUrl) {
-    const known = await findDuplicate(root, [input]); // before the fetch: no needless request
+    const known = await findDuplicate(w, [input]); // before the fetch: no needless request
     if (known) return { id: known, duplicate: true };
     ex = await extractUrl(input, opts);
   }
@@ -174,12 +179,12 @@ export async function add(root: string, input: string, opts: { note?: string; dr
       : (() => { throw new Error(`Format non géré à l'étape 1 : ${input} (URL, .md, .txt, .pdf)`); })();
   }
   const hash = sha256(ex.content);
-  const dup = await findDuplicate(root, [isUrl ? input : undefined, ex.url], hash);
+  const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url], hash);
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
   // folder according to raw_path (config.json); its last segment is the id, unique under raw/
-  const rel = free(expand((await naming(root)).raw_path, { at: now, title: ex.title, kind: ex.kind }), (p) => rawIdTaken(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p)));
+  const rel = free(expand((await w.naming()).raw_path, { at: now, title: ex.title, kind: ex.kind }), (p) => !!rawPath(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p)));
   const id = rel.split("/").at(-1)!;
   if (opts.dryRun) return { id, duplicate: false, ex };
 
@@ -201,9 +206,10 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   const dir = join(root, "raw", rel);
   await mkdir(dir, { recursive: true });
   await Bun.write(join(dir, "source.md"), serializeDoc(fm, `${ex.content.trim()}\n`));
-  await appendLog(root, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);
+  await appendLogCtx(w, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);
   return { id, duplicate: false, ex };
 }
+export const add = (root: string, input: string, opts: AddOpts) => addCtx(openWiki(root), input, opts);
 
 /** Report line of a successful `add`, shared by `cortex add` and `cortex inbox`. */
 export function describe(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {

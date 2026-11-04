@@ -1,26 +1,26 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fromResource, rawId, REPORTED_FIELDS, toResource } from "./doc";
-import { isReservedPage, readPages, readRawSources, slugify } from "./lib";
-import { naming } from "./naming";
+import { openWiki, type Wiki } from "./context";
+import { isReservedPage, slugify } from "./lib";
 import { pattern } from "./template";
-import { readLog, renderLogMd } from "./log";
+import { renderLogMd } from "./log";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
 const DAY = 86_400_000;
 const time = (x: string | Date | null | undefined) => (x == null ? NaN : new Date(x).getTime()); // YAML may yield Date or string
 
-export async function lint(root: string, now = new Date()): Promise<Issue[]> {
+export async function lintCtx(w: Wiki, now = new Date()): Promise<Issue[]> {
+  const root = w.root;
   const out: Issue[] = [];
   const push = (level: Issue["level"], path: string, msg: string) => out.push({ level, path, msg });
-  const tpl = await naming(root), pagePat = pattern(tpl.page_path), rawPat = pattern(tpl.raw_path);
-  const [w, r] = [await readPages(root), await readRawSources(root)];
-  for (const e of [...w.errors, ...r.errors]) push("error", e.path, `YAML invalide : ${e.msg}`);
-  const wiki = w.pages.filter((d) => !isReservedPage(d.path));
-  const raw = r.raws;
+  const tpl = await w.naming(), pagePat = pattern(tpl.page_path), rawPat = pattern(tpl.raw_path);
+  const [all, raw] = [await w.pages(), await w.raws()];
+  for (const e of [...w.errors.pages, ...w.errors.raws]) push("error", e.path, `YAML invalide : ${e.msg}`);
+  const wiki = all.filter((d) => !isReservedPage(d.path));
   const inbound = new Map<string, number>();
-  const cites = new Map<string, string[]>(); // raw resource → Source pages that cite it
+  const cites = await w.citations(); // raw resource → Source pages that cite it
   const titles = new Map<string, string>();
 
   for (const d of wiki) {
@@ -31,7 +31,6 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
     const ids = new Set((fm.sources ?? []).map((s) => s.id));
     for (const s of fm.sources ?? []) {
       if (!s.resource || !existsSync(join(root, s.resource))) push("error", path, `source introuvable : ${s.resource}`);
-      else if (fm.type === "Source") cites.set(s.resource, [...(cites.get(s.resource) ?? []), path]);
     }
     for (const [, id] of d.body.matchAll(/\[\^([\w-]+)\]/g)) if (!ids.has(id)) push("error", path, `note [^${id}] sans entrée sources[]`);
     for (const [, l] of d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)) {
@@ -47,7 +46,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
     else titles.set(t, path);
   }
   for (const d of wiki) if (d.fm.type !== "Source" && !inbound.get(d.path)) push("warning", d.path, "orpheline : aucun lien entrant");
-  for (const [res, pages] of cites) if (pages.length > 1) push("warning", pages[1], `doublon probable de ${pages[0]} (même source raw ${res})`);
+  for (const [res, pages] of cites) if (pages.length > 1 && existsSync(join(root, res))) push("warning", pages[1].path, `doublon probable de ${pages[0].path} (même source raw ${res})`);
 
   const rawIds = new Map<string, string>();
   for (const d of raw) {
@@ -74,12 +73,13 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   }
 
   // journal: invalid lines = error; log.md must be exactly the generation of log.jsonl
-  const journal = readLog(root);
+  const journal = w.journal();
   for (const e of journal.errors) push("error", `wiki/log.jsonl:${e.line}`, e.msg);
   const md = join(root, "wiki/log.md");
   if (existsSync(md) || journal.entries.length) {
-    if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries, new Map(wiki.filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]))))
+    if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries, await w.titles()))
       push("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : cortex index le régénère");
   }
   return out;
 }
+export const lint = (root: string, now = new Date()) => lintCtx(openWiki(root), now);

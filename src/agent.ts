@@ -3,10 +3,10 @@ import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { rawId, toResource } from "./doc";
-import { readPages, readRawSources } from "./lib";
+import { openWiki, type Wiki } from "./context";
 import { backendFor, type Mode } from "./backends/index";
 import { confine } from "./backends/sandbox";
-import { agentFileFor } from "./config";
+import { agentFile } from "./config";
 import { fail, paint, warn } from "./style";
 
 async function git(root: string, ...args: string[]) {
@@ -53,9 +53,10 @@ export async function outOfScope(root: string, before: Map<string, string>): Pro
 }
 
 /** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by config.json. */
-async function run(root: string, prompt: string, batch: boolean, mode: Mode): Promise<number> {
+async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode): Promise<number> {
+  const root = w.root;
   if (homeInside(root)) { fail("la racine du cerveau contient ton répertoire personnel : l'agent ne pourrait plus écrire son état (~/.claude…). Utilise un dossier dédié."); return 1; }
-  const backend = await backendFor(root);
+  const backend = await backendFor(root, await w.config());
   prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
@@ -92,12 +93,13 @@ export function resolveRawId<T extends { path: string }>(docs: T[], id: string):
   return hits[0]!;
 }
 
-async function isCited(root: string, path: string) {
-  return (await readPages(root)).pages.some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s) => s.resource === toResource(path)));
-}
+/** Does a Source page cite the raw source at `path`? */
+const isCited = async (w: Wiki, path: string) => (await w.citations()).has(toResource(path));
 
-export async function compile(root: string, ids: string[], opts: { pending?: boolean; batch?: boolean }) {
-  const raw = (await readRawSources(root)).raws;
+type CompileOpts = { pending?: boolean; batch?: boolean };
+export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts) {
+  const root = w.root;
+  const raw = await w.raws();
   const targets = opts.pending
     ? raw.filter((d) => d.fm.status === "pending")
     : ids.map((id) => resolveRawId(raw, id));
@@ -107,14 +109,14 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
     const id = rawId(d.path);
     if (!String(d.fm.note ?? "").trim()) { fail(`${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
     if (d.fm.status !== "pending") console.log(paint.dim(`(${id} est déjà ${d.fm.status} : recompilation)`));
-    const prompt = `Applique le workflow INGEST de ${await agentFileFor(root)} à la source ${toResource(d.path)}.` +
+    const prompt = `Applique le workflow INGEST de ${agentFile((await w.config()).client)} à la source ${toResource(d.path)}.` +
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
     console.log(`${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root);
-    const code = await run(root, prompt, !!opts.batch, "write");
+    const code = await run(w, prompt, !!opts.batch, "write");
     const stray = await outOfScope(root, before);
     if (stray.length) { warn(`l'agent a modifié hors de wiki/ : ${stray.join(", ")}`, "⚠"); process.exitCode = 1; }
-    if (await isCited(root, d.path)) {
+    if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
       if (d.fm.status === "pending") {
         try { await markCompiled(root, d.path); }
         catch (e) { fail(`${id} : ${(e as Error).message}`); process.exitCode = 1; continue; }
@@ -122,21 +124,25 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
       console.log(`${paint.ok("✓")} ${id} compilée`);
     } else { fail(`${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
   }
-  await (await import("./index")).regenerate(root);
+  await (await import("./index")).regenerateCtx(openWiki(root));
 }
+export const compile = (root: string, ids: string[], opts: CompileOpts) => compileCtx(openWiki(root), ids, opts);
 
-export async function ask(root: string, question: string, opts: { file?: boolean; interactive?: boolean }) {
-  const prompt = `Applique le workflow QUERY de ${await agentFileFor(root)} à la question : « ${question} ».` +
+type AskOpts = { file?: boolean; interactive?: boolean };
+export async function askCtx(w: Wiki, question: string, opts: AskOpts) {
+  const root = w.root;
+  const prompt = `Applique le workflow QUERY de ${agentFile((await w.config()).client)} à la question : « ${question} ».` +
     (opts.file ? " Range la réponse dans une page créée par cortex new Synthesis \"<titre>\" (status: draft), ajoute l'entrée Query au journal (cortex log add query \"…\" --page wiki/syntheses/….md) et lance cortex index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
-  const code = await run(root, prompt, !opts.interactive, opts.file ? "write" : "read");
+  const code = await run(w, prompt, !opts.interactive, opts.file ? "write" : "read");
   const after = await changed(root);
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
   if (stray.length) { warn(`fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`, "⚠"); process.exitCode = 1; }
   if (opts.file) {
-    await (await import("./index")).regenerate(root);
+    await (await import("./index")).regenerateCtx(openWiki(root)); // fresh context: the agent just wrote pages
   }
   if (code) process.exitCode = code;
 }
+export const ask = (root: string, question: string, opts: AskOpts) => askCtx(openWiki(root), question, opts);

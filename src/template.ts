@@ -16,7 +16,8 @@ export type NamingKey = keyof typeof NAMING_DEFAULTS;
 export const TYPE_DIRS = { Source: "sources", Concept: "concepts", Entity: "entities", Synthesis: "syntheses" } as const;
 export type PageType = keyof typeof TYPE_DIRS;
 
-const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+/** Any-version UUID (what a `{uuid}` name matches); ids are generated as v7 by the `uuid` placeholder. */
+export const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** Placeholders: value (at creation) and pattern (for lint). Dates in local time, like `fetched_at`. */
 const PLACEHOLDERS: Record<string, { for?: NamingKey; re: string; value: (v: Vars) => string; doc: string }> = {
   uuid: { re: UUID_RE, value: (v) => Bun.randomUUIDv7("hex", v.at), doc: "UUID v7 (horodaté, unique)" },
