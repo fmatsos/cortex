@@ -6,12 +6,21 @@ import * as z from "zod/v4";
 import { add } from "./add";
 import { fromResource, toResource } from "./doc";
 import { openWiki } from "./context";
-import { related } from "./lib";
+import { related, type Related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
 import { search } from "./search";
+import type { RelatedReason } from "../site/src/lib/types";
 
 export { related };
+
+/** A structured related reason as the external agent reads it: the French text the CLI used to emit as data. */
+export const reasonText = (r: RelatedReason): string =>
+  r.kind === "out" ? "lien sortant" : r.kind === "in" ? "lien entrant" : r.kind === "source" ? `source partagée : ${r.value}` : `tag partagé : ${r.value}`;
+
+/** What the MCP `related` tool returns: the first `limit` related pages, root-relative paths as resources, reasons in French. */
+export const relatedForAgent = (hits: Related[], limit = 10) =>
+  hits.slice(0, limit).map((r) => ({ ...r, path: toResource(r.path), reasons: r.reasons.map(reasonText) }));
 
 /** Content of a .md under wiki/ or raw/; refuses any path that leaves it once resolved (.., symbolic links). */
 export async function getFile(root: string, path: string): Promise<string> {
@@ -72,7 +81,7 @@ export function buildServer(root: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de pages (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ path, limit }) => json(related(await openWiki(root).pages(), path).slice(0, limit ?? 10).map((r) => ({ ...r, path: toResource(r.path) })))));
+  }, safe(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
 
   s.registerTool("lint", {
     description: "Contrôles mécaniques du wiki : erreurs et avertissements (liens cassés, orphelins, sources en attente, pages à relire…). Les contradictions entre pages restent à ta charge.",

@@ -1,7 +1,7 @@
 import type { IconName } from "#lib/icons.js";
 import { fold } from "./fold";
 import type { Parsed } from "./query";
-import type { Link, PageData, SourceRef, TocItem } from "./types";
+import type { Link, PageData, RelatedReason, SourceRef, TocItem } from "./types";
 import { TYPES } from "./type-meta";
 
 /**
@@ -46,23 +46,23 @@ export function currentSection(tops: { id: string; top: number }[], limit: numbe
 
 // --- Related pages ----------------------------------------------------------------------------------------------
 
-export type RelatedIn = Link & { reasons: string[] };
+export type RelatedIn = Link & { reasons: RelatedReason[] };
 /** A related-page reason: icon, short label, and detail (source titles) read on hover and by screen readers. */
 export type Reason = { icon: IconName; label: string; detail?: string };
 export type RelatedEntry = Link & { why: Reason[] };
 
 /**
- * The reasons of a related page as the export writes them ("lien sortant", "source partagée" repeated once per
- * source, "tag partagé : x"…), reduced to short, deduplicated reasons. `shared`: titles of the shared sources.
+ * The structured reasons of a related page (`source` repeated once per shared source, `tag` once per tag…),
+ * reduced to short, deduplicated reasons. `shared`: titles of the shared sources.
  */
-export function relatedReasons(reasons: string[], shared: string[] = []): Reason[] {
-	const has = (r: string) => reasons.includes(r);
-	const tags = [...new Set(reasons.filter((r) => r.startsWith("tag partagé")).map((r) => r.replace(/^tag partagé\s*:\s*/, "")).filter(Boolean))];
+export function relatedReasons(reasons: RelatedReason[], shared: string[] = []): Reason[] {
+	const has = (kind: RelatedReason["kind"]) => reasons.some((r) => r.kind === kind);
+	const tags = [...new Set(reasons.flatMap((r) => (r.kind === "tag" && r.value ? [r.value] : [])))];
 	const n = shared.length;
 	return [
-		...(has("lien sortant") ? [{ icon: "copy-link" as const, label: "citée ici" }] : []),
-		...(has("lien entrant") ? [{ icon: "backlink" as const, label: "cite cette page" }] : []),
-		...(has("source partagée") || n
+		...(has("out") ? [{ icon: "copy-link" as const, label: "citée ici" }] : []),
+		...(has("in") ? [{ icon: "backlink" as const, label: "cite cette page" }] : []),
+		...(has("source") || n
 			? [{ icon: "source" as const, label: n > 1 ? `${n} sources communes` : "source commune", ...(n ? { detail: shared.join(" · ") } : {}) }]
 			: []),
 		...(tags.length ? [{ icon: "tags" as const, label: tags.join(", ") }] : []),

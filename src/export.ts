@@ -250,7 +250,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
       stale_after: iso(fm.stale_after), needsReview: !!fm.verified && g > v, partial,
       html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
       backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
-      related: related(docs, d.path, graph0).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => r.replace(/ : \/raw\/.*$/, "")) })),
+      related: related(docs, d.path, graph0).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),
     };
   });
 

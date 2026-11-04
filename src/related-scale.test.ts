@@ -18,13 +18,13 @@ function relatedOld(docs: Page[], path: string): Related[] {
   const hits: Related[] = [];
   for (const d of pages) {
     if (d === me) continue;
-    const reasons: string[] = [];
+    const reasons: Related["reasons"] = [];
     let score = 0;
-    const plus = (n: number, why: string) => { score += n; reasons.push(why); };
-    if (out.has(d.path)) plus(3, "lien sortant");
-    if (links(d).has(me.path)) plus(3, "lien entrant");
-    for (const r of resources(d)) if (mine.has(r)) plus(2, `source partagée : ${r}`);
-    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, `tag partagé : ${t}`);
+    const plus = (n: number, why: Related["reasons"][number]) => { score += n; reasons.push(why); };
+    if (out.has(d.path)) plus(3, { kind: "out" });
+    if (links(d).has(me.path)) plus(3, { kind: "in" });
+    for (const r of resources(d)) if (mine.has(r)) plus(2, { kind: "source", value: r });
+    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, { kind: "tag", value: t });
     if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
   }
   return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
@@ -85,8 +85,8 @@ test("T10 related : liens précalculés == related d'avant, sur la fixture mcpRo
   }
   // captured from the code before the change
   expect(related(pages, "/wiki/concepts/a.md", graph)).toEqual([
-    { path: "wiki/concepts/b.md", title: "Beta", score: 6, reasons: ["lien sortant", "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md", "tag partagé : ctx"] },
-    { path: "wiki/entities/c.md", title: "Gamma", score: 6, reasons: ["lien entrant", "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md", "tag partagé : llm"] },
+    { path: "wiki/concepts/b.md", title: "Beta", score: 6, reasons: [{ kind: "out" }, { kind: "source", value: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" }, { kind: "tag", value: "ctx" }] },
+    { path: "wiki/entities/c.md", title: "Gamma", score: 6, reasons: [{ kind: "in" }, { kind: "source", value: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" }, { kind: "tag", value: "llm" }] },
   ]);
   expect(() => related(pages, "/wiki/concepts/nope.md", graph)).toThrow("introuvable");
 });
