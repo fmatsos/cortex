@@ -141,7 +141,7 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 | `brain compile [id…\|--pending] [--batch]` | 2 | lance l'agent configuré, **une session par source** : interactif par défaut (la CLI du client, ou `$BRAIN_AGENT`), ou `--batch` (le SDK du client configuré, sinon `$BRAIN_AGENT_BATCH`, par défaut `claude -p`), qui écrit en `draft` sans validation préalable. Refuse une `note` vide. Ne passe en `compiled` que si une page Source cite la source (ligne remplacée, sans ré-sérialiser le YAML). Signale toute modification hors de `wiki/` (via `git status`). Régénère l'index. Lance le ingest, puis passe le statut à `compiled` |
 | `brain ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query, **en lecture seule**. `--file` autorise à écrire une synthèse en `draft` |
 | `brain config init\|lint\|get\|set\|remove` | 2 | squelette de `config.json` (clés `client`, `model`, `effort` à `null`), contrôle, lecture et écriture validée des propriétés. L'effort est traduit pour chaque client : `effort` (Claude), `modelReasoningEffort` (Codex), variante du modèle (opencode, `modèle#variante` en CLI) |
-| `brain mcp` | 3 | serveur MCP stdio : `search`, `get`, `related`, `lint`, `add`, `log` |
+| `brain mcp` | 3 | serveur MCP stdio, qui ne modifie jamais `wiki/`. Lecture : `search`, `get` (un `.md` sous `wiki/` ou `raw/`, chemins résolus par `realpath`), `related` (liens sortants et entrants 3, source raw partagée 2, tag partagé 1), `lint`, `log` (dernières sections datées, 1 par défaut). Écriture : `add` seul, dans `raw/` (URL, chemin ou `text`, `note` obligatoire, idempotent). Racine par `$BRAIN_ROOT`. |
 | `brain inbox` | 4 | `add` sur tout le contenu de `inbox/` (fichiers et `urls.txt`) |
 | `brain export [--out <dossier>]` | 6 | le wiki en site HTML interactif (voir §10 bis) : navigation, recherche et graphe des liens |
 | `brain related`, `ls`, `show`, `doctor`, `reextract` | à la demande | — |
@@ -205,8 +205,8 @@ Exploration du 2026-11-04 sous Bun 1.4.3. La documentation a été vérifiée vi
 | `defuddle` | `0.19.6` (épinglée exacte, car 0.x) | page web → Markdown, plus les métadonnées (titre, auteur, date de publication, image, schema.org) | Moteur d'Obsidian Web Clipper (kepano), ~9,9k ★, releases toutes les semaines. Extracteur principal. |
 | `linkedom` | `^0.18` | DOM côté serveur pour defuddle | Léger, très actif. `jsdom` reste compatible en secours. |
 | `@mozilla/readability` + `turndown` | `^0.6` / `^7` | repli quand defuddle tronque | Implémentation de référence de Firefox. Passés du plan B au cœur dès l'étape 0 : defuddle a tronqué l'article OKF sans prévenir (voir §6). |
-| `@modelcontextprotocol/server` | `^2.4` | `brain mcp` (`serveStdio`) | SDK officiel v2, qui ne dépend que de `zod` et `core` (la v1 `@modelcontextprotocol/sdk` tirait express, hono, cors, ajv…) |
-| `zod` | `^4` | schémas d'entrée des outils MCP | Requis par le SDK MCP |
+| `@modelcontextprotocol/server` | `^2.4` | `brain mcp` (`serveStdio`) | SDK officiel v2, qui ne dépend que de `zod` et `core` (la v1 `@modelcontextprotocol/sdk` tirait express, hono, cors, ajv…). Vérifié à l'étape 3 (v2.4.0, Context7) : `McpServer` depuis `@modelcontextprotocol/server`, `serveStdio` depuis le sous-chemin `@modelcontextprotocol/server/stdio` (et non la racine), `registerTool(nom, { description, inputSchema: z.object({…}) }, handler)`. |
+| `zod` | `^4` | schémas d'entrée des outils MCP (`import * as z from "zod/v4"`) | Requis par le SDK MCP |
 
 **Runtime — optionnel, chargé à la demande (`await import()`) (2)**
 
@@ -264,7 +264,7 @@ opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle p
 - **Étape 0 — zéro code (1 semaine).** Mettre en place l'arborescence et `BRAIN.md`, migrer les 7 notes v1 comme premières sources, ingérer 5 sources réelles **sur des sujets variés** et poser 5 questions. *Critère de passage :* tu reviens consulter le wiki de toi-même.
 - **Étape 1.** `add` (URL, texte, Markdown, PDF texte), `search`, `index`. *Critère :* 20 sources ingérées et `search` réellement utilisé.
 - **Étape 2.** `lint`, `compile`, `ask`.
-- **Étape 3.** `mcp`.
+- **Étape 3.** `mcp` (fait).
 - **Étape 4.** `inbox`, avec un raccourci mobile « Partager → `inbox/urls.txt` ».
 - **Étape 5.** Images, puis vidéo et audio.
 - **Étape 6.** `export` : le wiki en site HTML interactif, avec un graphe des liens façon Obsidian.

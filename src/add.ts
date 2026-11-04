@@ -67,7 +67,7 @@ export async function findDuplicate(root: string, urls: (string | undefined)[], 
   }
 }
 
-export async function add(root: string, input: string, opts: { note?: string; dryRun?: boolean; now?: Date }): Promise<{ id: string; duplicate: boolean; ex?: Extract }> {
+export async function add(root: string, input: string, opts: { note?: string; dryRun?: boolean; now?: Date; text?: string }): Promise<{ id: string; duplicate: boolean; ex?: Extract }> {
   const now = opts.now ?? new Date();
   let ex: Extract;
   const isUrl = /^https?:\/\//.test(input);
@@ -76,7 +76,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
     if (known) return { id: known, duplicate: true };
     ex = await extractUrl(input);
   }
-  else if (input === "-") ex = extractText(await Bun.stdin.text());
+  else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text : contenu fourni sans stdin (serveur MCP)
   else {
     const f = Bun.file(input);
     if (!(await f.exists())) throw new Error(`Fichier introuvable : ${input}`);

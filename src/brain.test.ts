@@ -128,3 +128,103 @@ test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
   expect(sh("write", "BRAIN.md")).not.toBe(0);
   expect(sh("read", "wiki/non.md")).not.toBe(0);
 });
+
+/** Racine jetable : 3 pages wiki reliées par liens, tags et source partagée, plus une source raw. */
+async function mcpRoot() {
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  const res = "/raw/2026/11/20261104-abcd-x/source.md";
+  const page = (type: string, title: string, tags: string, body: string) =>
+    `---\ntype: ${type}\ntitle: ${title}\ndescription: D ${title}.\ntags: [${tags}]\nsources:\n  - id: x\n    resource: ${res}\n    title: X\n---\n${body}\n`;
+  await Bun.write(join(root, "BRAIN.md"), "");
+  await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\ntitle: X\nnote: n\nstatus: compiled\n---\nUn texte sur le zythum.\n");
+  await Bun.write(join(root, "wiki/concepts/a.md"), page("Concept", "Alpha", "llm, ctx", "Voir [B](/wiki/concepts/b.md)."));
+  await Bun.write(join(root, "wiki/concepts/b.md"), page("Concept", "Beta", "ctx", "Rien."));
+  await Bun.write(join(root, "wiki/entities/c.md"), page("Entity", "Gamma", "llm", "Voir [A](/wiki/concepts/a.md#x)."));
+  await Bun.write(join(root, "wiki/index.md"), "# Index\n- [Alpha](/wiki/concepts/a.md)\n- [Beta](/wiki/concepts/b.md)\n- [Gamma](/wiki/entities/c.md)\n");
+  await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2026-11-04\n- **Add** x.\n\n## 2026-11-03\n- **Add** y.\n");
+  return root;
+}
+
+test("related : liens, rétroliens, sources et tags, classés par force", async () => {
+  const { related } = await import("./mcp");
+  const { readDocs } = await import("./lib");
+  const docs = await readDocs(await mcpRoot(), "wiki");
+  const a = related(docs, "/wiki/concepts/a.md");
+  // B : lien sortant 3 + source 2 + tag ctx 1 = 6 ; C : lien entrant 3 + source 2 + tag llm 1 = 6 ; index.md exclu
+  expect(a.map((r) => r.path)).toEqual(["wiki/concepts/b.md", "wiki/entities/c.md"]);
+  expect(a[0]).toMatchObject({ score: 6, reasons: ["lien sortant", "source partagée : /raw/2026/11/20261104-abcd-x/source.md", "tag partagé : ctx"] });
+  expect(a[1].reasons).toContain("lien entrant");
+  // sans lien direct : seulement la source partagée (B et C n'ont aucun tag commun)
+  expect(related(docs, "wiki/concepts/b.md").map((r) => [r.path, r.score])).toEqual([["wiki/concepts/a.md", 6], ["wiki/entities/c.md", 2]]);
+  expect(() => related(docs, "/wiki/concepts/nope.md")).toThrow("introuvable");
+});
+
+test("get : refuse tout chemin hors de wiki/ et raw/", async () => {
+  const { getFile } = await import("./mcp");
+  const { symlinkSync } = await import("node:fs");
+  const root = await mcpRoot();
+  await Bun.write(join(root, "secret.md"), "secret");
+  symlinkSync("../secret.md", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
+  expect(await getFile(root, "/wiki/concepts/b.md")).toContain("Beta");
+  expect(await getFile(root, "wiki/concepts/b.md")).toContain("Beta");
+  expect(await getFile(root, "raw/2026/11/20261104-abcd-x/source.md")).toContain("zythum");
+  for (const p of ["BRAIN.md", "secret.md", "wiki/../secret.md", "/wiki/../secret.md", "wiki/piege.md", "/etc/passwd", "../x.md"])
+    expect(getFile(root, p)).rejects.toThrow();
+  expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // un dossier n'est pas un fichier
+});
+
+test("lastLog : sections datées les plus récentes", async () => {
+  const { lastLog } = await import("./mcp");
+  const root = await mcpRoot();
+  expect(await lastLog(root, 1)).toBe("## 2026-11-04\n- **Add** x.");
+  expect(await lastLog(root, 5)).toContain("## 2026-11-03");
+});
+
+test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RPC sur stdio)", async () => {
+  const root = await mcpRoot();
+  const proc = Bun.spawn(["bun", join(import.meta.dir, "brain.ts"), "mcp"], {
+    env: { ...process.env, BRAIN_ROOT: root }, stdin: "pipe", stdout: "pipe", stderr: "pipe",
+  });
+  const send = (m: object) => { proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n"); proc.stdin.flush(); };
+  const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  const recv = async (id: number) => {
+    for (;;) {
+      const nl = buf.indexOf("\n");
+      if (nl >= 0) {
+        const msg = JSON.parse(buf.slice(0, nl)); // une ligne hors protocole sur stdout ferait échouer ce parse
+        buf = buf.slice(nl + 1);
+        if (msg.id === id) return msg;
+        continue;
+      }
+      const { value, done } = await reader.read();
+      if (done) throw new Error(`serveur arrêté : ${await new Response(proc.stderr).text()}`);
+      buf += value;
+    }
+  };
+  const call = async (id: number, name: string, args: object) => {
+    send({ id, method: "tools/call", params: { name, arguments: args } });
+    return (await recv(id)).result;
+  };
+  try {
+    send({ id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } });
+    expect((await recv(1)).result.serverInfo.name).toBe("brain");
+    send({ method: "notifications/initialized" });
+
+    send({ id: 2, method: "tools/list" });
+    expect((await recv(2)).result.tools.map((t: any) => t.name).sort()).toEqual(["add", "get", "lint", "log", "related", "search"]);
+
+    const s = await call(3, "search", { q: "zythum" });
+    expect(JSON.parse(s.content[0].text).hits[0]).toMatchObject({ area: "raw", path: "/raw/2026/11/20261104-abcd-x/source.md" });
+    expect(JSON.parse(s.content[0].text).hint).toContain("trou");
+    expect((await call(4, "get", { path: "/wiki/concepts/b.md" })).content[0].text).toContain("Beta");
+    expect((await call(5, "get", { path: "wiki/../BRAIN.md" })).isError).toBe(true);
+    expect((await call(6, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "" })).isError).toBe(true);
+    const added = JSON.parse((await call(7, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text);
+    expect(added).toMatchObject({ duplicate: false, title: "Idée" });
+    expect(JSON.parse((await call(8, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text).id).toBe(added.id);
+    expect((await call(10, "add", { input: "/etc/hostname", note: "fuite" })).isError).toBe(true); // pas de fichier local via MCP
+    expect((await call(9, "log", {})).content[0].text).toContain(`**Add** \`${added.id}\``);
+    expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toContain("wiki/concepts/b.md");
+  } finally { proc.stdin.end(); proc.kill(); }
+});
