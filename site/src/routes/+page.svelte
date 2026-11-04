@@ -23,7 +23,7 @@
 
 <!-- la recherche est la porte d'entrée : un grand champ, des exemples qui donnent des résultats, les recherches récentes -->
 <section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-accueil" class="flex items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" />Cortex</h1>
+	<h1 id="h-accueil" class="flex items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><span class="titre-anime">Cortex</span></h1>
 	<p class="text-muted-foreground mt-2">
 		{data.seed.total} pages et {data.seed.nbTags} tags à parcourir, ou
 		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">le graphe des liens</a>.
@@ -82,3 +82,20 @@
 		</section>
 	{/each}
 </div>
+
+<style>
+	/* le mot suit le logo : quand l'influx a atteint les nœuds (vers 2 s sur un cycle de 4 s), une lumière balaie « Cortex » */
+	@media (prefers-reduced-motion: no-preference) {
+		.titre-anime {
+			background: linear-gradient(100deg, var(--foreground) 40%, var(--primary) 50%, var(--foreground) 60%) 100% 0 / 300% 100% no-repeat;
+			-webkit-background-clip: text;
+			background-clip: text;
+			color: transparent;
+			animation: balaye 4s ease-in-out infinite;
+		}
+	}
+	@keyframes balaye {
+		0%, 48% { background-position: 100% 0; }
+		72%, 100% { background-position: 0% 0; }
+	}
+</style>
