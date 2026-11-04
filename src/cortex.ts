@@ -12,6 +12,7 @@ import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
 import { CortexError, findRoot } from "./lib";
 import { newPageCtx } from "./naming";
+import { print, type Result } from "./print";
 import { fail, paint, warn } from "./style";
 
 const HELP = `cortex — second cerveau
@@ -46,7 +47,11 @@ const int = (name: string, value: string | undefined, { min }: { min: number }) 
   return n;
 };
 
+// Exit code: set in one place. A command that fails without throwing flips `ok`; a thrown CortexError is mapped in the catch.
 try {
+  let ok = true;
+  /** Domain results arrive already printed (live `print` report) or are rendered here; either way `ok` decides the exit code. */
+  const finish = (r: Result, rendered = true) => { if (!rendered) r.messages.forEach(print); ok &&= r.ok; };
   let parsed;
   try {
     parsed = parseArgs({
@@ -80,14 +85,14 @@ try {
           console.log(describe(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);
-          process.exitCode = 1;
+          ok = false;
         }
       }
       if (!o.note && !o["dry-run"]) warn("note manquante : à renseigner avant compilation.");
       break;
     }
     case "inbox":
-      process.exitCode = await inbox(root, { dryRun: o["dry-run"] });
+      finish(await inbox(root, { dryRun: o["dry-run"] }, print));
       break;
     case "search": {
       const q = args.join(" ");
@@ -138,17 +143,17 @@ try {
         const count = (k: string, s: string, color: (s: string) => string) => (n(k) ? color(`${n(k)} ${s}`) : `${n(k)} ${s}`);
         console.log(`${count("error", "erreur(s)", paint.error)}, ${count("warning", "avertissement(s)", paint.warn)}, ${n("info")} page(s) jamais relue(s).`);
       }
-      if (issues.some((i) => i.level === "error")) process.exitCode = 1;
+      if (issues.some((i) => i.level === "error")) ok = false;
       break;
     }
     case "compile":
       if (!args.length && !o.pending) throw usage("Usage : cortex compile <id…> | --pending [--batch]");
-      await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch });
+      finish(await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch }, print));
       break;
     case "ask": {
       const q = args.join(" ");
       if (!q) throw usage('Usage : cortex ask "<question>" [--file]');
-      await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive });
+      finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive }, print));
       break;
     }
     case "export": {
@@ -166,12 +171,13 @@ try {
       break;
     }
     case "config":
-      process.exitCode = await configCmd(root, args);
+      finish(await configCmd(root, args), false);
       break;
     default:
       console.log(HELP);
-      if (cmd && !o.help) process.exitCode = 1;
+      if (cmd && !o.help) ok = false;
   }
+  if (!ok) process.exitCode = 1;
 } catch (e) {
   fail(e instanceof Error ? e.message : String(e));
   process.exitCode = e instanceof CortexError && e.code === "usage" ? 2 : 1; // lint errors keep exit 1 (documented contract)

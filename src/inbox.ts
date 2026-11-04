@@ -1,13 +1,16 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
 import { add, describe } from "./add";
-import { fail, paint, warn } from "./style";
+import { collector, type Report, type Result } from "./print";
+import { paint } from "./style";
 
 /**
  * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`).
- * A successful entry (added or already present) leaves the inbox, a failure stays in it. Returns the exit code.
+ * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
+ * and are returned; `ok` is false when an entry failed.
  */
-export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Promise<number> {
+export async function inbox(root: string, opts: { dryRun?: boolean } = {}, report?: Report): Promise<Result> {
+  const { say, done: result } = collector(report);
   const dir = join(root, "inbox");
   const urlsFile = join(dir, "urls.txt");
   const names = await readdir(dir, { withFileTypes: true }).then((es) => es.filter((e) => e.isFile()).map((e) => e.name), () => []);
@@ -19,11 +22,11 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
   const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>) => {
     try {
       const r = await add(root, input, { note, dryRun: opts.dryRun });
-      console.log(`${describe(r, opts.dryRun)}  ← ${label}`);
+      say("info", `${describe(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else { added++; noNote ||= !note; }
       if (!opts.dryRun) await onOk();
     } catch (e) {
-      fail(`${label} : ${(e as Error).message}`);
+      say("fail", `${label} : ${(e as Error).message}`);
       failed++;
     }
   };
@@ -32,7 +35,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
     const [url, ...rest] = line.split(/\s+/);
-    if (!/^https?:\/\//.test(url)) { console.error(`✗ ${line} : pas une URL http(s)`); failed++; continue; }
+    if (!/^https?:\/\//.test(url)) { say("fail", `${line} : pas une URL http(s)`); failed++; continue; }
     await run(url, url, rest.join(" ") || undefined, async () => done.add(raw));
   }
   for (const f of files) {
@@ -48,8 +51,8 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
     await rename(`${urlsFile}.tmp`, urlsFile);
   }
 
-  if (!added && !known && !failed) console.log(paint.dim("Inbox vide."));
-  else console.log(`${opts.dryRun ? "(dry-run, inbox inchangée) " : ""}${added} ajouté(s), ${known} déjà présent(s), ${failed} échec(s).`);
-  if (noNote && !opts.dryRun) warn("note manquante : à renseigner avant compilation.");
-  return failed ? 1 : 0;
+  if (!added && !known && !failed) say("info", paint.dim("Inbox vide."));
+  else say("info", `${opts.dryRun ? "(dry-run, inbox inchangée) " : ""}${added} ajouté(s), ${known} déjà présent(s), ${failed} échec(s).`);
+  if (noNote && !opts.dryRun) say("warn", "note manquante : à renseigner avant compilation.");
+  return result(!failed);
 }

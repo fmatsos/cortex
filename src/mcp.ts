@@ -111,7 +111,10 @@ export function buildServer(root: string): McpServer {
   return s;
 }
 
-/** MCP stdio server. Stdout is reserved for the protocol: any stray console.log goes to stderr. */
+/**
+ * MCP stdio server. Stdout is reserved for the protocol. Domain code no longer prints (PRA-03), but the redirection stays
+ * as a safety net for third-party code reachable from the tools (PDF/HTML extraction libraries may log warnings).
+ */
 export function serveMcp(root: string) {
   console.log = console.error;
   serveStdio(() => buildServer(root));
