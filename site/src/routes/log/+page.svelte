@@ -130,8 +130,6 @@
 		{/each}
 	</ul>
 
-	<!-- la légende naît côté client : la page prérendue garde le texte des entrées en premier (brain.test.ts compare leur ordre) -->
-	{#if ready}
 	<details class="group mt-3 max-w-3xl">
 		<summary class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 touch-target inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md text-sm focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
 			<Icon name="chevron-down" size={16} class="motion-safe:transition-transform group-open:rotate-180" />
@@ -146,7 +144,6 @@
 			{/each}
 		</dl>
 	</details>
-	{/if}
 
 	<p class="text-muted-foreground mt-4 text-sm" role="status">
 		{filtered.length === total ? `${total} entrées` : `${filtered.length} sur ${total} entrées`}{#if filtered.length && remaining}, {visible.length} affichées{/if}

@@ -618,7 +618,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(log[2].html).toBe('Un <a href="../wiki/concepts/a/">lien</a> et <strong>gras</strong>.');
   const logPage = html("log/index.html");
   for (const t of ["Journal", "Ajout.", "Alpha", "Source un", "20261104-zzzz-inconnue", "3 entrées"]) expect(logPage).toContain(t);
-  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("compilée")); // l'ajout de 11 h avant l'ingest de 9 h 30
+  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("</code></a> compilée")); // l'ajout de 11 h avant l'ingest de 9 h 30
   const out2 = join(root, "site2");
   await exportSite(root, out2, () => {}); // reproductible : même wiki, même site
   const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
