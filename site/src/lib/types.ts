@@ -1,6 +1,6 @@
 /** Contrat entre `cli/src/export.ts` (qui écrit data.json, graph.json, search-index.json) et le site (qui les affiche). */
 export type Link = { id: string; title: string; type: string };
-export type SourceRef = { id: string; title: string; url?: string; page?: Link };
+export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true }; // partial : extraction partielle de la source raw (paywall)
 export type Note = { n: number; id: string; refs: number; html: string }; // refs : occurrences de la note dans le texte
 export type TocItem = { level: 2 | 3; id: string; text: string };
 export type PageData = {
@@ -14,6 +14,7 @@ export type PageData = {
   generated?: { by: string; at: string };
   stale_after?: string;
   needsReview: boolean; // generated.at postérieur à verified.at
+  partial: boolean; // contenu partiel : page Source dont la source raw est une extraction partielle, ou encart d'avertissement de contenu partiel
   html: string;
   md: string; // Markdown source de la page, chemins raw/ remplacés par l'URL d'origine
   sources: SourceRef[];
@@ -22,8 +23,8 @@ export type PageData = {
   backlinks: Link[];
   related: (Link & { reasons: string[] })[];
 };
-/** Une entrée du journal : `html` = texte en ligne ; `sources` = ids raw non nommés dans le texte (avec la page Source du wiki qui les cite, s'il y en a une). */
-export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[] };
+/** Une entrée du journal : `search` = tout le texte affiché (type, texte, titres des pages, ids et pages Source), replié (sans accents, minuscules) pour une recherche locale par `fold(requête)` ; `html` = texte en ligne ; `sources` = ids raw non nommés dans le texte (avec la page Source du wiki qui les cite, s'il y en a une). */
+export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; search: string };
 export type SiteData = {
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
@@ -31,7 +32,7 @@ export type SiteData = {
 };
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];
-  links: { source: string; target: string }[];
+  links: { source: string; target: string; mutual?: true }[]; // orienté : source = page qui contient le lien ; mutual : liens dans les deux sens (un seul lien, jamais deux)
 };
-export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; needsReview?: boolean; text: string };
+export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; needsReview?: boolean; partial?: boolean; text: string };
 export type SearchIndex = { docs: SearchDoc[]; terms: Record<string, number[]>; vocab: string[] };
