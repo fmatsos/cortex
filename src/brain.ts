@@ -19,6 +19,7 @@ const HELP = `brain — second cerveau
   brain lint [--json]
   brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
   brain ask "<question>" [--file] [--interactive]
+  brain export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .brain/site)
   brain mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
   brain config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
 
@@ -32,7 +33,7 @@ const { values: o, positionals: [cmd, ...args] } = parseArgs({
   options: {
     note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
     json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-    file: { type: "boolean" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
+    file: { type: "boolean" }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
   },
 });
 
@@ -91,6 +92,11 @@ try {
       const q = args.join(" ");
       if (!q) throw new Error('Usage : brain ask "<question>" [--file]');
       await ask(root, q, { file: o.file, interactive: o.interactive });
+      break;
+    }
+    case "export": {
+      const { exportSite } = await import("./export"); // Vite, Svelte et force-graph ne se chargent qu'ici
+      await exportSite(root, o.out ?? join(root, ".brain/site"));
       break;
     }
     case "mcp":

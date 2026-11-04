@@ -1,0 +1,74 @@
+import { fold } from "./fold";
+
+/**
+ * Requête de la barre de recherche : texte libre (Fuse) + filtres structurés (métadonnées), tous combinés en ET.
+ *   #tag  tag:x  type:concept|entity|synthesis|source  status:draft|stable|deprecated  is:fav  is:unverified
+ *   "phrase exacte"   -mot   -#tag   -type:source …
+ * Fonction pure, insensible aux accents et à la casse.
+ */
+export type Op = { key: "tag" | "type" | "status" | "is"; value: string; neg: boolean; raw: string };
+export type Parsed = {
+	words: string[]; // texte libre, repli
+	phrases: { text: string; raw: string }[]; // "phrase exacte"
+	exclude: { text: string; raw: string }[]; // -mot et -"phrase"
+	ops: Op[];
+};
+
+export const KEYS = ["tag", "type", "status", "is"] as const;
+const TYPES: Record<string, string> = {
+	concept: "Concept", concepts: "Concept", entity: "Entity", entities: "Entity", entite: "Entity", entites: "Entity",
+	synthesis: "Synthesis", syntheses: "Synthesis", synthese: "Synthesis", source: "Source", sources: "Source",
+};
+const IS: Record<string, string> = { fav: "fav", favori: "fav", favoris: "fav", favorite: "fav", unverified: "unverified", nonrelue: "unverified" };
+
+/** Type canonique (Concept, Entity…) d'une valeur saisie : « synthèses », « entity »… ; sinon la valeur repliée. */
+export const canonType = (v: string) => TYPES[fold(v)] ?? fold(v);
+
+const TOKEN = /(-?)(?:"([^"]*)"|(#[^\s"]+)|([a-z]+):("[^"]*"|[^\s"]+)|([^\s"]+))/giu;
+
+export function parseQuery(q: string): Parsed {
+	const out: Parsed = { words: [], phrases: [], exclude: [], ops: [] };
+	for (const m of q.matchAll(TOKEN)) {
+		const [raw, dash, phrase, hashtag, key, val, word] = m;
+		const neg = dash === "-", unq = (s: string) => s.replace(/^"|"$/g, "");
+		if (phrase !== undefined) {
+			const text = fold(phrase).trim();
+			if (text) (neg ? out.exclude : out.phrases).push({ text, raw });
+		} else if (hashtag) {
+			const value = fold(hashtag.slice(1));
+			if (value) out.ops.push({ key: "tag", value, neg, raw });
+		} else if (key && (KEYS as readonly string[]).includes(fold(key))) {
+			const k = fold(key) as Op["key"], v = fold(unq(val));
+			if (v) out.ops.push({ key: k, value: k === "type" ? canonType(v) : k === "is" ? (IS[v.replace(/\W/g, "")] ?? v) : v, neg, raw });
+		} else {
+			const text = fold(word ?? raw.replace(/^-/, "")).trim();
+			if (!text) continue;
+			if (neg) out.exclude.push({ text, raw });
+			else out.words.push(...(text.match(/[\p{L}\p{N}]+/gu) ?? []));
+		}
+	}
+	return out;
+}
+
+export const isEmpty = (p: Parsed) => !p.words.length && !p.phrases.length && !p.exclude.length && !p.ops.length;
+
+/** Retire de la requête la puce (jeton brut) `raw`, en nettoyant les espaces. */
+export const removeToken = (q: string, raw: string) => q.replace(raw, "").replace(/\s{2,}/g, " ").trimStart();
+
+export type Doc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; text: string };
+
+/** Les filtres structurés, les phrases et les exclusions sur les métadonnées et le texte (le texte libre reste à Fuse). */
+export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean): boolean {
+	const hay = fold(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`);
+	for (const o of p.ops) {
+		const hit =
+			o.key === "tag" ? d.tags.some((t) => fold(t) === o.value)
+			: o.key === "type" ? d.type === o.value
+			: o.key === "status" ? fold(d.status) === o.value
+			: o.value === "fav" ? isFav(d.id)
+			: o.value === "unverified" ? !d.verified
+			: false;
+		if (hit === o.neg) return false;
+	}
+	return p.phrases.every((x) => hay.includes(x.text)) && !p.exclude.some((x) => hay.includes(x.text));
+}

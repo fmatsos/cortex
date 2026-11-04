@@ -278,3 +278,107 @@ test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RP
     expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toContain("wiki/concepts/b.md");
   } finally { proc.stdin.end(); proc.kill(); }
 });
+
+test("requête de recherche : filtres, guillemets, exclusions, accents", async () => {
+  const { parseQuery, matches, removeToken, canonType, isEmpty } = await import("../site/src/lib/query");
+  const p = parseQuery(`context  #Mémoire tag:LLM type:Synthèses status:draft is:fav "Phrase Exacte" -rot -#vieux -"à éviter" -type:source`);
+  expect(p.words).toEqual(["context"]);
+  expect(p.ops.map((o) => [o.key, o.value, o.neg])).toEqual([
+    ["tag", "memoire", false], ["tag", "llm", false], ["type", "Synthesis", false], ["status", "draft", false], ["is", "fav", false],
+    ["tag", "vieux", true], ["type", "Source", true],
+  ]);
+  expect(p.phrases.map((x) => x.text)).toEqual(["phrase exacte"]);
+  expect(p.exclude.map((x) => x.text)).toEqual(["rot", "a eviter"]);
+  expect(canonType("entités")).toBe("Entity");
+  // clé inconnue = mot ordinaire ; tiret au milieu d'un mot ≠ exclusion ; requête vide
+  expect(parseQuery("foo:bar chain-of-thought").words).toEqual(["foo", "bar", "chain", "of", "thought"]);
+  expect(parseQuery("chain-of-thought").exclude).toEqual([]);
+  expect(isEmpty(parseQuery("  "))).toBe(true);
+  // guillemet non fermé : ne bloque rien
+  expect(parseQuery('"jamais fermé').words).toEqual(["jamais", "ferme"]);
+  // retrait d'une puce
+  expect(removeToken("a #tag b", "#tag")).toBe("a b");
+
+  const doc = { id: "concepts/a", title: "Mémoire vive", description: "RAM", type: "Concept", tags: ["Matériel", "ram"], status: "stable", verified: false, text: "La mémoire coûte cher en 2026." };
+  const ok = (q: string, fav = false) => matches(doc, parseQuery(q), () => fav);
+  expect(ok("#materiel type:concept status:stable")).toBe(true); // tag sans accent, type en minuscules
+  expect(ok("type:source")).toBe(false);
+  expect(ok("-type:source -#absent")).toBe(true);
+  expect(ok("-#ram")).toBe(false);
+  expect(ok("is:unverified")).toBe(true);
+  expect(ok("is:fav")).toBe(false);
+  expect(ok("is:favoris", true)).toBe(true);
+  expect(ok('"coute cher"')).toBe(true); // phrase exacte, sans accents
+  expect(ok('"cher coute"')).toBe(false);
+  expect(ok("-cher")).toBe(false);
+  expect(ok("-prix")).toBe(true);
+});
+
+test("export : site statique, liens réécrits, notes reliées, raw/ non publié, index de recherche", async () => {
+  const { existsSync, readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { exportSite, checkOut } = await import("./export");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  const fm = (t: string, title: string, extra = "") => `---\ntype: ${t}\ntitle: ${title}\ndescription: Description de ${title}.\ntags: [alpha]\nstatus: stable\ngenerated: { by: test, at: 2026-11-04T10:00:00+01:00 }\n${extra}---\n`;
+  const src = `sources:\n  - id: s1\n    resource: /raw/2026/11/20261104-abcd-x/source.md\n    title: "Source un"\n`;
+  await Bun.write(join(root, "BRAIN.md"), "");
+  await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\ntitle: Source un\nurl: https://exemple.org/article\nnote: n\nstatus: compiled\n---\nSECRET-DU-CORPS-RAW\n");
+  await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n[^s1]: précision *utile*\n");
+  await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n");
+  await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
+  await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "Résumé, voir [Alpha](/wiki/concepts/a.md).\n");
+  await Bun.write(join(root, "wiki/index.md"), "# Index\n");
+  await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2026-11-04\n- **Ingest** x\n");
+
+  expect(() => checkOut(root, root)).toThrow("refusé");
+  expect(() => checkOut(root, join(root, "wiki"))).toThrow("refusé");
+  await Bun.write(join(root, "documents/notes.txt"), "à ne jamais vider");
+  expect(() => checkOut(root, join(root, "documents"))).toThrow("ne ressemble pas à un export"); // dossier non vide sans _app/
+  const out = join(root, ".brain/site");
+  await exportSite(root, out, () => {});
+
+  const html = (p: string) => readFileSync(join(out, p), "utf8");
+  for (const p of ["index.html", "graph/index.html", "log/index.html", "tags/index.html", "tags/alpha/index.html", "search/index.html", "wiki/concepts/a/index.html", "wiki/concepts/b/index.html", "wiki/entities/c/index.html", "wiki/sources/s/index.html"])
+    expect(existsSync(join(out, p))).toBe(true);
+  const a = html("wiki/concepts/a/index.html");
+  expect(a).toContain('href="../b/#x"'); // lien réécrit, relatif
+  expect(a).toContain('href="../../entities/c/"');
+  expect(a).toContain('class="lien-manquant"'); // page absente : pas de lien mort
+  expect(a).not.toMatch(/href="[^"]*\.md/);
+  expect(a).toContain('href="#fn-s1"'); // note [^s1] numérotée, reliée à sources[]
+  expect(a).toContain('id="fn-s1"');
+  expect(a).toContain('href="#src-s1"');
+  expect(a).toContain("<em>utile</em>");
+  expect(a).toContain('href="https://exemple.org/article"'); // source : URL d'origine, pas le chemin raw
+  expect(a).not.toContain("/raw/");
+  expect(a).toContain("Rétroliens");
+
+  const c = html("wiki/entities/c/index.html");
+  expect(c).toContain('href="../../../"'); // /wiki/index.md → accueil
+  expect(c).toContain('href="../../../log/"'); // /wiki/log.md → journal
+  const out2 = join(root, "site2");
+  await exportSite(root, out2, () => {}); // reproductible : même wiki, même site
+  const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
+  expect(files(out2)).toEqual(files(out));
+  for (const f of files(out)) expect(readFileSync(join(out2, f), "utf8")).toBe(readFileSync(join(out, f), "utf8"));
+
+  const graph = JSON.parse(html("graph.json"));
+  expect(graph.nodes.map((n: any) => n.id).sort()).toEqual(["concepts/a", "concepts/b", "entities/c", "sources/s"]);
+  expect(graph.nodes.find((n: any) => n.id === "concepts/a")).toMatchObject({ type: "Concept", tags: ["alpha"], degree: 3 });
+  expect(graph.links).toHaveLength(3); // a-b (liens dans les deux sens : une seule arête), a-c, s-a
+  expect(graph.links.filter((l: any) => [l.source, l.target].sort().join() === "concepts/a,concepts/b")).toHaveLength(1);
+  expect(graph.links.some((l: any) => l.target === "concepts/absent")).toBe(false);
+
+  const idx = JSON.parse(html("search-index.json"));
+  expect(idx.docs).toHaveLength(4);
+  expect(idx.index.records).toHaveLength(4);
+  expect(idx.vocab).toContain("alpha");
+  expect((await import("fuse.js")).default.parseIndex(idx.index).size()).toBe(4); // index rechargeable tel quel
+
+  // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
+  const all = (readdirSync(out, { recursive: true }) as string[]).filter((f) => statSync(join(out, f)).isFile());
+  for (const f of all) {
+    const t = readFileSync(join(out, f), "utf8");
+    expect(t).not.toContain("SECRET-DU-CORPS-RAW");
+    expect(t).not.toContain("20261104-abcd-x");
+  }
+}, 120_000);

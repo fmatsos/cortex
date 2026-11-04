@@ -71,3 +71,34 @@ export async function appendLog(root: string, line: string, d = new Date()) {
   else txt = txt.replace(/^# Log\n\n?/, `# Log\n\n${h}- ${line}\n\n`);
   await Bun.write(f, txt);
 }
+
+const norm = (p: string) => p.trim().replace(/^\/+/, "");
+export type Related = { path: string; title: string; score: number; reasons: string[] };
+
+export const wikiLinks = (d: Doc) => new Set([...d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)].map((m) => norm(m[1])));
+const resources = (d: Doc) => new Set<string>((d.fm.sources ?? []).map((s: any) => s.resource));
+
+/**
+ * Pages wiki liées à `path`, par force décroissante : lien sortant ou entrant (3 chacun), source raw partagée (2),
+ * tag partagé (1). Pure : travaille sur les pages déjà lues (index.md et log.md exclus).
+ */
+export function related(docs: Doc[], path: string): Related[] {
+  const pages = docs.filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
+  const me = pages.find((d) => d.path === norm(path));
+  if (!me) throw new Error(`Page wiki introuvable : ${path}`);
+  const out = wikiLinks(me), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
+  const hits: Related[] = [];
+  for (const d of pages) {
+    if (d === me) continue;
+    const reasons: string[] = [];
+    let score = 0;
+    const plus = (n: number, why: string) => { score += n; reasons.push(why); };
+    if (out.has(d.path)) plus(3, "lien sortant");
+    if (wikiLinks(d).has(me.path)) plus(3, "lien entrant");
+    for (const r of resources(d)) if (mine.has(r)) plus(2, `source partagée : ${r}`);
+    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, `tag partagé : ${t}`);
+    if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
+  }
+  return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+}
+

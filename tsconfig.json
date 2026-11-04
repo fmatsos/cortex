@@ -2,5 +2,6 @@
   "compilerOptions": {
     "target": "ESNext", "module": "Preserve", "moduleResolution": "bundler",
     "strict": true, "noEmit": true, "skipLibCheck": true, "types": ["bun"]
-  }
+  },
+  "exclude": ["node_modules", "site"] // le site a son propre tsconfig ; seuls les modules qu'export.ts importe sont vérifiés ici
 }
