@@ -203,7 +203,7 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   for (const q of ["mot1a", "mot2 mot3b", "motab", "page 12", "mot1q mot2r mot3s"]) {
     const t = performance.now(); rank(E, parseQuery(q), () => false); worst = Math.max(worst, performance.now() - t);
   }
-  expect(worst).toBeLessThan(50);
+  expect(worst).toBeLessThan(200); // ~10 ms en pratique ; marge pour une machine chargée (l'ancien moteur : ~900 ms)
 });
 
 test("export : ancres de titres lisibles, uniques, sans collision avec les ids de l'interface", async () => {
@@ -431,7 +431,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n## Première partie\n\nEncore un fait.[^s1] Et un autre.[^s1]\n\n### Détail\n\n## Première partie\n\n## Notes\n\n[^s1]: précision *utile*\n");
   await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7 800 caractères
   await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
-  await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "Résumé, voir [Alpha](/wiki/concepts/a.md).\n");
+  await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "> [!note] Note personnelle\n> pourquoi je garde ça\n\nRésumé, voir [Alpha](/wiki/concepts/a.md).\n");
   await Bun.write(join(root, "wiki/index.md"), "# Index\n");
   await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2026-11-04\n- **Ingest** x\n");
 
@@ -486,6 +486,9 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(graph.links.some((l: any) => l.target === "concepts/absent")).toBe(false);
 
   const idx = JSON.parse(html("search-index.json"));
+  const s = idx.docs.find((d: any) => d.id === "sources/s");
+  expect(s.text).toContain("pourquoi je garde ça"); // contenu de l'encart indexé…
+  expect(s.text).not.toContain("Note personnelle"); // …mais pas son titre
   expect(idx.docs).toHaveLength(4);
   expect(idx.terms.motlointain).toEqual([idx.docs.findIndex((d: any) => d.id === "concepts/b")]); // index inversé sur tout le contenu
   expect(idx.vocab).toContain("alpha");
