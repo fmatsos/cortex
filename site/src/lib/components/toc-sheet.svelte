@@ -4,10 +4,10 @@
 	import Toc from "#lib/components/toc.svelte";
 	import type { TocItem } from "#lib/types.js";
 
-	// Commande « Sommaire » des petits écrans (UI19) : un bouton flottant, présent pendant toute la lecture, qui nomme la
-	// section courante et ouvre le sommaire dans un panneau. Panneau natif (`popover`) : Échap, clic extérieur et retour
-	// du focus au bouton sont gérés par le navigateur. Sans l'API popover, rien n'est affiché (le sommaire latéral existe
-	// dès lg, et les ancres restent suivies par les notes).
+	// "Sommaire" command for small screens (UI19): a floating button, present throughout the reading, that names the
+	// current section and opens the table of contents in a panel. Native panel (`popover`): Escape, outside click and focus
+	// return to the button are handled by the browser. Without the popover API, nothing is shown (the side table of contents exists
+	// from lg, and the anchors are still followed by the notes).
 	let { items, current = "" }: { items: TocItem[]; current?: string } = $props();
 	let supported = $state(false);
 	let sheet = $state<HTMLElement>();
@@ -38,7 +38,7 @@
 {/if}
 
 <style>
-	/* panneau en bas d'écran ; `display` n'est posé qu'à l'ouverture (sinon il écraserait le masquage natif) */
+	/* panel at the bottom of the screen; `display` is only set on opening (otherwise it would override the native hiding) */
 	.toc-sheet {
 		margin: 0;
 		inset: auto 0 0 0;

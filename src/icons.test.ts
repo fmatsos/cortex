@@ -8,7 +8,7 @@ import { KINDS, TYPES, kindIcon, kindLabel, statusMeta, typeIcon } from "../site
 
 const SITE = join(import.meta.dir, "../site/src");
 
-// Les icônes de la section « Icon pack » de la revue : chaque nom doit exister.
+// The icons of the « Icon pack » section of the review: each name must exist.
 const WANTED = `home search graph tags journal favorites concept entity synthesis source draft stable deprecated verified unverified needs-review stale star
 copy-link copy-markdown success error sun moon system filter operator-tag operator-type operator-status operator-phrase operator-exclude recent clear toc
 chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated kind-query kind-lint kind-update zoom-in zoom-out
@@ -19,7 +19,7 @@ test("le pack contient toutes les icônes demandées, et seulement elles", () =>
   expect(new Set(ICON_NAMES).size).toBe(ICON_NAMES.length);
 });
 
-// --- lecture minimale d'un attribut `d` : commandes, nombre d'arguments, extrémités absolues ---
+// --- minimal reading of a `d` attribute: commands, argument count, absolute endpoints ---
 const ARGS: Record<string, number> = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0 };
 function endpoints(d: string): [number, number][] {
   const toks = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/g) ?? [];
@@ -65,7 +65,7 @@ test("lecteur de chemin : cas connus", () => {
 });
 
 const SHAPES = new Set(["path", "circle", "rect", "g"]);
-const MARGIN = 1.5; // marge optique de 2, avec la tolérance des extrémités arrondies
+const MARGIN = 1.5; // optical margin of 2, with the tolerance of rounded endpoints
 
 test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   const { document } = parseHTML(`<!doctype html><body>${iconSvg(name, { size: 20 })}`);
@@ -77,7 +77,7 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   expect(svg.getAttribute("stroke-width")).toBe("1.75");
   expect(svg.getAttribute("stroke-linecap")).toBe("round");
   expect(svg.getAttribute("stroke-linejoin")).toBe("round");
-  expect(svg.getAttribute("aria-hidden")).toBe("true"); // décorative par défaut
+  expect(svg.getAttribute("aria-hidden")).toBe("true"); // decorative by default
   expect(svg.getAttribute("role")).toBeNull();
 
   const shapes = [...svg.querySelectorAll("*")];
@@ -86,7 +86,7 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
     const tag = el.tagName.toLowerCase();
     expect(SHAPES.has(tag), `élément ${tag} non prévu`).toBe(true);
     expect(el.getAttribute("fill"), "pas de remplissage propre à une forme").toBeNull();
-    if (tag === "g") continue; // groupe transformé (copy-link) : étendue calculée après rotation, vérifiée à l'œil
+    if (tag === "g") continue; // transformed group (copy-link): extent computed after rotation, checked by eye
     const inside = !el.closest("g");
     if (tag === "path") {
       const d = el.getAttribute("d");
@@ -168,7 +168,7 @@ test("type-meta : libellés français du journal, identifiants techniques inchan
     expect(k.icon).toBe(`kind-${k.kind}`);
   }
   expect(kindLabel("ingest")).toBe("Compilation");
-  expect(kindLabel("inconnu")).toBe("inconnu"); // un identifiant inconnu s'affiche tel quel
+  expect(kindLabel("inconnu")).toBe("inconnu"); // an unknown identifier is displayed as is
   expect(kindIcon("inconnu")).toBe("note");
   for (const t of TYPES) expect(ICON_NAMES).toContain(t.icon);
   expect(typeIcon("Concept")).toBe("concept");

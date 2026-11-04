@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SiteData } from "#lib/types.js";
 
-/** Données écrites par `cortex export` dans $CORTEX_SITE_DATA (le site ne lit jamais le wiki lui-même). */
+/** Data written by `cortex export` into $CORTEX_SITE_DATA (the site never reads the wiki itself). */
 export const dataFile = (name: string): string => {
 	const dir = process.env.CORTEX_SITE_DATA;
 	if (!dir) throw new Error("CORTEX_SITE_DATA manquant : le site se construit avec `cortex export`.");

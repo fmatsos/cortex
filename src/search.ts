@@ -3,9 +3,9 @@ import { readDocs } from "./lib";
 
 export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number };
 
-/** Index FTS5 en mémoire, reconstruit depuis wiki/ et raw/ : aucune écriture, donc utilisable en bac à sable lecture seule. */
+/** In-memory FTS5 index, rebuilt from wiki/ and raw/: no writes, so usable in a read-only sandbox. */
 export async function buildIndex(root: string): Promise<Database> {
-  // ponytail: reconstruction complète à chaque recherche (~ms pour 100 fichiers) ; index persistant incrémental par mtime au-delà de quelques milliers
+  // ponytail: full rebuild on every search (~ms for 100 files); incremental persistent index by mtime beyond a few thousand
   const db = new Database(":memory:");
   db.run(`CREATE VIRTUAL TABLE docs USING fts5(path UNINDEXED, area UNINDEXED, title, body, tokenize = 'unicode61 remove_diacritics 2')`);
   const ins = db.prepare("INSERT INTO docs (path, area, title, body) VALUES (?, ?, ?, ?)");
@@ -21,14 +21,14 @@ export async function buildIndex(root: string): Promise<Database> {
   return db;
 }
 
-/** Chaque terme est mis entre guillemets : l'apostrophe ou le tiret d'une saisie libre ne casse pas la syntaxe FTS5. */
+/** Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. */
 export const ftsQuery = (q: string) =>
   q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`).join(" ");
 
 export async function search(root: string, q: string, opts: { in?: "wiki" | "raw"; limit?: number } = {}): Promise<Hit[]> {
   const db = await buildIndex(root);
   const where = opts.in ? "AND area = $area" : "";
-  // titre pondéré ×5 ; wiki avant raw
+  // title weighted ×5; wiki before raw
   const rows = db.query(`
     SELECT path, area, title, snippet(docs, 3, '«', '»', '…', 12) AS snippet, bm25(docs, 0, 0, 5, 1) AS score
     FROM docs WHERE docs MATCH $q ${where}

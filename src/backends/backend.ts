@@ -1,28 +1,28 @@
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
-/** Pont (Bridge) entre les commandes (compile, ask) et les agents. Chaque client implémente `Backend`. */
+/** Bridge between the commands (compile, ask) and the agents. Each client implements `Backend`. */
 export type Mode = "write" | "read";
 export type Config = { client?: string; model?: string; effort?: string; language?: string; schema?: string; raw_path?: string; page_path?: string };
 
 export interface Backend {
-  /** Commande de la session interactive : l'agent présente son plan avant d'écrire. */
+  /** Command of the interactive session: the agent presents its plan before writing. */
   interactive(prompt: string): string[];
-  /** Exécution non interactive ; renvoie le texte final, lève en cas d'échec. */
+  /** Non-interactive execution; returns the final text, throws on failure. */
   run(root: string, prompt: string, mode: Mode): Promise<string>;
 }
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 
-/** CORTEX_AGENT remplace la commande interactive de n'importe quel backend. */
-/** Option de CLI seulement si la valeur est définie. */
+/** CORTEX_AGENT replaces the interactive command of any backend. */
+/** CLI option only if the value is defined. */
 export const flag = (name: string, v?: string) => (v ? [name, v] : []);
 
 export const interactiveWith = (fallback: (prompt: string) => string[]) => (prompt: string) =>
   process.env.CORTEX_AGENT ? [...split(process.env.CORTEX_AGENT), prompt] : fallback(prompt);
 
 /**
- * CLI de l'agent déjà installée : les SDK la pilotent au lieu d'embarquer leur propre binaire
- * (installation `bun install --omit optional` : ~94 Mo au lieu de ~1,2 Go de binaires par plateforme).
+ * Agent CLI already installed: the SDKs drive it instead of shipping their own binary
+ * (`bun install --omit optional` installation: ~94 MB instead of ~1.2 GB of per-platform binaries).
  */
 export function cli(name: string): string {
   const p = Bun.which(name);
@@ -30,23 +30,23 @@ export function cli(name: string): string {
   return p;
 }
 
-/** Chargement à la demande : le SDK d'un client non configuré n'est jamais importé. */
+/** Lazy loading: the SDK of an unconfigured client is never imported. */
 export async function load<T>(pkg: string): Promise<T> {
   try { return (await import(pkg)) as T; }
   catch { throw new Error(`SDK absent : bun add --cwd cli ${pkg}`); }
 }
 
 /**
- * Enferme une commande d'agent : tout le dépôt en lecture seule, sauf wiki/ en mode écriture.
- * Vaut pour n'importe quelle CLI (moteur par défaut, sessions interactives) ; le reste du système reste inscriptible
- * (état propre de l'agent : ~/.claude, ~/.codex…).
- * Linux : bubblewrap. macOS : sandbox-exec (Seatbelt, celui qu'utilisent Codex et Claude Code).
+ * Confines an agent command: whole repo read-only, except wiki/ in write mode.
+ * Applies to any CLI (default engine, interactive sessions); the rest of the system stays writable
+ * (the agent's own state: ~/.claude, ~/.codex…).
+ * Linux: bubblewrap. macOS: sandbox-exec (Seatbelt, the one Codex and Claude Code use).
  */
 export function confine(root: string, cmd: string[], mode: Mode): string[] {
-  const r = realpathSync(root); // macOS : /var → /private/var, le profil doit viser le chemin réel
+  const r = realpathSync(root); // macOS: /var → /private/var, the profile must target the real path
   const wiki = join(r, "wiki");
   if (process.platform === "darwin") {
-    const q = (p: string) => JSON.stringify(p); // chaîne SBPL entre guillemets, échappée
+    const q = (p: string) => JSON.stringify(p); // quoted, escaped SBPL string
     const write = mode === "write" ? `(require-not (subpath ${q(wiki)}))` : "";
     const profile = `(version 1)(allow default)(deny file-write* (require-all (subpath ${q(r)}) ${write}))`;
     return ["sandbox-exec", "-p", profile, ...cmd];

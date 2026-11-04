@@ -18,8 +18,8 @@ export type Extract = {
 };
 
 /**
- * Page web → Markdown. defuddle d'abord ; Readability + Turndown en parallèle, gardé s'il est nettement plus long
- * (defuddle tronque parfois sans prévenir, cf. OKF à l'étape 0).
+ * Web page → Markdown. defuddle first; Readability + Turndown in parallel, kept if clearly longer
+ * (defuddle sometimes truncates without warning, cf. OKF at step 0).
  */
 export async function extractUrl(url: string): Promise<Extract> {
   const res = await fetch(url, { headers: { "user-agent": UA, "accept-language": "fr,en;q=0.8" }, signal: AbortSignal.timeout(30_000) });
@@ -30,19 +30,19 @@ export async function extractUrl(url: string): Promise<Extract> {
   const d = await Defuddle(parseHTML(html).document, url, { markdown: true });
   const doc = parseHTML(html).document;
   const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute("href");
-  const r = new Readability(doc as any).parse(); // mute doc : canonical lu avant
+  const r = new Readability(doc as any).parse(); // mutates doc: canonical read beforehand
   const rb = r?.content ? new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" }).turndown(r.content) : "";
   const [wd, wr] = [words(d.content ?? ""), words(rb)];
-  // ponytail: seuil 1,3 calibré sur les 21 sources de l'étape 0 ; à revoir si des faux positifs apparaissent
+  // ponytail: threshold 1.3 calibrated on the 21 sources of step 0; to revisit if false positives appear
   const useRb = wr > wd * 1.3;
   const content = useRb ? rb : d.content ?? "";
   if (words(content) < 50) throw new Error(`Corps quasi vide (${words(content)} mots) sur ${url} : blocage anti-bot ? Rien n'est écrit.`);
-  // marqueurs vérifiés : Next (« Il reste 69 % de l'article »), Substack (« This post is for paid subscribers »)
+  // verified markers: Next (« Il reste 69 % de l'article »), Substack (« This post is for paid subscribers »)
   const paywall = /Il reste \d+ ?% de l.article|This post is for paid subscribers/i.test(html);
   return {
     title: d.title || r?.title || url, content, kind: "article",
     url: canonical ? new URL(canonical, res.url).href : res.url,
-    author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist : defuddle rend un id numérique */, published: d.published || undefined,
+    author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist: defuddle returns a numeric id */, published: d.published || undefined,
     extractor: useRb ? "readability/0.6+turndown" : "defuddle/0.19.6+linkedom",
     partial: paywall ? "paywall : contenu partiel" : undefined,
   };
@@ -62,7 +62,7 @@ export function extractText(txt: string, name?: string): Extract {
   return { title: h1 ?? name ?? txt.trim().split("\n")[0].slice(0, 80), content: txt, kind: "note", extractor: "manual" };
 }
 
-/** Source déjà présente (une des URL normalisées ou même empreinte) → son id, sinon undefined. */
+/** Source already present (one of the normalized URLs or same fingerprint) → its id, otherwise undefined. */
 export async function findDuplicate(root: string, urls: (string | undefined)[], hash?: string): Promise<string | undefined> {
   const u = new Set(urls.filter(Boolean).map((x) => normUrl(x!)));
   for (const d of await readDocs(root, "raw")) {
@@ -75,11 +75,11 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   let ex: Extract;
   const isUrl = /^https?:\/\//.test(input);
   if (isUrl) {
-    const known = await findDuplicate(root, [input]); // avant le fetch : pas de requête inutile
+    const known = await findDuplicate(root, [input]); // before the fetch: no needless request
     if (known) return { id: known, duplicate: true };
     ex = await extractUrl(input);
   }
-  else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text : contenu fourni sans stdin (serveur MCP)
+  else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)
   else {
     const f = Bun.file(input);
     if (!(await f.exists())) throw new Error(`Fichier introuvable : ${input}`);
@@ -93,7 +93,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
-  // dossier selon raw_path (config.json) ; son dernier segment est l'id, unique sous raw/
+  // folder according to raw_path (config.json); its last segment is the id, unique under raw/
   const rel = free(expand((await naming(root)).raw_path, { at: now, title: ex.title, kind: ex.kind }), (p) => rawIdTaken(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p)));
   const id = rel.split("/").at(-1)!;
   if (opts.dryRun) return { id, duplicate: false, ex };
@@ -120,7 +120,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   return { id, duplicate: false, ex };
 }
 
-/** Ligne de compte rendu d'un `add` réussi, partagée par `cortex add` et `cortex inbox`. */
+/** Report line of a successful `add`, shared by `cortex add` and `cortex inbox`. */
 export function describe(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
   if (r.duplicate || !r.ex) return `= déjà présent : ${r.id}`;
   return `${dryRun ? "~ (dry-run)" : "+"} ${r.id}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;

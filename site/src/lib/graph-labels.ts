@@ -1,15 +1,15 @@
-/** Logique pure du graphe (testée par bun test) : taille bornée des nœuds et choix des libellés sans collision. */
+/** Pure graph logic (tested by bun test): bounded node size and collision-free label selection. */
 
-/** Rayon d'un nœud en pixels écran : proportionnel au zoom, mais borné pour rester lisible, quel que soit le zoom. */
+/** Radius of a node in screen pixels: proportional to the zoom, but bounded to stay readable, whatever the zoom. */
 export const screenRadius = (degree: number, k: number) =>
 	Math.min(14, Math.max((2.5 + Math.sqrt(degree) * 1.7) * k, 2.5 + Math.sqrt(degree) * 0.5));
 
-/** Nombre maximal de libellés : proportionnel à la surface visible, et qui croît avec le zoom (jamais plus de 150). */
+/** Maximum number of labels: proportional to the visible area, and growing with the zoom (never more than 150). */
 export const labelBudget = (w: number, h: number, k: number) => Math.min(150, Math.ceil(((w * h) / 14000) * Math.max(1, k)));
 
 /**
- * Raccourcit `text` pour qu'il tienne en `maxWidth` pixels (UI18) : coupe à la dernière longueur qui rentre, suivie de « … ».
- * `measure` donne la largeur d'une chaîne (canvas) ; recherche dichotomique : peu de mesures même pour un titre très long.
+ * Shortens `text` so that it fits in `maxWidth` pixels (UI18): cuts at the last length that fits, followed by "…".
+ * `measure` gives the width of a string (canvas); binary search: few measurements even for a very long title.
  */
 export function truncateToWidth(text: string, maxWidth: number, measure: (s: string) => number): string {
 	if (measure(text) <= maxWidth) return text;
@@ -26,9 +26,9 @@ export type Rect ={ x: number; y: number; w: number; h: number; force?: boolean 
 const CELL = 96;
 
 /**
- * Retient, parmi `items` triés par priorité décroissante, ceux dont le rectangle (en pixels écran) ne chevauche aucun rectangle
- * déjà retenu, dans la limite de `max`. Un rectangle `force` est toujours retenu. `rect` renvoie `null` pour écarter un élément
- * (hors écran). Grille spatiale : le coût reste proportionnel au nombre d'éléments, même pour des milliers de nœuds.
+ * Keeps, among `items` sorted by decreasing priority, those whose rectangle (in screen pixels) overlaps no rectangle
+ * already kept, within the limit of `max`. A `force` rectangle is always kept. `rect` returns `null` to discard an item
+ * (off screen). Spatial grid: the cost stays proportional to the number of items, even for thousands of nodes.
  */
 export function placeLabels<T>(items: Iterable<T>, rect: (t: T) => Rect | null, max: number, gap = 3): T[] {
 	const grid = new Map<number, Rect[]>();

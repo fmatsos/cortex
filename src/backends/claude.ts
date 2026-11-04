@@ -2,7 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 
-// --- Claude Agent SDK : chaque appel d'outil passe par le garde-fou, avant exécution ------------
+// --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
 
 export default function claude(cfg: Config): Backend {
   return {
@@ -17,9 +17,9 @@ export default function claude(cfg: Config): Backend {
           model: cfg.model,
           effort: cfg.effort as any, // low | medium | high | xhigh | max
           pathToClaudeCodeExecutable: cli("claude"),
-          settingSources: ["project"], // CLAUDE.md, sans les autorisations de ~/.claude qui court-circuiteraient le garde-fou
-          permissionMode: "default", // acceptEdits/bypass sauteraient canUseTool
-          allowedTools: [], // rien d'approuvé d'office : chaque appel passe par canUseTool
+          settingSources: ["project"], // CLAUDE.md, without the ~/.claude permissions that would bypass the guard
+          permissionMode: "default", // acceptEdits/bypass would skip canUseTool
+          allowedTools: [], // nothing approved by default: every call goes through canUseTool
           canUseTool: async (tool, input) => {
             const v = guard(root, tool, input as Record<string, any>, mode);
             if (v.allow) return { behavior: "allow", updatedInput: input };
@@ -38,9 +38,9 @@ export default function claude(cfg: Config): Backend {
   };
 }
 
-// --- Garde-fou de permissions (utilisé par le backend Claude) ----------------------------------
+// --- Permission guard (used by the Claude backend)----------------------------------------------
 
-// `cortex log` en lecture : seules ses options ; `cortex log add` n'est permis qu'en écriture
+// `cortex log` for reading: only its options; `cortex log add` is only allowed when writing
 const LOG_READ = "log( --json| --limit \\d+| --kind \\w+)*$";
 const CORTEX_CMD = {
   read: new RegExp(`^cortex (search( |$)|${LOG_READ})`),
@@ -49,7 +49,7 @@ const CORTEX_CMD = {
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-/** Chemin réel (symlinks résolus), y compris pour un fichier pas encore créé. */
+/** Real path (symlinks resolved), including for a file not yet created. */
 function real(p: string): string {
   let cur = p;
   const tail: string[] = [];
@@ -60,15 +60,15 @@ function real(p: string): string {
 export type Verdict = { allow: true } | { allow: false; reason: string };
 
 /**
- * Remplace chaque chaîne entre guillemets par `Q` : le shell la prend pour du texte (celui d'une entrée de journal
- * contient `;`, `|`, `>`…). Refusé (undefined) : guillemet non fermé, ou `$`, accent grave, `\` dans des guillemets
- * doubles (l'expansion s'y exécuterait), ou `\` hors guillemets (échappement d'un guillemet). Les guillemets simples sont littéraux.
+ * Replaces each quoted string with `Q`: the shell takes it for text (that of a journal entry
+ * contains `;`, `|`, `>`…). Refused (undefined): unclosed quote, or `$`, backtick, `\` inside double
+ * quotes (expansion would run there), or `\` outside quotes (escaping a quote). Single quotes are literal.
  */
 export function unquote(cmd: string): string | undefined {
   let out = "";
   for (let i = 0; i < cmd.length; i++) {
     const q = cmd[i];
-    if (q === "\\") return undefined; // hors guillemets, \' ou \" serait un guillemet littéral pour le shell, et ce qui suit, une commande
+    if (q === "\\") return undefined; // outside quotes, \' or \" would be a literal quote for the shell, and what follows, a command
     if (q !== "'" && q !== '"') { out += q; continue; }
     const j = cmd.indexOf(q, i + 1);
     if (j < 0 || (q === '"' && /[$`\\]/.test(cmd.slice(i + 1, j)))) return undefined;
@@ -78,7 +78,7 @@ export function unquote(cmd: string): string | undefined {
   return out;
 }
 
-/** Fonction pure : un outil demandé par l'agent est-il permis ? Écritures limitées à wiki/, Bash limité à cortex. */
+/** Pure function: is a tool requested by the agent allowed? Writes limited to wiki/, Bash limited to cortex. */
 export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode): Verdict {
   if (READ_ONLY.has(tool)) return { allow: true };
   if (tool === "Bash") {

@@ -10,14 +10,14 @@ import {
 	type OfflineState, type ToWorker,
 } from "#lib/offline.js";
 
-// Hors ligne (voir docs/DESIGN.md, « Hors ligne »). Deux niveaux :
-//  - le socle (ressources `_app/`, pages hors `wiki/`, index de recherche, graphe) est précaché à l'installation ;
-//  - les pages du wiki sont gardées au fil des consultations (cache `runtime`, borné), ou toutes d'un coup sur demande
-//    explicite (« Télécharger tout le wiki », message `download-all`).
-// `version` = empreinte des données ET du frontend (CORTEX_SITE_VERSION) : un changement de l'un ou de l'autre change les caches.
+// Offline (see docs/DESIGN.md, "Hors ligne"). Two levels:
+//  - the base (`_app/` resources, pages outside `wiki/`, search index, graph) is precached at installation;
+//  - wiki pages are kept as they are visited (`runtime` cache, bounded), or all at once on explicit
+//    request ("Télécharger tout le wiki", `download-all` message).
+// `version` = fingerprint of the data AND of the frontend (CORTEX_SITE_VERSION): a change in either changes the caches.
 
-// Les chemins du manifeste sont relatifs au chemin de base : on les résout contre la portée du service worker,
-// donc le site marche sous n'importe quel sous-chemin.
+// Manifest paths are relative to the base path: they are resolved against the service worker's scope,
+// so the site works under any subpath.
 const scope = self.registration.scope;
 const names = cacheNames(scope, version);
 const url = (path: string) => new URL(path, scope).href;
@@ -28,9 +28,9 @@ const CORE = files.filter((f) => !isContentPath(f.path));
 const WIKI = files.filter((f) => isContentPath(f.path));
 const WIKI_PAGES = WIKI.filter((f) => !f.path.endsWith("__data.json")).length;
 
-// --- État diffusé aux pages ------------------------------------------------------------------------------------------
+// --- State broadcast to pages ----------------------------------------------------------------------------------------
 
-let phase: OfflineState["phase"] = "ready"; // un service worker qui répond à `status` est actif : son installation est terminée
+let phase: OfflineState["phase"] = "ready"; // a service worker that answers `status` is active: its installation is finished
 let phaseMessage: string | undefined;
 let coreDone = 0;
 const download: OfflineState["download"] = { state: "idle", done: 0, total: 0, bytes: 0 };
@@ -52,7 +52,7 @@ async function snapshot(): Promise<OfflineState> {
 }
 const report = async () => broadcast(await snapshot());
 
-// Avancement : au plus quatre messages par seconde (un par fichier saturerait le fil principal des pages)
+// Progress: at most four messages per second (one per file would saturate the pages' main thread)
 let lastReport = 0;
 const report_throttled = (force = false) => {
 	if (!force && Date.now() - lastReport < 250) return;
@@ -60,7 +60,7 @@ const report_throttled = (force = false) => {
 	return report();
 };
 
-// --- Installation : le socle seulement ---------------------------------------------------------------------------------
+// --- Installation: the base only ---------------------------------------------------------------------------------------
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(precache());
@@ -69,12 +69,12 @@ self.addEventListener("install", (event) => {
 async function precache() {
 	phase = "preparing";
 	const cache = await caches.open(names.core);
-	const have = new Set((await cache.keys()).map((r) => r.url)); // une installation interrompue reprend où elle s'était arrêtée
+	const have = new Set((await cache.keys()).map((r) => r.url)); // an interrupted installation resumes where it stopped
 	coreDone = CORE.filter((f) => have.has(f.href)).length;
 	await report_throttled(true);
 	try {
 		await pool(CORE.filter((f) => !have.has(f.href)), 6, async (f) => {
-			// `reload` : on ne veut pas d'une copie périmée du cache HTTP du navigateur
+			// `reload`: we do not want a stale copy from the browser's HTTP cache
 			const response = await fetch(new Request(f.href, { cache: "reload" }));
 			if (!response.ok) throw new Error(`${response.status} ${f.path}`);
 			await cache.put(f.href, response);
@@ -85,37 +85,37 @@ async function precache() {
 		phase = "error";
 		phaseMessage = error instanceof Error ? error.message : String(error);
 		await report_throttled(true);
-		throw error; // l'installation échoue : l'ancien service worker (s'il y en a un) reste actif
+		throw error; // the installation fails: the old service worker (if any) stays active
 	}
 	phase = "ready";
 	phaseMessage = undefined;
-	// site en lecture seule : la nouvelle version prend le relais sans attendre la fermeture des onglets
-	// (sinon un ancien service worker, qui ne connaît pas le message `status`, laisse l'indicateur en « Préparation »)
+	// read-only site: the new version takes over without waiting for the tabs to close
+	// (otherwise an old service worker, which does not know the `status` message, leaves the indicator on "Préparation")
 	await self.skipWaiting();
 }
 
-// --- Activation : nettoyage du seul wiki ---------------------------------------------------------------------------------
+// --- Activation: cleaning up this wiki only ------------------------------------------------------------------------------
 
 self.addEventListener("activate", (event) => {
 	event.waitUntil((async () => {
-		// uniquement les anciennes versions de CE wiki (préfixe + portée) : CacheStorage est partagé par origine
+		// only the old versions of THIS wiki (prefix + scope): CacheStorage is shared per origin
 		for (const name of obsoleteCaches(await caches.keys(), scope, version)) await caches.delete(name);
-		// ressources hachées devenues obsolètes dans le cache courant
+		// hashed resources that became obsolete in the current cache
 		const core = await caches.open(names.core);
 		for (const key of staleImmutable((await core.keys()).map((r) => r.url), scope, IMMUTABLE)) await core.delete(key);
-		// `claim` : la page qui vient d'installer le service worker en profite sans recharger (sinon « disponible hors ligne » serait faux)
+		// `claim`: the page that just installed the service worker benefits from it without reloading (otherwise "disponible hors ligne" would be false)
 		await self.clients.claim();
 		await report();
 	})());
 });
 
-// --- Requêtes ------------------------------------------------------------------------------------------------------------
+// --- Requests ------------------------------------------------------------------------------------------------------------
 
 async function lookup(key: string): Promise<Response | undefined> {
 	return (await (await caches.open(names.core)).match(key)) ?? (await (await caches.open(names.runtime)).match(key));
 }
 
-/** Garde une réponse : dans le socle si la clé en fait partie (copie rafraîchie), sinon dans le cache borné des pages consultées. */
+/** Keeps a response: in the base if the key is part of it (refreshed copy), otherwise in the bounded cache of visited pages. */
 async function remember(key: string, response: Response) {
 	const core = await caches.open(names.core);
 	if (await core.match(key)) return core.put(key, response);
@@ -133,10 +133,10 @@ self.addEventListener("fetch", (event) => {
 async function respond(event: FetchEvent): Promise<Response> {
 	const { request } = event;
 	const key = cacheKey(request.url);
-	// fichiers immuables (nom = empreinte du contenu) : le cache d'abord
+	// immutable files (name = content fingerprint): cache first
 	if (IMMUTABLE.has(key)) return (await lookup(key)) ?? fetch(request);
 
-	// pages et données : le réseau d'abord (les mises à jour se voient en ligne), mais borné quand une copie existe
+	// pages and data: network first (updates are seen online), but bounded when a copy exists
 	const cached = await lookup(key);
 	const network = fetch(request).then((response) => {
 		if (response.status === 200) event.waitUntil(remember(key, response.clone()).catch(() => {}));
@@ -152,11 +152,11 @@ async function respond(event: FetchEvent): Promise<Response> {
 	}
 	const response = await withTimeout(network, NETWORK_TIMEOUT_MS);
 	if (response && !isTemporaryFailure(response.status)) return response;
-	event.waitUntil(network.catch(() => {})); // délai dépassé : la copie est servie, la réponse tardive rafraîchit quand même le cache
+	event.waitUntil(network.catch(() => {})); // delay exceeded: the copy is served, the late response still refreshes the cache
 	return cached;
 }
 
-// --- Messages des pages --------------------------------------------------------------------------------------------------
+// --- Messages from pages -------------------------------------------------------------------------------------------------
 
 self.addEventListener("message", (event) => {
 	const message = event.data as ToWorker | undefined;
@@ -165,7 +165,7 @@ self.addEventListener("message", (event) => {
 	else if (message?.type === "cancel") cancelled = true;
 });
 
-/** Télécharge toutes les pages du wiki absentes du cache (reprend où l'on s'était arrêté). */
+/** Downloads all the wiki pages absent from the cache (resumes where it stopped). */
 async function downloadAll() {
 	if (download.state === "running") return;
 	Object.assign(download, { state: "running", done: 0, total: 0, bytes: 0, message: undefined });
@@ -175,7 +175,7 @@ async function downloadAll() {
 	const todo = [];
 	for (const f of WIKI) {
 		if (inCore.has(f.href)) continue;
-		// déjà consultée : la copie quitte le cache borné (qui pourrait l'évincer) pour rejoindre le socle
+		// already visited: the copy leaves the bounded cache (which could evict it) to join the base
 		const seen = await runtime.match(f.href);
 		if (seen) { await core.put(f.href, seen); await runtime.delete(f.href); } else todo.push(f);
 	}

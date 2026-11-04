@@ -3,8 +3,8 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { STATUS_LABEL, statusMeta } from "#lib/type-meta.js";
 
-	// Statut d'une page (draft | stable | deprecated). Stable reste discret ; brouillon et déprécié sont les plus saillants.
-	// Texte et icône toujours ensemble : l'état ne repose jamais sur la couleur seule.
+	// Status of a page (draft | stable | deprecated). Stable stays discreet; draft and deprecated are the most prominent.
+	// Text and icon always together: the state never relies on color alone.
 	let { status }: { status: string } = $props();
 	const meta = $derived(statusMeta(status));
 </script>

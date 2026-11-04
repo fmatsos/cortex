@@ -8,15 +8,15 @@
 	import { STATUS_META, TYPES, typeColor } from "#lib/type-meta.js";
 
 	/**
-	 * Facettes manipulables : type, statut, état (favoris, relecture, source partielle) et tags, avec leur nombre de pages dans le
-	 * contexte de la requête. Elles lisent et écrivent la même saisie que le champ (`search.q`) : un clic ajoute ou retire l'opérateur
-	 * texte correspondant (`type:concept`, `#llm`…), et un opérateur tapé à la main allume la facette.
-	 * Type et statut sont à choix unique (deux valeurs en ET ne donneraient jamais rien) ; les autres s'additionnent.
+	 * Manipulable facets: type, status, state (favorites, review, partial source) and tags, with their page count in the
+	 * query context. They read and write the same input as the field (`search.q`): a click adds or removes the matching text
+	 * operator (`type:concept`, `#llm`…), and an operator typed by hand lights up the facet.
+	 * Type and status are single-choice (two values ANDed would never match anything); the others add up.
 	 */
 	let { facets, class: className = "" }: { facets: Facets; class?: string } = $props();
 
 	const p = $derived(parseQuery(search.q));
-	// valeurs comparées repliées (« Mémoire » et #memoire sont le même tag) ; le type garde sa forme canonique (« Concept »)
+	// compared values folded ("Mémoire" and #memoire are the same tag); the type keeps its canonical form ("Concept")
 	const on = (key: Op["key"], v: string) => activeValues(p, key).has(key === "type" ? v : fold(v));
 	const toggle = (key: Op["key"], v: string) => { search.q = toggleFacet(search.q, key, v); };
 	const anyOps = $derived(p.ops.length > 0);

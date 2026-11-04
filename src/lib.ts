@@ -18,7 +18,7 @@ export function parseDoc(path: string, txt: string): Doc {
   return { path, fm: (Bun.YAML.parse(m[1]) as any) ?? {}, body: txt.slice(m[0].length) };
 }
 
-/** Fichiers .md sous `dir` (relatif à root), chemins renvoyés relatifs à root. */
+/** `.md` files under `dir` (relative to root), paths returned relative to root. */
 export async function readDocs(root: string, dir: string): Promise<Doc[]> {
   const out: Doc[] = [];
   if (!existsSync(join(root, dir))) return out;
@@ -29,7 +29,7 @@ export async function readDocs(root: string, dir: string): Promise<Doc[]> {
   return out;
 }
 
-/** Horodatage ISO local avec le vrai décalage horaire (gère l'heure d'été). */
+/** Local ISO timestamp with the real UTC offset (handles daylight saving). */
 export function localIso(d = new Date()): string {
   const off = -d.getTimezoneOffset();
   const p = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
@@ -44,14 +44,14 @@ export function slugify(s: string, max = 50): string {
   return out.slice(1) || "source";
 }
 
-/** UUID v7 : horodaté puis aléatoire, trié dans l'ordre de création (nommage par défaut, voir naming.ts). */
+/** UUID v7: timestamped then random, sorted in creation order (default naming, see naming.ts). */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const newId = (at = new Date()) => Bun.randomUUIDv7("hex", at);
 
-/** Id raw : le dernier segment du dossier d'une source (unique sous raw/). */
+/** Raw id: the last segment of a source's folder (unique under raw/). */
 export const RAW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** Chemin (relatif à root) de la source raw `id`, où que le nommage l'ait rangée sous raw/ ; undefined si absente. */
+/** Path (relative to root) of raw source `id`, wherever the naming filed it under raw/; undefined if absent. */
 export function rawPath(root: string, id: string): string | undefined {
   if (!RAW_ID.test(id) || !existsSync(join(root, "raw"))) return;
   for (const f of new Bun.Glob(`**/${id}/source.md`).scanSync(join(root, "raw"))) return `raw/${f}`;
@@ -59,7 +59,7 @@ export function rawPath(root: string, id: string): string | undefined {
 
 export const sha256 = (s: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
-/** URL comparable : sans fragment, sans paramètres de tracking, sans / final, hôte en minuscules. */
+/** Comparable URL: no fragment, no tracking parameters, no trailing /, lowercase host. */
 export function normUrl(u: string): string {
   try {
     const x = new URL(u);
@@ -76,8 +76,8 @@ export const wikiLinks = (d: Doc) => new Set([...d.body.matchAll(/\]\((\/wiki\/[
 const resources = (d: Doc) => new Set<string>((d.fm.sources ?? []).map((s: any) => s.resource));
 
 /**
- * Pages wiki liées à `path`, par force décroissante : lien sortant ou entrant (3 chacun), source raw partagée (2),
- * tag partagé (1). Pure : travaille sur les pages déjà lues (index.md et log.md exclus).
+ * Wiki pages linked to `path`, by decreasing strength: outgoing or incoming link (3 each), shared raw source (2),
+ * shared tag (1). Pure: works on pages already read (index.md and log.md excluded).
  */
 export function related(docs: Doc[], path: string): Related[] {
   const pages = docs.filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));

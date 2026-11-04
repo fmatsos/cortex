@@ -4,7 +4,7 @@ import { writeLogMd } from "./log";
 
 const ORDER: [string, string][] = [["Concept", "Concepts"], ["Entity", "Entités"], ["Synthesis", "Synthèses"], ["Source", "Sources"]];
 
-/** wiki/index.md généré depuis les frontmatters (réservé OKF : pas de frontmatter). */
+/** wiki/index.md generated from the frontmatters (OKF-reserved: no frontmatter). */
 export async function renderIndex(root: string): Promise<string> {
   const pages = (await readDocs(root, "wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
   let idx = "# Index\n";
@@ -16,7 +16,7 @@ export async function renderIndex(root: string): Promise<string> {
   return idx;
 }
 
-/** Les deux fichiers générés du wiki : index.md (depuis les frontmatters) et log.md (depuis log.jsonl). */
+/** The two generated wiki files: index.md (from the frontmatters) and log.md (from log.jsonl). */
 export async function regenerate(root: string) {
   await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
   await writeLogMd(root);

@@ -3,14 +3,14 @@ import { kindLabel, KINDS } from "./type-meta";
 import type { LogEntryData } from "./types";
 
 /**
- * Journal côté client : identifiants stables, filtres synchronisés dans l'URL, recherche locale, archives par période.
- * Fonctions pures (testées par `cli/src/log-view.test.ts`), sans accès au DOM.
+ * Client-side log: stable identifiers, filters synchronized in the URL, local search, archives by period.
+ * Pure functions (tested by `src/log-view.test.ts`), with no DOM access.
  */
 
-/** Une entrée du journal avec son identifiant d'ancre et son texte de recherche (libellé français compris). */
+/** A log entry with its anchor identifier and its search text (French label included). */
 export type LogEntry = LogEntryData & { id: string; hay: string };
 
-/** FNV-1a 32 bits, en base 36 sur 6 caractères. */
+/** 32-bit FNV-1a, in base 36 over 6 characters. */
 const hash = (s: string): string => {
 	let h = 0x811c9dc5;
 	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
@@ -18,8 +18,8 @@ const hash = (s: string): string => {
 };
 
 /**
- * Identifiant d'ancre stable : la date de l'entrée et une empreinte de son contenu, donc indépendant de sa position
- * (ajouter des entrées plus récentes ne change aucun lien). Deux entrées identiques reçoivent un suffixe d'ordre.
+ * Stable anchor identifier: the entry's date and a fingerprint of its content, hence independent of its position
+ * (adding more recent entries changes no link). Two identical entries get an order suffix.
  */
 export function withIds(entries: LogEntryData[]): LogEntry[] {
 	const seen = new Map<string, number>();
@@ -35,7 +35,7 @@ export type LogFilter = { kind: string; q: string; month: string; day: string };
 export const NO_FILTER: LogFilter = { kind: "", q: "", month: "", day: "" };
 export const isUnfiltered = (f: LogFilter) => !f.kind && !f.q.trim() && !f.month && !f.day;
 
-/** Lit les filtres dans l'URL : `type`, `q`, `mois` (AAAA-MM), `jour` (AAAA-MM-JJ). Une valeur inconnue ou mal formée est ignorée. */
+/** Reads the filters from the URL: `type`, `q`, `mois` (YYYY-MM), `jour` (YYYY-MM-DD). An unknown or malformed value is ignored. */
 export function readFilter(sp: URLSearchParams): LogFilter {
 	const kind = sp.get("type") ?? "", month = sp.get("mois") ?? "", day = sp.get("jour") ?? "";
 	return {
@@ -46,7 +46,7 @@ export function readFilter(sp: URLSearchParams): LogFilter {
 	};
 }
 
-/** Chaîne de requête canonique d'un filtre (`""` si aucun filtre). Un jour précis rend le mois superflu. */
+/** Canonical query string of a filter (`""` if no filter). A specific day makes the month redundant. */
 export function filterQuery(f: LogFilter): string {
 	const sp = new URLSearchParams();
 	if (f.kind) sp.set("type", f.kind);
@@ -57,7 +57,7 @@ export function filterQuery(f: LogFilter): string {
 	return s && `?${s}`;
 }
 
-/** Les entrées qui passent les filtres. `skip` ignore un critère : sert aux décomptes par facette (type, mois…). */
+/** The entries that pass the filters. `skip` ignores one criterion: used for per-facet counts (type, month…). */
 export function filterEntries(entries: LogEntry[], f: LogFilter, skip?: keyof LogFilter): LogEntry[] {
 	const words = skip === "q" ? [] : fold(f.q).split(/\s+/).filter(Boolean);
 	return entries.filter(
@@ -69,7 +69,7 @@ export function filterEntries(entries: LogEntry[], f: LogFilter, skip?: keyof Lo
 	);
 }
 
-/** Décompte par clé, dans l'ordre d'apparition. */
+/** Count per key, in order of appearance. */
 export function countBy(entries: LogEntry[], key: (e: LogEntry) => string): Map<string, number> {
 	const m = new Map<string, number>();
 	for (const e of entries) m.set(key(e), (m.get(key(e)) ?? 0) + 1);
@@ -78,7 +78,7 @@ export function countBy(entries: LogEntry[], key: (e: LogEntry) => string): Map<
 export const monthOf = (e: { at: string }) => e.at.slice(0, 7);
 export const dayOf = (e: { at: string }) => e.at.slice(0, 10);
 
-/** Entrées (plus récente d'abord) regroupées par jour : un jour = une série contiguë. */
+/** Entries (most recent first) grouped by day: a day = a contiguous run. */
 export function groupDays<T extends { at: string }>(entries: T[]): { day: string; entries: T[] }[] {
 	const out: { day: string; entries: T[] }[] = [];
 	for (const e of entries) {
@@ -89,19 +89,19 @@ export function groupDays<T extends { at: string }>(entries: T[]): { day: string
 	return out;
 }
 
-/** Mois présents (plus récent d'abord) avec leur nombre d'entrées, et jours présents. */
+/** Months present (most recent first) with their entry count, and days present. */
 export function archives(entries: LogEntry[]) {
 	const months = [...countBy(entries, monthOf)].map(([month, n]) => ({ month, n })).sort((a, b) => b.month.localeCompare(a.month));
 	const days = [...countBy(entries, dayOf)].map(([day, n]) => ({ day, n })).sort((a, b) => b.day.localeCompare(a.day));
 	return { months, days };
 }
 
-// UTC : la date écrite dans le journal, sans décalage selon le fuseau du lecteur
+// UTC: the date written in the log, without offset depending on the reader's time zone
 const longDay = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 const shortDay = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "long", timeZone: "UTC" });
 const monthName = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
 export const dayLabel = (day: string) => longDay.format(new Date(`${day}T00:00:00Z`));
 export const dayShort = (day: string) => shortDay.format(new Date(`${day}T00:00:00Z`));
 export const monthLabel = (month: string) => monthName.format(new Date(`${month}-01T00:00:00Z`));
-/** Heure d'une entrée (`HH:MM`), ou `""` quand le journal ne note que la date. */
+/** Time of an entry (`HH:MM`), or `""` when the log only records the date. */
 export const hourOf = (at: string) => (at.length > 10 ? at.slice(11, 16) : "");

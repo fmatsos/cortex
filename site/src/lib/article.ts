@@ -5,18 +5,18 @@ import type { Link, PageData, SourceRef, TocItem } from "./types";
 import { TYPES } from "./type-meta";
 
 /**
- * Logique pure de la page article (testée par cli/src/article.test.ts) : sommaire, section courante, pages liées,
- * source originale, liens vers le graphe et les collections, termes à surligner à la lecture.
- * Aucune dépendance à SvelteKit : les composants n'ont plus qu'à afficher.
+ * Pure logic of the article page (tested by src/article.test.ts): table of contents, current section, related pages,
+ * original source, links to the graph and to the collections, terms to highlight when reading.
+ * No dependency on SvelteKit: components only have to display.
  */
 
-// --- Sommaire ---------------------------------------------------------------------------------------------------
+// --- Table of contents ------------------------------------------------------------------------------------------
 
-/** Ancres des sections que le composant ajoute après le corps (voir +page.svelte). */
+/** Anchors of the sections that the component adds after the body (see +page.svelte). */
 export const NOTES_ID = "h-notes";
 export const SOURCES_ID = "h-sources";
 
-/** Les titres du corps, suivis de Notes et Sources lorsqu'elles existent (UX20) : une seule liste, un seul suivi de section. */
+/** The body headings, followed by Notes and Sources when they exist (UX20): a single list, a single section tracking. */
 export function tocItems(toc: TocItem[], notes: number, sources: number): TocItem[] {
 	return [
 		...toc,
@@ -25,18 +25,18 @@ export function tocItems(toc: TocItem[], notes: number, sources: number): TocIte
 	];
 }
 
-/** Longueur (en caractères de HTML) à partir de laquelle une page à deux sections mérite déjà un sommaire. */
+/** Length (in characters of HTML) from which a two-section page already deserves a table of contents. */
 export const LONG_PAGE = 2500;
 
 /**
- * Le sommaire s'affiche dès deux sections (Notes et Sources comprises) si la page est longue, dès trois sinon (UX21) :
- * le nombre de titres du corps n'est pas un bon seuil, une page très citée reste navigable.
+ * The table of contents is shown from two sections (Notes and Sources included) if the page is long, from three otherwise (UX21):
+ * the number of body headings is not a good threshold, a heavily cited page stays navigable.
  */
 export const showToc = (items: TocItem[], htmlLength: number) => items.length >= 3 || (items.length === 2 && htmlLength >= LONG_PAGE);
 
 /**
- * Section courante : le dernier titre passé sous la ligne `limit` (distance depuis le haut de la fenêtre). Tout en bas
- * de la page, c'est la dernière section (une section finale courte n'atteindrait jamais la ligne).
+ * Current section: the last heading that passed below the `limit` line (distance from the top of the window). At the very bottom
+ * of the page, it is the last section (a short final section would never reach the line).
  */
 export function currentSection(tops: { id: string; top: number }[], limit: number, atEnd = false): string {
 	if (!tops.length) return "";
@@ -44,16 +44,16 @@ export function currentSection(tops: { id: string; top: number }[], limit: numbe
 	return tops.findLast((t) => t.top <= limit)?.id ?? "";
 }
 
-// --- Pages liées ------------------------------------------------------------------------------------------------
+// --- Related pages ----------------------------------------------------------------------------------------------
 
 export type RelatedIn = Link & { reasons: string[] };
-/** Un motif de page liée : icône, libellé court, et détail (titres des sources) lu au survol et par les lecteurs d'écran. */
+/** A related-page reason: icon, short label, and detail (source titles) read on hover and by screen readers. */
 export type Reason = { icon: IconName; label: string; detail?: string };
 export type RelatedEntry = Link & { why: Reason[] };
 
 /**
- * Les raisons d'une page liée telles que l'export les écrit (« lien sortant », « source partagée » répété une fois par
- * source, « tag partagé : x »…), ramenées à des motifs courts et dédupliqués. `shared` : titres des sources partagées.
+ * The reasons of a related page as the export writes them ("lien sortant", "source partagée" repeated once per
+ * source, "tag partagé : x"…), reduced to short, deduplicated reasons. `shared`: titles of the shared sources.
  */
 export function relatedReasons(reasons: string[], shared: string[] = []): Reason[] {
 	const has = (r: string) => reasons.includes(r);
@@ -73,15 +73,15 @@ export function relatedReasons(reasons: string[], shared: string[] = []): Reason
 export const actor = (by: string) => by.replace(/^human:/, "").replace("/", " · ");
 
 /**
- * Pages à explorer : les pages liées qui ne sont pas déjà des rétroliens (UX22 : une destination n'apparaît qu'une fois),
- * chacune avec ses motifs dédupliqués (UX23).
+ * Pages to explore: the related pages that are not already backlinks (UX22: a destination appears only once),
+ * each with its deduplicated reasons (UX23).
  */
 export function relatedEntries(backlinks: Link[], related: RelatedIn[], shared: Record<string, string[]> = {}): RelatedEntry[] {
 	const back = new Set(backlinks.map((b) => b.id));
 	return related.filter((r) => !back.has(r.id)).map(({ reasons, ...link }) => ({ ...link, why: relatedReasons(reasons, shared[link.id]) }));
 }
 
-/** Titres des sources que chaque page liée partage avec la page courante (côté serveur : le site connaît toutes les pages). */
+/** Titles of the sources that each related page shares with the current page (server side: the site knows all the pages). */
 export function sharedSources(page: Pick<PageData, "sources" | "related">, pages: Pick<PageData, "id" | "sources">[]): Record<string, string[]> {
 	const mine = new Set(page.sources.map((s) => s.id)), out: Record<string, string[]> = {};
 	const wanted = new Set(page.related.map((r) => r.id)), byId = new Map(pages.filter((p) => wanted.has(p.id)).map((p) => [p.id, p]));
@@ -92,44 +92,44 @@ export function sharedSources(page: Pick<PageData, "sources" | "related">, pages
 	return out;
 }
 
-// --- Liens ------------------------------------------------------------------------------------------------------
+// --- Links ------------------------------------------------------------------------------------------------------
 
-/** Domaine affiché d'un lien externe (sans `www.`), ou `""` si l'URL est illisible. */
+/** Displayed domain of an external link (without `www.`), or `""` if the URL is unreadable. */
 export function domainOf(url: string): string {
 	try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return ""; }
 }
 
-/** La source originale d'une page : la première source qui porte une URL (UX18). */
+/** The original source of a page: the first source that carries a URL (UX18). */
 export function originalSource(sources: SourceRef[]): (SourceRef & { url: string; domain: string }) | undefined {
 	const s = sources.find((x) => x.url);
 	return s && { ...s, url: s.url!, domain: domainOf(s.url!) };
 }
 
-/** Requête du graphe : `?focus=<id>`, l'id étant celui du nœud (`concepts/context-rot`, barres conservées pour rester lisible). */
+/** Graph query: `?focus=<id>`, the id being the node's (`concepts/context-rot`, slashes kept to stay readable). */
 export const graphFocus = (id: string) => `?focus=${encodeURIComponent(id).replace(/%2F/gi, "/")}`;
 
-/** Requête de la collection d'un type de page (`type:concept`), ou `undefined` pour un type inconnu. */
+/** Query for the collection of a page type (`type:concept`), or `undefined` for an unknown type. */
 export const collectionQuery = (type: string) => (TYPES.some((t) => t.type === type) ? `?q=${encodeURIComponent(`type:${type.toLowerCase()}`)}` : undefined);
 export const collectionLabel = (type: string) => TYPES.find((t) => t.type === type)?.plural ?? type;
 
-/** Lien à copier : l'adresse de la page sans le contexte de recherche (`?q=`) qui ne fait pas partie de la page. */
+/** Link to copy: the page address without the search context (`?q=`) which is not part of the page. */
 export function shareUrl(href: string): string {
 	try { const u = new URL(href); u.searchParams.delete("q"); return u.toString(); } catch { return href; }
 }
 
-// --- Lecture d'un résultat de recherche (UX26) -------------------------------------------------------------------
+// --- Reading a search result (UX26) ------------------------------------------------------------------------------
 
 export type HitTerms = { words: string[]; phrases: string[] };
 
-/** Termes de la requête qui se cherchent dans le texte : mots libres et phrases exactes (les filtres et exclusions n'en sont pas). */
+/** Query terms that are searched in the text: free words and exact phrases (filters and exclusions are not). */
 export const hitTerms = (p: Parsed): HitTerms => ({ words: [...new Set(p.words)], phrases: p.phrases.map((x) => x.text) });
 export const hasTerms = (t: HitTerms) => t.words.length > 0 || t.phrases.length > 0;
 
 /**
- * Plages [début, fin[ d'un texte qui répondent aux termes : un mot du texte qui commence par un mot saisi (la frappe en
- * cours compte, comme dans la recherche ; une lettre seule doit être le mot entier), ou une phrase exacte. Insensible aux
- * accents et à la casse. Les plages qui se chevauchent sont fusionnées. Un texte dont le repli change de longueur est ignoré
- * (le surlignage ne se décalerait pas, il serait faux).
+ * Ranges [start, end[ of a text that match the terms: a word of the text that starts with a typed word (the typing in
+ * progress counts, as in the search; a single letter must be the whole word), or an exact phrase. Insensitive to
+ * accents and case. Overlapping ranges are merged. A text whose folding changes length is ignored
+ * (the highlighting would not just be shifted, it would be wrong).
  */
 export function hitRanges(text: string, t: HitTerms): [number, number][] {
 	const f = fold(text);

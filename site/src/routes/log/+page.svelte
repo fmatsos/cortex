@@ -11,13 +11,13 @@
 	import { archives, countBy, dayLabel, dayOf, dayShort, filterEntries, filterQuery, groupDays, isUnfiltered, type LogFilter, monthLabel, NO_FILTER, readFilter, withIds } from "#lib/log-view.js";
 	import { KINDS, kindColor, kindDescription, kindIcon } from "#lib/type-meta.js";
 
-	const STEP = 20; // entrées affichées par tranche
+	const STEP = 20; // entries displayed per slice
 	let { data } = $props();
 
-	// Les filtres (type, texte, période) font foi dans l'URL : la page prérendue n'en connaît aucun, ils se lisent dans le navigateur.
+	// The filters (type, text, period) are authoritative in the URL: the prerendered page knows none of them, they are read in the browser.
 	let f = $state<LogFilter>({ ...NO_FILTER });
-	let extra = $state(0); // tranches supplémentaires demandées
-	let targetId = $state(""); // entrée visée par le lien direct (#e-…) : toujours affichée
+	let extra = $state(0); // additional slices requested
+	let targetId = $state(""); // entry targeted by the direct link (#e-…): always displayed
 	let ready = $state(false);
 	let search = $state<HTMLInputElement | null>(null);
 
@@ -31,7 +31,7 @@
 	const days = $derived(groupDays(visible));
 	const dayTotals = $derived(countBy(filtered, dayOf));
 
-	// décomptes par facette : chaque liste tient compte des autres filtres, pas du sien
+	// per-facet counts: each list takes the other filters into account, not its own
 	const kindCounts = $derived(countBy(filterEntries(all, f, "kind"), (e) => e.kind));
 	const kindsShown = $derived(KINDS.filter((k) => kindCounts.has(k.kind) || f.kind === k.kind));
 	const kindTotal = $derived([...kindCounts.values()].reduce((a, b) => a + b, 0));
@@ -55,7 +55,7 @@
 		const from = visible.length;
 		extra = Math.max(extra, count - STEP) + STEP;
 		await tick();
-		document.getElementById(filtered[from]?.id ?? "")?.focus(); // le focus passe à la première entrée ajoutée
+		document.getElementById(filtered[from]?.id ?? "")?.focus(); // focus moves to the first added entry
 	}
 
 	afterNavigate(async (nav) => {
@@ -68,11 +68,11 @@
 		ready = true;
 		if (targetId) {
 			await tick();
-			// laisser les entrées se replier en résumés (la hauteur de la page change) avant de se placer
+			// let the entries collapse into summaries (the page height changes) before positioning
 			setTimeout(() => document.getElementById(targetId)?.scrollIntoView(), 120);
 		}
 	});
-	// la saisie met l'URL à jour sur place (sans entrée d'historique)
+	// typing updates the URL in place (without a history entry)
 	const query = $derived(filterQuery(f));
 	$effect(() => {
 		if (!ready || location.search === query) return;

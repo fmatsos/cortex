@@ -6,24 +6,24 @@
 	import { type OfflineState, estimateBytes, formatBytes, isOfflineState, percent } from "#lib/offline.js";
 	import type { IconName } from "#lib/icons.js";
 
-	// Statut du mode hors ligne, toujours consultable : un bouton discret (en bas à gauche) ouvre un panneau avec l'état
-	// (Préparation, Disponible, Échec + Réessayer), la version conservée, la connexion et le téléchargement complet du wiki.
-	// Les changements importants sont aussi annoncés quelques secondes dans la région `aria-live`.
+	// Offline mode status, always accessible: a discreet button (bottom left) opens a panel with the state
+	// (Préparation, Disponible, Échec + Réessayer), the kept version, the connection and the full download of the wiki.
+	// Important changes are also announced for a few seconds in the `aria-live` region.
 	const KEY = "brain:offline-ready";
 	const MESSAGE_MS = 6000;
 
 	let offline = $state(false);
-	let supported = $state(true); // service worker disponible (contexte sécurisé, navigateur récent)
-	let registered = $state<boolean | undefined>(undefined); // `undefined` : pas encore vérifié (l'enregistrement a lieu au chargement de la page)
-	let failed = $state(false); // l'installation s'est terminée en échec
-	let waiting = $state(false); // une nouvelle version est installée et attend la fermeture des onglets
+	let supported = $state(true); // service worker available (secure context, recent browser)
+	let registered = $state<boolean | undefined>(undefined); // `undefined`: not checked yet (registration happens on page load)
+	let failed = $state(false); // the installation ended in failure
+	let waiting = $state(false); // a new version is installed and waits for the tabs to close
 	let sw = $state<OfflineState>();
 	let open = $state(false);
-	let announce = $state(""); // message temporaire, lu par les lecteurs d'écran
+	let announce = $state(""); // temporary message, read by screen readers
 	let root = $state<HTMLDivElement>();
 	let toggle = $state<HTMLButtonElement | null>(null);
 	let registration: ServiceWorkerRegistration | undefined;
-	// un service worker actif qui ne répond pas à `status` (version d'avant le panneau) a fini d'installer : il est prêt
+	// an active service worker that does not answer `status` (pre-panel version) has finished installing: it is ready
 	let silent = $state(false);
 	let quiet: ReturnType<typeof setTimeout>;
 	const uid = $props.id();
@@ -38,7 +38,7 @@
 		: "preparing",
 	);
 	const download = $derived(sw?.download);
-	const left = $derived(sw ? sw.wiki.files - sw.wiki.cached : 0); // fichiers du wiki pas encore gardés
+	const left = $derived(sw ? sw.wiki.files - sw.wiki.cached : 0); // wiki files not yet kept
 	const allCached = $derived(!!sw && left === 0);
 
 	const label = $derived(
@@ -71,12 +71,12 @@
 		sw = e.data;
 		if (e.data.phase === "ready") {
 			failed = false;
-			// une fois par version du site : le message revient si elle change, pas à chaque chargement
+			// once per site version: the message comes back if it changes, not on every load
 			if (!wasReady) {
 				try {
 					if (localStorage.getItem(KEY) === e.data.version) return;
 					localStorage.setItem(KEY, e.data.version);
-				} catch { /* stockage indisponible : annoncé à chaque chargement */ }
+				} catch { /* storage unavailable: announced on every load */ }
 				say("Disponible hors ligne");
 			}
 		} else if (e.data.phase === "error" && !wasFailed) say("Échec de la préparation hors ligne");
@@ -84,7 +84,7 @@
 
 	function track(worker: ServiceWorker | null | undefined, reg: ServiceWorkerRegistration) {
 		worker?.addEventListener("statechange", () => {
-			if (worker.state === "redundant" && !reg.active) failed = true; // installation sans issue : pas de service worker de repli
+			if (worker.state === "redundant" && !reg.active) failed = true; // installation with no way out: no fallback service worker
 			if (worker.state === "activated") { failed = false; post({ type: "status" }); }
 			waiting = !!reg.waiting;
 		});
@@ -102,7 +102,7 @@
 		if (reg.active) post({ type: "status" });
 	}
 
-	// la nouvelle version vient de prendre le relais (skipWaiting + claim) : on lui redemande son état
+	// the new version has just taken over (skipWaiting + claim): ask it for its state again
 	function onController() { waiting = false; post({ type: "status" }); }
 
 	onMount(() => {
@@ -115,7 +115,7 @@
 		if (supported) {
 			navigator.serviceWorker.addEventListener("message", onMessage);
 			navigator.serviceWorker.addEventListener("controllerchange", onController);
-			// SvelteKit enregistre le service worker à l'événement `load` : on regarde ensuite, avec un court délai
+			// SvelteKit registers the service worker on the `load` event: look afterwards, with a short delay
 			const start = () => { check = setTimeout(watch, 300); };
 			if (document.readyState === "complete") start(); else addEventListener("load", start, { once: true });
 			navigator.serviceWorker.ready.then((reg) => { registration = reg; reg.active?.postMessage({ type: "status" }); });
@@ -135,7 +135,7 @@
 
 	function retry() {
 		failed = false;
-		// une première installation qui échoue supprime l'enregistrement : seul un rechargement le recrée (SvelteKit l'enregistre au chargement)
+		// a first installation that fails removes the registration: only a reload recreates it (SvelteKit registers it on load)
 		if (registration && (registration.installing || registration.waiting || registration.active)) {
 			registration.update().catch(() => { failed = true; });
 		} else location.reload();
@@ -233,7 +233,7 @@
 		>
 			<Icon name={icon} size={18} class={phase === "preparing" && !offline ? "motion-safe:animate-spin" : ""} />
 		</Button>
-		<!-- toujours dans le DOM : une région `aria-live` doit exister avant que son texte change -->
+		<!-- always in the DOM: an `aria-live` region must exist before its text changes -->
 		<div aria-live="polite" class="pointer-events-none">
 			{#if offline || announce}
 				<p class="bg-background text-muted-foreground rounded-md border px-2.5 py-1 text-xs shadow-sm">{offline && !announce ? "Hors ligne" : announce}</p>

@@ -4,11 +4,11 @@
 	import { toPage } from "#lib/links.js";
 	import type { Link } from "#lib/types.js";
 
-	// Colonne latérale de navigation : les pages qui citent celle-ci (rétroliens), puis les pages à explorer ensuite.
-	// Une destination n'apparaît qu'une fois ; chaque page liée porte ses motifs en courtes puces à icône.
+	// Side navigation column: the pages that cite this one (backlinks), then the pages to explore next.
+	// A destination appears only once; each related page carries its reasons as short icon chips.
 	let { backlinks, related }: { backlinks: Link[]; related: RelatedEntry[] } = $props();
 
-	const SHOWN = 5; // ponytail: seuil fixe ; au-delà, « Afficher tout »
+	const SHOWN = 5; // ponytail: fixed threshold; beyond it, "Afficher tout"
 	let allBack = $state(false), allRel = $state(false);
 	const back = $derived(allBack ? backlinks : backlinks.slice(0, SHOWN));
 	const rel = $derived(allRel ? related : related.slice(0, SHOWN));
@@ -18,8 +18,8 @@
 	<a href={toPage(l.id)} class="hover:bg-muted focus-visible:ring-ring/50 group -mx-2 flex items-start gap-2 rounded-md px-2 py-1.5 focus-visible:ring-3 focus-visible:outline-none">
 		<span class="min-w-0">
 			<span class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
-			<!-- motifs en icônes discrètes à la suite du titre : détail au survol, lu en entier par les lecteurs d'écran -->
-			<!-- seule l'icône de tag est montrée ; les autres motifs restent lus par les lecteurs d'écran -->
+			<!-- reasons as discreet icons after the title: detail on hover, read in full by screen readers -->
+			<!-- only the tag icon is shown; the other reasons are still read by screen readers -->
 			{#each why as w (w.label)}
 				{#if w.icon === "tags"}
 					<span class="text-muted-foreground ml-1 inline-flex translate-y-0.5" title={w.label}>

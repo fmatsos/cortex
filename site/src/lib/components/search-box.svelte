@@ -15,10 +15,10 @@
 	import { theme } from "#lib/theme.svelte.js";
 	import type { SearchDoc } from "#lib/types.js";
 
-	// Palette de commandes : recherches récentes, filtres (#tag, type:, status:, is:), termes, pages, puis commandes générales.
-	// La requête est celle de l'état partagé (`search.q`) : le champ de l'en-tête, le grand champ de l'accueil et celui de /search/ sont
-	// une seule recherche. variant « main » : grand champ de la page ; « header » : champ compact de l'en-tête.
-	// live : sur la page de résultats, où la liste complète est déjà affichée, la liste déroulante ne propose que des suggestions.
+	// Command palette: recent searches, filters (#tag, type:, status:, is:), terms, pages, then general commands.
+	// The query is that of the shared state (`search.q`): the header field, the large home field and that of /search/ are
+	// a single search. variant "main": large page field; "header": compact header field.
+	// live: on the results page, where the full list is already displayed, the dropdown only offers suggestions.
 	let { variant = "header", live = false, class: className = "" }: { variant?: "header" | "main"; live?: boolean; class?: string } = $props();
 	const main = $derived(variant === "main");
 
@@ -29,15 +29,15 @@
 	let wrap = $state<HTMLElement | null>(null);
 	let mac = $state(false);
 	let notice = $state("");
-	let failed = $state(false); // l'index de recherche n'a pas pu être chargé
-	let panelMax = $state(0); // hauteur disponible sous le champ (px) : le panneau ne dépasse jamais l'écran visible
-	const uid = $props.id(); // identifiant stable : le HTML prérendu est identique à chaque export
+	let failed = $state(false); // the search index could not be loaded
+	let panelMax = $state(0); // available height below the field (px): the panel never exceeds the visible screen
+	const uid = $props.id(); // stable identifier: the prerendered HTML is identical on every export
 	const listId = `sb-${uid}`;
 	const value = $derived(search.q);
 	const setValue = (v: string) => { search.q = v; };
 
 	onMount(() => { mac = /mac|iphone|ipad/i.test(navigator.platform); });
-	// ce champ est celui que Ctrl+K et « / » activent tant qu'il est à l'écran
+	// this field is the one that Ctrl+K and "/" activate as long as it is on screen
 	$effect(() => (input ? search.register(input) : undefined));
 	const warm = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
 	const abs = (rel: string) => new URL(rel, location.href).href;
@@ -45,7 +45,7 @@
 	const flash = (m: string) => { notice = m; clearTimeout(flashTimer); flashTimer = setTimeout(() => (notice = ""), 1800); };
 	onMount(() => () => clearTimeout(flashTimer));
 
-	// hauteur disponible entre le champ et le bas de l'écran visible (clavier virtuel compris)
+	// available height between the field and the bottom of the visible screen (virtual keyboard included)
 	const measure = () => {
 		if (!wrap) return;
 		const vv = window.visualViewport;
@@ -90,7 +90,7 @@
 			run: () => { setValue(f.insert); active = -1; input?.focus(); },
 		});
 		if (!q) {
-			// d'abord l'accès aux connaissances (récentes, filtres), les commandes générales en groupe secondaire
+			// knowledge access first (recent, filters), general commands in a secondary group
 			if (search.recent.length) {
 				for (const r of search.recent) out.push({ key: `r:${r}`, kind: "recent", group: "Recherches récentes", icon: "recent", html: esc(r), run: () => { setValue(r); active = -1; submit(); } });
 				out.push({ key: "r-clear", kind: "commande", group: "Recherches récentes", icon: "clear", html: "Effacer l'historique", run: () => { search.forget(); active = -1; input?.focus(); } });
@@ -115,12 +115,12 @@
 		for (const h of hits) page(h.doc, h.title, h.snippet);
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((t) => fold(c.html).includes(t))) out.push(c);
-		// accès toujours visible (pied collant) à la liste complète, avec son total exact
+		// always visible access (sticky footer) to the full list, with its exact total
 		if (total > 0) out.push({ key: "all", kind: "tous", html: `Tous les résultats pour « ${esc(q)} »`, sub: `${total} page${total > 1 ? "s" : ""}`, run: () => submit() });
 		return out;
 	});
 
-	/** Ouvre une page ; la requête l'accompagne (`?q=`) pour que l'article surligne et propose le passage trouvé. */
+	/** Opens a page; the query goes with it (`?q=`) so that the article highlights and offers the found passage. */
 	function open_(d: SearchDoc, newTab?: boolean) {
 		const href = withPassage(toPage(d.id), value);
 		search.remember(value);
@@ -137,7 +137,7 @@
 	const copy = async (d: SearchDoc) => {
 		try { await navigator.clipboard.writeText(abs(withPassage(toPage(d.id), value))); flash("Lien copié"); } catch { flash("Copie impossible"); }
 	};
-	// message à la place d'une liste vide (dans la palette seulement : la page de résultats affiche les siens)
+	// message in place of an empty list (in the palette only: the results page shows its own)
 	const state = $derived.by(() => {
 		if (live || !open || !value.trim()) return undefined;
 		if (failed) return "error";
@@ -146,7 +146,7 @@
 		return wantsFav(parseQuery(value)) && !favs.ids.length ? "nofav" : "none";
 	});
 	const reset = () => { setValue(""); input?.focus(); };
-	// l'option active doit exister dans la liste affichée (la liste peut changer sans saisie)
+	// the active option must exist in the displayed list (the list can change without typing)
 	const act = $derived(open && active < items.length ? active : -1);
 	const cur = $derived(items[act]);
 
@@ -167,13 +167,13 @@
 			else setValue("");
 			active = -1;
 		} else if (e.altKey && cur?.doc) {
-			// actions sur le résultat sélectionné (code de touche : Alt+lettre produit un autre caractère sous macOS)
+			// actions on the selected result (key code: Alt+letter produces another character on macOS)
 			if (e.code === "KeyF") { e.preventDefault(); favs.toggle(cur.doc.id); }
 			else if (e.code === "KeyC") { e.preventDefault(); copy(cur.doc); }
 		}
 	}
 
-	// le panneau se ferme quand le focus quitte l'ensemble champ + panneau (Tab vers les puces ne le ferme pas)
+	// the panel closes when focus leaves the field + panel group (Tab to the chips does not close it)
 	const onfocusout = (e: FocusEvent) => {
 		if (!wrap?.contains(e.relatedTarget as Node | null)) { open = false; active = -1; }
 	};
@@ -210,7 +210,7 @@
 		{/if}
 	</div>
 	{#if open && (items.length || (!live && value.trim()))}
-		<!-- mousedown sans effet de focus : le champ garde le focus, donc le panneau ne se ferme pas avant le clic -->
+		<!-- mousedown with no focus effect: the field keeps focus, so the panel does not close before the click -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div class="bg-popover text-popover-foreground absolute inset-x-0 z-50 mt-1.5 flex flex-col rounded-lg border p-1 shadow-lg" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
 			{#if !live}<FilterChips value={search.q} class="px-1.5 pt-1 pb-1.5" />{/if}
@@ -236,7 +236,7 @@
 							{/if}
 						</div>
 						{#if item.doc}
-							<!-- actions hors de l'option (pas de bouton dans une option) : visibles au survol, à la sélection, et toujours au toucher -->
+							<!-- actions outside the option (no button inside an option): visible on hover, on selection, and always on touch -->
 							<button type="button" tabindex="-1" aria-pressed={favs.has(item.doc.id)} aria-label="Favori : {item.doc.title}" class="text-muted-foreground hover:text-foreground size-9 shrink-0 items-center justify-center rounded-md {sel || favs.has(item.doc.id) ? 'inline-flex' : 'hidden group-hover:inline-flex pointer-coarse:inline-flex'}" onclick={() => favs.toggle(item.doc!.id)}>
 								<Icon name="star" size={20} filled={favs.has(item.doc.id)} class={favs.has(item.doc.id) ? "text-favorite" : ""} />
 							</button>

@@ -6,7 +6,7 @@ import { buildSiteData, frontendFingerprint, graphLinks, isPartialWarning, md, n
 import { parseDoc, readDocs } from "./lib";
 import { safeUrl, sanitizeHtml } from "./sanitize";
 
-// Non-régression sur un vrai wiki : CORTEX_ROOT=<wiki> bun test (ignorés sans)
+// Non-regression on a real wiki: CORTEX_ROOT=<wiki> bun test (skipped without)
 const ROOT = process.env.CORTEX_ROOT;
 const bun = (s: string) => Bun.markdown.html(s, { tagFilter: true, headings: { ids: true }, autolinks: true });
 
@@ -31,13 +31,13 @@ test("assainissement : scripts, gestionnaires d'événements, iframes, styles et
     "[md](javascript:alert(1)) ![md](javascript:alert(1))",
     "<img src=x onerror=alert(1)",
   ].join("\n\n"));
-  // le texte échappé (`&lt;script>`) est inerte et peut rester visible ; seul le balisage compte
+  // the escaped text (`&lt;script>`) is inert and may stay visible; only markup counts
   for (const bad of [/<script/i, /<iframe/i, /<svg/i, /<form/i, /<button/i, /javascript:/i, /vbscript:/i, /data:text/i, /image\/svg/i])
     expect(out).not.toMatch(bad);
-  expect(out).not.toMatch(/<[a-z][^>]*\s(?:on\w+|style)\s*=/i); // aucune balise émise ne porte d'attribut dangereux
+  expect(out).not.toMatch(/<[a-z][^>]*\s(?:on\w+|style)\s*=/i); // no emitted tag carries a dangerous attribute
   expect(out).not.toMatch(/<[a-z][^>]*\sexpression/i);
   expect(out).toContain("<details open>");
-  expect(out).toContain('<img src="x">'); // l'image reste, sans son gestionnaire
+  expect(out).toContain('<img src="x">'); // the image stays, without its handler
 });
 
 test("assainissement : protocoles en liste blanche, URL relatives et internes conservées", () => {
@@ -46,7 +46,7 @@ test("assainissement : protocoles en liste blanche, URL relatives et internes co
   for (const bad of ["javascript:1", "JAVASCRIPT:1", " \tjava\nscript:1", "java&Tab;script:1", "&#x6A;avascript:1", "jav&#97;script&colon;1", "vbscript:1", "data:text/html,x", "file:///etc/passwd", "blob:x", "foo&bar:1", "\u0001javascript:1"])
     expect(safeUrl(bad)).toBeUndefined();
   expect(safeUrl("data:image/png;base64,AAAA", true)).toBe("data:image/png;base64,AAAA");
-  expect(safeUrl("data:image/png;base64,AAAA")).toBeUndefined(); // hors image : refusé
+  expect(safeUrl("data:image/png;base64,AAAA")).toBeUndefined(); // non-image: refused
   expect(safeUrl("data:image/svg+xml;base64,AAAA", true)).toBeUndefined();
 });
 
@@ -67,7 +67,7 @@ test.skipIf(!ROOT)("assainissement : non-régression sur le rendu des pages rée
   const paths = new Set(docs.map((d) => d.path));
   for (const d of docs) {
     const raw = bun(d.body);
-    expect(sanitizeHtml(raw)).toBe(raw); // le Markdown du wiki ne contient rien que la liste blanche retire
+    expect(sanitizeHtml(raw)).toBe(raw); // the wiki Markdown contains nothing the whitelist removes
     const { html } = render(d.body, `${d.path.replace(/\.md$/, "")}/`, paths);
     expect(html).not.toMatch(/<script|\son\w+=|javascript:/i);
   }
@@ -80,18 +80,18 @@ test("encarts : l'avertissement de source partielle sort de la note personnelle"
     '<aside class="callout-warning" role="note"><p class="callout-warning-titre">Avertissement</p><p>Article partiel à cause du paywall : 30 % extrait.</p></aside>\n<p>Suite.</p>\n',
   );
   expect(html).not.toContain("⚠");
-  // sans ligne vide, dans le même paragraphe
+  // without a blank line, in the same paragraph
   const same = noteCallouts(md("> [!note] Note personnelle\n> pourquoi\n> ⚠️ Aperçu public seulement."));
   expect(same).toContain('<p>pourquoi</p>');
   expect(same).toContain('<p class="callout-warning-titre">Avertissement</p><p>Aperçu public seulement.</p>');
-  // convention Markdown dédiée : > [!warning] Titre
+  // dedicated Markdown convention: > [!warning] Title
   expect(noteCallouts(md("> [!warning]\n> Attention."))).toBe('<aside class="callout-warning" role="note"><p class="callout-warning-titre">Avertissement</p><p>Attention.</p>\n</aside>\n');
   expect(noteCallouts(md("> [!warning] Contenu tronqué\n> ⚠️ Texte."))).toContain('<p class="callout-warning-titre">Contenu tronqué</p><p>Texte.</p>');
-  // une note sans avertissement ne change pas ; une citation ordinaire non plus
+  // a note without a warning does not change; neither does an ordinary quote
   expect(noteCallouts(md("> [!note]\n> sans titre"))).toContain('<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>sans titre');
   expect(noteCallouts(md("> ⚠️ une citation ordinaire"))).toContain("<blockquote>");
 
-  // sur les pages réelles (si CORTEX_ROOT est défini)
+  // on real pages (if CORTEX_ROOT is set)
   const real = ROOT ? (await readDocs(ROOT, "wiki/sources")).filter((d) => /^(Raspberry Pi 5 16 Go|How Codex is built)/.test(String(d.fm.title))) : [];
   if (ROOT) expect(real).toHaveLength(2);
   for (const d of real) {
@@ -114,7 +114,7 @@ test("graphe : liens orientés, un seul lien (mutual) pour une paire réciproque
   expect(graphLinks(new Set())).toEqual([]);
 });
 
-/** Racine jetable : une source raw partielle citée par une page Source, des titres à accents. */
+/** Throwaway root: a partial raw source cited by a Source page, titles with accents. */
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const page = (path: string, type: string, title: string, extra: string, body: string) => {
@@ -142,7 +142,7 @@ function fixture() {
 
 test("export : partial, tri par titre (collation française), liens orientés, recherche du journal", async () => {
   const { data, graph, search } = await buildSiteData(fixture());
-  // ordre : Abeille, Avertie, Complet, Étude, Zèbre, Zèbre partiel (É entre C et Z, pas après Z comme dans l'ordre des codes)
+  // order: Abeille, Avertie, Complet, Étude, Zèbre, Zèbre partiel (É between C and Z, not after Z as in code-point order)
   expect(data.pages.map((p) => p.title)).toEqual(["Abeille", "Avertie", "Complet", "Étude", "Zèbre", "Zèbre partiel"]);
   expect(graph.nodes.map((n) => n.title)).toEqual(data.pages.map((p) => p.title));
   expect(search.docs.map((d) => d.id)).toEqual(data.pages.map((p) => p.id));
@@ -150,7 +150,7 @@ test("export : partial, tri par titre (collation française), liens orientés, r
   const by = (id: string) => data.pages.find((p) => p.id === id)!;
   expect(by("concepts/etude").backlinks.map((b) => b.title)).toEqual(["Abeille", "Zèbre"]);
 
-  // partial : source raw `partial:` (page Source seulement), ou encart d'avertissement de contenu partiel
+  // partial: raw source `partial:` (Source page only), or partial-content warning callout
   expect(Object.fromEntries(data.pages.map((p) => [p.id, p.partial]))).toEqual({
     "concepts/abeille": false, "concepts/avertie": true, "sources/complet": false, "concepts/etude": false, "concepts/zebre": false, "sources/zz-partiel": true,
   });
@@ -160,13 +160,13 @@ test("export : partial, tri par titre (collation française), liens orientés, r
   expect(search.docs.find((d) => d.id === "concepts/etude")!.partial).toBe(false);
   const avertie = by("concepts/avertie");
   expect(avertie.html).toContain('<p class="callout-warning-titre">Avertissement</p>');
-  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).toContain("Aperçu public seulement"); // le texte de l'avertissement est cherchable…
-  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).not.toContain("Avertissement"); // …pas son titre
-  // HTML auteur assaini dans les données exportées
+  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).toContain("Aperçu public seulement"); // the warning text is searchable…
+  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).not.toContain("Avertissement"); // …not its title
+  // author HTML sanitized in the exported data
   expect(avertie.html).not.toMatch(/onerror|javascript:/i);
   expect(avertie.html).toContain("<code>&lt;b&gt;</code>");
 
-  // graphe orienté : etude → zz-partiel ; abeille → etude ; zebre → abeille, etude
+  // directed graph: etude → zz-partiel; abeille → etude; zebre → abeille, etude
   expect(graph.links).toEqual([
     { source: "concepts/abeille", target: "concepts/etude" },
     { source: "concepts/etude", target: "sources/zz-partiel" },
@@ -175,7 +175,7 @@ test("export : partial, tri par titre (collation française), liens orientés, r
   ]);
   expect(graph.nodes.find((n) => n.id === "concepts/etude")!.degree).toBe(3);
 
-  // journal : texte replié (sans accents, minuscules) pour la recherche locale, titres des pages et ids inclus
+  // journal: folded text (no accents, lowercase) for local search, page titles and ids included
   const e = data.log[0];
   expect(e.search).toBe(e.search.toLowerCase());
   for (const t of ["ingest", "compile", "etude", "abeille", "01a1a5c9-5e80-7075-ae13-aab03b0a8697"]) expect(e.search).toContain(t);
@@ -189,11 +189,11 @@ test("version du site : l'empreinte du frontend change avec le CSS ou un composa
   writeFileSync(join(dir, "src/lib/x.svelte"), "<p>x</p>");
   writeFileSync(join(dir, "vite.config.ts"), "export default {}");
   const a = frontendFingerprint(dir);
-  expect(frontendFingerprint(dir)).toBe(a); // déterministe
+  expect(frontendFingerprint(dir)).toBe(a); // deterministic
   writeFileSync(join(dir, "src/app.css"), "a{color:blue}");
   const b = frontendFingerprint(dir);
   expect(b).not.toBe(a);
   writeFileSync(join(dir, "src/lib/x.svelte"), "<p>y</p>");
   expect(frontendFingerprint(dir)).not.toBe(b);
-  expect(frontendFingerprint()).toMatch(/^[0-9a-f]{64}$/); // le vrai site
+  expect(frontendFingerprint()).toMatch(/^[0-9a-f]{64}$/); // the real site
 });

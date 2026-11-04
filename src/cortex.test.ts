@@ -11,8 +11,8 @@ test("utilitaires", () => {
   expect(localIso(new Date())).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/);
   const ids = Array.from({ length: 1000 }, () => newId(new Date("2026-11-04T10:00:00Z")));
   expect(ids.every((id) => UUID.test(id))).toBe(true);
-  expect(new Set(ids).size).toBe(1000); // même milliseconde : toujours distincts
-  expect(newId(new Date("2026-01-01")) < newId(new Date("2026-11-04"))).toBe(true); // ordre de création
+  expect(new Set(ids).size).toBe(1000); // same millisecond: always distinct
+  expect(newId(new Date("2026-01-01")) < newId(new Date("2026-11-04"))).toBe(true); // creation order
   expect(UUID.test("20261104-abcd-x")).toBe(false);
   expect(slugify("Le C++26 refusé à l'ISO : une première")).toBe("le-c-26-refuse-a-l-iso-une-premiere");
   expect(normUrl("https://X.com/a/?utm_source=z&hl=en#f")).toBe(normUrl("https://x.com/a?hl=en"));
@@ -32,17 +32,17 @@ test("add → index → search, idempotent", async () => {
   expect(a.duplicate).toBe(false);
   expect((await add(root, note, { note: "test", now })).duplicate).toBe(true);
   const jsonl = (await Bun.file(join(root, "wiki/log.jsonl")).text()).trim().split("\n").map((l) => JSON.parse(l));
-  expect(jsonl).toHaveLength(2); // l'add dupliqué n'écrit rien
+  expect(jsonl).toHaveLength(2); // the duplicate add writes nothing
   expect(UUID.test(a.id)).toBe(true);
-  expect(rawPath(root, a.id)).toBe(`raw/2026/11/${a.id}/source.md`); // rangée par mois d'ajout
+  expect(rawPath(root, a.id)).toBe(`raw/2026/11/${a.id}/source.md`); // filed by month of addition
   expect(jsonl[1]).toMatchObject({ kind: "add", text: `\`${a.id}\`.`, sources: [a.id] });
   expect(jsonl[1].at).toMatch(/^2026-11-04T10:00:00[+-]\d\d:\d\d$/);
   const log = await Bun.file(join(root, "wiki/log.md")).text();
-  expect(log).toContain(`## 2026-11-04\n- **Add** \`${a.id}\`.\n\n## 2000-01-01\n- **Update** ancien\n`); // sans répéter l'id déjà dans le texte
+  expect(log).toContain(`## 2026-11-04\n- **Add** \`${a.id}\`.\n\n## 2000-01-01\n- **Update** ancien\n`); // without repeating the id already in the text
 
   expect(await renderIndex(root)).toContain("- [Relecture](/wiki/concepts/x.md) — D.");
   const hits = await search(root, "relecture");
-  expect(hits.map((h) => h.area)).toEqual(["wiki", "raw"]); // wiki d'abord
+  expect(hits.map((h) => h.area)).toEqual(["wiki", "raw"]); // wiki first
   expect((await search(root, "hydroponie", { in: "raw" }))[0].path).toContain(a.id);
 });
 
@@ -56,7 +56,7 @@ test("cortex new : page nommée par UUID v7 par défaut, titre unique, lint des 
   expect(p).toMatch(/^wiki\/concepts\/[0-9a-f-]{36}\.md$/);
   expect(UUID.test(p.slice(14, -3))).toBe(true);
   expect(await Bun.file(join(root, p)).text()).toBe("---\ntype: Concept\ntitle: Context rot\nstatus: draft\n---\n");
-  await expect(newPage(root, "Entity", "context  ROT")).rejects.toThrow(p); // même titre : la page existante est nommée
+  await expect(newPage(root, "Entity", "context  ROT")).rejects.toThrow(p); // same title: the existing page is named
   await expect(newPage(root, "Note", "x")).rejects.toThrow("type inconnu");
   expect((await newPage(root, "Synthesis", "Autre")).startsWith("wiki/syntheses/")).toBe(true);
 
@@ -68,7 +68,7 @@ test("cortex new : page nommée par UUID v7 par défaut, titre unique, lint des 
   expect(issues.filter((i) => i.includes("id raw en double : 20261104-abcd-x"))).toHaveLength(1);
   expect(issues.some((i) => i.includes(p) && i.includes("modèle"))).toBe(false);
 
-  // log.md nomme les pages par leur titre, et ne les répète pas quand le texte les nomme déjà
+  // log.md names pages by their title, and does not repeat them when the text already names them
   await logAdd(root, "ingest", "Créé context-rot.", [], [p, "wiki/concepts/a-la-main.md"]);
   expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("- **Ingest** Créé context-rot. (pages : [Main](/wiki/concepts/a-la-main.md))\n");
 });
@@ -81,7 +81,7 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
   // validation
   expect(checkTemplate("raw_path", "{yyyy}/{mm}/{uuid}")).toBeUndefined();
   expect(checkTemplate("page_path", "{type}/{yyyy}{mm}{dd}-{slug}")).toBeUndefined();
-  expect(checkTemplate("raw_path", "{type}/{uuid}")).toContain("placeholder inconnu {type}"); // {type} : pages seulement
+  expect(checkTemplate("raw_path", "{type}/{uuid}")).toContain("placeholder inconnu {type}"); // {type}: pages only
   expect(checkTemplate("page_path", "{kind}/{uuid}")).toContain("placeholder inconnu {kind}");
   expect(checkTemplate("page_path", "../{uuid}")).toContain("segments vides");
   expect(checkTemplate("page_path", "{type}//{uuid}")).toContain("segments vides");
@@ -89,17 +89,17 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
   expect(checkTemplate("page_path", "{uuid}/page")).toContain("dernier segment");
   expect(lintConfig({ page_path: "{oops}" })[0].msg).toContain("placeholder inconnu {oops}");
   expect(lintConfig({ raw_path: "{yyyy}/{rand}-{slug}", page_path: null })).toEqual([]);
-  // valeurs et motifs
+  // values and patterns
   const v = { at, title: "Le C++26 refusé", type: "Concept", kind: "pdf" };
   expect(expand("{type}/{yyyy}{mm}{dd}-{hh}{mi}{ss}-{slug}", v)).toBe("concepts/20261104-090507-le-c-26-refuse");
   expect(expand("{kind}/{rand}", v)).toMatch(/^pdf\/[a-z0-9]{4}$/);
   for (const t of ["{type}/{uuid}", "{yyyy}/{mm}/{dd}-{rand}-{slug}", "{type}/{yyyy}{mm}{dd}-{slug}"]) {
     expect(pattern(t).test(expand(t, v))).toBe(true);
-    expect(pattern(t).test(`${expand(t, v)}-2`)).toBe(true); // suffixe de collision
+    expect(pattern(t).test(`${expand(t, v)}-2`)).toBe(true); // collision suffix
     expect(pattern(t).test(`x/${expand(t, v)}`)).toBe(false);
   }
 
-  // un wiki en nommage horodaté, sans dossier par type
+  // a wiki with timestamped naming, no folder per type
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "cortex.json"), JSON.stringify({ raw_path: "{yyyy}{mm}{dd}-{rand}-{slug}", page_path: "{yyyy}/{slug}" }));
@@ -109,7 +109,7 @@ test("nommage configurable : modèles validés, placeholders, sous-dossiers, col
   expect(a.id).toMatch(/^20261104-[a-z0-9]{4}-ma-note$/);
   expect(rawPath(root, a.id)).toBe(`raw/${a.id}/source.md`);
   expect(await newPage(root, "Concept", "Context rot", at)).toBe("wiki/2026/context-rot.md");
-  await Bun.write(join(root, "wiki/2026/context-rot.md"), "---\ntype: Concept\ntitle: Autre titre\n---\n"); // le nom est pris, pas le titre
+  await Bun.write(join(root, "wiki/2026/context-rot.md"), "---\ntype: Concept\ntitle: Autre titre\n---\n"); // the name is taken, not the title
   expect(await newPage(root, "Entity", "Context  rot!", at)).toBe("wiki/2026/context-rot-2.md");
   const issues = (await lint(root)).filter((i) => i.msg.includes("modèle"));
   expect(issues).toEqual([]);
@@ -154,11 +154,11 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
   const sources = () => (existsSync(join(root, "raw")) ? readdirSync(join(root, "raw"), { recursive: true }) : []).filter((f) => String(f).endsWith("source.md")).length;
   const urls = join(root, "inbox/urls.txt");
   const [ok, ko] = [`${srv.url}ok`, `${srv.url}ko`];
-  const log = console.log, err = console.error; // sorties du CLI : rendues muettes
+  const log = console.log, err = console.error; // CLI outputs: muted
   const out: string[] = [];
   console.log = (...a) => void out.push(a.join(" ")); console.error = (...a) => void out.push(a.join(" "));
   try {
-    expect(await inbox(root)).toBe(0); // inbox absente
+    expect(await inbox(root)).toBe(0); // inbox absent
     expect(out.at(-1)).toBe("Inbox vide.");
 
     await Bun.write(urls, `# commentaire\n\n${ok} pourquoi je garde ça\n${ko}\n`);
@@ -167,13 +167,13 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
     await Bun.write(join(root, "inbox/sans.txt"), "# Sans note\n\nUne autre idée sur la lacto-fermentation, très différente.\n");
     await Bun.write(join(root, "inbox/.gitkeep"), "");
 
-    // dry-run : rien ne bouge
+    // dry-run: nothing moves
     expect(await inbox(root, { dryRun: true })).toBe(1);
     expect(sources()).toBe(0);
     expect(await Bun.file(urls).text()).toContain(ok);
     expect(existsSync(join(root, "inbox/avec.md.note"))).toBe(true);
 
-    // vrai passage : 3 sources, l'échec (404) reste, commentaires conservés
+    // real run: 3 sources, the failure (404) stays, comments kept
     expect(await inbox(root)).toBe(1);
     expect(sources()).toBe(3);
     expect(await Bun.file(urls).text()).toBe(`# commentaire\n\n${ko}\n`);
@@ -182,11 +182,11 @@ test("inbox : fichiers et urls.txt vidés, échecs conservés, idempotent", asyn
     expect((await raws).map((d) => d.fm.note).sort()).toEqual(["", "ma note", "pourquoi je garde ça"]);
     expect(out.some((l) => l.startsWith(`✗ ${ko}`))).toBe(true);
 
-    // second passage : seul l'échec revient, rien de nouveau
+    // second run: only the failure comes back, nothing new
     expect(await inbox(root)).toBe(1);
     expect(sources()).toBe(3);
 
-    // l'URL déjà présente quitte l'inbox sans nouvelle source
+    // the URL already present leaves the inbox without a new source
     await Bun.write(urls, `${ok}\n`);
     expect(await inbox(root)).toBe(0);
     expect(await Bun.file(urls).text()).toBe("");
@@ -215,7 +215,7 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à cortex", async 
   await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "wiki/concepts/x.md"), "");
   symlinkSync("cortex.json", join(root, "CLAUDE.md"));
-  symlinkSync("../cortex.json", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
+  symlinkSync("../cortex.json", join(root, "wiki/piege.md")); // link that leaves wiki/
   const ok = (tool: string, input: object, mode: "read" | "write" = "write") => guard(root, tool, input, mode).allow;
   expect(ok("Write", { file_path: join(root, "wiki/concepts/nouveau.md") })).toBe(true);
   expect(ok("Edit", { file_path: "wiki/concepts/x.md" })).toBe(true);
@@ -230,24 +230,24 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à cortex", async 
   expect(ok("Bash", { command: "cortex index" })).toBe(true);
   expect(ok("Bash", { command: "cortex new Concept \"Context rot\"" })).toBe(true);
   expect(ok("Bash", { command: "cortex new Concept \"Context rot\"" }, "read")).toBe(false);
-  // journal : lecture permise partout, écriture (cortex log add) seulement en mode write ; le texte entre guillemets peut contenir ; | > &
+  // journal: reading allowed everywhere, writing (cortex log add) only in write mode; the quoted text may contain ; | > &
   expect(ok("Bash", { command: "cortex log --limit 5 --kind lint --json" }, "read")).toBe(true);
   expect(ok("Bash", { command: "cortex log add update \"x\"" }, "read")).toBe(false);
   expect(ok("Bash", { command: "cortex log add update \"CLI : a ; b | c > d & l'idée\" --page wiki/concepts/x.md --source 01a1a5c9-5e80-7075-ae13-aab03b0a8697" })).toBe(true);
-  expect(ok("Bash", { command: "cortex log add ingest 'texte avec `backticks` et $HOME' --source 01a1a5c9-5e80-7075-ae13-aab03b0a8697" })).toBe(true); // guillemets simples : littéral
-  expect(ok("Bash", { command: "cortex log add update \"x $(rm -rf wiki)\"" })).toBe(false); // expansion sous guillemets doubles
+  expect(ok("Bash", { command: "cortex log add ingest 'texte avec `backticks` et $HOME' --source 01a1a5c9-5e80-7075-ae13-aab03b0a8697" })).toBe(true); // single quotes: literal
+  expect(ok("Bash", { command: "cortex log add update \"x $(rm -rf wiki)\"" })).toBe(false); // expansion under double quotes
   expect(ok("Bash", { command: "cortex log add update \"x `id`\"" })).toBe(false);
-  expect(ok("Bash", { command: "cortex log add update \"x\" ; rm -rf wiki" })).toBe(false); // chaînage
+  expect(ok("Bash", { command: "cortex log add update \"x\" ; rm -rf wiki" })).toBe(false); // chaining
   expect(ok("Bash", { command: "cortex log add update \"x\" && cortex index" })).toBe(false);
-  // guillemet échappé hors guillemets : le shell y voit un caractère littéral, pas une chaîne — ce qui suit s'exécuterait
+  // escaped quote outside quotes: the shell sees a literal character, not a string — what follows would run
   expect(ok("Bash", { command: "cortex search \\'; touch /tmp/pwn; \\'" })).toBe(false);
   expect(ok("Bash", { command: 'cortex search \\"; touch /tmp/pwn; \\"' })).toBe(false);
   expect(ok("Bash", { command: "cortex search a\\ b" })).toBe(false);
-  expect(ok("Bash", { command: "cortex log add update \"x" })).toBe(false); // guillemet non fermé
+  expect(ok("Bash", { command: "cortex log add update \"x" })).toBe(false); // unclosed quote
   expect(ok("Bash", { command: "cortex log add update x > wiki/log.jsonl" })).toBe(false);
   expect(ok("Bash", { command: "cortex log add update \"x\"\nrm -rf wiki" })).toBe(false);
   expect(ok("Bash", { command: "cortex logs add" })).toBe(false);
-  expect(ok("Bash", { command: "cortex log --json add update \"x\"" }, "read")).toBe(false); // `add` caché derrière une option
+  expect(ok("Bash", { command: "cortex log --json add update \"x\"" }, "read")).toBe(false); // `add` hidden behind an option
   expect(ok("Bash", { command: "cortex log --json add update \"x\"" })).toBe(false);
   expect(ok("Bash", { command: "cortex search x; sed -i s/a/b/ raw/x.md" })).toBe(false);
   expect(ok("Bash", { command: "echo x > raw/a.md" })).toBe(false);
@@ -307,18 +307,18 @@ test("cortex log add : valide kind, pages et sources, écrit une ligne, régén�
   await expect(logAdd(root, "update", "x", [], ["wiki/log.md"])).rejects.toThrow("page introuvable");
   await expect(logAdd(root, "update", "x", ["01a1a5c9-5e80-7075-ae13-000000000000"])).rejects.toThrow("source raw introuvable");
   await expect(logAdd(root, "update", "x", ["../../etc"])).rejects.toThrow("source raw introuvable");
-  expect(existsSync(join(root, "wiki/log.jsonl"))).toBe(false); // aucun refus n'écrit
+  expect(existsSync(join(root, "wiki/log.jsonl"))).toBe(false); // no refusal writes
   const d = new Date("2026-11-04T10:00:00");
   const e = await logAdd(root, "ingest", "Ligne un\n  suite.", ["01a1a5c9-5e80-7075-ae13-aab03b0a8697", "01a1a5c9-5e80-7075-ae13-aab03b0a8697"], ["/wiki/concepts/a.md", "wiki/concepts/a.md"], d);
   expect(e).toMatchObject({ kind: "ingest", text: "Ligne un suite.", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"], pages: ["wiki/concepts/a.md"] });
   await logAdd(root, "lint", "0 erreur.", [], [], new Date("2026-11-04T11:00:00"));
   const raw = await Bun.file(join(root, "wiki/log.jsonl")).text();
-  expect(raw.split("\n")).toHaveLength(3); // deux lignes complètes + fin de ligne
-  expect(JSON.parse(raw.split("\n")[1])).not.toHaveProperty("sources"); // champs vides omis
+  expect(raw.split("\n")).toHaveLength(3); // two complete lines + newline
+  expect(JSON.parse(raw.split("\n")[1])).not.toHaveProperty("sources"); // empty fields omitted
   expect(readLog(root).errors).toEqual([]);
   const md = await Bun.file(join(root, "wiki/log.md")).text();
   expect(md).toContain("## 2026-11-04\n- **Lint** 0 erreur.\n- **Ingest** Ligne un suite. (sources : `01a1a5c9-5e80-7075-ae13-aab03b0a8697` ; pages : [concepts/a](/wiki/concepts/a.md))\n");
-  // fichier édité sans fin de ligne : l'entrée suivante ne se colle pas à la précédente
+  // file edited without a trailing newline: the next entry does not stick to the previous one
   await Bun.write(join(root, "wiki/log.jsonl"), raw.trimEnd());
   await logAdd(root, "update", "suite", [], [], d);
   expect(readLog(root).errors).toEqual([]);
@@ -329,7 +329,7 @@ test("cortex log add : valide kind, pages et sources, écrit une ligne, régén�
   expect(run("log", "add", "update", "via la CLI ; | >", "--source", "01a1a5c9-5e80-7075-ae13-aab03b0a8697", "--page", "wiki/concepts/a.md").exitCode).toBe(0);
   expect(run("log", "add", "update", "x", "--page", "wiki/concepts/nope.md").exitCode).toBe(1);
   expect(run("log", "add", "update").exitCode).toBe(1);
-  // `add` n'est le sous-commande que juste après `log` : les gardes des agents (lecture seule) s'appuient sur cet ordre
+  // `add` is the subcommand only right after `log`: the (read-only) agent guards rely on this order
   const count = () => readLog(root).entries.length, before = count();
   for (const a of [["log", "--json", "add", "update", "x"], ["log", "--", "add", "update", "x"], ["log", "--kind", "lint", "add", "update", "x"]]) {
     expect(run(...a).exitCode).toBe(1);
@@ -341,7 +341,7 @@ test("cortex log add : valide kind, pages et sources, écrit une ligne, régén�
   expect(run("log", "--kind", "zz").exitCode).toBe(1);
   await Bun.write(join(root, "wiki/log.md"), "édité");
   expect(run("index").exitCode).toBe(0);
-  expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("via la CLI ; | >"); // cortex index régénère aussi log.md
+  expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("via la CLI ; | >"); // cortex index also regenerates log.md
 });
 
 test("lint du journal : ligne invalide = erreur, log.md édité à la main = avertissement", async () => {
@@ -349,9 +349,9 @@ test("lint du journal : ligne invalide = erreur, log.md édité à la main = ave
   const { writeLogMd } = await import("./log");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const msgs = async () => (await lint(root)).map((i) => `${i.level} ${i.path} ${i.msg}`);
-  expect(await msgs()).toEqual([]); // pas de journal : rien à dire
+  expect(await msgs()).toEqual([]); // no journal: nothing to say
   await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-04","kind":"add","text":"x"}\n');
-  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]); // jamais généré
+  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]); // never generated
   await writeLogMd(root);
   expect(await msgs()).toEqual([]);
   await Bun.write(join(root, "wiki/log.md"), (await Bun.file(join(root, "wiki/log.md")).text()) + "- à la main\n");
@@ -371,7 +371,7 @@ test("cortex.json : absent = agnostique, client inconnu = erreur", async () => {
   expect(loadConfig(root)).rejects.toThrow("client inconnu");
   await Bun.write(join(root, "cortex.json"), '{"client":"opencode"}');
   expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--model", "opencode/big-pickle", "--prompt", "p"]);
-  // effort : traduit dans le vocabulaire de chaque CLI
+  // effort: translated into each CLI's vocabulary
   const it = async (cfg: object) => { await Bun.write(join(root, "cortex.json"), JSON.stringify(cfg)); return (await backendFor(root)).interactive("p"); };
   expect(await it({ client: "opencode", effort: "high" })).toEqual(["opencode", "--model", "opencode/big-pickle#high", "--prompt", "p"]);
   expect(await it({ client: "claude", model: "opus", effort: "max" })).toEqual(["claude", "--model", "opus", "--effort", "max", "p"]);
@@ -386,7 +386,7 @@ test("cortex config : init, set, get, remove, lint", async () => {
   const log = console.log; console.log = () => {};
   try {
     expect(await configCmd(root, ["init"])).toBe(0);
-    expect(await loadConfig(root)).toEqual({}); // squelette tout à null : agnostique
+    expect(await loadConfig(root)).toEqual({}); // all-null skeleton: agnostic
     expect(configCmd(root, ["init"])).rejects.toThrow("existe déjà");
     await configCmd(root, ["set", "client", "codex"]);
     await configCmd(root, ["set", "effort", "low"]);
@@ -398,7 +398,7 @@ test("cortex config : init, set, get, remove, lint", async () => {
     await Bun.write(join(root, "cortex.json"), "{ pas du json");
     expect(await configCmd(root, ["lint"])).toBe(1);
   } finally { console.log = log; }
-  expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // variante propre au modèle
+  expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // model-specific variant
   expect(lintConfig({ effort: "high" })[0].level).toBe("warning");
   expect(lintConfig([])[0].level).toBe("error");
 });
@@ -413,16 +413,16 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
     doc("a", "Context rot", "La fenêtre de contexte se dégrade."),
     doc("b", "Harnais", "Un long texte. ".repeat(2000) + "Le contexte compte aussi ici.", ["llm"]),
     doc("c", "Décentralisation", "Le fédivers et Mastodon.", ["reseau"], "Entity"),
-    doc("d", "Constructor", "Le constructor et toString d'une classe."), // mots qui sont aussi des propriétés d'Object
+    doc("d", "Constructor", "Le constructor et toString d'une classe."), // words that are also Object properties
   ];
   const e = createEngine({ docs, terms: buildTerms(docs), vocab: [] }, Fuse);
   const ids = (q: string) => rank(e, parseQuery(q), () => false).map((r) => r.doc.id);
-  expect(ids("contexte")).toEqual(["a", "b"]); // mot en fin d'une longue page trouvé ; « Context » au titre classe a devant
-  expect(ids("conte")).toContain("b"); // préfixe pendant la frappe
-  expect(ids("contexet")).toContain("a"); // faute de frappe
-  expect(ids("dégrade")).toEqual(["a"]); // mot connu : pas de flou (« degrade » ne ramène pas un voisin approché)
+  expect(ids("contexte")).toEqual(["a", "b"]); // word at the end of a long page found; « Context » in the title ranks a first
+  expect(ids("conte")).toContain("b"); // prefix while typing
+  expect(ids("contexet")).toContain("a"); // typo
+  expect(ids("dégrade")).toEqual(["a"]); // known word: no fuzziness (« degrade » does not bring back an approximate neighbor)
   expect([...expand(e, "fenetre").keys()]).toEqual(["fenetre"]);
-  expect(ids("decentralisation")).toEqual(["c"]); // accents ignorés
+  expect(ids("decentralisation")).toEqual(["c"]); // accents ignored
   expect(ids("contexte #llm")).toEqual(["b"]);
   expect(ids("contexte -fenetre")).toEqual(["b"]);
   expect(ids('"fediverse"')).toEqual([]);
@@ -433,16 +433,16 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   expect(ids("tostring")).toEqual(["d"]);
   expect(ids("hasownproperty")).toEqual([]);
 
-  // ~3 000 pages de ~1 500 caractères : chaque requête doit rester instantanée
+  // ~3,000 pages of ~1,500 characters: each query must stay instantaneous
   const words = Array.from({ length: 4000 }, (_, i) => `mot${i.toString(36)}`);
   const big = Array.from({ length: 3000 }, (_, i) => doc(`p${i}`, `Page ${i}`, Array.from({ length: 200 }, (_, k) => words[(i * 7 + k * 13) % words.length]).join(" ")));
   const E = createEngine({ docs: big, terms: buildTerms(big), vocab: [] }, Fuse);
-  rank(E, parseQuery("motzz"), () => false); // construit l'index flou une fois
+  rank(E, parseQuery("motzz"), () => false); // builds the fuzzy index once
   let worst = 0;
   for (const q of ["mot1a", "mot2 mot3b", "motab", "page 12", "mot1q mot2r mot3s"]) {
     const t = performance.now(); rank(E, parseQuery(q), () => false); worst = Math.max(worst, performance.now() - t);
   }
-  expect(worst).toBeLessThan(200); // ~10 ms en pratique ; marge pour une machine chargée (l'ancien moteur : ~900 ms)
+  expect(worst).toBeLessThan(200); // ~10 ms in practice; margin for a loaded machine (the old engine: ~900 ms)
 });
 
 test("export : ancres de titres lisibles, uniques, sans collision avec les ids de l'interface", async () => {
@@ -472,19 +472,19 @@ test("recherche : suggestions de titres et résultats obéissent aux mêmes cond
   const found = (q: string, isFav = none) => rank(e, parseQuery(q), isFav).map((r) => r.doc.id);
 
   expect(titles("har")).toEqual(["a", "c"]);
-  expect(titles("har -agent")).toEqual(["c"]); // exclusion : plus de « Harnais d'agent »
-  expect(titles("-agent")).toEqual([]); // sans mot libre, aucun titre
+  expect(titles("har -agent")).toEqual(["c"]); // exclusion: no more « Harnais d'agent »
+  expect(titles("-agent")).toEqual([]); // without a free word, no title
   expect(titles("#llm har")).toEqual(["a", "c"]);
-  expect(titles("type:entity age")).toEqual(["b"]); // filtre structuré
-  expect(titles('age "format open"')).toEqual(["d"]); // phrase exacte
+  expect(titles("type:entity age")).toEqual(["b"]); // structured filter
+  expect(titles('age "format open"')).toEqual(["d"]); // exact phrase
   expect(titles("age is:fav", fav)).toEqual(["d"]);
   expect(titles("age is:fav")).toEqual([]);
-  // cohérence : tout titre proposé figure parmi les résultats de la même requête
+  // consistency: every suggested title appears among the results of the same query
   for (const q of ["har", "har -agent", "#llm har", "type:entity age", 'age "format open"', "-#llm age", "age -type:concept"])
     for (const id of titles(q)) expect(found(q)).toContain(id);
   expect(suggest(e, "har -agent", none).titles.map((d) => d.id)).toEqual(["c"]);
 
-  // total exact au-delà de la limite, extraits seulement jusqu'à la limite
+  // exact total beyond the limit, excerpts only up to the limit
   const r = search(e, "type:source", none, 50);
   expect([r.hits.length, r.total]).toEqual([50, 120]);
   expect(search(e, "  ", none, 50)).toEqual({ hits: [], total: 0 });
@@ -511,7 +511,7 @@ test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
   expect(sh("read", "wiki/non.md")).not.toBe(0);
 });
 
-/** Racine jetable : 3 pages wiki reliées par liens, tags et source partagée, plus une source raw. */
+/** Throwaway root: 3 wiki pages linked by links, tags and a shared source, plus a raw source. */
 async function mcpRoot() {
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   const res = "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md";
@@ -532,11 +532,11 @@ test("related : liens, rétroliens, sources et tags, classés par force", async 
   const { readDocs } = await import("./lib");
   const docs = await readDocs(await mcpRoot(), "wiki");
   const a = related(docs, "/wiki/concepts/a.md");
-  // B : lien sortant 3 + source 2 + tag ctx 1 = 6 ; C : lien entrant 3 + source 2 + tag llm 1 = 6 ; index.md exclu
+  // B: outgoing link 3 + source 2 + tag ctx 1 = 6; C: incoming link 3 + source 2 + tag llm 1 = 6; index.md excluded
   expect(a.map((r) => r.path)).toEqual(["wiki/concepts/b.md", "wiki/entities/c.md"]);
   expect(a[0]).toMatchObject({ score: 6, reasons: ["lien sortant", "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md", "tag partagé : ctx"] });
   expect(a[1].reasons).toContain("lien entrant");
-  // sans lien direct : seulement la source partagée (B et C n'ont aucun tag commun)
+  // no direct link: only the shared source (B and C have no common tag)
   expect(related(docs, "wiki/concepts/b.md").map((r) => [r.path, r.score])).toEqual([["wiki/concepts/a.md", 6], ["wiki/entities/c.md", 2]]);
   expect(() => related(docs, "/wiki/concepts/nope.md")).toThrow("introuvable");
 });
@@ -546,19 +546,19 @@ test("get : refuse tout chemin hors de wiki/ et raw/", async () => {
   const { symlinkSync } = await import("node:fs");
   const root = await mcpRoot();
   await Bun.write(join(root, "secret.md"), "secret");
-  symlinkSync("../secret.md", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
+  symlinkSync("../secret.md", join(root, "wiki/piege.md")); // link that leaves wiki/
   expect(await getFile(root, "/wiki/concepts/b.md")).toContain("Beta");
   expect(await getFile(root, "wiki/concepts/b.md")).toContain("Beta");
   expect(await getFile(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md")).toContain("zythum");
   for (const p of ["cortex.json", "secret.md", "wiki/../secret.md", "/wiki/../secret.md", "wiki/piege.md", "/etc/passwd", "../x.md"])
     expect(getFile(root, p)).rejects.toThrow();
-  expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // un dossier n'est pas un fichier
+  expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // a folder is not a file
 });
 
 test("lastLog : entrées structurées des derniers jours, filtre par kind", async () => {
   const { lastLog } = await import("./mcp");
   const root = await mcpRoot();
-  expect(lastLog(root, 1).map((e) => e.text)).toEqual(["x", "0 erreur"]); // plus récente d'abord
+  expect(lastLog(root, 1).map((e) => e.text)).toEqual(["x", "0 erreur"]); // most recent first
   expect(lastLog(root, 1)[0]).toMatchObject({ kind: "add", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"] });
   expect(lastLog(root, 5).map((e) => e.text)).toEqual(["x", "0 erreur", "y"]);
   expect(lastLog(root, 5, "lint").map((e) => e.text)).toEqual(["0 erreur"]);
@@ -576,7 +576,7 @@ test("cortex mcp : initialize, tools/list, search, get, add sans réseau (JSON-R
     for (;;) {
       const nl = buf.indexOf("\n");
       if (nl >= 0) {
-        const msg = JSON.parse(buf.slice(0, nl)); // une ligne hors protocole sur stdout ferait échouer ce parse
+        const msg = JSON.parse(buf.slice(0, nl)); // a line outside the protocol on stdout would make this parse fail
         buf = buf.slice(nl + 1);
         if (msg.id === id) return msg;
         continue;
@@ -607,7 +607,7 @@ test("cortex mcp : initialize, tools/list, search, get, add sans réseau (JSON-R
     const added = JSON.parse((await call(7, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text);
     expect(added).toMatchObject({ duplicate: false, title: "Idée" });
     expect(JSON.parse((await call(8, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text).id).toBe(added.id);
-    expect((await call(10, "add", { input: "/etc/hostname", note: "fuite" })).isError).toBe(true); // pas de fichier local via MCP
+    expect((await call(10, "add", { input: "/etc/hostname", note: "fuite" })).isError).toBe(true); // no local file via MCP
     const today = JSON.parse((await call(9, "log", { kind: "add" })).content[0].text);
     expect(today[0]).toMatchObject({ kind: "add", sources: [added.id] });
     expect(today.every((e: any) => e.kind === "add")).toBe(true);
@@ -627,15 +627,15 @@ test("requête de recherche : filtres, guillemets, exclusions, accents", async (
   expect(p.phrases.map((x) => x.text)).toEqual(["phrase exacte"]);
   expect(p.exclude.map((x) => x.text)).toEqual(["rot", "a eviter"]);
   expect(canonType("entités")).toBe("Entity");
-  // clé inconnue = mot ordinaire ; tiret au milieu d'un mot ≠ exclusion ; requête vide
+  // unknown key = ordinary word; hyphen inside a word ≠ exclusion; empty query
   expect(parseQuery("foo:bar chain-of-thought").words).toEqual(["foo", "bar", "chain", "of", "thought"]);
   expect(parseQuery("chain-of-thought").exclude).toEqual([]);
   expect(isEmpty(parseQuery("  "))).toBe(true);
-  // guillemet non fermé : ne bloque rien
+  // unclosed quote: blocks nothing
   expect(parseQuery('"jamais fermé').words).toEqual(["jamais", "ferme"]);
-  // retrait d'une puce
+  // removal of a chip
   expect(removeToken("a #tag b", "#tag")).toBe("a b");
-  // filtre répété : une seule puce (clé unique), qui retire toutes ses occurrences ; retrait par jeton entier
+  // repeated filter: a single chip (unique key), which removes all its occurrences; removal by whole token
   const labels = (q: string) => chips(parseQuery(q)).map((c) => c.label);
   expect(labels("#llm #llm")).toEqual(["#llm"]);
   expect(labels("#llm tag:LLM")).toEqual(["#llm"]);
@@ -651,14 +651,14 @@ test("requête de recherche : filtres, guillemets, exclusions, accents", async (
 
   const doc = { id: "concepts/a", title: "Mémoire vive", description: "RAM", type: "Concept", tags: ["Matériel", "ram"], status: "stable", verified: false, text: "La mémoire coûte cher en 2026." };
   const ok = (q: string, fav = false) => matches(doc, parseQuery(q), () => fav);
-  expect(ok("#materiel type:concept status:stable")).toBe(true); // tag sans accent, type en minuscules
+  expect(ok("#materiel type:concept status:stable")).toBe(true); // tag without accent, type in lowercase
   expect(ok("type:source")).toBe(false);
   expect(ok("-type:source -#absent")).toBe(true);
   expect(ok("-#ram")).toBe(false);
   expect(ok("is:unverified")).toBe(true);
   expect(ok("is:fav")).toBe(false);
   expect(ok("is:favoris", true)).toBe(true);
-  expect(ok('"coute cher"')).toBe(true); // phrase exacte, sans accents
+  expect(ok('"coute cher"')).toBe(true); // exact phrase, without accents
   expect(ok('"cher coute"')).toBe(false);
   expect(ok("-cher")).toBe(false);
   expect(ok("-prix")).toBe(true);
@@ -673,7 +673,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   await Bun.write(join(root, "cortex.json"), "{}");
   await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\ntitle: Source un\nurl: https://exemple.org/article\nnote: n\nstatus: compiled\n---\nSECRET-DU-CORPS-RAW\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n## Première partie\n\nEncore un fait.[^s1] Et un autre.[^s1]\n\n### Détail\n\n## Première partie\n\n## Notes\n\n[^s1]: précision *utile*\n");
-  await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7 800 caractères
+  await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7,800 characters
   await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
   await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "> [!note] Note personnelle\n> pourquoi je garde ça\n\nRésumé, voir [Alpha](/wiki/concepts/a.md).\n");
   await Bun.write(join(root, "wiki/index.md"), "# Index\n");
@@ -686,113 +686,113 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(() => checkOut(root, root)).toThrow("refusé");
   expect(() => checkOut(root, join(root, "wiki"))).toThrow("refusé");
   await Bun.write(join(root, "documents/notes.txt"), "à ne jamais vider");
-  expect(() => checkOut(root, join(root, "documents"))).toThrow("ne ressemble pas à un export"); // dossier non vide sans _app/
+  expect(() => checkOut(root, join(root, "documents"))).toThrow("ne ressemble pas à un export"); // non-empty folder without _app/
   const out = join(root, ".cortex/site");
-  process.env.SOURCE_DATE_EPOCH = "1793790000"; // heure d'export figée : deux exports restent identiques à l'octet
+  process.env.SOURCE_DATE_EPOCH = "1793790000"; // export time frozen: two exports stay byte-identical
   await exportSite(root, out, () => {});
 
   const html = (p: string) => readFileSync(join(out, p), "utf8");
   for (const p of ["index.html", "graph/index.html", "log/index.html", "tags/index.html", "tags/alpha/index.html", "search/index.html", "wiki/concepts/a/index.html", "wiki/concepts/b/index.html", "wiki/entities/c/index.html", "wiki/sources/s/index.html"])
     expect(existsSync(join(out, p))).toBe(true);
   const a = html("wiki/concepts/a/index.html");
-  expect(a).toContain('href="../b/#x"'); // lien réécrit, relatif
+  expect(a).toContain('href="../b/#x"'); // link rewritten, relative
   expect(a).toContain('href="../../entities/c/"');
-  expect(a).toContain('class="lien-manquant"'); // page absente : pas de lien mort
+  expect(a).toContain('class="lien-manquant"'); // missing page: no dead link
   expect(a).not.toMatch(/href="[^"]*\.md/);
-  expect(a).toContain('href="#fn-s1"'); // note [^s1] numérotée, reliée à sources[]
+  expect(a).toContain('href="#fn-s1"'); // note [^s1] numbered, linked to sources[]
   expect(a).toContain('id="fn-s1"');
   expect(a).toContain('href="#src-s1"');
   expect(a).toContain("<em>utile</em>");
-  // note citée trois fois : une ancre par occurrence, et un retour ↩ vers chacune (pas seulement la première)
+  // note cited three times: one anchor per occurrence, and a ↩ back-link to each (not only the first)
   for (const k of [1, 2, 3]) {
     expect(a).toContain(`id="fnref-s1-${k}"`);
     expect(a).toContain(`href="#fnref-s1-${k}"`);
   }
   expect(a).not.toContain('id="fnref-s1-4"');
   expect(a).toContain("Retour à l'occurrence 2 sur 3");
-  expect(a).toContain('href="https://exemple.org/article"'); // source : URL d'origine, pas le chemin raw
+  expect(a).toContain('href="https://exemple.org/article"'); // source: original URL, not the raw path
   expect(a).not.toContain("/raw/");
   expect(a).toContain("Rétroliens");
 
   const c = html("wiki/entities/c/index.html");
-  expect(c).toContain('href="../../../"'); // /wiki/index.md → accueil
+  expect(c).toContain('href="../../../"'); // /wiki/index.md → home
   expect(c).toContain('href="../../../log/"'); // /wiki/log.md → journal
-  // journal : entrées structurées, plus récente d'abord ; pages citées en liens, source → page Source du wiki, sinon id en texte
+  // journal: structured entries, most recent first; cited pages as links, source → wiki Source page, otherwise id as text
   const log = JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).log;
   expect(log.map((e: any) => [e.at.slice(0, 10), e.kind])).toEqual([["2026-11-04", "add"], ["2026-11-04", "ingest"], ["2026-11-03", "update"]]);
-  expect(log[1].pages).toEqual([{ id: "concepts/a", title: "Alpha", type: "Concept" }]); // la page absente est écartée
-  expect(log[1].sources).toEqual([]); // l'id est déjà nommé dans le texte
+  expect(log[1].pages).toEqual([{ id: "concepts/a", title: "Alpha", type: "Concept" }]); // the missing page is dropped
+  expect(log[1].sources).toEqual([]); // the id is already named in the text
   expect(log[1].html).toContain('<a href="../wiki/sources/s/"><code>01a1a5c9-5e80-7075-ae13-aab03b0a8697</code></a>');
   expect(log[0].sources).toEqual([{ id: "01a1a5c9-5e80-7075-ae13-aab03b0a8697", page: { id: "sources/s", title: "Source un", type: "Source" } }, { id: "01a1a5c9-5e80-7075-ae13-0000000000ff" }]);
   expect(log[2].html).toBe('Un <a href="../wiki/concepts/a/">lien</a> et <strong>gras</strong>.');
   const logPage = html("log/index.html");
   for (const t of ["Journal", "Ajout.", "Alpha", "Source un", "01a1a5c9-5e80-7075-ae13-0000000000ff", "3 entrées"]) expect(logPage).toContain(t);
-  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("</code></a> compilée")); // l'ajout de 11 h avant l'ingest de 9 h 30
+  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("</code></a> compilée")); // the 11:00 add before the 09:30 ingest
   const out2 = join(root, "site2");
-  await exportSite(root, out2, () => {}); // reproductible : même wiki, même site
+  await exportSite(root, out2, () => {}); // reproducible: same wiki, same site
   const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
   expect(files(out2)).toEqual(files(out));
   for (const f of files(out)) expect(readFileSync(join(out2, f), "utf8")).toBe(readFileSync(join(out, f), "utf8"));
 
-  // hors ligne : le service worker précache les pages, leurs données, l'index de recherche et le graphe (comparé plus haut : reproductible)
+  // offline: the service worker precaches the pages, their data, the search index and the graph (compared above: reproducible)
   const sw = html("service-worker.js");
   for (const p of ["graph.json", "search-index.json", "wiki/concepts/a/", "wiki/concepts/a/__data.json", "_app/immutable/"]) expect(sw).toContain(p);
 
   const graph = JSON.parse(html("graph.json"));
   expect(graph.nodes.map((n: any) => n.id).sort()).toEqual(["concepts/a", "concepts/b", "entities/c", "sources/s"]);
   expect(graph.nodes.find((n: any) => n.id === "concepts/a")).toMatchObject({ type: "Concept", tags: ["alpha"], degree: 3 });
-  expect(graph.links).toHaveLength(3); // a-b (liens dans les deux sens : une seule arête), a-c, s-a
+  expect(graph.links).toHaveLength(3); // a-b (links in both directions: a single edge), a-c, s-a
   expect(graph.links.filter((l: any) => [l.source, l.target].sort().join() === "concepts/a,concepts/b")).toHaveLength(1);
   expect(graph.links.some((l: any) => l.target === "concepts/absent")).toBe(false);
 
   const idx = JSON.parse(html("search-index.json"));
   const s = idx.docs.find((d: any) => d.id === "sources/s");
-  expect(s.text).toContain("pourquoi je garde ça"); // contenu de l'encart indexé…
-  expect(s.text).not.toContain("Note personnelle"); // …mais pas son titre
+  expect(s.text).toContain("pourquoi je garde ça"); // content of the callout indexed…
+  expect(s.text).not.toContain("Note personnelle"); // …but not its title
   expect(idx.docs).toHaveLength(4);
-  expect(idx.terms.motlointain).toEqual([idx.docs.findIndex((d: any) => d.id === "concepts/b")]); // index inversé sur tout le contenu
+  expect(idx.terms.motlointain).toEqual([idx.docs.findIndex((d: any) => d.id === "concepts/b")]); // inverted index over the whole content
   expect(idx.vocab).toContain("alpha");
-  expect(idx.docs.find((d: any) => d.id === "concepts/b").text).toContain("Motlointain"); // contenu complet indexé, pas un extrait
+  expect(idx.docs.find((d: any) => d.id === "concepts/b").text).toContain("Motlointain"); // full content indexed, not an excerpt
 
-  // « Copier le Markdown » : le source de la page, frontmatter compris, chemin raw/ remplacé par l'URL d'origine
+  // « Copier le Markdown »: the page source, frontmatter included, raw/ path replaced by the original URL
   const pageA = JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).pages.find((x: any) => x.id === "concepts/a");
   expect(pageA.md).toStartWith("---\ntype: Concept\ntitle: Alpha");
   expect(pageA.md).toContain("resource: https://exemple.org/article");
   expect(pageA.md).toContain("Voir [Beta](/wiki/concepts/b.md#x)");
-  // sommaire : titres h2/h3 avec ancres stables (doublon suffixé), repris par les ids du HTML ; nombre d'occurrences par note
+  // table of contents: h2/h3 headings with stable anchors (duplicate suffixed), reused by the HTML ids; occurrence count per note
   expect(pageA.toc.map((t: any) => [t.level, t.id, t.text])).toEqual([[2, "premiere-partie", "Première partie"], [3, "detail", "Détail"], [2, "premiere-partie-1", "Première partie"], [2, "notes", "Notes"]]);
   for (const t of pageA.toc) expect(pageA.html).toContain(`id="${t.id}"`);
   expect(pageA.notes[0]).toMatchObject({ id: "s1", refs: 3 });
-  expect(a).toContain('href="#premiere-partie-1"'); // quatre titres : le sommaire est affiché (seuil > 3)
+  expect(a).toContain('href="#premiere-partie-1"'); // four headings: the table of contents is shown (threshold > 3)
   expect(JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).pages.find((x: any) => x.id === "entities/c").toc).toEqual([]);
-  // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
+  // no raw/ data beyond the original URL, anywhere in the site
   const all = (readdirSync(out, { recursive: true }) as string[]).filter((f) => statSync(join(out, f)).isFile());
   for (const f of all) {
     const t = readFileSync(join(out, f), "utf8");
     expect(t).not.toContain("SECRET-DU-CORPS-RAW");
-    if (!f.startsWith("log/")) expect(t).not.toContain("01a1a5c9-5e80-7075-ae13-aab03b0a8697"); // le journal nomme les ids raw dans son texte
+    if (!f.startsWith("log/")) expect(t).not.toContain("01a1a5c9-5e80-7075-ae13-aab03b0a8697"); // the journal names raw ids in its text
   }
 }, 120_000);
 
 test("graphe : taille des nœuds bornée, libellés sans collision, hiérarchisés, rapides à 2 000 nœuds", async () => {
   const { labelBudget, placeLabels, screenRadius } = await import("../site/src/lib/graph-labels");
-  for (const k of [0.05, 1, 12, 1000]) expect(screenRadius(30, k)).toBeLessThanOrEqual(14); // jamais énorme, quel que soit le zoom
-  expect(screenRadius(0, 0.01)).toBeGreaterThanOrEqual(2.5); // ni invisible
-  expect(screenRadius(25, 0.01)).toBeGreaterThan(screenRadius(1, 0.01)); // le degré reste lisible au dézoom
-  expect(labelBudget(342, 590, 0.5)).toBeLessThan(labelBudget(1200, 700, 4)); // plus de libellés sur grand écran et en zoomant
+  for (const k of [0.05, 1, 12, 1000]) expect(screenRadius(30, k)).toBeLessThanOrEqual(14); // never huge, whatever the zoom
+  expect(screenRadius(0, 0.01)).toBeGreaterThanOrEqual(2.5); // nor invisible
+  expect(screenRadius(25, 0.01)).toBeGreaterThan(screenRadius(1, 0.01)); // degree stays readable when zoomed out
+  expect(labelBudget(342, 590, 0.5)).toBeLessThan(labelBudget(1200, 700, 4)); // more labels on a large screen and when zooming in
   expect(labelBudget(4000, 4000, 100)).toBe(150);
 
   type T = { id: string; x: number; y: number; force?: boolean };
   const it = (id: string, x: number, y: number, force = false): T => ({ id, x, y, force });
   const rect = (t: T) => ({ x: t.x, y: t.y, w: 80, h: 16, force: t.force });
   const ids = (a: T[]) => a.map((t) => t.id);
-  // priorité : le premier gagne, le chevauchant est écarté, le voisin éloigné est gardé
+  // priority: the first wins, the overlapping one is dropped, the distant neighbor is kept
   expect(ids(placeLabels([it("a", 0, 0), it("b", 40, 5), it("c", 200, 0)], rect, 10))).toEqual(["a", "c"]);
-  expect(ids(placeLabels([it("a", 0, 0), it("c", 200, 0), it("d", 400, 0)], rect, 2))).toEqual(["a", "c"]); // plafond
-  expect(ids(placeLabels([it("a", 0, 0), it("f", 20, 0, true)], rect, 10))).toEqual(["a", "f"]); // `force` toujours retenu
-  expect(ids(placeLabels([it("a", 0, 0), it("b", 0, 40), it("h", -999, 0)], (t) => (t.id === "h" ? null : rect(t)), 10))).toEqual(["a", "b"]); // hors écran écarté
-  expect(ids(placeLabels([it("a", -250, -40), it("b", -190, -30)], rect, 10))).toEqual(["a"]); // grille à coordonnées négatives : chevauchement vu
-  // 2 000 nœuds sur un écran : aucun chevauchement, plafond respecté, quelques millisecondes
+  expect(ids(placeLabels([it("a", 0, 0), it("c", 200, 0), it("d", 400, 0)], rect, 2))).toEqual(["a", "c"]); // cap
+  expect(ids(placeLabels([it("a", 0, 0), it("f", 20, 0, true)], rect, 10))).toEqual(["a", "f"]); // `force` always kept
+  expect(ids(placeLabels([it("a", 0, 0), it("b", 0, 40), it("h", -999, 0)], (t) => (t.id === "h" ? null : rect(t)), 10))).toEqual(["a", "b"]); // off-screen dropped
+  expect(ids(placeLabels([it("a", -250, -40), it("b", -190, -30)], rect, 10))).toEqual(["a"]); // grid with negative coordinates: overlap detected
+  // 2,000 nodes on a screen: no overlap, cap respected, a few milliseconds
   const many = Array.from({ length: 2000 }, (_, i) => it(`n${i}`, (i * 37) % 1200, (i * 91) % 700));
   const t0 = performance.now();
   const kept = placeLabels(many, rect, labelBudget(1200, 700, 1));

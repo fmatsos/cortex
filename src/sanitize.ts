@@ -1,10 +1,10 @@
 /**
- * Assainisseur du HTML exporté (`{@html}` côté site). Le Markdown du wiki est écrit par un LLM à partir de pages web
- * brutes : le HTML auteur que Bun laisse passer est une surface XSS.
+ * Sanitizer for the exported HTML (`{@html}` on the site side). The wiki Markdown is written by an LLM from raw web
+ * pages: the author HTML that Bun lets through is an XSS surface.
  *
- * Principe : liste blanche d'éléments et d'attributs, et ré-émission. Le texte est recopié tel quel, chaque balise
- * reconnue est reconstruite (attributs entre guillemets, valeurs échappées), tout `<` qui n'ouvre pas une balise bien
- * formée devient `&lt;`. Rien du HTML d'entrée n'atteint la sortie sans être passé par ces règles.
+ * Principle: whitelist of elements and attributes, and re-emission. Text is copied as is, each recognized tag
+ * is rebuilt (quoted attributes, escaped values), any `<` that does not open a well-formed tag
+ * becomes `&lt;`. Nothing of the input HTML reaches the output without going through these rules.
  */
 
 const VOID = new Set(["br", "hr", "img", "input", "wbr"]);
@@ -14,9 +14,9 @@ const TAGS = new Set([
   "p", "pre", "q", "s", "small", "span", "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead",
   "time", "tr", "u", "ul", "wbr",
 ]);
-/** Éléments dont le contenu n'est jamais du texte à afficher : supprimés avec leur contenu. */
+/** Elements whose content is never text to display: removed with their content. */
 const DROP = new Set(["script", "style", "iframe", "object", "embed", "noscript", "template", "textarea", "title", "xmp", "noembed", "noframes", "svg", "math", "select", "button", "form"]);
-/** Classes que le site stylise ; toute autre classe est retirée (pas d'habillage arbitraire de l'interface). */
+/** Classes the site styles; any other class is removed (no arbitrary skinning of the interface). */
 const CLASSES = new Set(["fn-ref", "note-perso", "note-perso-titre", "callout-warning", "callout-warning-titre", "lien-manquant", "task-list-item", "task-list-item-checkbox"]);
 
 const NAMED: Record<string, string> = { colon: ":", tab: "\t", newline: "\n", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", sol: "/", lpar: "(", rpar: ")", num: "#", excl: "!", period: ".", comma: ",", semi: ";", equals: "=", quest: "?", percnt: "%", plus: "+" };
@@ -26,16 +26,16 @@ const decode = (s: string) => s.replace(/&(?:#[xX]([0-9a-fA-F]+)|#(\d+)|([a-zA-Z
   return NAMED[name!.toLowerCase()] ?? all;
 });
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-/** Valeur d'attribut textuelle : entités valides conservées, le reste échappé. */
+/** Textual attribute value: valid entities kept, the rest escaped. */
 const escText = (s: string) => s.replace(/&(?!#?\w+;)/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const SAFE_SCHEMES = new Set(["http", "https", "mailto", "tel"]);
 const SAFE_DATA_IMAGE = /^data:image\/(?:png|gif|jpe?g|webp|avif);base64,[a-z0-9+/=]*$/i;
 
-/** URL sûre (valeur décodée, prête à échapper) ou `undefined`. Liste blanche de protocoles, pas de liste noire. */
+/** Safe URL (decoded value, ready to escape) or `undefined`. Protocol whitelist, not a blacklist. */
 export function safeUrl(raw: string, image = false): string | undefined {
   const value = decode(raw).trim();
-  // les navigateurs ignorent tabulations, retours et contrôles dans le protocole : on les retire pour juger
+  // browsers ignore tabs, newlines and control characters in the protocol: we strip them before judging
   const probe = value.replace(/[\p{Cc}\p{Cf}\p{Z}]/gu, "");
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(probe);
   if (scheme) {
@@ -43,7 +43,7 @@ export function safeUrl(raw: string, image = false): string | undefined {
     return image && SAFE_DATA_IMAGE.test(probe) ? probe : undefined;
   }
   const head = probe.split(/[/?#]/)[0];
-  if (head.includes(":") || head.includes("&")) return undefined; // protocole déguisé (entité inconnue, caractère exotique)
+  if (head.includes(":") || head.includes("&")) return undefined; // disguised protocol (unknown entity, exotic character)
   return value;
 }
 
@@ -53,7 +53,7 @@ const cls = (v: string, tag: string) => {
 };
 const digits = (v: string) => (/^\d{1,4}$/.test(v.trim()) ? v.trim() : undefined);
 
-/** Règle d'un attribut : renvoie la valeur à écrire (déjà échappée), `""` pour un attribut booléen, ou `undefined` pour le retirer. */
+/** Rule for an attribute: returns the value to write (already escaped), `""` for a boolean attribute, or `undefined` to remove it. */
 function attribute(tag: string, name: string, v: string): string | undefined {
   if (name === "class") { const c = cls(decode(v), tag); return c && esc(c); }
   switch (tag + " " + name) {
@@ -70,7 +70,7 @@ function attribute(tag: string, name: string, v: string): string | undefined {
   return undefined;
 }
 
-// une balise bien formée : nom, attributs `nom`, `nom=valeur`, `nom="valeur"`, `nom='valeur'`, `/` final facultatif
+// a well-formed tag: name, attributes `name`, `name=value`, `name="value"`, `name='value'`, optional trailing `/`
 const TAG = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*(\/?)>/y;
 const ATTR = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 
@@ -79,7 +79,7 @@ function openTag(tag: string, attrs: string, selfClose: boolean): string {
   let out = `<${tag}`;
   for (const m of attrs.matchAll(ATTR)) {
     const name = m[1].toLowerCase();
-    if (seen.has(name)) continue; // le premier gagne, comme dans un navigateur
+    if (seen.has(name)) continue; // the first wins, as in a browser
     seen.add(name);
     const v = attribute(tag, name, m[2] ?? m[3] ?? m[4] ?? "");
     if (v === undefined) continue;
@@ -97,7 +97,7 @@ export function sanitizeHtml(html: string): string {
     if (lt < 0) { out += html.slice(i); break; }
     out += html.slice(i, lt);
     i = lt;
-    if (html.startsWith("<!--", i)) { // commentaire : supprimé (« <!-->  » et « <!--> » sont des commentaires vides pour un navigateur)
+    if (html.startsWith("<!--", i)) { // comment: removed (« <!-->  » and « <!--> » are empty comments for a browser)
       const end = html.indexOf("-->", i + 4);
       if (end >= 0) { i = end + 3; continue; }
       out += "&lt;"; i += 1; continue;
@@ -112,14 +112,14 @@ export function sanitizeHtml(html: string): string {
         const close = new RegExp(`</${tag}\\s*>`, "ig");
         close.lastIndex = i;
         const c = close.exec(html);
-        if (c) i = close.lastIndex; // contenu supprimé avec l'élément ; sans fermeture, on continue après la balise
+        if (c) i = close.lastIndex; // content removed with the element; without a closing tag, we continue after the tag
       }
       continue;
     }
-    if (!TAGS.has(tag)) continue; // élément inconnu : balise retirée, texte conservé
+    if (!TAGS.has(tag)) continue; // unknown element: tag removed, text kept
     if (slash) {
       const at = open.lastIndexOf(tag);
-      if (at < 0) continue; // fermeture orpheline
+      if (at < 0) continue; // orphan closing tag
       while (open.length > at) out += `</${open.pop()}>`;
     } else {
       out += openTag(tag, attrs, !!selfClose);

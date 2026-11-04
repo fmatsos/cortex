@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config } from "./backend";
 
-// --- Codex SDK : bac à sable OS ; en écriture, seul wiki/ est inscriptible ----------------------
+// --- Codex SDK: OS sandbox; when writing, only wiki/ is writable---------------------------------
 
 export default function codex(cfg: Config): Backend {
   return {
@@ -9,7 +9,7 @@ export default function codex(cfg: Config): Backend {
     async run(root, prompt, mode) {
       const { Codex } = await load<typeof import("@openai/codex-sdk")>("@openai/codex-sdk");
       const thread = new Codex({ codexPathOverride: cli("codex") }).startThread({
-        // workspace-write n'autorise l'écriture que sous workingDirectory (verified: raw/ and the agent file stay read-only)
+        // workspace-write only allows writing under workingDirectory (verified: raw/ and the agent file stay read-only)
         workingDirectory: mode === "write" ? join(root, "wiki") : root,
         sandboxMode: mode === "write" ? "workspace-write" : "read-only",
         approvalPolicy: "never",

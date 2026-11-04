@@ -10,7 +10,7 @@
 	import { filterTags, readTagsParams, sortTags, TAG_SORTS, tagsQuery, type TagSort } from "#lib/tags-view.js";
 
 	let { data } = $props();
-	// Filtre et tri font foi dans l'URL (?q=…&tri=alpha) : la page prérendue n'en connaît aucun, ils se lisent dans le navigateur.
+	// Filter and sort are authoritative in the URL (?q=…&tri=alpha): the prerendered page knows none of them, they are read in the browser.
 	let q = $state("");
 	let sort = $state<TagSort>("freq");
 	let ready = $state(false);
@@ -21,7 +21,7 @@
 	const clear = async () => {
 		q = "";
 		await tick();
-		input?.focus(); // le bouton disparaît : le focus revient dans le champ
+		input?.focus(); // the button disappears: focus returns to the field
 	};
 
 	afterNavigate((nav) => {

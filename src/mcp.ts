@@ -13,7 +13,7 @@ export { related };
 
 const norm = (p: string) => p.trim().replace(/^\/+/, "");
 
-/** Contenu d'un .md sous wiki/ ou raw/ ; refuse tout chemin qui en sort une fois résolu (.., liens symboliques). */
+/** Content of a .md under wiki/ or raw/; refuses any path that leaves it once resolved (.., symbolic links). */
 export async function getFile(root: string, path: string): Promise<string> {
   const file = join(root, norm(path));
   if (!existsSync(file) || !statSync(file).isFile()) throw new Error(`Fichier introuvable : ${path}`);
@@ -23,14 +23,14 @@ export async function getFile(root: string, path: string): Promise<string> {
   return Bun.file(real).text();
 }
 
-/** Entrées des `days` derniers jours du journal (wiki/log.jsonl), plus récentes d'abord, filtrées par `kind`. */
+/** Entries of the last `days` days of the journal (wiki/log.jsonl), most recent first, filtered by `kind`. */
 export function lastLog(root: string, days: number, kind?: string): LogEntry[] {
   return lastDays(readLog(root).entries, days, kind);
 }
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 1));
-/** Une erreur devient un résultat d'outil `isError` que l'agent peut lire, pas une rupture du protocole. */
+/** An error becomes an `isError` tool result the agent can read, not a protocol break. */
 const safe = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async (a: A) => {
   try { return await fn(a); }
   catch (e) { return { ...text(`Erreur : ${(e as Error).message}`), isError: true }; }
@@ -93,7 +93,7 @@ export function buildServer(root: string): McpServer {
   }, safe(async ({ input, text: txt, note }) => {
     if (!note.trim()) throw new Error("note obligatoire : dis pourquoi cette source est gardée.");
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Donne soit input (URL ou chemin), soit text.");
-    // pas de chemin local : un client MCP copierait n'importe quel fichier du poste (clé, secret) dans raw/, puis dans git
+    // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input doit être une URL http(s) ; pour un fichier local, utilise cortex add ou cortex inbox.");
     const r = await add(root, input ?? "-", { note, text: txt });
     return json({ id: r.id, duplicate: r.duplicate, ...(r.ex && { title: r.ex.title, partial: r.ex.partial }) });
@@ -111,7 +111,7 @@ export function buildServer(root: string): McpServer {
   return s;
 }
 
-/** Serveur MCP stdio. Stdout est réservé au protocole : tout console.log perdu part sur stderr. */
+/** MCP stdio server. Stdout is reserved for the protocol: any stray console.log goes to stderr. */
 export function serveMcp(root: string) {
   console.log = console.error;
   serveStdio(() => buildServer(root));

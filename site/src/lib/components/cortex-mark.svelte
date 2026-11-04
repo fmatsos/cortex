@@ -1,8 +1,8 @@
 <script lang="ts">
-	// Marque de Cortex (assets/logo/cortex-mark.svg), en currentColor : suit le thème.
-	// `animated` : en boucle, une lumière fine descend l'axe du cerveau puis parcourt les liens du graphe,
-	// et chaque nœud pulse à son passage.
-	// Avec prefers-reduced-motion, la marque est statique.
+	// Cortex mark (assets/logo/cortex-mark.svg), in currentColor: follows the theme.
+	// `animated`: in a loop, a thin light runs down the axis of the brain then along the graph links,
+	// and each node pulses as it passes.
+	// With prefers-reduced-motion, the mark is static.
 	let { size = 24, animated = false, class: cls = "" }: { size?: number; animated?: boolean; class?: string } = $props();
 	const LIENS = "M44 22l-4 11 6 10";
 </script>
@@ -14,7 +14,7 @@
 		<path d="M43.2 24.4l-2.4 6.2m.6 4.5 3.2 5.8" />
 	</g>
 	{#if animated}
-		<!-- influx : descend l'axe central, puis parcourt les liens du graphe (un chemin par trait : les tirets repartent à chaque sous-chemin) -->
+		<!-- inflow: runs down the central axis, then along the graph links (one path per stroke: the dashes restart on each subpath) -->
 		<path class="influx i1" pathLength="1" d="M32 14v37" />
 		<path class="influx i4" pathLength="1" d={LIENS} />
 	{/if}
@@ -30,7 +30,7 @@
 	.influx { display: none; }
 	.noeud { transform-box: fill-box; transform-origin: center; }
 	@media (prefers-reduced-motion: no-preference) {
-		/* une lumière fine qui court à l'intérieur du trait (couleur du fond), un trait à la fois, puis les nœuds */
+		/* a thin light running inside the stroke (background color), one stroke at a time, then the nodes */
 		.animated .influx {
 			display: inline;
 			stroke: var(--background, #fff);

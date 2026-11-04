@@ -7,8 +7,8 @@
 	import { toPage, toRoute } from "#lib/links.js";
 	import { kindColor, kindLabel, typeColor, typeIcon } from "#lib/type-meta.js";
 
-	// Une entrée du journal : type, heure, lien direct, texte (résumé de quelques lignes puis détail dépliable si le texte
-	// est long), références toujours visibles. Sans JavaScript, le texte reste entier : le résumé n'est appliqué qu'une fois monté.
+	// A log entry: type, time, direct link, text (summary of a few lines then expandable detail if the text
+	// is long), references always visible. Without JavaScript, the text stays whole: the summary is only applied once mounted.
 	let { entry, target = false }: { entry: LogEntry; target?: boolean } = $props();
 	const hour = $derived(hourOf(entry.at));
 	const textId = $derived(`${entry.id}-texte`);
@@ -16,13 +16,13 @@
 	let box = $state<HTMLElement>();
 	let mounted = $state(false);
 	let open = $state(false);
-	let overflow = $state(false); // le texte dépasse le résumé : le bouton n'apparaît que dans ce cas
+	let overflow = $state(false); // the text exceeds the summary: the button only appears in that case
 
 	$effect(() => {
 		const el = box;
 		if (!el) return;
 		mounted = true;
-		// ne mesurer que replié : déplié, le texte entier ne « dépasse » plus rien
+		// measure only when collapsed: expanded, the whole text no longer "overflows" anything
 		const measure = () => {
 			if (!untrack(() => open)) overflow = el.scrollHeight > el.clientHeight + 1;
 		};
@@ -48,7 +48,7 @@
 			<Icon name="copy-link" size={16} />
 		</a>
 	</div>
-	<!-- le focus d'un lien masqué par le résumé déplie l'entrée -->
+	<!-- focus on a link hidden by the summary expands the entry -->
 	<div
 		id={textId}
 		bind:this={box}

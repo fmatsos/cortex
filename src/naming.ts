@@ -4,19 +4,19 @@ import { localIso, readDocs, slugify } from "./lib";
 import { loadConfig } from "./backends/index";
 
 /**
- * Nommage et arborescence des sources raw et des pages wiki : un modèle par genre, dans config.json.
- * `raw_path` donne le dossier d'une source sous raw/ (qui contient source.md), son dernier segment est l'id raw ;
- * `page_path` donne le chemin d'une page sous wiki/, sans `.md`. `/` crée des sous-dossiers.
- * Seul le CLI applique ces modèles (`cortex add`, `cortex new`) : ni l'agent ni l'humain n'inventent un nom.
+ * Naming and layout of raw sources and wiki pages: one template per kind, in config.json.
+ * `raw_path` gives the folder of a source under raw/ (containing source.md), its last segment is the raw id;
+ * `page_path` gives the path of a page under wiki/, without `.md`. `/` creates subfolders.
+ * Only the CLI applies these templates (`cortex add`, `cortex new`): neither the agent nor the human invents a name.
  */
 export const NAMING_DEFAULTS = { raw_path: "{yyyy}/{mm}/{uuid}", page_path: "{type}/{uuid}" } as const;
 export type NamingKey = keyof typeof NAMING_DEFAULTS;
 
-/** Dossier de chaque type de page wiki (placeholder `{type}`). */
+/** Folder of each wiki page type (placeholder `{type}`). */
 export const TYPE_DIRS: Record<string, string> = { Source: "sources", Concept: "concepts", Entity: "entities", Synthesis: "syntheses" };
 
 const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-/** Placeholders : valeur (à la création) et motif (pour le lint). Dates en heure locale, comme `fetched_at`. */
+/** Placeholders: value (at creation) and pattern (for lint). Dates in local time, like `fetched_at`. */
 const PLACEHOLDERS: Record<string, { for?: NamingKey; re: string; value: (v: Vars) => string; doc: string }> = {
   uuid: { re: UUID_RE, value: (v) => Bun.randomUUIDv7("hex", v.at), doc: "UUID v7 (horodaté, unique)" },
   yyyy: { re: "\\d{4}", value: (v) => localIso(v.at).slice(0, 4), doc: "année" },
@@ -37,11 +37,11 @@ function rand4(): string {
   return [...crypto.getRandomValues(new Uint8Array(4))].map((b) => a[b % 36]).join("");
 }
 
-/** Placeholders permis pour un modèle, avec leur description (aide et messages d'erreur). */
+/** Allowed placeholders for a template, with their description (help and error messages). */
 export const placeholders = (key: NamingKey) =>
   Object.entries(PLACEHOLDERS).filter(([, p]) => !p.for || p.for === key).map(([k, p]) => `{${k}} ${p.doc}`);
 
-/** Modèle valide, sinon le message d'erreur. */
+/** Valid template, otherwise the error message. */
 export function checkTemplate(key: NamingKey, tpl: string): string | undefined {
   const allowed = Object.keys(PLACEHOLDERS).filter((k) => !PLACEHOLDERS[k].for || PLACEHOLDERS[k].for === key);
   const segs = tpl.split("/");
@@ -51,35 +51,35 @@ export function checkTemplate(key: NamingKey, tpl: string): string | undefined {
   if (!/\{[a-z]+\}/.test(segs.at(-1)!)) return `${key} : le dernier segment doit contenir un placeholder (« ${tpl} »), sinon tous les noms seraient identiques.`;
 }
 
-/** Applique un modèle. */
+/** Applies a template. */
 export const expand = (tpl: string, v: Vars) => tpl.replace(/\{([a-z]+)\}/g, (_, k: string) => PLACEHOLDERS[k].value(v));
 
-/** Motif d'un chemin produit par le modèle (suffixe `-2`, `-3`… d'une collision compris). */
+/** Pattern of a path produced by the template (including the `-2`, `-3`… suffix of a collision). */
 export function pattern(tpl: string): RegExp {
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const parts = tpl.split(/(\{[a-z]+\})/).map((p) => (/^\{[a-z]+\}$/.test(p) ? PLACEHOLDERS[p.slice(1, -1)].re : esc(p)));
   return new RegExp(`^${parts.join("")}(?:-\\d+)?$`);
 }
 
-/** Modèles en vigueur : config.json, sinon les valeurs par défaut (UUID v7). */
+/** Templates in force: config.json, otherwise the defaults (UUID v7). */
 export async function naming(root: string): Promise<Record<NamingKey, string>> {
   const c = await loadConfig(root);
   return { raw_path: c.raw_path ?? NAMING_DEFAULTS.raw_path, page_path: c.page_path ?? NAMING_DEFAULTS.page_path };
 }
 
-/** Premier chemin libre : `p`, sinon `p-2`, `p-3`… (le suffixe va au dernier segment). */
+/** First free path: `p`, otherwise `p-2`, `p-3`… (the suffix goes on the last segment). */
 export function free(p: string, taken: (p: string) => boolean): string {
   if (!taken(p)) return p;
   for (let n = 2; ; n++) if (!taken(`${p}-${n}`)) return `${p}-${n}`;
 }
 
-/** Id raw (dernier segment de son dossier) déjà pris quelque part sous raw/ ? Il doit être unique : le journal ne cite que lui. */
+/** Raw id (last segment of its folder) already taken somewhere under raw/? It must be unique: the journal only cites it. */
 export const rawIdTaken = (root: string, id: string) =>
   existsSync(join(root, "raw")) && new Bun.Glob(`**/${id}/source.md`).scanSync(join(root, "raw")).next().done === false;
 
 /**
- * `cortex new` : crée la page (frontmatter minimal, status: draft) au chemin donné par `page_path`, et renvoie ce chemin.
- * Refuse un titre déjà pris (mettre à jour avant de créer) en nommant la page existante.
+ * `cortex new`: creates the page (minimal frontmatter, status: draft) at the path given by `page_path`, and returns that path.
+ * Refuses an already-taken title (update before creating) by naming the existing page.
  */
 export async function newPage(root: string, type: string, title: string, at = new Date()): Promise<string> {
   const t = Object.keys(TYPE_DIRS).find((k) => k.toLowerCase() === type.toLowerCase());

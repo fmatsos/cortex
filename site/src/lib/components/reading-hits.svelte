@@ -5,9 +5,9 @@
 	import { parseQuery } from "#lib/query.js";
 	import { toRoute } from "#lib/links.js";
 
-	// Lecture d'un résultat de recherche (UX26) : quand l'adresse porte `?q=`, les termes trouvés sont surlignés dans le corps
-	// (`<mark>`), « Aller au passage trouvé » mène au premier, puis « Passage suivant / précédent » parcourt les autres ;
-	// « Retour aux résultats » revient à la recherche (au même endroit si on en vient). Le surlignage s'efface à volonté.
+	// Reading a search result (UX26): when the address carries `?q=`, the found terms are highlighted in the body
+	// (`<mark>`), "Aller au passage trouvé" leads to the first, then "Passage suivant / précédent" walks through the others;
+	// "Retour aux résultats" goes back to the search (to the same place if you came from it). The highlighting can be cleared at will.
 	let { container, q, pageId, fromSearch }: { container?: HTMLElement; q: string; pageId: string; fromSearch: boolean } = $props();
 
 	const terms = $derived(hitTerms(parseQuery(q)));
@@ -20,7 +20,7 @@
 	let announce = $state("");
 	const MAX = 300;
 
-	/** Enveloppe chaque plage trouvée d'un `<mark data-hit>` (hors appels de note) ; renvoie les marques dans l'ordre du texte. */
+	/** Wraps each found range in a `<mark data-hit>` (outside footnote calls); returns the marks in text order. */
 	function markHits(root: HTMLElement, t: HitTerms): HTMLElement[] {
 		const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
 			acceptNode: (n) => (n.parentElement?.closest("mark, script, style, .fn-ref") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
@@ -53,7 +53,7 @@
 		root.normalize();
 	}
 
-	// le corps est un `{@html}` : le surlignage se repose quand la page ou la requête change, et se retire au nettoyage
+	// the body is an `{@html}`: the highlighting is reapplied when the page or the query changes, and removed on cleanup
 	$effect(() => {
 		void pageId;
 		if (!container || !active) return;
@@ -76,7 +76,7 @@
 	};
 
 	const searchHref = $derived(`${toRoute("/search")}?q=${encodeURIComponent(q)}`);
-	// venu de la recherche : le retour de l'historique restitue les résultats, le filtre et la position
+	// coming from the search: history back restores the results, the filter and the position
 	const back = (e: MouseEvent) => { if (fromSearch && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) { e.preventDefault(); history.back(); } };
 </script>
 
@@ -105,7 +105,7 @@
 {/if}
 
 <style>
-	/* le passage courant se distingue des autres marques (anneau, pas seulement la couleur) */
+	/* the current passage stands out from the other marks (ring, not only color) */
 	:global(.wiki mark[data-hit][data-current]) {
 		outline: 2px solid var(--ring);
 		outline-offset: 1px;

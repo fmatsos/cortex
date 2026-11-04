@@ -1,11 +1,11 @@
 /**
- * Pack d'icônes du site : un seul jeu, dessiné pour ce projet (aucune dépendance).
+ * The site's icon pack: a single set, drawn for this project (no dependency).
  *
- * Grille `viewBox="0 0 24 24"`, trait 1,75, extrémités et jonctions arrondies, rayon usuel 2,
- * marge optique 2. `stroke="currentColor"`, `fill="none"` ; seule l'étoile active est remplie (prop `filled`).
- * Chaque valeur est le contenu interne du SVG : uniquement `path`, `circle`, `rect` et `g`
- * (un point = `h.01` avec extrémités rondes). L'enveloppe est dans `icon.svelte` ; `iconSvg()` la rend en chaîne
- * pour les usages hors Svelte (tests, motifs CSS en `mask`).
+ * `viewBox="0 0 24 24"` grid, stroke 1.75, rounded ends and joins, usual radius 2,
+ * optical margin 2. `stroke="currentColor"`, `fill="none"`; only the active star is filled (`filled` prop).
+ * Each value is the inner content of the SVG: only `path`, `circle`, `rect` and `g`
+ * (a dot = `h.01` with round ends). The wrapper is in `icon.svelte`; `iconSvg()` renders it as a string
+ * for uses outside Svelte (tests, CSS `mask` patterns).
  */
 
 const STAR = `<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>`;
@@ -23,13 +23,13 @@ export const ICONS = {
 	journal: `<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v18M12.5 8h3.5M12.5 12h3.5M12.5 16h3.5"/>`,
 	favorites: STAR,
 
-	// types de pages
+	// page types
 	concept: `<path d="M12 3a6 6 0 0 0-3.5 10.9L9.5 16h5l1-2.1A6 6 0 0 0 12 3z"/><path d="M9.5 18.5h5M10.5 21h3"/>`,
 	entity: `<path d="M12 3 20 7.5v9L12 21 4 16.5v-9z"/><path d="m12 12-7.7-4.3M12 12l7.7-4.3M12 12v9"/>`,
 	synthesis: `<circle cx="6" cy="5.5" r="2"/><circle cx="18" cy="5.5" r="2"/><path d="M6 7.5v1a3 3 0 0 0 3 3h3M18 7.5v1a3 3 0 0 1-3 3h-3M12 11.5V16"/><rect x="8.75" y="16" width="6.5" height="4.5" rx="1.5"/>`,
 	source: `<path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3v3.5A1.5 1.5 0 0 0 15.5 8H19M9 13h6M9 16.5h6"/>`,
 
-	// statut et confiance
+	// status and trust
 	draft: `<circle cx="12" cy="12" r="9" stroke-dasharray="2.2 4.87"/>`,
 	stable: `${CIRCLE}<path d="m8 12.3 2.8 2.8 5.4-5.7"/>`,
 	deprecated: `${CIRCLE}<path d="m5.6 5.6 12.8 12.8"/>`,
@@ -45,12 +45,12 @@ export const ICONS = {
 	success: `<path d="m5 12.5 4.8 4.8L19 7.5"/>`,
 	error: `${CIRCLE}<path d="M12 7.5v5.5M12 16.5h.01"/>`,
 
-	// thème
+	// theme
 	sun: `<circle cx="12" cy="12" r="3.8"/><path d="M12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M16.95 7.05l1.77-1.77M16.95 16.95l1.77 1.77M7.05 16.95l-1.77 1.77M7.05 7.05 5.28 5.28"/>`,
 	moon: `<path d="M20.5 13.5A8.75 8.75 0 1 1 10.5 3.5 7 7 0 0 0 20.5 13.5z"/>`,
 	system: `<rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M12 16.5V20M8.5 20h7"/>`,
 
-	// recherche
+	// search
 	filter: `<path d="M4 5.5h16L14 12.8V19l-4-2v-4.2z"/>`,
 	"operator-tag": `<path d="M10 3.5 8.5 20.5M16.5 3.5 15 20.5M4.5 9h15.5M4 15h15.5"/>`,
 	"operator-type": `<circle cx="7.5" cy="7.5" r="3.75"/><rect x="13" y="3.75" width="7.5" height="7.5" rx="1"/><path d="M12 14 16.25 20.5h-8.5z"/>`,
@@ -60,7 +60,7 @@ export const ICONS = {
 	recent: `<path d="M3.8 12a8.2 8.2 0 1 0 2.4-5.8L3.5 8.5M3.5 3.8v4.7h4.7M12 7.5V12l3 1.8"/>`,
 	clear: CLOSE,
 
-	// lecture
+	// reading
 	toc: `<path d="M4 6h16M9 12h8M9 18h11"/>`,
 	"chevron-down": `<path d="m6 9 6 6 6-6"/>`,
 	back: `<path d="M20 12H4M10 6l-6 6 6 6"/>`,
@@ -72,7 +72,7 @@ export const ICONS = {
 	citation: `<rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9.5 10.5v3.2a1.8 1.8 0 0 1-1.8 1.8M15.5 10.5v3.2a1.8 1.8 0 0 1-1.8 1.8"/>`,
 	"citation-return": `<path d="M20 5v7a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/>`,
 
-	// types d'entrée du journal
+	// log entry types
 	"kind-add": `${CIRCLE}<path d="M12 8v8M8 12h8"/>`,
 	"kind-ingest": `<path d="M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14M12 4v10M8 10.5l4 4 4-4"/>`,
 	generated: `<path d="M11 3.5l1.9 4.6 4.6 1.9-4.6 1.9L11 16.5l-1.9-4.6L4.5 10l4.6-1.9z"/><path d="M18 14.5v5M15.5 17h5"/>`,
@@ -81,7 +81,7 @@ export const ICONS = {
 	"kind-lint": `<path d="m3.5 6.2 1.6 1.6 3-3.2M3.5 12.2l1.6 1.6 3-3.2M3.5 18.2l1.6 1.6 3-3.2M12 6h9M12 12h9M12 18h9"/>`,
 	"kind-update": `<path d="M4.12 10.61A8 8 0 0 1 19.88 10.61M21.5 7.8l-1.62 2.81L17.4 8.55M19.88 13.39A8 8 0 0 1 4.12 13.39M2.5 16.2l1.62-2.81 2.48 2.06"/>`,
 
-	// graphe
+	// graph
 	"zoom-in": `${LOUPE}<path d="M10.5 7.75v5.5M7.75 10.5h5.5"/>`,
 	"zoom-out": `${LOUPE}<path d="M7.75 10.5h5.5"/>`,
 	"fit-view": `<path d="M4 9V6a2 2 0 0 1 2-2h3M15 4h3a2 2 0 0 1 2 2v3M20 15v3a2 2 0 0 1-2 2h-3M9 20H6a2 2 0 0 1-2-2v-3M12 12h.01"/>`,
@@ -90,7 +90,7 @@ export const ICONS = {
 	"close-selection": CLOSE,
 	"list-view": `<path d="M4 6h.01M4 12h.01M4 18h.01M9 6h11M9 12h11M9 18h11"/>`,
 
-	// réseau
+	// network
 	offline: `<path d="M3 9.2a13.5 13.5 0 0 1 18 0M6.2 12.8a8.8 8.8 0 0 1 11.6 0M9.4 16.2a4.2 4.2 0 0 1 5.2 0M12 19.7h.01M4 4l16 16"/>`,
 	"offline-ready": `<path d="m8.5 7.8 2.6 2.6 4.5-5"/><rect x="3.5" y="13.5" width="17" height="7" rx="2"/><path d="M7.5 17h.01"/>`,
 	retry: `<path d="M20 12a8 8 0 1 1-2.3-5.6L20 8.6M20 3.5v5.1h-5.1"/>`,
@@ -101,20 +101,20 @@ export type IconName = keyof typeof ICONS;
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];
 
 export const STROKE_WIDTH = 1.75;
-/** Variante optique : en dessous de 18 px, le trait s'épaissit un peu pour garder le même poids visuel. */
+/** Optical variant: below 18 px, the stroke thickens a little to keep the same visual weight. */
 export const strokeFor = (size: number) => (size < 18 ? 2 : STROKE_WIDTH);
 
 export type IconSvgOptions = { size?: number; filled?: boolean; label?: string };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
-/** Le SVG complet d'une icône, en chaîne (mêmes attributs que `icon.svelte`). */
+/** The complete SVG of an icon, as a string (same attributes as `icon.svelte`). */
 export function iconSvg(name: IconName, { size = 20, filled = false, label }: IconSvgOptions = {}): string {
 	const a11y = label ? `role="img" aria-label="${esc(label)}"` : `aria-hidden="true"`;
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="${strokeFor(size)}" stroke-linecap="round" stroke-linejoin="round" focusable="false" ${a11y}>${ICONS[name]}</svg>`;
 }
 
-/** URL `data:` d'une icône pour `mask-image` en CSS (pastilles des encarts : le contenu exporté ne porte pas de SVG). */
+/** `data:` URL of an icon for CSS `mask-image` (callout pills: the exported content carries no SVG). */
 export function iconMask(name: IconName): string {
 	const svg = iconSvg(name, { size: 24 }).replace(/"/g, "'");
 	return `url("data:image/svg+xml,${svg.replace(/</g, "%3C").replace(/>/g, "%3E").replace(/#/g, "%23")}")`;

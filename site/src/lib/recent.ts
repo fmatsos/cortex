@@ -1,16 +1,16 @@
 import { fold } from "./fold";
 
-/** Historique local des recherches validées (Entrée, résultat ouvert) : fonctions pures, le stockage est dans search-state.svelte.ts. */
+/** Local history of validated searches (Enter, opened result): pure functions, storage is in search-state.svelte.ts. */
 export const MAX_RECENT = 8;
 
-/** Ajoute `q` en tête (espaces normalisés), sans doublon (insensible aux accents et à la casse), borné à `max` ; une saisie vide ne change rien. */
+/** Adds `q` at the head (spaces normalized), without duplicate (accent- and case-insensitive), bounded to `max`; an empty input changes nothing. */
 export function pushRecent(list: string[], q: string, max = MAX_RECENT): string[] {
 	const t = q.trim().replace(/\s+/g, " ");
 	if (!t) return list;
 	return [t, ...list.filter((x) => fold(x) !== fold(t))].slice(0, max);
 }
 
-/** Relit l'historique stocké : tout ce qui n'est pas une liste de textes non vides est ignoré. */
+/** Reads the stored history back: anything that is not a list of non-empty strings is ignored. */
 export function parseRecent(json: string | null, max = MAX_RECENT): string[] {
 	try {
 		const v: unknown = JSON.parse(json ?? "[]");

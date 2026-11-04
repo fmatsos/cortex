@@ -3,7 +3,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
 
-	// L'icône dit le type par sa forme, la couleur du type la renforce (jamais la couleur seule) ; le libellé reste le nom accessible.
+	// The icon tells the type by its shape, the type color reinforces it (never color alone); the label remains the accessible name.
 	let { type }: { type: string } = $props();
 </script>
 

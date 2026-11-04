@@ -1,4 +1,4 @@
 import { searchSeed } from "#lib/server/search-seed.js";
 
-// La page est prérendue sans requête (`?q=` ne se lit que dans le navigateur) : on lui donne de quoi démarrer.
+// The page is prerendered without a query (`?q=` is only read in the browser): we give it what it takes to start.
 export const load = () => ({ seed: searchSeed() });

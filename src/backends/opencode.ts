@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { interactiveWith, type Backend, type Config } from "./backend";
 
-// --- opencode v2 : API REST de `opencode serve` (le SDK publié, 1.19.5, ne parle pas la v2) -----
+// --- opencode v2: REST API of `opencode serve` (the published SDK, 1.19.5, does not speak v2)----
 
 export default function opencode(cfg: Config): Backend {
   const model = cfg.model ?? "opencode/big-pickle";
@@ -19,19 +19,19 @@ export default function opencode(cfg: Config): Backend {
           return r.status === 204 ? undefined : r.json();
         };
         const rule = (action: string, resource: string, effect: "allow" | "deny") => ({ action, resource, effect });
-        // la dernière règle qui correspond l'emporte ; jamais "ask" : personne ne répondrait
+        // the last matching rule wins; never "ask": nobody would answer
         const permissions = [
           rule("edit", "*", "deny"),
           ...(mode === "write" ? [rule("edit", "wiki/*", "allow"), rule("edit", `${join(root, "wiki")}/*`, "allow")] : []),
           rule("shell", "*", "deny"),
           rule("shell", "cortex search*", "allow"),
-          rule("shell", "cortex log --*", "allow"), // lecture du journal ; « cortex log add » n'y correspond pas
+          rule("shell", "cortex log --*", "allow"), // journal reading; « cortex log add » does not match it
           ...(mode === "write" ? [rule("shell", "cortex index*", "allow"), rule("shell", "cortex lint*", "allow"), rule("shell", "cortex new *", "allow"), rule("shell", "cortex log add *", "allow")] : []),
           rule("external_directory", "*", "deny"),
           rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
         ];
         const { data: session } = await api("POST", "/api/session", {
-          location: { directory: root }, permissions, model: { providerID, id: id.join("/"), ...(cfg.effort && { variant: cfg.effort }) }, // effort = variante du modèle opencode
+          location: { directory: root }, permissions, model: { providerID, id: id.join("/"), ...(cfg.effort && { variant: cfg.effort }) }, // effort = opencode model variant
         });
         await api("POST", `/api/session/${session.id}/prompt`, { text: prompt });
         await api("POST", `/api/experimental/session/${session.id}/wait`);
@@ -47,7 +47,7 @@ export default function opencode(cfg: Config): Backend {
   };
 }
 
-/** `opencode serve` sur un port libre (4096 entrerait en collision), mot de passe propre à la session (Basic opencode:<mdp>). */
+/** `opencode serve` on a free port (4096 would collide), session-specific password (Basic opencode:<pwd>). */
 async function startOpencode() {
   const sock = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
   const port = sock.port;

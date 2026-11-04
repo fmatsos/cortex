@@ -23,10 +23,10 @@
 	const plural = (n: number, one: string, many: string) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
 	let header = $state<HTMLElement | null>(null);
 
-	// favoris, historique de recherche et thème : propres à ce navigateur (localStorage)
+	// favorites, search history and theme: specific to this browser (localStorage)
 	onMount(() => { theme.init(); search.init(); return favs.init(); });
 
-	// Hauteur réelle de l'en-tête collant → décalage des ancres et du lien d'évitement (jamais deux hauteurs supposées)
+	// Real height of the sticky header → offset of anchors and of the skip link (never two assumed heights)
 	$effect(() => {
 		if (!header) return;
 		const el = header, root = document.documentElement;
@@ -37,7 +37,7 @@
 		return () => { ro.disconnect(); root.style.removeProperty("--anchor-offset"); };
 	});
 
-	// Ctrl+K et « / » : focus sur le champ de recherche visible (celui de la page quand elle en a un grand, sinon celui de l'en-tête)
+	// Ctrl+K and "/": focus on the visible search field (the page's one when it has a large one, otherwise the header's)
 	function globalKeys(e: KeyboardEvent) {
 		const t = e.target as HTMLElement | null;
 		const typing = /^(input|textarea|select)$/i.test(t?.tagName ?? "") || t?.isContentEditable;
@@ -46,7 +46,7 @@
 			search.focus();
 		}
 	}
-	// l'accueil repart d'une recherche vide ; /search/ reprend la sienne dans l'URL
+	// the home page starts again from an empty search; /search/ resumes its own from the URL
 	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; });
 
 	const nav = [
@@ -55,11 +55,11 @@
 		["/tags", "tags", "Tags"],
 		["/log", "journal", "Journal"],
 	] as const;
-	// rubrique active : l'identifiant de route marche aussi au prérendu (l'URL relative ne se compare pas)
+	// active section: the route id also works at prerender (the relative URL cannot be compared)
 	const current = (route: string) => page.route.id === route || page.route.id?.startsWith(`${route}/`);
-	// « Favoris » = la recherche filtrée `is:fav` (même vue partout) ; la requête partagée n'existe que dans le navigateur
+	// "Favoris" = the search filtered on `is:fav` (same view everywhere); the shared query only exists in the browser
 	const onFavs = $derived(page.route.id === "/search" && /(^|\s)is:fav/i.test(search.q));
-	// l'accueil et /search/ portent leur propre grand champ : pas de second champ dans l'en-tête
+	// the home page and /search/ carry their own large field: no second field in the header
 	const pageSearch = $derived(page.route.id === "/" || page.route.id === "/search");
 </script>
 
@@ -67,7 +67,7 @@
 
 <a href="#contenu-principal" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">Aller au contenu</a>
 
-<!-- ordre du DOM = ordre visuel (marque, navigation, recherche, thème) à toutes les largeurs : la tabulation suit l'œil -->
+<!-- DOM order = visual order (mark, navigation, search, theme) at all widths: tabbing follows the eye -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
 	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
 		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} animated class="text-primary" /><CortexWordmark /></a>

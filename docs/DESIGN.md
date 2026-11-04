@@ -1,373 +1,375 @@
 ---
 type: Design Doc
 title: "DESIGN — Cortex v2"
-description: "Conception de la v2 : architecture, CLI cortex (Bun), dépendances, feuille de route."
+description: "Design of v2: architecture, the cortex CLI (Bun), dependencies, roadmap."
 ---
 # DESIGN — Cortex v2
 
-> Statut : proposition (2026-11-04). Issu du croisement de deux analyses indépendantes (Opus et Fable).
-> Remplace l'approche v1 (pipeline multi-agents + GitHub Actions) de ce dépôt.
+> Status: proposal (2026-11-04). Drawn from two independent analyses (Opus and Fable).
+> Replaces the v1 approach (multi-agent pipeline + GitHub Actions) of this repository.
 
-## 1. Pourquoi une v2
+## 1. Why a v2
 
-La v1 a produit plus de machinerie que de connaissance :
+v1 produced more machinery than knowledge:
 
-| Machinerie | Contenu produit |
+| Machinery | What it produced |
 |---|---|
-| 100 commits en 14 jours, puis 14 mois de silence | 7 notes (~12 Ko), 6 sur 7 sur les LLM |
-| 5 agents, 4 schémas JSON de handoff, 6 GitHub Actions, `rules.yaml` | `zettels/`, `summaries/`, `archive/` vides |
-| 4 changements de stack en 10 jours (Bash → Go → Cobra → Bun → opencode) | 3 notes « context rot » redondantes, jamais dédupliquées |
-| Index rédigé par un LLM | `index.md` pointe vers des fichiers qui n'existent pas |
-| CI de validation des handoffs | `writer_to_organizer.schema.json` est du JSON invalide (ligne 90) |
+| 100 commits in 14 days, then 14 months of silence | 7 notes (~12 KB), 6 of 7 about LLMs |
+| 5 agents, 4 JSON handoff schemas, 6 GitHub Actions, `rules.yaml` | empty `zettels/`, `summaries/`, `archive/` |
+| 4 stack changes in 10 days (Bash → Go → Cobra → Bun → opencode) | 3 redundant “context rot” notes, never deduplicated |
+| Index written by an LLM | `index.md` points to files that do not exist |
+| CI that validates handoffs | `writer_to_organizer.schema.json` is invalid JSON (line 90) |
 
-**Causes :**
-1. Une architecture d'entreprise pour un usage solo.
-2. Un LLM mis à la mauvaise place : on lui a confié la plomberie, sans humain pour le jugement.
-3. Un traitement asynchrone par cron, sans feedback immédiat.
-4. Une dépendance à GitHub (secrets qui expirent, CI qui fait tourner un LLM).
-5. Aucune opération de consultation.
+**Causes:**
+1. Enterprise architecture for a solo use.
+2. An LLM in the wrong place: it was given the plumbing, with no human for the judgment.
+3. Asynchronous processing by cron, with no immediate feedback.
+4. A dependency on GitHub (secrets that expire, CI that runs an LLM).
+5. No query operation.
 
-**À garder :** Markdown + frontmatter, la séparation entre capture brute et connaissance durable, l'opération « URL → résumé sourcé ».
+**To keep:** Markdown + frontmatter, the separation between raw capture and lasting knowledge, the “URL → sourced summary” operation.
 
-## 2. Fondations
+## 2. Foundations
 
 ### LLM Wiki (Karpathy)
 
-Le LLM **compile** les sources une fois pour toutes dans un wiki interlié, puis le maintient. Ce n'est pas du RAG : on ne re-cherche pas dans le brut à chaque question.
+The LLM **compiles** the sources once and for all into an interlinked wiki, then maintains it. This is not RAG: raw material is not searched again at every question.
 
-Trois couches :
-- **raw** : les sources, immuables ;
-- **wiki** : les pages écrites par le LLM ;
-- **schéma** : `CORTEX.md`, qui fixe les conventions et les workflows.
+Three layers:
+- **raw**: the sources, immutable;
+- **wiki**: the pages written by the LLM;
+- **schema**: the built-in `src/schema.md`, written to `CLAUDE.md` or `AGENTS.md`, which sets the conventions and the workflows.
 
-Trois opérations :
-- **ingest** : une source peut toucher 5 à 15 pages ;
-- **query** : une bonne réponse est rangée dans le wiki ;
-- **lint** : contradictions, orphelins, trous, affirmations périmées.
+Three operations:
+- **ingest**: one source can touch 5 to 15 pages;
+- **query**: a good answer is filed in the wiki;
+- **lint**: contradictions, orphans, gaps, stale claims.
 
-`index.md` sert de catalogue et `log.md` de journal.
+`index.md` serves as the catalog and `log.md` as the journal.
 
-### OKF v0.2 (sous-ensemble retenu)
+### OKF v0.2 (subset kept)
 
-Il faut suivre la **SPEC v0.2**. Le billet de blog Google décrit la v0.1, où `timestamp` est devenu `generated.at` et `# Citations` est devenu `sources`.
+Follow **SPEC v0.2**. The Google blog post describes v0.1, where `timestamp` became `generated.at` and `# Citations` became `sources`.
 
-**Ce qu'on retient :**
-- `type` est le seul champ obligatoire. Les champs recommandés sont `title`, `description` et `tags`.
-- `sources[]` (`id`, `resource`, `title`), avec des notes de bas de page `[^id]` qui attribuent chaque affirmation à sa source.
-- `generated: {by, at}`, avec la convention d'acteurs `human:franck`, `claude-code/opus-5.5` et `cortex-cli/0.1`.
-- `verified` quand une page a été relue (avec `human:franck`).
-- `status` (`draft`, `stable` ou `deprecated`) et, en option, `stale_after`.
-- Des liens Markdown relatifs à la racine (`/wiki/concepts/x.md`). Un lien cassé est toléré : il signale une connaissance pas encore écrite.
-- `index.md` et `log.md` sont des noms réservés.
+**What we keep:**
+- `type` is the only required field. The recommended fields are `title`, `description` and `tags`.
+- `sources[]` (`id`, `resource`, `title`), with `[^id]` footnotes that attribute each claim to its source.
+- `generated: {by, at}`, with the actor convention `human:franck`, `claude-code/opus-5.5` and `cortex-cli/0.1`.
+- `verified` when a page has been reviewed (with `human:franck`).
+- `status` (`draft`, `stable` or `deprecated`) and, optionally, `stale_after`.
+- Root-relative Markdown links (`/wiki/concepts/x.md`). A broken link is tolerated: it flags knowledge not yet written.
+- `index.md` and `log.md` are reserved names.
 
-**Ce qu'on ignore :** les Attested Computations (§10), `usage_count` et `usage_window`, et la couche BigQuery/Knowledge Catalog.
+**What we ignore:** Attested Computations (§10), `usage_count` and `usage_window`, and the BigQuery/Knowledge Catalog layer.
 
-Le bénéfice : le wiki reste lisible par Obsidian, par le visualiseur OKF et par n'importe quel agent, sans SDK.
+The benefit: the wiki stays readable by Obsidian, by the OKF viewer and by any agent, with no SDK.
 
-## 3. Principe directeur
+## 3. Guiding principle
 
-**Le CLI fait le déterministe, le LLM fait le jugement. Le CLI n'écrit jamais une page du wiki.**
+**The CLI does the deterministic work, the LLM does the judgment. The CLI never writes a wiki page.**
 
-| CLI `cortex` | Agent (Claude Code / opencode / codex) |
+| `cortex` CLI | Agent (Claude Code / opencode / codex) |
 |---|---|
-| fetch, extraction en Markdown, hash et dédup, écriture dans `raw/` | décider ce qu'une source apporte |
-| index de recherche (SQLite FTS5), `search` | créer et mettre à jour les pages, relier, signaler les contradictions |
-| générer `wiki/index.md` à partir des frontmatters, générer `log.md` depuis `log.jsonl` (`cortex log add` valide et ajoute une entrée) | répondre aux questions en citant, ranger les réponses |
-| `lint` structurel | résoudre ce que le lint remonte (fusionner, déprécier, créer) |
-| serveur MCP | décrire les images, résumer les transcripts |
+| fetch, extraction to Markdown, hash and dedup, writing to `raw/` | decide what a source contributes |
+| search index (SQLite FTS5), `search` | create and update pages, link them, flag contradictions |
+| generate `wiki/index.md` from the frontmatters, generate `log.md` from `log.jsonl` (`cortex log add` validates and appends an entry) | answer questions with citations, file the answers |
+| structural `lint` | resolve what lint reports (merge, deprecate, create) |
+| MCP server | describe images, summarize transcripts |
 
-**Par défaut, le CLI n'embarque aucun SDK LLM.** L'agent est une session de ton harness existant, avec `CORTEX.md` comme instructions et `cortex` comme outil.
+**By default, the CLI embeds no LLM SDK.** The agent is a session of your existing harness, with the schema (`CLAUDE.md` or `AGENTS.md`) as instructions and `cortex` as a tool.
 
-**Le CLI ne fournit pas les agents.** `claude`, `codex` ou `opencode` doivent déjà être installés et authentifiés sur le poste. `cortex` les pilote, sans jamais les embarquer ni les installer.
+**The CLI does not provide the agents.** `claude`, `codex` or `opencode` must already be installed and authenticated on the machine. `cortex` drives them. It never bundles or installs them.
 
-**Les SDK sont optionnels, chargés à la demande** quand `config.json` nomme un client. Ils servent seulement à mieux tirer parti de l'agent, en premier lieu pour bloquer les écritures hors de `wiki/` avant qu'elles aient lieu. Dans le code, c'est un pattern Bridge :
-- **l'abstraction**, ce sont les commandes `compile` et `ask` (`agent.ts`), qui ne connaissent que l'interface `Backend` (`interactive`, `run`) ;
-- **les implémentations** sont dans `src/backends/` : `default.ts` (agnostique, sous-processus), `claude.ts`, `codex.ts` et `opencode.ts`.
+**SDKs are optional and loaded on demand** when `cortex.json` names a client. They only serve to make better use of the agent, first of all to block writes outside `wiki/` before they happen. In the code, this is a Bridge pattern:
+- **the abstraction** is the `compile` and `ask` commands (`agent.ts`), which only know the `Backend` interface (`interactive`, `run`);
+- **the implementations** are in `src/backends/`: `default.ts` (agnostic, subprocess), `claude.ts`, `codex.ts` and `opencode.ts`.
 
-Garde-fous vérifiés le 2026-11-04 par des essais où l'agent tentait d'écrire dans `raw/` :
+Guardrails verified on 2026-11-04 by trials where the agent tried to write to `raw/`:
 
-| Client | Mécanisme | Résultat |
+| Client | Mechanism | Result |
 |---|---|---|
-| Défaut (agnostique, n'importe quelle CLI) | dépôt en lecture seule sauf `wiki/` : bubblewrap sous Linux, `sandbox-exec` sous macOS | `raw/` en « EROFS: read-only file system », `wiki/` inscriptible |
-| Claude (Agent SDK) | `canUseTool` sur chaque appel d'outil, `settingSources: ["project"]`, rien d'approuvé d'office | écriture et shell hors de `wiki/` refusés |
-| Codex (SDK) | bac à sable `workspace-write` lancé depuis `wiki/` | `raw/` et `CORTEX.md` en « Read-only file system » (`/tmp` reste toujours inscriptible) |
-| opencode v2 (API REST de `opencode serve`) | règles de permission, la dernière qui correspond l'emporte | `edit` refusé hors de `wiki/*`, shell refusé hors de `cortex` |
+| Default (agnostic, any CLI) | repository read-only except `wiki/`: bubblewrap on Linux, `sandbox-exec` on macOS | `raw/` gives “EROFS: read-only file system”, `wiki/` is writable |
+| Claude (Agent SDK) | `canUseTool` on every tool call, `settingSources: ["project"]`, nothing approved by default | writes and shell outside `wiki/` denied |
+| Codex (SDK) | `workspace-write` sandbox launched from `wiki/` | `raw/` and the agent file give “Read-only file system” (`/tmp` always remains writable) |
+| opencode v2 (REST API of `opencode serve`) | permission rules, the last matching rule wins | `edit` denied outside `wiki/*`, shell denied outside `cortex` |
 
-Les sessions interactives, quel que soit le client, passent aussi par ce confinement : une validation humaine trop rapide ne peut pas écrire hors de `wiki/`. Dans tous les cas, `git status` avant et après l'agent reste le filet de sécurité commun.
+Interactive sessions, whatever the client, also go through this confinement: a human approving too quickly cannot write outside `wiki/`. In every case, `git status` before and after the agent remains the common safety net.
 
-*Prérequis :* `bwrap` sous Linux (`apt install bubblewrap`). Sous macOS, `sandbox-exec` est intégré au système. La variante macOS n'est pas encore testée sur une vraie machine.
+*Prerequisites:* `bwrap` on Linux (`apt install bubblewrap`). On macOS, `sandbox-exec` is built into the system. The macOS variant has not yet been tested on a real machine.
 
-## 4. Arborescence
+## 4. Directory layout
 
 ```
 cortex/
-├── CORTEX.md          # schéma : conventions + workflows (CLAUDE.md, AGENTS.md → symlinks)
-├── DESIGN.md
-├── raw/              # immuable, écrit par le CLI (ou à la main à l'étape 0)
-│   └── 2026/11/20261104-a7k3-context-rot/
+├── cortex.json        # configuration; marks the wiki root
+├── CLAUDE.md          # schema written by `cortex config init` (AGENTS.md for Codex and opencode)
+├── raw/              # immutable, written by the CLI (or by hand at step 0)
+│   └── 2026/11/<uuid>/
 │       ├── source.md # extraction + frontmatter
-│       └── assets/   # images ≤ ~500 Ko
-├── wiki/             # écrit par l'agent
-│   ├── index.md      # GÉNÉRÉ (jamais rédigé par l'agent une fois le CLI disponible)
-│   ├── log.jsonl     # journal append-only, SOURCE DE VÉRITÉ (une entrée JSON par ligne), écrit par `cortex log add`
-│   ├── log.md        # GÉNÉRÉ depuis log.jsonl (lisible dans Obsidian, réservé OKF)
-│   ├── sources/      # type: Source — une page résumé par source raw
+│       └── assets/   # images ≤ ~500 KB
+├── wiki/             # written by the agent
+│   ├── index.md      # GENERATED (never written by the agent once the CLI is available)
+│   ├── log.jsonl     # append-only journal, SOURCE OF TRUTH (one JSON entry per line), written by `cortex log add`
+│   ├── log.md        # GENERATED from log.jsonl (readable in Obsidian, OKF-reserved)
+│   ├── sources/      # type: Source — one summary page per raw source
 │   ├── concepts/     # type: Concept
-│   ├── entities/     # type: Entity (personnes, outils, projets, organisations)
-│   └── syntheses/    # type: Synthesis — réponses rangées, comparaisons
-├── inbox/            # zone de dépôt synchronisée (mobile), vidée par `cortex inbox`
-└── .cortex/           # gitignored : index.sqlite, blobs/<sha256>, cache
+│   ├── entities/     # type: Entity (people, tools, projects, organizations)
+│   └── syntheses/    # type: Synthesis — filed answers, comparisons
+├── inbox/            # synced drop zone (mobile), emptied by `cortex inbox`
+└── .cortex/           # gitignored: index.sqlite, blobs/<sha256>, cache
 ```
 
-**Binaires :** les PDF, vidéos, audios et DOCX vont dans `.cortex/blobs/` (content-addressed, **hors git**) et sont référencés par `blob:`. Pour une vidéo, on ne garde jamais le fichier, seulement le transcript et une vignette. La connaissance est dans le Markdown, l'original n'est qu'un confort.
+**Binaries:** PDFs, videos, audio files and DOCX go to `.cortex/blobs/` (content-addressed, **outside git**) and are referenced by `blob:`. For a video, the file is never kept, only the transcript and a thumbnail. The knowledge is in the Markdown. The original is only a convenience.
 
 ## 5. Formats
 
-Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [CORTEX.md](CORTEX.md), qui fait foi.
+The format of `raw/.../source.md` and that of the wiki pages are defined in the agent schema ([`src/schema.md`](../src/schema.md)), which is authoritative.
 
-**Identifiants : UUID v7**, pour les sources raw (`raw/AAAA/MM/<uuid>/source.md`, mois d'ajout) comme pour les pages wiki (`wiki/<type>/<uuid>.md`). Décision du 2026-11-04, qui remplace `YYYYMMDD-<4 caractères>-<slug>` et les slugs lisibles : l'unicité est garantie sans dépendre du titre (deux sources de même titre le même jour, une page renommée), au prix de noms de fichiers illisibles. Horodaté puis aléatoire (74 bits), l'UUID v7 se trie dans l'ordre de création ; `Bun.randomUUIDv7()`, sans dépendance. Ni l'agent ni l'humain n'en écrivent : `cortex add` nomme une source, `cortex new <type> "<titre>"` crée une page (refusée si le titre existe déjà : on met à jour avant de créer). Une page se trouve par son titre (index, recherche) ; le journal (`log.md`) la nomme par son titre.  Le chemin d'une source raw se retrouve par son id (`rawPath`, recherche de `raw/*/*/<id>/`), jamais en découpant l'id. Un lien vers une page à écrire n'est plus possible : on crée d'abord l'ébauche (`cortex new`, en `draft`).
+**Built-in schema** (decision of 2026-11-04, replaces a hand-kept `CORTEX.md` at the wiki root). The schema ships with the CLI, in English, so it evolves with the commands it describes. `cortex config init [client]` creates `cortex.json` and writes the schema where the client loads it by itself: `CLAUDE.md` (Claude, or no client: `$CORTEX_AGENT` defaults to `claude`), `AGENTS.md` (Codex, opencode); an existing file is kept. `cortex schema [--write]` prints or rewrites it, after a CLI update or a change of client. `cortex.json` can set `language` (fills `{{language}}`, default English: the wiki language is a setting, not a fork of the schema) and `schema` (a Markdown file, relative to the root, replacing the built-in one). The agent prompts name the agent file (`Apply the INGEST workflow of CLAUDE.md…`). `cortex.json` (formerly `config.json`) now marks the root: a `CLAUDE.md` or `AGENTS.md` could not, since many code repositories have one. `findRoot` walks up to it, or uses `$CORTEX_ROOT`. It is versioned with the wiki, since it carries the naming.
 
-**Nommage configurable** (même jour) : `raw_path` et `page_path` dans `config.json` (validé par un schéma zod, comme toute la config) composent chemins et noms à partir de placeholders (`{uuid}`, date et heure, `{slug}`, `{rand}`, `{kind}`, `{type}`) ; l'UUID v7 reste le défaut. Le dernier segment de `raw_path` est l'id raw, unique sous `raw/` (le journal ne cite que lui). Une collision reçoit `-2`, `-3`… Le lint compare chaque chemin au motif tiré du modèle (avertissement : changer de modèle ne renomme rien) et refuse deux ids raw identiques. `naming.ts`.
+**Identifiers: UUID v7**, for raw sources (`raw/YYYY/MM/<uuid>/source.md`, month of addition) as well as for wiki pages (`wiki/<type>/<uuid>.md`). Decision of 2026-11-04, which replaces `YYYYMMDD-<4 characters>-<slug>` and readable slugs: uniqueness is guaranteed without depending on the title (two sources with the same title on the same day, a renamed page), at the cost of unreadable file names. Timestamped then random (74 bits), a UUID v7 sorts in creation order; `Bun.randomUUIDv7()`, no dependency. Neither the agent nor the human writes one: `cortex add` names a source, `cortex new <type> "<title>"` creates a page (refused if the title already exists: update before creating). A page is found by its title (index, search); the journal (`log.md`) names it by its title. The path of a raw source is found from its id (`rawPath`, a search for `raw/*/*/<id>/`), never by splitting the id. A link to a page yet to be written is no longer possible: the stub is created first (`cortex new`, as `draft`).
 
-## 6. CLI `cortex`
+**Configurable naming** (same day): `raw_path` and `page_path` in `cortex.json` (validated by a zod schema, like the whole config) compose paths and names from placeholders (`{uuid}`, date and time, `{slug}`, `{rand}`, `{kind}`, `{type}`); UUID v7 remains the default. The last segment of `raw_path` is the raw id, unique under `raw/` (the journal cites only that). A collision gets `-2`, `-3`… Lint compares each path to the pattern derived from the template (warning: changing the template renames nothing) and rejects two identical raw ids. `naming.ts`.
 
-**Les commandes du MVP passent en premier.** Les autres arrivent quand le besoin est ressenti.
+## 6. `cortex` CLI
 
-| Commande | Étape | Rôle |
+**The MVP commands come first.** The others arrive when the need is felt.
+
+| Command | Step | Role |
 |---|---|---|
-| `cortex add <url\|fichier\|-> --note "…"` | 1 | extrait, déduplique (hash du contenu normalisé + URL canonique), écrit dans `raw/`, indexe, ajoute au log. Idempotent. |
-| `cortex search "<q>" [--in wiki\|raw] [--json]` | 1 | BM25 FTS5, sur le wiki d'abord |
-| `cortex index` | 1 | régénère `wiki/index.md` à partir des frontmatters, et `wiki/log.md` à partir de `wiki/log.jsonl` |
-| `cortex lint [--json]` | 2 | frontmatter (`type`, `description`), liens cassés, orphelins, raw `pending`, `stale_after` dépassé, doublons probables, pages modifiées depuis leur relecture (`generated.at` > `verified.at`) |
-| `cortex compile [id…\|--pending] [--batch]` | 2 | lance l'agent configuré, **une session par source** : interactif par défaut (la CLI du client, ou `$CORTEX_AGENT`), ou `--batch` (le SDK du client configuré, sinon `$CORTEX_AGENT_BATCH`, par défaut `claude -p`), qui écrit en `draft` sans validation préalable. Refuse une `note` vide. Ne passe en `compiled` que si une page Source cite la source (ligne remplacée, sans ré-sérialiser le YAML). Signale toute modification hors de `wiki/` (via `git status`). Régénère l'index. Lance le ingest, puis passe le statut à `compiled` |
-| `cortex ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query, **en lecture seule**. `--file` autorise à écrire une synthèse en `draft` |
-| `cortex config init\|lint\|get\|set\|remove` | 2 | squelette de `config.json` (clés `client`, `model`, `effort` à `null`), contrôle, lecture et écriture validée des propriétés. L'effort est traduit pour chaque client : `effort` (Claude), `modelReasoningEffort` (Codex), variante du modèle (opencode, `modèle#variante` en CLI) |
-| `cortex log [--limit N] [--json] [--kind k]`, `cortex log add <kind> "<texte>" [--source <id>]… [--page <chemin>]…` | — | le journal. `wiki/log.jsonl` est la source de vérité (append-only, une ligne `{"at", "kind": add\|ingest\|query\|lint\|update, "text", "sources"?, "pages"?}`) ; `wiki/log.md` en est généré (même rendu que l'ancien journal, plus une ligne « généré, ne pas éditer »), comme `index.md`. `cortex log add` valide le `kind`, les chemins de pages (existants, sous `wiki/`, hors `index.md` et `log.md`) et les ids raw (existants), écrit la ligne d'un seul `append`, puis régénère `log.md` ; `cortex add` écrit lui-même l'entrée `add`. `cortex log` lit (20 dernières entrées par défaut). Les agents n'écrivent jamais le journal à la main : `cortex log add` est autorisé là où `cortex index` l'est (garde Claude, règles opencode, `--allowedTools` du moteur par défaut ; Codex écrit sous `wiki/`, donc l'a d'office), et `cortex log` en lecture seule (garde Claude, opencode). `cortex lint` : erreur sur une ligne invalide, avertissement si `log.md` diffère de sa génération |
-| `cortex mcp` | 3 | serveur MCP stdio, qui ne modifie jamais `wiki/`. Lecture : `search`, `get` (un `.md` sous `wiki/` ou `raw/`, chemins résolus par `realpath`), `related` (liens sortants et entrants 3, source raw partagée 2, tag partagé 1), `lint`, `log` (entrées structurées des N derniers jours, 1 par défaut, filtre `kind` facultatif). Écriture : `add` seul, dans `raw/` (URL ou `text`, jamais un fichier local du poste, `note` obligatoire, idempotent). Racine par `$CORTEX_ROOT`. |
-| `cortex inbox [--dry-run]` | 4 | `add` sur tout le contenu de `inbox/`. `urls.txt` : une entrée par ligne, `<url> [note libre…]` (le reste de la ligne est la `note`), lignes vides et `#` ignorées et conservées. Tout autre fichier visible (PDF, `.md`, `.txt`) passe par `add`, avec pour note le contenu de `<nom>.note` s'il existe. **Une entrée réussie (ajoutée ou déjà présente) quitte l'inbox** (ligne retirée, fichier et `.note` supprimés) ; un échec y reste, et le code de sortie est 1. `urls.txt` est réécrit par fichier temporaire puis `rename`, après relecture. `--dry-run` n'écrit rien et ne vide rien. Sans `note`, l'avertissement de `cortex add` s'affiche et `compile` refusera la source tant qu'elle manque |
-| `cortex export [--out <dossier>]` | 6 (fait) | le wiki en site HTML interactif (voir §10 bis) : navigation, recherche instantanée, graphe des liens. Sortie par défaut `.cortex/site`, **vidée à chaque export** (refus si c'est la racine, `wiki/`, `raw/`, le dossier du CLI, le HOME ou l'un de leurs parents, ou si le dossier existe, n'est pas vide et ne contient pas de `_app/` : il ne ressemble pas à un export précédent). SvelteKit `adapter-static` + shadcn-svelte, embarqués dans le CLI (`site/`), rien à installer en plus |
-| `cortex related`, `ls`, `show`, `doctor`, `reextract` | à la demande | — |
+| `cortex add <url\|file\|-> --note "…"` | 1 | extracts, deduplicates (hash of the normalized content + canonical URL), writes to `raw/`, indexes, appends to the journal. Idempotent. |
+| `cortex search "<q>" [--in wiki\|raw] [--json]` | 1 | BM25 FTS5, wiki first |
+| `cortex index` | 1 | regenerates `wiki/index.md` from the frontmatters, and `wiki/log.md` from `wiki/log.jsonl` |
+| `cortex lint [--json]` | 2 | frontmatter (`type`, `description`), broken links, orphans, `pending` raw sources, `stale_after` exceeded, probable duplicates, pages modified since their review (`generated.at` > `verified.at`) |
+| `cortex compile [id…\|--pending] [--batch]` | 2 | launches the configured agent, **one session per source**: interactive by default (the client's CLI, or `$CORTEX_AGENT`), or `--batch` (the configured client's SDK, otherwise `$CORTEX_AGENT_BATCH`, `claude -p` by default), which writes as `draft` with no prior validation. Refuses an empty `note`. Sets `compiled` only if a Source page cites the source (line replaced, without re-serializing the YAML). Flags any modification outside `wiki/` (via `git status`). Regenerates the index. Runs the ingest, then sets the status to `compiled` |
+| `cortex ask "<q>" [--file]` | 2 | same mechanism with the query workflow, **read-only**. `--file` allows writing a synthesis as `draft` |
+| `cortex config init\|lint\|get\|set\|remove` | 2 | skeleton of `cortex.json` (keys `client`, `model`, `effort` set to `null`), check, and validated reading and writing of properties. The effort is translated for each client: `effort` (Claude), `modelReasoningEffort` (Codex), model variant (opencode, `model#variant` on the CLI) |
+| `cortex log [--limit N] [--json] [--kind k]`, `cortex log add <kind> "<text>" [--source <id>]… [--page <path>]…` | — | the journal. `wiki/log.jsonl` is the source of truth (append-only, one line `{"at", "kind": add\|ingest\|query\|lint\|update, "text", "sources"?, "pages"?}`); `wiki/log.md` is generated from it (same rendering as the old journal, plus a “generated, do not edit” line), like `index.md`. `cortex log add` validates the `kind`, the page paths (existing, under `wiki/`, excluding `index.md` and `log.md`) and the raw ids (existing), writes the line with a single `append`, then regenerates `log.md`; `cortex add` writes the `add` entry itself. `cortex log` reads (last 20 entries by default). Agents never write the journal by hand: `cortex log add` is allowed wherever `cortex index` is (Claude guard, opencode rules, `--allowedTools` of the default engine; Codex writes under `wiki/`, so it has it by default), and `cortex log` read-only (Claude guard, opencode). `cortex lint`: error on an invalid line, warning if `log.md` differs from its generation |
+| `cortex mcp` | 3 | stdio MCP server, which never modifies `wiki/`. Read: `search`, `get` (a `.md` under `wiki/` or `raw/`, paths resolved by `realpath`), `related` (outgoing and incoming links 3, shared raw source 2, shared tag 1), `lint`, `log` (structured entries of the last N days, 1 by default, optional `kind` filter). Write: `add` only, into `raw/` (URL or `text`, never a local file of the machine, `note` required, idempotent). Root set by `$CORTEX_ROOT`. |
+| `cortex inbox [--dry-run]` | 4 | `add` on the whole content of `inbox/`. `urls.txt`: one entry per line, `<url> [free note…]` (the rest of the line is the `note`), blank lines and `#` lines ignored and kept. Any other visible file (PDF, `.md`, `.txt`) goes through `add`, with the content of `<name>.note` as its note if it exists. **A successful entry (added or already present) leaves the inbox** (line removed, file and `.note` deleted); a failure stays there, and the exit code is 1. `urls.txt` is rewritten through a temporary file then `rename`, after re-reading. `--dry-run` writes nothing and empties nothing. Without a `note`, the `cortex add` warning is shown and `compile` will refuse the source as long as it is missing |
+| `cortex export [--out <folder>]` | 6 (done) | the wiki as an interactive HTML site (see §10 bis): navigation, instant search, link graph. Default output `.cortex/site`, **emptied at every export** (refused if it is the root, `wiki/`, `raw/`, the CLI folder, the HOME or one of their parents, or if the folder exists, is not empty and contains no `_app/`: it does not look like a previous export). SvelteKit `adapter-static` + shadcn-svelte, bundled in the CLI (`site/`), nothing more to install |
+| `cortex related`, `ls`, `show`, `doctor`, `reextract` | on demand | — |
 
-**Détection des extractions tronquées dans `cortex add`.** Leçon de l'étape 0 : defuddle a coupé l'article OKF de Google au milieu (841 mots au lieu de 1 577), sans erreur ni avertissement. `cortex add` doit comparer le nombre de mots extraits à celui du texte visible de la page. Sous un seuil (à calibrer, par exemple 70 %), il relance avec Readability + Turndown, garde le résultat le plus long, et marque `partial: true` si les deux extractions restent courtes. Paywall et blocage Cloudflare (corps vide) produisent un refus explicite.
+**Detecting truncated extractions in `cortex add`.** Lesson from step 0: defuddle cut Google's OKF article in the middle (841 words instead of 1,577), with no error or warning. `cortex add` must compare the number of extracted words with that of the visible text of the page. Below a threshold (to be calibrated, for example 70%), it retries with Readability + Turndown, keeps the longer result, and marks `partial: true` if both extractions stay short. A paywall and a Cloudflare block (empty body) produce an explicit refusal.
 
-**Heuristique retenue à l'étape 1** (calibrée sur les 21 sources de l'étape 0). La comparaison au texte visible de la page a été abandonnée : la navigation et les blocs « articles liés » de Next la faussent. `cortex add` lance **defuddle et Readability + Turndown à chaque fois** et garde Readability si son texte est **plus de 1,3 fois plus long**. Seul OKF bascule, et aucune autre source ne perd de contenu. `partial:` est posé sur des **marqueurs de paywall vérifiés** dans le HTML : « Il reste N % de l'article » pour Next, « This post is for paid subscribers » pour Substack. Ils retrouvent exactement les 3 sources partielles. Un statut HTTP d'erreur ou un corps de moins de 50 mots est refusé. *Limite connue :* une coquille de page servie avec un statut 200 (en-tête Medium sans article, par exemple) passe ce seuil. La relecture au compile la rattrape.
+**Heuristic adopted at step 1** (calibrated on the 21 sources of step 0). The comparison with the visible text of the page was dropped: Next's navigation and “related articles” blocks skew it. `cortex add` runs **defuddle and Readability + Turndown every time** and keeps Readability if its text is **more than 1.3 times longer**. Only OKF switches, and no other source loses content. `partial:` is set on **verified paywall markers** in the HTML: “Il reste N % de l'article” (“N% of the article remains”) for Next, “This post is for paid subscribers” for Substack. They find exactly the 3 partial sources. An HTTP error status or a body of fewer than 50 words is refused. *Known limit:* a page shell served with a 200 status (a Medium header with no article, for example) passes this threshold. The review at compile time catches it.
 
-L'index SQLite est un **cache reconstructible**, jamais une source de vérité.
+The SQLite index is a **rebuildable cache**, never a source of truth.
 
 ## 7. Extraction
 
-On compose des outils existants, sans chercher un extracteur universel natif. Chaque extracteur produit un `source.md` normalisé et note son nom dans `extractor:`, pour pouvoir ré-extraire plus tard.
+We compose existing tools, without seeking a native universal extractor. Each extractor produces a normalized `source.md` and records its name in `extractor:`, so that the source can be re-extracted later.
 
-| Source | Méthode |
+| Source | Method |
 |---|---|
-| Texte, Markdown, note | lecture directe |
-| Page web | fetch + Readability + HTML→Markdown, URL canonique, métadonnées OpenGraph, images téléchargées localement |
-| PDF texte | `pdftotext` (poppler) |
+| Text, Markdown, note | direct read |
+| Web page | fetch + Readability + HTML→Markdown, canonical URL, OpenGraph metadata, images downloaded locally |
+| Text PDF | `pdftotext` (poppler) |
 | DOCX, PPTX, ODT | `pandoc` |
-| Image | stockée telle quelle ; **l'agent la décrit** au compile, grâce à sa vision. OCR local `tesseract.js` en option. |
-| Vidéo, podcast | `yt-dlp` (sous-titres en priorité), sinon audio → `ffmpeg` → Whisper via `@huggingface/transformers` |
-| PDF scanné | vision de l'agent |
+| Image | stored as is; **the agent describes it** at compile time, using its vision. Local OCR with `tesseract.js` as an option. |
+| Video, podcast | `yt-dlp` (subtitles first), otherwise audio → `ffmpeg` → Whisper via `@huggingface/transformers` |
+| Scanned PDF | agent vision |
 
-Si un outil externe manque, le CLI affiche un message clair.
+If an external tool is missing, the CLI prints a clear message.
 
-## 8. Recherche (sans RAG)
+## 8. Search (no RAG)
 
-1. **Divulgation progressive** : l'agent lit `wiki/index.md`, choisit les pages et les lit en entier. L'unité de retrieval est **la page compilée**, jamais un chunk.
-2. **FTS5 BM25** pour les termes précis, sur `wiki/` puis `raw/`. Un résultat qui ne se trouve que dans `raw/` signale un trou à compiler.
-3. **Graphe** : liens, tags et sources partagées.
-4. **Embeddings** (`sqlite-vec` + modèle multilingue, fusion RRF) seulement si le rappel se dégrade de façon mesurable. Retour d'expérience : grep + lecture restent fiables sous 50 à 100K tokens de wiki.
+1. **Progressive disclosure**: the agent reads `wiki/index.md`, chooses the pages and reads them in full. The retrieval unit is **the compiled page**, never a chunk.
+2. **FTS5 BM25** for precise terms, on `wiki/` then `raw/`. A result found only in `raw/` flags a gap to compile.
+3. **Graph**: links, tags and shared sources.
+4. **Embeddings** (`sqlite-vec` + multilingual model, RRF fusion) only if recall degrades measurably. Field experience: grep + reading remain reliable under 50 to 100K tokens of wiki.
 
-## 9. Langage du CLI : Bun
+## 9. CLI language: Bun
 
-> **Décision (2026-11-04) : Bun (TypeScript).** Elle ne sera pas rouverte. Le contrat, c'est le format des fichiers.
+> **Decision (2026-11-04): Bun (TypeScript).** It will not be reopened. The contract is the file format.
 
-Le CLI fait surtout de la **colle** : fetch HTTP, extraction HTML, SQLite, YAML, appels à des outils externes, MCP. La performance ne compte pas à l'échelle de quelques milliers de fichiers.
+The CLI is mostly **glue**: HTTP fetch, HTML extraction, SQLite, YAML, calls to external tools, MCP. Performance does not matter at the scale of a few thousand files.
 
-| Critère | Bun (TypeScript) | Rust |
+| Criterion | Bun (TypeScript) | Rust |
 |---|---|---|
-| Extraction web | `@mozilla/readability`, l'implémentation de référence, + `turndown` | des ports de Readability, moins éprouvés |
-| SQLite FTS5 | `bun:sqlite` intégré | `rusqlite` (bundled), solide |
-| MCP | SDK officiel TypeScript | `rmcp`, plus jeune |
-| Binaire unique | `bun build --compile` (~50-90 Mo) | natif, petit |
-| Robustesse, typage | correcte | excellente |
-| Vitesse pour atteindre le MVP | élevée | plus lente |
+| Web extraction | `@mozilla/readability`, the reference implementation, + `turndown` | ports of Readability, less proven |
+| SQLite FTS5 | built-in `bun:sqlite` | `rusqlite` (bundled), solid |
+| MCP | official TypeScript SDK | `rmcp`, younger |
+| Single binary | `bun build --compile` (~50-90 MB) | native, small |
+| Robustness, typing | adequate | excellent |
+| Speed to reach the MVP | high | slower |
 
-**Choix retenu : Bun**, pour la vitesse d'arrivée au MVP et l'écosystème (Readability, SDK MCP officiel, `bun:sqlite`).
+**Choice: Bun**, for the speed of reaching the MVP and the ecosystem (Readability, official MCP SDK, `bun:sqlite`).
 
-Le risque n'est pas le langage, c'est de **changer de langage** (cf. v1). On choisit une fois et on n'y revient pas. Le contrat, c'est le format des fichiers, pas le code : le CLI reste réécrivable sans toucher au wiki.
+The risk is not the language, it is **changing language** (cf. v1). We choose once and do not go back. The contract is the file format, not the code: the CLI can be rewritten without touching the wiki.
 
-### Dépendances
+### Dependencies
 
-Exploration du 2026-11-04 sous Bun 1.4.3. La documentation a été vérifiée via Context7, et chaque brique a été exécutée sur des cas réels.
+Exploration of 2026-11-04 on Bun 1.4.3. The documentation was checked via Context7, and each building block was run on real cases.
 
-**Runtime — cœur (6)**
+**Runtime — core (6)**
 
-| Package | Version | Rôle | Pourquoi celui-là |
+| Package | Version | Role | Why this one |
 |---|---|---|---|
-| `defuddle` | `0.19.6` (épinglée exacte, car 0.x) | page web → Markdown, plus les métadonnées (titre, auteur, date de publication, image, schema.org) | Moteur d'Obsidian Web Clipper (kepano), ~9,9k ★, releases toutes les semaines. Extracteur principal. |
-| `linkedom` | `^0.18` | DOM côté serveur pour defuddle | Léger, très actif. `jsdom` reste compatible en secours. |
-| `@mozilla/readability` + `turndown` | `^0.6` / `^7` | repli quand defuddle tronque | Implémentation de référence de Firefox. Passés du plan B au cœur dès l'étape 0 : defuddle a tronqué l'article OKF sans prévenir (voir §6). |
-| `@modelcontextprotocol/server` | `^2.4` | `cortex mcp` (`serveStdio`) | SDK officiel v2, qui ne dépend que de `zod` et `core` (la v1 `@modelcontextprotocol/sdk` tirait express, hono, cors, ajv…). Vérifié à l'étape 3 (v2.4.0, Context7) : `McpServer` depuis `@modelcontextprotocol/server`, `serveStdio` depuis le sous-chemin `@modelcontextprotocol/server/stdio` (et non la racine), `registerTool(nom, { description, inputSchema: z.object({…}) }, handler)`. |
-| `zod` | `^4` | schémas d'entrée des outils MCP (`import * as z from "zod/v4"`) | Requis par le SDK MCP |
+| `defuddle` | `0.19.6` (pinned exactly, since 0.x) | web page → Markdown, plus metadata (title, author, publication date, image, schema.org) | Engine of Obsidian Web Clipper (kepano), ~9.9k ★, weekly releases. Main extractor. |
+| `linkedom` | `^0.18` | server-side DOM for defuddle | Lightweight, very active. `jsdom` remains compatible as a fallback. |
+| `@mozilla/readability` + `turndown` | `^0.6` / `^7` | fallback when defuddle truncates | Firefox's reference implementation. Moved from plan B to the core at step 0: defuddle truncated the OKF article without warning (see §6). |
+| `@modelcontextprotocol/server` | `^2.4` | `cortex mcp` (`serveStdio`) | Official v2 SDK, which depends only on `zod` and `core` (v1 `@modelcontextprotocol/sdk` pulled in express, hono, cors, ajv…). Verified at step 3 (v2.4.0, Context7): `McpServer` from `@modelcontextprotocol/server`, `serveStdio` from the subpath `@modelcontextprotocol/server/stdio` (not the root), `registerTool(name, { description, inputSchema: z.object({…}) }, handler)`. |
+| `zod` | `^4` | input schemas of the MCP tools (`import * as z from "zod/v4"`) | Required by the MCP SDK |
 
-**Runtime — optionnel, chargé à la demande (`await import()`) (2)**
+**Runtime — optional, loaded on demand (`await import()`) (2)**
 
-| Package | Version | Rôle | Coût |
+| Package | Version | Role | Cost |
 |---|---|---|---|
-| `@huggingface/transformers` | `^4.3` | transcription Whisper (ONNX), **remplace `whisper.cpp`** | ~580 Mo dans `node_modules` (`onnxruntime-node`/`web`) + modèle téléchargé au premier usage (whisper-small q8 = 241 Mo, voir plus bas). |
-| `tesseract.js` | `^7` | OCR local en WASM, **remplace `tesseract`** | ~44 Mo + modèle de langue (`fra`). Test : 0,4 s, texte français exact. |
+| `@huggingface/transformers` | `^4.3` | Whisper transcription (ONNX), **replaces `whisper.cpp`** | ~580 MB in `node_modules` (`onnxruntime-node`/`web`) + model downloaded on first use (whisper-small q8 = 241 MB, see below). |
+| `tesseract.js` | `^7` | local OCR in WASM, **replaces `tesseract`** | ~44 MB + language model (`fra`). Test: 0.4 s, exact French text. |
 
-Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement par les extracteurs audio et image. Le cœur reste léger.
+These two packages are listed in `optionalDependencies` and loaded only by the audio and image extractors. The core stays light.
 
-**Runtime — SDK d'agents, chargés seulement si `config.json` nomme le client (2)**
+**Runtime — agent SDKs, loaded only if `cortex.json` names the client (2)**
 
-| Package | Version | Rôle | Coût |
+| Package | Version | Role | Cost |
 |---|---|---|---|
-| `@anthropic-ai/claude-agent-sdk` | `^0.3.318` | `"client": "claude"` | 5 Mo, plus ses pairs `@anthropic-ai/sdk` (25 Mo) et `@modelcontextprotocol/sdk` (6 Mo). Fonctionne avec l'abonnement Claude. |
-| `@openai/codex-sdk` | `^0.166.0` | `"client": "codex"` | 100 Ko. Réutilise la connexion `codex login`. |
+| `@anthropic-ai/claude-agent-sdk` | `^0.3.318` | `"client": "claude"` | 5 MB, plus its peers `@anthropic-ai/sdk` (25 MB) and `@modelcontextprotocol/sdk` (6 MB). Works with the Claude subscription. |
+| `@openai/codex-sdk` | `^0.166.0` | `"client": "codex"` | 100 KB. Reuses the `codex login` connection. |
 
-Ces SDK ne sont que des surcouches qui pilotent la CLI de l'agent. Ils tirent en dépendances optionnelles un binaire par plateforme : ~630 Mo pour Claude (glibc + musl), ~440 Mo pour Codex. Le CLI les en dispense : il installe avec `bun install --omit optional` et pointe les SDK vers les CLI déjà installées (`pathToClaudeCodeExecutable`, `codexPathOverride`). Bilan : `node_modules` pèse ~97 Mo (~220 Mo depuis l'export HTML) au lieu de ~1,2 Go. En contrepartie, la CLI installée (`claude`, `codex`) doit rester dans une version compatible avec le SDK.
+These SDKs are only thin layers that drive the agent's CLI. They pull in, as optional dependencies, one binary per platform: ~630 MB for Claude (glibc + musl), ~440 MB for Codex. The CLI spares you this: it installs with `bun install --omit optional` and points the SDKs to the CLIs already installed (`pathToClaudeCodeExecutable`, `codexPathOverride`). Result: `node_modules` weighs ~97 MB (~220 MB since the HTML export) instead of ~1.2 GB. In return, the installed CLI (`claude`, `codex`) must stay on a version compatible with the SDK.
 
-opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle pas l'API d'opencode v2 (routes `/api/…`, authentification Basic, nouveau format de permissions). `opencode.ts` appelle directement l'API REST d'`opencode serve`. Modèle par défaut : `opencode/big-pickle`.
+opencode has no SDK: the only one published, `@opencode-ai/sdk` 1.19.5, does not speak the opencode v2 API (`/api/…` routes, Basic authentication, new permission format). `opencode.ts` calls the REST API of `opencode serve` directly. Default model: `opencode/big-pickle`.
 
-*À revoir à l'étape 5 (l'export HTML a déjà dû sortir ses liaisons natives d'`optionalDependencies`, voir plus bas) :* `--omit optional` écartera aussi `@huggingface/transformers` et `tesseract.js`. Il faudra alors les passer en dépendances normales chargées à la demande, ou les installer explicitement.
+*To revisit at step 5 (the HTML export already had to move its native bindings out of `optionalDependencies`, see below):* `--omit optional` will also drop `@huggingface/transformers` and `tesseract.js`. They will then have to become normal dependencies loaded on demand, or be installed explicitly.
 
-**Points d'attention :**
-- `onnxruntime-node` est un addon natif, il n'entre donc pas dans un binaire `bun build --compile`. La transcription n'est disponible que dans un `cortex` installé via `bun install`.
-- L'OCR local n'est qu'un secours : la vision de l'agent fait mieux (description + texte).
-- **Modèle Whisper retenu : `onnx-community/whisper-small` (q8, 241 Mo), avec `language: "french"`.**
-  - Test sur 60 s de lecture LibriVox en français : texte complet, ponctuation correcte, quelques noms propres écorchés.
-  - Vitesse : 20 s par minute d'audio, soit ~3× le temps réel (un podcast d'1 h ≈ 20 min).
-  - `whisper-base` (9 s/min) **saute un passage entier** et déforme beaucoup de mots.
-  - `whisper-large-v3-turbo` (1,1 Go, 32 s/min) **perd aussi un passage** et toute la ponctuation en q8 : il ne vaut pas son coût.
+**Points to watch:**
+- `onnxruntime-node` is a native addon, so it does not fit in a `bun build --compile` binary. Transcription is only available in a `cortex` installed via `bun install`.
+- Local OCR is only a fallback: the agent's vision does better (description + text).
+- **Whisper model chosen: `onnx-community/whisper-small` (q8, 241 MB), with `language: "french"`.**
+  - Test on 60 s of French LibriVox reading: full text, correct punctuation, a few proper names mangled.
+  - Speed: 20 s per minute of audio, i.e. ~3× real time (a 1 h podcast ≈ 20 min).
+  - `whisper-base` (9 s/min) **skips an entire passage** and distorts many words.
+  - `whisper-large-v3-turbo` (1.1 GB, 32 s/min) **also loses a passage** and all the punctuation in q8: it is not worth its cost.
 
-**Runtime — export HTML (`cortex export`), dépendances normales chargées à la demande (`await import("vite")`) (10)**
+**Runtime — HTML export (`cortex export`), normal dependencies loaded on demand (`await import("vite")`) (10)**
 
-Ajoutées à l'étape 6, documentation vérifiée via Context7 et dates de dernière publication relevées sur le registre npm le 2026-11-04. Règle retenue : uniquement des bibliothèques entretenues (version publiée dans les ~3 derniers mois).
+Added at step 6, documentation checked via Context7 and last-publication dates read from the npm registry on 2026-11-04. Rule adopted: only maintained libraries (version published in the last ~3 months).
 
-| Package | Version | Publiée | Rôle | Pourquoi celui-là |
+| Package | Version | Published | Role | Why this one |
 |---|---|---|---|---|
-| `vite` | `8.3.5` (exacte, voir plus bas) | 2026-10-21 | construit le site par son API (`createBuilder().buildApp()`) | requis par SvelteKit 3 |
-| `@sveltejs/kit` | `^3.1.1` | 2026-10-29 | routage, prérendu, pages HTML statiques | prérendu natif (voir §10 bis) |
-| `@sveltejs/adapter-static` | `^4.0.1` | 2026-10-29 | écrit le site prérendu dans `--out` | adapter officiel du site statique |
-| `svelte` | `^5.57.3` | 2026-10-26 | composants (runes) | requis par SvelteKit et shadcn-svelte |
-| `tailwindcss` + `@tailwindcss/vite` | `4.3.4` (exactes) | 2026-11-02 | styles | requis par shadcn-svelte |
-| `tailwind-variants` + `tailwind-merge` | `^4.0.1` / `^3.7.0` | 2026-10-31 / 2026-09-12 | variantes et fusion des classes des composants shadcn-svelte copiés | `cn` de shadcn-svelte, sans `clsx` (inutile : `twMerge` accepte déjà tableaux et valeurs fausses) |
-| `force-graph` | `^1.52.0` | 2026-09-28 | graphe (canvas, d3-force), chargé seulement dans le navigateur | voir §10 bis |
-| `fuse.js` | `^7.5.0` | 2026-07-13 | recherche plein texte côté navigateur : floue, classée, avec surlignage ; index précalculé à l'export (`Fuse.createIndex` → JSON, `Fuse.parseIndex` dans le navigateur) | zéro dépendance, ~450 Ko installés, ~25 Ko dans le navigateur. Écartés car figés depuis plus de 3 mois : `minisearch` (2025-09), `@orama/orama` (2025-12), `flexsearch` (2025-09). Écarté : Pagefind (binaire Rust par plateforme en `optionalDependencies`, sans autocomplétion) |
+| `vite` | `8.3.5` (exact, see below) | 2026-10-21 | builds the site through its API (`createBuilder().buildApp()`) | required by SvelteKit 3 |
+| `@sveltejs/kit` | `^3.1.1` | 2026-10-29 | routing, prerendering, static HTML pages | native prerendering (see §10 bis) |
+| `@sveltejs/adapter-static` | `^4.0.1` | 2026-10-29 | writes the prerendered site to `--out` | official static-site adapter |
+| `svelte` | `^5.57.3` | 2026-10-26 | components (runes) | required by SvelteKit and shadcn-svelte |
+| `tailwindcss` + `@tailwindcss/vite` | `4.3.4` (exact) | 2026-11-02 | styles | required by shadcn-svelte |
+| `tailwind-variants` + `tailwind-merge` | `^4.0.1` / `^3.7.0` | 2026-10-31 / 2026-09-12 | variants and class merging for the copied shadcn-svelte components | shadcn-svelte's `cn`, without `clsx` (not needed: `twMerge` already accepts arrays and falsy values) |
+| `force-graph` | `^1.52.0` | 2026-09-28 | graph (canvas, d3-force), loaded only in the browser | see §10 bis |
+| `fuse.js` | `^7.5.0` | 2026-07-13 | full-text search in the browser: fuzzy, ranked, with highlighting; index precomputed at export (`Fuse.createIndex` → JSON, `Fuse.parseIndex` in the browser) | zero dependencies, ~450 KB installed, ~25 KB in the browser. Rejected because frozen for more than 3 months: `minisearch` (2025-09), `@orama/orama` (2025-12), `flexsearch` (2025-09). Rejected: Pagefind (Rust binary per platform in `optionalDependencies`, no autocompletion) |
 
-**Liaisons natives de Vite 8 et de Tailwind 4, à épingler (6).** Vite 8 (rolldown), `@tailwindcss/oxide` et `lightningcss` livrent leur binaire en `optionalDependencies` par plateforme, que `bun install --omit optional` écarte : `import("vite")` échoue alors (« Cannot find native binding »). Elles sont donc déclarées en **dépendances normales**, aux versions exactes de leur parent : `@rolldown/binding-*` `1.2.16` (publiée le 2026-10-29), `@tailwindcss/oxide-*` `4.3.4` (2026-11-02), `lightningcss-*` `1.33.0` (2026-07-20 : un peu plus de 3 mois, hors de la règle, mais c'est la dernière version publiée et celle que Tailwind exige), pour `linux-x64-gnu` et `darwin-arm64`. Bun ignore sans erreur celle qui ne correspond pas à la plateforme. **À maintenir en même temps que `vite` et `tailwindcss`** (versions exactes, sans `^`). Autres plateformes (Linux arm64, macOS Intel, musl, Windows) : ajouter la liaison correspondante, sinon `cortex export` s'arrête avec un message qui nomme la plateforme.
+**Native bindings of Vite 8 and Tailwind 4, to pin (6).** Vite 8 (rolldown), `@tailwindcss/oxide` and `lightningcss` ship their binary in per-platform `optionalDependencies`, which `bun install --omit optional` drops: `import("vite")` then fails (“Cannot find native binding”). They are therefore declared as **normal dependencies**, at the exact versions of their parent: `@rolldown/binding-*` `1.2.16` (published 2026-10-29), `@tailwindcss/oxide-*` `4.3.4` (2026-11-02), `lightningcss-*` `1.33.0` (2026-07-20: a little over 3 months, outside the rule, but it is the latest published version and the one Tailwind requires), for `linux-x64-gnu` and `darwin-arm64`. Bun silently ignores the one that does not match the platform. **To be maintained together with `vite` and `tailwindcss`** (exact versions, no `^`). Other platforms (Linux arm64, Intel macOS, musl, Windows): add the matching binding, otherwise `cortex export` stops with a message that names the platform.
 
-**Rendu Markdown : aucune dépendance** (`Bun.markdown.html`, GFM intégré à Bun ; `marked` écarté). Les notes de bas de page `[^id]` n'y sont pas gérées : `export.ts` les extrait et les numérote lui-même (une quarantaine de lignes).
+**Markdown rendering: no dependency** (`Bun.markdown.html`, GFM built into Bun; `marked` rejected). `[^id]` footnotes are not handled there: `export.ts` extracts and numbers them itself (about forty lines).
 
-**Composants shadcn-svelte** copiés dans `site/` (`button`, `badge`, `input`, `card`), versionnés ; le preset `nova` ajoute `tw-animate-css`, `@fontsource-variable/geist`, `shadcn-svelte/tailwind.css`, `bits-ui` et `@lucide/svelte`, non utilisés ici et donc non installés (animations, police et icônes inutiles ; `tw-animate-css` date de 2025-09).
+**shadcn-svelte components** copied into `site/` (`button`, `badge`, `input`, `card`), versioned; the `nova` preset adds `tw-animate-css`, `@fontsource-variable/geist`, `shadcn-svelte/tailwind.css`, `bits-ui` and `@lucide/svelte`, which are not used here and therefore not installed (animations, font and icons are unnecessary; `tw-animate-css` dates from 2025-09).
 
-**Dev (2) :** `@types/bun`, `@types/turndown`.
+**Dev (2):** `@types/bun`, `@types/turndown`.
 
-**Intégré à Bun, donc aucune dépendance :**
+**Built into Bun, so no dependency:**
 
-| Besoin | Brique Bun |
+| Need | Bun building block |
 |---|---|
-| index BM25 | `bun:sqlite` (FTS5 + `bm25()`) |
-| frontmatter YAML | `Bun.YAML.parse` / `stringify` |
-| parsing des arguments CLI | `node:util` `parseArgs` |
+| BM25 index | `bun:sqlite` (FTS5 + `bm25()`) |
+| YAML frontmatter | `Bun.YAML.parse` / `stringify` |
+| CLI argument parsing | `node:util` `parseArgs` |
 | sha256 | `Bun.CryptoHasher` |
-| parcours de fichiers | `Bun.Glob` |
+| file traversal | `Bun.Glob` |
 | HTTP | `fetch` |
-| outils externes | `Bun.spawn` |
+| external tools | `Bun.spawn` |
 | tests | `bun test` |
-| binaire | `bun build --compile` |
+| binary | `bun build --compile` |
 
-Écartés : `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`, `nodejs-whisper`/`smart-whisper` (ils compilent whisper.cpp), et le SDK MCP v1.
+Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`, `nodejs-whisper`/`smart-whisper` (they compile whisper.cpp), and the v1 MCP SDK.
 
-**Outils système, appelés via `Bun.spawn` :** `ffmpeg` (décodage audio, également requis par yt-dlp), `yt-dlp`, `pdftotext` (poppler) et `pandoc`. Tous sont disponibles dans les gestionnaires de paquets standard. `cortex doctor` signale ceux qui manquent.
+**System tools, called via `Bun.spawn`:** `ffmpeg` (audio decoding, also required by yt-dlp), `yt-dlp`, `pdftotext` (poppler) and `pandoc`. All are available in the standard package managers. `cortex doctor` reports the missing ones.
 
-## 10. Feuille de route
+## 10. Roadmap
 
-- **Étape 0 — zéro code (1 semaine).** Mettre en place l'arborescence et `CORTEX.md`, migrer les 7 notes v1 comme premières sources, ingérer 5 sources réelles **sur des sujets variés** et poser 5 questions. *Critère de passage :* tu reviens consulter le wiki de toi-même.
-- **Étape 1.** `add` (URL, texte, Markdown, PDF texte), `search`, `index`. *Critère :* 20 sources ingérées et `search` réellement utilisé.
-- **Étape 2.** `lint`, `compile`, `ask`.
-- **Étape 3.** `mcp` (fait).
-- **Étape 4.** `inbox` (fait), avec un raccourci mobile « Partager → `inbox/urls.txt` » : l'action « Partager » du téléphone ajoute `<url>` en fin de `inbox/urls.txt`, dans le dossier synchronisé. Le contenu de `inbox/` n'est pas versionné (`.gitignore`) : la synchro se fait hors git, avec Syncthing ou un équivalent, au choix de l'humain ; le CLI ne lit que le dossier. Un `cortex inbox` ultérieur ingère puis vide.
-- **Étape 5.** Images, puis vidéo et audio.
-- **Étape 6 (fait).** `export` : le wiki en site HTML interactif, avec un graphe des liens façon Obsidian (voir §10 bis).
-- **Étape 7, seulement si nécessaire.** Embeddings, `reextract`.
+- **Step 0 — zero code (1 week).** Set up the directory layout and `CORTEX.md`, migrate the 7 v1 notes as the first sources, ingest 5 real sources **on varied topics** and ask 5 questions. *Pass criterion:* you come back to consult the wiki on your own.
+- **Step 1.** `add` (URL, text, Markdown, text PDF), `search`, `index`. *Criterion:* 20 sources ingested and `search` actually used.
+- **Step 2.** `lint`, `compile`, `ask`.
+- **Step 3.** `mcp` (done).
+- **Step 4.** `inbox` (done), with a mobile “Share → `inbox/urls.txt`” shortcut: the phone's “Share” action appends `<url>` to the end of `inbox/urls.txt`, in the synced folder. The content of `inbox/` is not versioned (`.gitignore`): syncing happens outside git, with Syncthing or an equivalent, at the human's choice; the CLI only reads the folder. A later `cortex inbox` ingests then empties.
+- **Step 5.** Images, then video and audio.
+- **Step 6 (done).** `export`: the wiki as an interactive HTML site, with an Obsidian-style link graph (see §10 bis).
+- **Step 7, only if needed.** Embeddings, `reextract`.
 
-## 10 bis. Export HTML
+## 10 bis. HTML export
 
-**But :** parcourir le wiki depuis un navigateur, sans Obsidian ni agent.
+**Goal:** browse the wiki from a browser, with no Obsidian and no agent.
 
-**`cortex export` produit un site HTML dynamique et interactif** : tout tourne dans le navigateur (JavaScript), sans serveur applicatif, donc n'importe quel serveur de fichiers suffit. C'est une étape déterministe, sans LLM, comme `index` et `lint`.
-- **Une page HTML par page wiki.** Le Markdown est rendu ; les liens `/wiki/…` deviennent des liens relatifs vers les pages HTML ; les notes de bas de page renvoient aux sources.
-- **L'index, les tags et le log** deviennent des pages de navigation, générés depuis les frontmatters, comme `wiki/index.md`.
-- **Bouton « Copier le Markdown »** sur chaque page : le source de la page, frontmatter compris. `raw/` n'étant pas publié, chaque chemin `/raw/…` y devient l'URL d'origine de la source, ou disparaît si elle n'en a pas.
-- **Chaque page affiche ses métadonnées OKF** : type, statut (`draft`, `stable`, `deprecated`), relue ou non, sources, et ses liens entrants (rétroliens).
-- **Une page de graphe interactive**, à la manière de la vue graphe d'Obsidian. Les nœuds sont les pages, colorés par type ; les arêtes, les liens Markdown. On zoome, on déplace, on filtre par type ou tag, on ouvre une page en cliquant son nœud. Les données du graphe sont un JSON produit à l'export.
-- **Une recherche plein texte côté navigateur**, sur un index JSON produit à l'export.
-- **`raw/` n'est pas publié.** Les sources pointent vers leur URL d'origine. Le site ne contient que le wiki, que l'humain a relu ou peut relire.
-- **Le site fonctionne hors ligne.** Tout est empaqueté par Vite, sans CDN, et un service worker met le site entier en cache après la première visite (voir « Hors ligne » plus bas).
+**`cortex export` produces a dynamic, interactive HTML site**: everything runs in the browser (JavaScript), with no application server, so any file server is enough. It is a deterministic step, with no LLM, like `index` and `lint`.
+- **One HTML page per wiki page.** The Markdown is rendered; `/wiki/…` links become relative links to the HTML pages; footnotes point to the sources.
+- **The index, the tags and the journal** become navigation pages, generated from the frontmatters, like `wiki/index.md`.
+- **“Copier le Markdown” button** (“Copy the Markdown”) on every page: the page source, frontmatter included. Since `raw/` is not published, each `/raw/…` path there becomes the source's original URL, or disappears if it has none.
+- **Each page shows its OKF metadata**: type, status (`draft`, `stable`, `deprecated`), reviewed or not, sources, and its incoming links (backlinks).
+- **An interactive graph page**, in the manner of Obsidian's graph view. Nodes are pages, colored by type; edges are Markdown links. You can zoom, pan, filter by type or tag, and open a page by clicking its node. The graph data is a JSON file produced at export.
+- **A full-text search in the browser**, on a JSON index produced at export.
+- **`raw/` is not published.** Sources point to their original URL. The site contains only the wiki, which the human has reviewed or can review.
+- **The site works offline.** Everything is bundled by Vite, with no CDN, and a service worker caches the whole site after the first visit (see “Offline” below).
 
-**Stack : SvelteKit (`adapter-static`, sur Vite) et shadcn-svelte.**
-- **Pourquoi SvelteKit plutôt que React + Vite :** le prérendu est natif. Chaque page devient un fichier HTML à la construction, puis s'hydrate pour la navigation côté client, le graphe et la recherche. React + Vite demanderait un outil de SSG en plus (`vite-react-ssg` ou équivalent). Les bundles Svelte sont aussi plus légers.
-- **shadcn-svelte** est le port communautaire de shadcn/ui pour Svelte (Bits UI + Tailwind CSS). Comme shadcn, il copie les composants dans le projet au lieu de les importer d'un package. Installation : `bun x sv create --add tailwindcss`, puis `bun x shadcn-svelte@latest init`. On n'ajoute que les composants utilisés.
-- **Vite et SvelteKit sont embarqués dans le CLI**, l'utilisateur n'a rien à installer pour l'export. Vite, SvelteKit, Svelte, Tailwind et `force-graph` sont des dépendances normales de `package.json`, installées par le même `bun install`. Elles ne vont **pas** en `optionalDependencies`, que l'installation recommandée (`--omit optional`) écarterait.
-- **L'application vit dans `site/`.** Les composants shadcn-svelte y sont copiés une fois, au développement : l'utilisateur ne lance jamais `shadcn-svelte`.
-- **`cortex export`** écrit les données (pages rendues, métadonnées OKF, `graph.json`, index de recherche), puis appelle Vite par son API (`createBuilder(…).buildApp()`, sans la commande `vite` ; voir les écarts plus bas) sur `site/`, qui prérend toutes les pages vers `--out`. Le CLI reste le seul à lire le wiki ; le site ne fait qu'afficher ces données.
-- **Chargé à la demande** (`await import()`) : `add`, `search`, `compile`… ne chargent jamais Vite et restent aussi rapides.
-- **Graphe : `force-graph`** (vasturiano), dans un composant Svelte. Rendu Canvas 2D et physique d3-force : animé dès l'installation (placement des nœuds, glisser, zoom, voisins mis en valeur au survol, particules sur les liens), au plus près de la vue graphe d'Obsidian pour le moins de code. L'interface autour (filtres par type et tag, recherche, aperçu de page) est en shadcn-svelte. *Limite :* ralentit au-delà de quelques milliers de nœuds ; si le wiki y arrive, passer à sigma.js + graphology (WebGL). Écarté : 3d-force-graph (Three.js, plus lourd, moins lisible pour naviguer).
-- **Coût :** quelques dizaines de Mo de plus dans `node_modules` (à mesurer à l'étape 6) et quelques secondes de construction par export.
+**Stack: SvelteKit (`adapter-static`, on Vite) and shadcn-svelte.**
+- **Why SvelteKit rather than React + Vite:** prerendering is native. Each page becomes an HTML file at build time, then hydrates for client-side navigation, the graph and the search. React + Vite would need an extra SSG tool (`vite-react-ssg` or equivalent). Svelte bundles are also lighter.
+- **shadcn-svelte** is the community port of shadcn/ui for Svelte (Bits UI + Tailwind CSS). Like shadcn, it copies the components into the project instead of importing them from a package. Installation: `bun x sv create --add tailwindcss`, then `bun x shadcn-svelte@latest init`. Only the components in use are added.
+- **Vite and SvelteKit are bundled in the CLI**, the user has nothing to install for the export. Vite, SvelteKit, Svelte, Tailwind and `force-graph` are normal dependencies in `package.json`, installed by the same `bun install`. They do **not** go in `optionalDependencies`, which the recommended install (`--omit optional`) would drop.
+- **The application lives in `site/`.** The shadcn-svelte components are copied there once, during development: the user never runs `shadcn-svelte`.
+- **`cortex export`** writes the data (rendered pages, OKF metadata, `graph.json`, search index), then calls Vite through its API (`createBuilder(…).buildApp()`, without the `vite` command; see the deviations below) on `site/`, which prerenders every page into `--out`. The CLI remains the only one to read the wiki; the site only displays this data.
+- **Loaded on demand** (`await import()`): `add`, `search`, `compile`… never load Vite and stay just as fast.
+- **Graph: `force-graph`** (vasturiano), in a Svelte component. Canvas 2D rendering and d3-force physics: animated out of the box (node placement, drag, zoom, neighbors highlighted on hover, particles on links), as close as possible to Obsidian's graph view with the least code. The interface around it (filters by type and tag, search, page preview) is in shadcn-svelte. *Limit:* it slows down beyond a few thousand nodes; if the wiki gets there, switch to sigma.js + graphology (WebGL). Rejected: 3d-force-graph (Three.js, heavier, harder to navigate).
+- **Cost:** a few tens of MB more in `node_modules` (to be measured at step 6) and a few seconds of build time per export.
 
-**Réalisé à l'étape 6 : mesures et écarts à la spec.**
+**Delivered at step 6: measurements and deviations from the spec.**
 
-- **Mesures (47 pages, 81 arêtes, Linux x64, Bun 1.4.3).** Export complet en **~2,2 s**. Site de 3,2 Mo (le JS du graphe ne se charge que sur `/graph/`). Index de recherche 172 Ko (~62 Ko compressé), recherche en 4 à 15 ms. `node_modules` : **106 Mo → 222 Mo (+116 Mo)**, soit plus que les « quelques dizaines de Mo » prévus : liaisons natives de Vite (`@rolldown`, 21 Mo) et de lightningcss (10 Mo), `force-graph` et ses d3 (6,5 Mo), Svelte et SvelteKit (7,4 Mo). Les autres commandes ne chargent rien de tout cela (`cortex search` : 0,13 s).
-- **Données.** `cortex export` lit `wiki/` (jamais `raw/`, sauf le champ `url` du frontmatter de chaque source citée) et écrit `.cortex/site-data/` (`data.json`, `graph.json`, `search-index.json`) ; le site les lit à la construction (`CORTEX_SITE_DATA`), et `graph.json` ainsi que l'index sont republiés comme points d'accès prérendus. Rien n'est écrit dans `site/` hors de `.svelte-kit/` (ignoré). Pour développer le site : `CORTEX_SITE_DATA=<racine>/.cortex/site-data bunx --bun vite dev` depuis `site/`.
-- **Écart : `createBuilder().buildApp()` au lieu de `build()`.** `build()` ne construit qu'un environnement Vite : SvelteKit 3 orchestre client, serveur, prérendu et adapter dans son hook `buildApp`, que seul `createBuilder` appelle. `build()` se terminait « avec succès » sans rien écrire.
-- **Écart : SvelteKit 3 et Vite 8** (versions courantes, plus récentes que celles de la doc consultée en amont). La configuration passe par `sveltekit({…})` dans `site/vite.config.ts` (plus de `svelte.config.js`) ; `$lib` est supprimé, remplacé par `#lib` via le champ `imports` de `site/package.json` (les composants shadcn-svelte copiés ont été adaptés) ; `tsconfig.json` étend `$app/tsconfig`. Le CLI ne vérifie pas les types du site (pas de `svelte-check`, une dépendance de plus) : les erreurs de compilation Svelte et le prérendu (`handleHttpError: "fail"`) font échouer l'export.
-- **Recherche : index inversé construit à l'export, Fuse.js pour les seules fautes de frappe.** L'export produit, sur **tout le texte** de chaque page, un index mot replié (sans accents ni casse) → pages. Dans le navigateur, chaque mot saisi se résout en mots de l'index : exact, préfixe (frappe en cours, recherche dichotomique dans la liste triée) ou proche (Fuse sur la liste des mots, jamais sur le contenu, et seulement pour un mot sans correspondance exacte ni préfixe). Les mots se combinent en ET, les phrases exactes resserrent d'abord les candidats par l'index puis sont vérifiées sur le texte. Classement : titre 3 > description 1,5 > tags 1 > contenu 0,4, pondéré par la qualité (exact > préfixe > proche). Le coût d'une recherche dépend des mots tapés, pas de la taille du wiki. Mesuré le 2026-11-04 (pire requête) : ~13 ms pour les 47 pages, ~12 ms pour ~940, ~11 ms pour ~2 800 (contre 19, ~290 et ~900 ms quand Fuse parcourait le contenu) ; index de recherche 146 Ko pour le wiki actuel. Moteur dans `site/src/lib/search-engine.ts`, sans dépendance à SvelteKit, testé par `bun test` (y compris un plafond de 200 ms sur ~3 000 pages, ~10 ms en pratique).
-- **Une seule barre de recherche, façon palette de commandes** (champ de l'en-tête ; ⌘K / Ctrl+K ou « / » pour y aller ; liste déroulante `combobox` ARIA, ↑ ↓ Entrée Échap) plus une page `/search/?q=…`. Les opérateurs se combinent en ET : `#tag` ou `tag:x`, `type:concept|entity|synthesis|source` (les pluriels et formes françaises passent), `status:draft|stable|deprecated`, `is:fav`, `is:unverified` (jamais relue), `"phrase exacte"`, exclusions `-mot`, `-#tag`, `-type:source`. Les filtres se résolvent sur les métadonnées (nombre de pages affiché pendant la frappe : `#` ou `type:` proposent les valeurs existantes), le texte libre par Fuse. Les filtres actifs s'affichent en puces retirables. Le parseur est une fonction pure (`site/src/lib/query.ts`, testée). Autocomplétion : valeurs de filtres, termes du vocabulaire (préfixe du dernier mot), titres par préfixe. Les titres proposés passent par les mêmes conditions que les résultats (filtres, phrases, exclusions ; sans mot libre, aucun titre). Un filtre répété donne une seule puce. Chaque page proposée porte un court extrait et ses états (favori, brouillon, à relire) ; le titre sélectionné peut tenir sur deux lignes et l'option active est toujours amenée dans la zone visible. Un pied collant « Tous les résultats pour … » donne le total exact ; une liste vide explique pourquoi (« Aucun favori », « Aucun résultat », chargement, échec du chargement de l'index avec « Réessayer ») et propose de réinitialiser. Sur `/search/`, l'URL fait foi (envoi depuis l'en-tête, précédent et suivant) et la liste s'étend par tranches de 50 (« Afficher davantage »).
-- **Actions sur le résultat sélectionné** : `Entrée` ouvre, `⌘/Ctrl+Entrée` ouvre dans un nouvel onglet, `Alt+F` met en favori ou retire, `Alt+C` copie le lien (les raccourcis s'affichent sous la ligne sélectionnée). Commandes globales (champ vide, ou texte qui correspond) : aller au graphe, au journal, aux favoris, aux tags, à l'accueil ; changer de thème (système, sombre, clair, mémorisé dans `localStorage`). **Pas d'action « éditer la fiche »** : le site est généré et en lecture seule, donc ni URL d'édition ni lecture du remote `origin`, ni clé `editUrl`. Cela évite `shadcn` `command` et `dialog` (donc `bits-ui`, `tw-animate-css` et les icônes) : les composants copiés se réduisent à `button`, `badge`, `input`, `card`. `cn` de shadcn-svelte est réécrit sans `clsx`, et la police du preset (Geist) est remplacée par la pile système : aucun fichier de police à embarquer.
-- **Favoris.** Bouton étoile sur chaque page et dans la palette, section « Favoris » en tête de l'accueil, filtre `is:fav`, anneau doré sur les nœuds du graphe. Stockés dans le `localStorage` du navigateur (lecture et écriture dans un `try/catch`) : **le site étant statique, les favoris sont propres à chaque navigateur** (ni partagés, ni versionnés).
-- **Pages longues : sommaire et notes.** Chaque titre reçoit à l'export une ancre lisible et stable (texte du titre sans accents, suffixe `-1`, `-2` en cas de doublon ; le slug de Bun, qui supprime les accents, est remplacé ; un slug qui ressemblerait à un id de l'interface est préfixé `t-`). `PageData.toc` liste les h2/h3. Au-delà de 3 titres, la page affiche un sommaire : dans la colonne latérale (collante) sur grand écran, repliable (`<details>`) au-dessus du texte sur mobile ; la section courante (dernier titre passé sous l'en-tête) est signalée par `aria-current="location"`. Le retour `↩` d'une note de bas de page mène à l'appel réellement suivi (mémorisé au clic, par page et par note), sinon au premier ; une note citée plusieurs fois a en plus un retour par occurrence (↩ a b c, `Note.refs`). Corps limité à 72 caractères par ligne ; tableaux et blocs de code défilent horizontalement.
-- **Navigation et thème.** L'en-tête porte « Favoris » (la recherche `is:fav`) et un sélecteur Système / Clair / Sombre (`theme.set`, même mémorisation `localStorage` et même attribut `data-theme` que la commande de la palette). La rubrique active reçoit `aria-current="page"` (lu depuis `page.route.id`, valable au prérendu). L'accueil propose des raccourcis (ancres) vers les sections par type ; `/tags/` a un champ de filtre (insensible à la casse et aux accents).
-- **Zones tactiles.** Sur `@media (pointer: coarse)`, la classe `.touch-target` (boutons, tags, raccourcis) étend la zone cliquable à ~44 px par un pseudo-élément transparent ; l'aspect compact de la souris est inchangé. Les champs et le sélecteur de thème passent à 44 px de haut.
-- **Journal.** Le journal est `wiki/log.jsonl` ; `renderLog` (`src/export.ts`) en tire des entrées structurées (`at`, `kind`, texte rendu en HTML en ligne, pages citées, sources) dans `data.json`, chaque entrée porte aussi un texte replié (`search`) pour la recherche locale de `/log/`. La page `/log/` (`site/src/routes/log/`) est une frise par jour (le plus récent en haut) : chaque entrée porte un badge coloré par `kind` (variables `--kind-*`, clair et sombre), l'heure si elle est connue, le texte, puis les liens vers les pages wiki citées et vers les sources. `raw/` n'étant pas publié, une source renvoie à la page Source du wiki qui la cite, sinon son id reste en texte ; un id cité dans le texte devient lui aussi ce lien. Filtres par `kind` en puces avec compteurs (`aria-pressed`, annonce du total), sans JavaScript tout est affiché. Entrées migrées de l'ancien `log.md` : date sans heure.
-- **Reproductible.** Même wiki, même site, octet pour octet (testé en exportant deux fois) : la version SvelteKit est l'empreinte des données (`CORTEX_SITE_VERSION`), `.svelte-kit/` est vidé avant chaque construction, et le HTML prérendu n'a aucun identifiant aléatoire.
-- **Écart : liaisons natives en dépendances normales** (voir §9), pour que `--omit optional` n'empêche pas Vite de démarrer.
-- **Hors ligne (version initiale, remplacée : voir « Hors ligne à la demande » plus bas).** `site/src/service-worker.ts` (service worker natif de SvelteKit 3, aucune dépendance ; `$service-worker` n'existe plus, on lit `$app/manifest` et `$app/env`) précachait à l'installation tout le site prérendu : pages, `__data.json`, `graph.json`, `search-index.json` et les ressources `_app/` (233 fichiers pour le wiki actuel). Le cache s'appelle `brain-<version>` et la version est l'empreinte des données (`CORTEX_SITE_VERSION`), pas l'horloge : le service worker reste reproductible octet pour octet. Les anciens caches sont supprimés à l'activation, et `clients.claim()` fait profiter la page qui l'installe sans rechargement. Stratégie : cache d'abord pour les fichiers immuables (`_app/immutable/`, nommés par empreinte), réseau d'abord pour tout le reste (les mises à jour se voient en ligne), cache en secours (`ignoreSearch` : `/search/?q=…` retombe sur `/search/`). Les chemins du manifeste sont résolus contre la portée du service worker, donc le site marche sous un sous-chemin. L'indicateur (`offline-status.svelte`, `aria-live="polite"`, en bas à gauche) affiche « Disponible hors ligne » 6 s, une fois par version du site, quand le service worker est actif (donc son cache complet), et « Hors ligne » tant que le navigateur l'est. *Mesuré (47 pages) :* 3,0 Mo en cache (0,85 Mo compressé sur le réseau), dont 1,9 Mo pour `wiki/` (HTML et `__data.json`, environ 40 Ko par page). Testé dans Chrome : serveur arrêté après l'installation, accueil, page jamais visitée, graphe et recherche fonctionnent, à la racine comme sous `/brain/sous/`. *Limites :* (1) `file://` n'est pas visé : un service worker exige http(s) ou localhost. (2) Le cache grossit avec le wiki (~40 Ko par page : environ 40 Mo pour 1 000 pages, 120 Mo pour 3 000) ; les navigateurs plafonnent le stockage par origine (souvent plusieurs centaines de Mo) et peuvent vider un cache trop plein. Au-delà, parade : ne précacher que l'essentiel (`_app/`, accueil, `graph.json`, `search-index.json`) et laisser les pages en cache à la volée, ou retirer les `__data.json` du précache (les pages se rechargent alors en HTML complet). (3) Une mise à jour du site s'installe en arrière-plan et ne prend le relais qu'une fois les onglets fermés.
-- **Hors ligne à la demande (2026-11-04, remplace le précache intégral).** L'installation ne précache que le socle : `_app/`, l'accueil, les listes (`tags/`, `log/`, `graph/`, `search/`), `graph.json` et `search-index.json` (42 fichiers au lieu de 234). Les pages consultées vont dans un cache d'exécution borné à 120 entrées ; « Télécharger tout le wiki », dans le panneau d'état (bouton permanent en bas à gauche), récupère le reste avec estimation, progression, annulation et reprise. Caches nommés `brain-wiki:<portée>:<version>` (et `…:runtime`) : à l'activation, seules les anciennes versions de ce préfixe et de cette portée sont supprimées (plus l'ancien nommage `brain-<12 hex>`), jamais les caches d'une autre application du domaine. Clés sans paramètres ni ancre. Avec une copie locale, le réseau a 3 s avant qu'elle soit servie, et elle remplace aussi une réponse 5xx, 408 ou 429 (404 et 410 passent tels quels). La version (`CORTEX_SITE_VERSION`) inclut l'empreinte des sources du frontend (`frontendFingerprint()`) en plus des données : un changement de CSS ou de composant invalide le cache. Une vraie page 404 (`routes/+error.svelte`) est aussi produite en `404.html` ; SvelteKit ne pouvant pas relativiser une page de repli servie à une adresse quelconque, un hébergement en sous-chemin s'exporte avec `CORTEX_SITE_BASE=/sous-chemin`. Un `<noscript>` explique ce qui demande JavaScript.
-- **Refonte UI/UX (2026-11-04, seconde revue de Codex : 86 constats, liste locale non versionnée `REVIEW-UI-UX.md`).**
-  - *Thème* « papier minéral, encre pétrole » (variables shadcn, clair et sombre), corps de lecture 17 px, métadonnées 14 px ; contrastes vérifiés AA par `src/theme.test.ts` (82 paires par thème, lues dans `app.css`). Styles d'impression.
-  - *Pack d'icônes* maison (`lib/icons.ts`, `components/icon.svelte`) : viewBox 24, trait 1,75, extrémités arrondies, `currentColor`, aucune dépendance ni emoji.
-  - *La recherche au centre* : accueil construit autour d'un grand champ (exemples, recherches récentes locales, favoris, puis 5 pages par collection et « Voir tout »), facettes cliquables synchronisées avec les opérateurs (`is:review`, `is:partial` ajoutés), compteurs contextuels, diagnostic des filtres contradictoires, un seul état de requête partagé, ligne de résultat commune (type, statut, relecture, source partielle). Un résultat ouvre la page avec `?q=` : passages surlignés, suivant / précédent, retour aux résultats.
-  - *Article* : fil d'Ariane, aperçu des citations sur place, sommaire avec Notes et Sources (panneau flottant sur mobile), « Lire la source originale », pages liées dédoublonnées avec leur raison visible, tableaux défilants accessibles, « Voir dans le graphe » (`/graph/?focus=<id>`).
-  - *Graphe* : forme par type (rond, carré, losange, triangle), recherche de nœud, vue liste aux mêmes actions que la souris, états vide / erreur / chargement, degré recalculé selon les filtres.
-  - *Journal* : libellés français, recherche locale, filtres dans l'URL, tranches de 20, lien stable par entrée, entrées longues repliées. *Limite :* la page reçoit encore tout le journal (seul l'affichage est borné).
-  - *Sécurité* : le HTML exporté est assaini par liste blanche (`src/sanitize.ts`, sans dépendance) : un LLM écrit le wiki à partir de pages web.
-  - *Non vérifié* : tactile réel, clavier virtuel, lecteur d'écran. Pas de tests navigateur (pas de Playwright pour l'instant) : la logique est extraite en fonctions pures testées par `bun test`.
-- **Liens et pages.** `wiki/concepts/x.md` devient `wiki/concepts/x/index.html` (`trailingSlash: "always"`, `paths.relative: true`) : le site marche derrière tout serveur de fichiers, sous-chemin compris (exploration HTTP sur deux préfixes : 124 URLs, 635 ancres, 0 lien mort). Les liens du corps sont réécrits en relatifs ; un lien vers une page qui n'existe pas encore (permis par CORTEX.md) devient un `<span class="lien-manquant">`, jamais un 404 ; un lien vers `raw/` n'est pas publié. Les liens du graphe sont orientés (`source` = page qui contient le lien, `target` = page citée) ; une paire réciproque donne un seul lien `mutual: true`. Les particules suivent ce sens, dans les deux sens pour un lien réciproque.
-- **Graphe.** Nœuds colorés par type avec légende (les pastilles filtrent aussi), filtres par type et par tag, glisser, zoom, gravité vers le centre, survol ou sélection qui estompe le reste, particules sur les liens mis en valeur. Ajouts de la revue UI/UX :
-  - **Repères dès l'ouverture.** Les libellés sont dessinés après tous les nœuds, par ordre de degré décroissant, sans jamais se chevaucher (grille spatiale, `placeLabels` dans `site/src/lib/graph-labels.ts`, testé). Le nombre de libellés suit la surface visible et croît avec le zoom (surface ÷ 14 000 px², × zoom, plafond 150) : sur un écran de 390 px, une douzaine au cadrage initial ; en zoomant, davantage. Rayon des nœuds borné à l'écran (2,5 à 14 px quel que soit le zoom ; le degré reste lisible au dézoom), épaisseur des liens à peu près constante. Cadrage initial à marge adaptée à la largeur (7 %, entre 20 et 70 px). Le nœud survolé ou sélectionné affiche son titre complet (les autres : 28 caractères) ; en survol ou sélection, seul le voisinage est étiqueté.
-  - **Sélection.** Un clic ou un toucher sélectionne la page : voisinage mis en valeur (anneau + liens + particules), panneau (type, titre, description, pages liées cliquables, « Ouvrir la page »), posé en bas sur écran étroit (le nœud qu'il recouvrirait est remonté) et à droite sur grand écran. Double-clic (400 ms) ouvre la page ; clic dans le vide ou `Échap` désélectionne ; le survol d'un autre nœud prend le pas tant que le pointeur y reste. La zone de toucher d'un nœud est élargie (+12 px, +6 px à la souris). `graph.json` porte désormais la `description` de chaque page.
-  - **Commandes.** Pause / Reprendre (fige la simulation et les particules ; les nœuds restent déplaçables), zoom + / − (×1,5, bornes 0,05 à 12), Recentrer. Un cadrage tardif de fin de simulation ne reprend plus la main dès que l'utilisateur a touché le graphe.
-  - **Sobriété et mouvement réduit.** Le canvas ne se redessine plus au repos (`autoPauseRedraw` : simulation arrêtée, aucune particule) ; mesuré : 0,1 ms par image au repos contre ~10 ms pour une image redessinée avec 2 000 nœuds. `prefers-reduced-motion` : ni particules, ni cadrage ou zoom animés, simulation calculée d'un coup (300 pas) puis figée, bouton Pause masqué.
-  - **Équivalent clavier.** La liste des pages (rendue seulement quand on l'ouvre) donne pour chaque page ses pages liées, en liens.
-  - **Échelle (graphe synthétique de 2 000 nœuds et ~3 000 arêtes, Chrome, Linux).** Ouverture : un blocage d'environ 1 s du fil principal (chargement du code et 80 pas de simulation d'amorçage), puis fluide ; image à ~10 ms au pire (nœuds, liens et libellés), libellés sans chevauchement (choix des libellés < 20 ms, testé), au repos plus aucun redessin. Limites : avec `prefers-reduced-motion`, les 300 pas d'amorçage bloquent ~3 s à cette taille ; à 2 000 nœuds le cadrage initial est un nuage dense où seuls ~40 libellés (les plus liés) apparaissent, la lisibilité vient du zoom et de la sélection ; au-delà de quelques milliers, passer à sigma.js (WebGL, voir plus haut). Non vérifié : le tactile réel, `prefers-reduced-motion` dans un navigateur, un lecteur d'écran.
+- **Measurements (47 pages, 81 edges, Linux x64, Bun 1.4.3).** Full export in **~2.2 s**. Site of 3.2 MB (the graph JS loads only on `/graph/`). Search index 172 KB (~62 KB compressed), search in 4 to 15 ms. `node_modules`: **106 MB → 222 MB (+116 MB)**, which is more than the “few tens of MB” planned: Vite's native bindings (`@rolldown`, 21 MB) and lightningcss's (10 MB), `force-graph` and its d3 packages (6.5 MB), Svelte and SvelteKit (7.4 MB). The other commands load none of this (`cortex search`: 0.13 s).
+- **Data.** `cortex export` reads `wiki/` (never `raw/`, except the `url` field of the frontmatter of each cited source) and writes `.cortex/site-data/` (`data.json`, `graph.json`, `search-index.json`); the site reads them at build time (`CORTEX_SITE_DATA`), and `graph.json` and the index are republished as prerendered endpoints. Nothing is written to `site/` outside `.svelte-kit/` (ignored). To develop the site: `CORTEX_SITE_DATA=<root>/.cortex/site-data bunx --bun vite dev` from `site/`.
+- **Deviation: `createBuilder().buildApp()` instead of `build()`.** `build()` builds only one Vite environment: SvelteKit 3 orchestrates client, server, prerendering and adapter in its `buildApp` hook, which only `createBuilder` calls. `build()` ended “successfully” without writing anything.
+- **Deviation: SvelteKit 3 and Vite 8** (current versions, newer than those of the documentation consulted beforehand). Configuration goes through `sveltekit({…})` in `site/vite.config.ts` (no more `svelte.config.js`); `$lib` is removed, replaced by `#lib` via the `imports` field of `site/package.json` (the copied shadcn-svelte components were adapted); `tscortex.json` extends `$app/tsconfig`. The CLI does not type-check the site (no `svelte-check`, one more dependency): Svelte compilation errors and prerendering (`handleHttpError: "fail"`) make the export fail.
+- **Search: inverted index built at export, Fuse.js for typos only.** The export produces, over **all the text** of each page, an index of folded word (no accents, no case) → pages. In the browser, each typed word is resolved to index words: exact, prefix (typing in progress, binary search in the sorted list) or close (Fuse on the word list, never on the content, and only for a word with no exact or prefix match). Words combine with AND, exact phrases first narrow the candidates through the index and are then verified against the text. Ranking: title 3 > description 1.5 > tags 1 > content 0.4, weighted by quality (exact > prefix > close). The cost of a search depends on the words typed, not on the size of the wiki. Measured on 2026-11-04 (worst query): ~13 ms for the 47 pages, ~12 ms for ~940, ~11 ms for ~2,800 (versus 19, ~290 and ~900 ms when Fuse scanned the content); search index 146 KB for the current wiki. Engine in `site/src/lib/search-engine.ts`, with no SvelteKit dependency, tested by `bun test` (including a 200 ms ceiling on ~3,000 pages, ~10 ms in practice).
+- **A single search bar, command-palette style** (header field; ⌘K / Ctrl+K or “/” to jump to it; dropdown ARIA `combobox`, ↑ ↓ Enter Esc) plus a `/search/?q=…` page. Operators combine with AND: `#tag` or `tag:x`, `type:concept|entity|synthesis|source` (plurals and French forms are accepted), `status:draft|stable|deprecated`, `is:fav`, `is:unverified` (never reviewed), `"exact phrase"`, exclusions `-word`, `-#tag`, `-type:source`. Filters are resolved on the metadata (page count shown while typing: `#` or `type:` suggest the existing values), free text by Fuse. Active filters appear as removable chips. The parser is a pure function (`site/src/lib/query.ts`, tested). Autocompletion: filter values, vocabulary terms (prefix of the last word), titles by prefix. The suggested titles go through the same conditions as the results (filters, phrases, exclusions; with no free word, no title). A repeated filter gives a single chip. Each suggested page carries a short excerpt and its states (favorite, draft, to review); the selected title may span two lines and the active option is always scrolled into view. A sticky footer “Tous les résultats pour …” (“All results for …”) gives the exact total; an empty list explains why (“Aucun favori” (“No favorites”), “Aucun résultat” (“No results”), loading, failure to load the index with “Réessayer” (“Retry”)) and offers to reset. On `/search/`, the URL is authoritative (submission from the header, previous and next) and the list grows in slices of 50 (“Afficher davantage”, “Show more”).
+- **Actions on the selected result**: `Enter` opens, `⌘/Ctrl+Enter` opens in a new tab, `Alt+F` toggles the favorite, `Alt+C` copies the link (the shortcuts are displayed under the selected line). Global commands (empty field, or matching text): go to the graph, the journal, the favorites, the tags, the home page; change theme (system, dark, light, remembered in `localStorage`). **No “edit the page” action**: the site is generated and read-only, so no edit URL, no reading of the `origin` remote, and no `editUrl` key. This avoids `shadcn` `command` and `dialog` (hence `bits-ui`, `tw-animate-css` and the icons): the copied components shrink to `button`, `badge`, `input`, `card`. shadcn-svelte's `cn` is rewritten without `clsx`, and the preset's font (Geist) is replaced by the system stack: no font file to bundle.
+- **Favorites.** Star button on each page and in the palette, a “Favoris” (“Favorites”) section at the top of the home page, the `is:fav` filter, a golden ring on graph nodes. Stored in the browser's `localStorage` (reads and writes inside a `try/catch`): **since the site is static, favorites are specific to each browser** (neither shared nor versioned).
+- **Long pages: table of contents and notes.** At export, each heading gets a readable, stable anchor (heading text without accents, suffix `-1`, `-2` in case of duplicates; Bun's slug, which strips accents, is replaced; a slug that would look like an interface id is prefixed with `t-`). `PageData.toc` lists the h2/h3. Beyond 3 headings, the page shows a table of contents: in the side column (sticky) on a large screen, collapsible (`<details>`) above the text on mobile; the current section (last heading scrolled past under the header) is flagged with `aria-current="location"`. The `↩` return of a footnote leads to the call actually followed (remembered on click, per page and per note), otherwise to the first one; a note cited several times also has a return per occurrence (↩ a b c, `Note.refs`). Body limited to 72 characters per line; tables and code blocks scroll horizontally.
+- **Navigation and theme.** The header carries “Favoris” (the `is:fav` search) and a System / Light / Dark selector (`theme.set`, same `localStorage` memory and same `data-theme` attribute as the palette command). The active section gets `aria-current="page"` (read from `page.route.id`, valid at prerender time). The home page offers shortcuts (anchors) to the sections by type; `/tags/` has a filter field (insensitive to case and accents).
+- **Touch targets.** Under `@media (pointer: coarse)`, the `.touch-target` class (buttons, tags, shortcuts) extends the clickable area to ~44 px with a transparent pseudo-element; the compact look for mouse use is unchanged. The fields and the theme selector go to 44 px high.
+- **Journal.** The journal is `wiki/log.jsonl`; `renderLog` (`src/export.ts`) derives structured entries from it (`at`, `kind`, text rendered as inline HTML, cited pages, sources) into `data.json`, and each entry also carries a folded text (`search`) for the local search of `/log/`. The `/log/` page (`site/src/routes/log/`) is a day-by-day timeline (most recent at the top): each entry carries a badge colored by `kind` (`--kind-*` variables, light and dark), the time if known, the text, then links to the cited wiki pages and to the sources. Since `raw/` is not published, a source links to the wiki Source page that cites it, otherwise its id stays as text; an id cited in the text also becomes that link. Filters by `kind` as chips with counters (`aria-pressed`, announcement of the total); without JavaScript, everything is shown. Entries migrated from the old `log.md`: date without time.
+- **Reproducible.** Same wiki, same site, byte for byte (tested by exporting twice): the SvelteKit version is the fingerprint of the data (`CORTEX_SITE_VERSION`), `.svelte-kit/` is emptied before each build, and the prerendered HTML has no random identifier.
+- **Deviation: native bindings as normal dependencies** (see §9), so that `--omit optional` does not prevent Vite from starting.
+- **Offline (initial version, replaced: see “On-demand offline” below).** `site/src/service-worker.ts` (SvelteKit 3's native service worker, no dependency; `$service-worker` no longer exists, so `$app/manifest` and `$app/env` are read) precached the whole prerendered site at install: pages, `__data.json`, `graph.json`, `search-index.json` and the `_app/` resources (233 files for the current wiki). The cache is named `brain-<version>` and the version is the fingerprint of the data (`CORTEX_SITE_VERSION`), not the clock: the service worker stays reproducible byte for byte. Old caches are deleted at activation, and `clients.claim()` lets the page that installs it benefit without a reload. Strategy: cache first for immutable files (`_app/immutable/`, named by fingerprint), network first for everything else (updates are seen online), cache as a fallback (`ignoreSearch`: `/search/?q=…` falls back to `/search/`). Manifest paths are resolved against the service worker's scope, so the site works under a subpath. The indicator (`offline-status.svelte`, `aria-live="polite"`, bottom left) shows “Disponible hors ligne” (“Available offline”) for 6 s, once per site version, when the service worker is active (so its cache is complete), and “Hors ligne” (“Offline”) as long as the browser is. *Measured (47 pages):* 3.0 MB in cache (0.85 MB compressed over the network), of which 1.9 MB for `wiki/` (HTML and `__data.json`, about 40 KB per page). Tested in Chrome: server stopped after installation, home page, a never-visited page, graph and search work, at the root as well as under `/brain/sous/`. *Limits:* (1) `file://` is not targeted: a service worker requires http(s) or localhost. (2) The cache grows with the wiki (~40 KB per page: about 40 MB for 1,000 pages, 120 MB for 3,000); browsers cap storage per origin (often several hundred MB) and may evict a cache that is too full. Beyond that, the remedy: precache only the essentials (`_app/`, home page, `graph.json`, `search-index.json`) and let pages be cached on the fly, or remove the `__data.json` files from the precache (pages then reload as full HTML). (3) A site update installs in the background and takes over only once the tabs are closed.
+- **On-demand offline (2026-11-04, replaces the full precache).** Installation precaches only the base: `_app/`, the home page, the lists (`tags/`, `log/`, `graph/`, `search/`), `graph.json` and `search-index.json` (42 files instead of 234). Pages that are visited go into a runtime cache bounded to 120 entries; “Télécharger tout le wiki” (“Download the whole wiki”), in the status panel (permanent button at the bottom left), fetches the rest with an estimate, progress, cancellation and resume. Caches are named `brain-wiki:<scope>:<version>` (and `…:runtime`): at activation, only the old versions of that prefix and that scope are deleted (plus the old `brain-<12 hex>` naming), never the caches of another application on the domain. Keys have no parameters or anchor. With a local copy, the network has 3 s before it is served, and it also replaces a 5xx, 408 or 429 response (404 and 410 pass through as is). The version (`CORTEX_SITE_VERSION`) includes the fingerprint of the frontend sources (`frontendFingerprint()`) in addition to the data: a CSS or component change invalidates the cache. A real 404 page (`routes/+error.svelte`) is also produced as `404.html`; since SvelteKit cannot make a fallback page relative when it is served at an arbitrary address, a subpath hosting is exported with `CORTEX_SITE_BASE=/subpath`. A `<noscript>` explains what requires JavaScript.
+- **UI/UX overhaul (2026-11-04, Codex's second review: 86 findings, local unversioned list `REVIEW-UI-UX.md`).**
+  - *Theme* “mineral paper, teal ink” (shadcn variables, light and dark), reading body 17 px, metadata 14 px; contrasts checked AA by `src/theme.test.ts` (82 pairs per theme, read from `app.css`). Print styles.
+  - *In-house icon pack* (`lib/icons.ts`, `components/icon.svelte`): viewBox 24, stroke 1.75, rounded caps, `currentColor`, no dependency and no emoji.
+  - *Search at the center*: home page built around a large field (examples, local recent searches, favorites, then 5 pages per collection and “Voir tout” (“See all”)), clickable facets synchronized with the operators (`is:review`, `is:partial` added), contextual counters, diagnosis of contradictory filters, a single shared query state, a common result row (type, status, review, partial source). A result opens the page with `?q=`: highlighted passages, next / previous, back to the results.
+  - *Article*: breadcrumb, in-place citation preview, table of contents with Notes and Sources (floating panel on mobile), “Lire la source originale” (“Read the original source”), deduplicated related pages with their reason shown, accessible scrolling tables, “Voir dans le graphe” (“View in the graph”) (`/graph/?focus=<id>`).
+  - *Graph*: shape by type (circle, square, diamond, triangle), node search, list view with the same actions as the mouse, empty / error / loading states, degree recomputed according to the filters.
+  - *Journal*: French labels, local search, filters in the URL, slices of 20, stable link per entry, long entries collapsed. *Limit:* the page still receives the whole journal (only the display is bounded).
+  - *Security*: the exported HTML is sanitized by an allowlist (`src/sanitize.ts`, no dependency): an LLM writes the wiki from web pages.
+  - *Not verified*: real touch, virtual keyboard, screen reader. No browser tests (no Playwright for now): the logic is extracted into pure functions tested by `bun test`.
+- **Links and pages.** `wiki/concepts/x.md` becomes `wiki/concepts/x/index.html` (`trailingSlash: "always"`, `paths.relative: true`): the site works behind any file server, subpath included (HTTP crawl on two prefixes: 124 URLs, 635 anchors, 0 dead links). Body links are rewritten as relative; a link to a page that does not exist yet (allowed by CORTEX.md) becomes a `<span class="lien-manquant">`, never a 404; a link to `raw/` is not published. Graph links are directed (`source` = the page that contains the link, `target` = the cited page); a reciprocal pair gives a single link `mutual: true`. Particles follow this direction, in both directions for a reciprocal link.
+- **Graph.** Nodes colored by type with a legend (the dots also filter), filters by type and by tag, drag, zoom, gravity toward the center, hover or selection that dims the rest, particles on the highlighted links. Additions from the UI/UX review:
+  - **Landmarks from the start.** Labels are drawn after all the nodes, in decreasing degree order, never overlapping (spatial grid, `placeLabels` in `site/src/lib/graph-labels.ts`, tested). The number of labels follows the visible area and grows with zoom (area ÷ 14,000 px², × zoom, cap 150): on a 390 px screen, a dozen at the initial framing; more as you zoom in. Node radius bounded on screen (2.5 to 14 px whatever the zoom; the degree stays readable when zoomed out), link thickness roughly constant. Initial framing with a margin adapted to the width (7%, between 20 and 70 px). The hovered or selected node shows its full title (the others: 28 characters); on hover or selection, only the neighborhood is labeled.
+  - **Selection.** A click or a tap selects the page: neighborhood highlighted (ring + links + particles), panel (type, title, description, clickable related pages, “Ouvrir la page” (“Open the page”)), placed at the bottom on a narrow screen (the node it would cover is moved up) and on the right on a large screen. Double-click (400 ms) opens the page; a click on empty space or `Esc` deselects; hovering another node takes precedence as long as the pointer stays on it. The touch area of a node is widened (+12 px, +6 px with a mouse). `graph.json` now carries the `description` of each page.
+  - **Controls.** Pause / Reprendre (Pause / Resume) (freezes the simulation and the particles; nodes remain draggable), zoom + / − (×1.5, bounds 0.05 to 12), Recentrer (Recenter). A late framing at the end of the simulation no longer takes over once the user has touched the graph.
+  - **Sobriety and reduced motion.** The canvas no longer redraws at rest (`autoPauseRedraw`: simulation stopped, no particle); measured: 0.1 ms per frame at rest versus ~10 ms for a redrawn frame with 2,000 nodes. `prefers-reduced-motion`: no particles, no animated framing or zoom, simulation computed in one go (300 steps) then frozen, Pause button hidden.
+  - **Keyboard equivalent.** The page list (rendered only when opened) gives, for each page, its related pages as links.
+  - **Scale (synthetic graph of 2,000 nodes and ~3,000 edges, Chrome, Linux).** On opening: a main-thread block of about 1 s (code loading and 80 warm-up simulation steps), then smooth; frame at ~10 ms at worst (nodes, links and labels), labels without overlap (label selection < 20 ms, tested), at rest no more redraw. Limits: with `prefers-reduced-motion`, the 300 warm-up steps block for ~3 s at this size; at 2,000 nodes the initial framing is a dense cloud where only ~40 labels (the most linked) appear, readability comes from zoom and selection; beyond a few thousand, switch to sigma.js (WebGL, see above). Not verified: real touch, `prefers-reduced-motion` in a browser, a screen reader.
 
-**Hors périmètre : le déploiement.** Où et comment servir le site (par exemple sur un homelab) relève de l'usage, pas du CLI. L'export est reproductible (même commit, même site), ce qui suffit à l'automatiser ailleurs.
+**Out of scope: deployment.** Where and how to serve the site (for example on a homelab) is a matter of use, not of the CLI. The export is reproducible (same commit, same site), which is enough to automate it elsewhere.
 
 ## 11. Non-goals
 
-- pas de GitHub Actions ni de CI qui fait tourner un LLM ;
-- pas de handoffs JSON ni de pipeline multi-agents ;
-- pas de cron ni de synthèses périodiques automatiques : les synthèses naissent de questions ;
-- pas d'ingestion sans lecture : le champ `note:` est obligatoire et l'humain reste dans la boucle ;
-- pas de taxonomie de tags a priori : les tags émergent et le lint propose des fusions ;
-- pas de SDK LLM obligatoire : le CLI reste agnostique par défaut, les SDK sont optionnels ;
-- pas de RAG par chunks.
+- no GitHub Actions and no CI that runs an LLM;
+- no JSON handoffs and no multi-agent pipeline;
+- no cron and no automatic periodic syntheses: syntheses are born from questions;
+- no ingestion without reading: the `note:` field is required and the human stays in the loop;
+- no a priori tag taxonomy: tags emerge and lint proposes merges;
+- no mandatory LLM SDK: the CLI stays agnostic by default, the SDKs are optional;
+- no chunk-based RAG.
 
 ## Sources
 
 - Karpathy, [LLM Wiki](https://gist.githubusercontent.com/karpathy/442a6bf555914893e9891c11519de94f/raw/ac46de1ad27f92b28ac95459c782c07f6b8c964a/llm-wiki.md)
-- OKF : [README](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/README.md), [SPEC v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md), [billet Google Cloud (v0.1)](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing?hl=en)
-- Recherche locale : [qmd](https://github.com/tobi/qmd), [rqmd](https://docs.rs/crate/rqmd/0.1.1), [qrst](https://github.com/l1x/qrst)
-- Implémentations du pattern : [Astro-Han/karpathy-llm-wiki](https://github.com/Astro-Han/karpathy-llm-wiki), [lucasastorian/llmwiki](https://github.com/lucasastorian/llmwiki), [topic llm-wiki](https://github.com/topics/llm-wiki)
+- OKF: [README](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/README.md), [SPEC v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md), [Google Cloud blog post (v0.1)](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing?hl=en)
+- Local search: [qmd](https://github.com/tobi/qmd), [rqmd](https://docs.rs/crate/rqmd/0.1.1), [qrst](https://github.com/l1x/qrst)
+- Implementations of the pattern: [Astro-Han/karpathy-llm-wiki](https://github.com/Astro-Han/karpathy-llm-wiki), [lucasastorian/llmwiki](https://github.com/lucasastorian/llmwiki), [topic llm-wiki](https://github.com/topics/llm-wiki)

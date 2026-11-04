@@ -14,7 +14,7 @@
 	const FAVS_SHOWN = 6;
 	const urlOf = (q: string) => `${toRoute("/search")}?q=${encodeURIComponent(q)}`;
 
-	// Les favoris sont propres à ce navigateur : on les retrouve dans l'index de recherche (chargé seulement s'il y en a)
+	// Favorites are specific to this browser: they are found in the search index (loaded only if there are any)
 	let engine = $state<Engine>();
 	$effect(() => { if (favs.ids.length && !engine) loadEngine().then((e) => (engine = e), () => {}); });
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
@@ -22,7 +22,7 @@
 
 <svelte:head><title>Cortex</title></svelte:head>
 
-<!-- la recherche est la porte d'entrée : un grand champ, des exemples qui donnent des résultats, les recherches récentes -->
+<!-- search is the entry point: a large field, examples that give results, recent searches -->
 <section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
 	<h1 id="h-accueil" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground self-end pb-1 text-sm leading-tight font-normal tracking-normal">Mon second cerveau : lu, relié, sourcé.</span></h1>
 	<p class="text-muted-foreground mt-2">
@@ -68,7 +68,7 @@
 	</section>
 {/if}
 
-<!-- aperçu borné par collection, quelle que soit la taille du wiki ; la vue complète est la recherche filtrée (par tranches) -->
+<!-- preview bounded per collection, whatever the size of the wiki; the full view is the filtered search (in slices) -->
 <div class="mt-10 grid gap-6 lg:grid-cols-2 2xl:grid-cols-4">
 	{#each data.collections as c (c.type)}
 		<section aria-labelledby="h-{c.type}" class="bg-muted/40 rounded-lg border p-4">

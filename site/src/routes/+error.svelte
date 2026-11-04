@@ -5,8 +5,8 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { toRoute } from "#lib/links.js";
 
-	// Page d'erreur du site : affichée pour une adresse inconnue (404, y compris via `404.html` sur l'hébergement statique)
-	// et pour toute erreur côté client. Dans le gabarit du site (en-tête, recherche, thème).
+	// Site error page: shown for an unknown address (404, including via `404.html` on static hosting)
+	// and for any client-side error. In the site template (header, search, theme).
 	const notFound = $derived(page.status === 404);
 	const title = $derived(notFound ? "Page introuvable" : "Une erreur est survenue");
 </script>

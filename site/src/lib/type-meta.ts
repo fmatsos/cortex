@@ -1,6 +1,6 @@
 import type { IconName } from "#lib/icons.js";
 
-/** Types de pages OKF : libellés, variable CSS de couleur et icône (accueil, badges, légende et graphe). */
+/** OKF page types: labels, color CSS variable and icon (home, badges, legend and graph). */
 export const TYPES = [
 	{ type: "Concept", plural: "Concepts", color: "--type-concept", icon: "concept" },
 	{ type: "Entity", plural: "Entités", color: "--type-entity", icon: "entity" },
@@ -11,11 +11,11 @@ export const TYPES = [
 const FR: Record<string, string> = { Concept: "Concept", Entity: "Entité", Synthesis: "Synthèse", Source: "Source" };
 export const typeLabel = (t: string) => FR[t] ?? t;
 export const typeColor = (t: string) => `var(${TYPES.find((x) => x.type === t)?.color ?? "--type-autre"})`;
-/** Icône d'un type de page ; un type inconnu retombe sur la feuille. */
+/** Icon of a page type; an unknown type falls back to the leaf. */
 export const typeIcon = (t: string): IconName => TYPES.find((x) => x.type === t)?.icon ?? "source";
 
 export const STATUS_LABEL: Record<string, string> = { draft: "brouillon", stable: "stable", deprecated: "déprécié" };
-/** Statut d'une page : icône et variante de badge. Stable reste discret ; brouillon et déprécié attirent l'attention. */
+/** Status of a page: icon and badge variant. Stable stays discreet; draft and deprecated draw attention. */
 export const STATUS_META = {
 	stable: { label: "stable", icon: "stable", variant: "stable" },
 	draft: { label: "brouillon", icon: "draft", variant: "caution" },
@@ -24,8 +24,8 @@ export const STATUS_META = {
 export const statusMeta = (s: string) => (STATUS_META as Record<string, (typeof STATUS_META)[keyof typeof STATUS_META]>)[s];
 
 /**
- * Types d'entrée du journal (wiki/log.jsonl). L'identifiant technique (`kind`) reste celui des données ;
- * `label` et `description` sont ceux de l'affichage, en français : ils décrivent l'opération sans connaître le CLI.
+ * Log entry types (wiki/log.jsonl). The technical identifier (`kind`) stays that of the data;
+ * `label` and `description` are those of the display, in French: they describe the operation without knowing the CLI.
  */
 export const KINDS = [
 	{ kind: "add", label: "Ajout", description: "Une source a été ajoutée au dossier raw, en attente de compilation.", color: "--kind-add", icon: "kind-add" },
@@ -37,5 +37,5 @@ export const KINDS = [
 export const kindLabel = (k: string) => KINDS.find((x) => x.kind === k)?.label ?? k;
 export const kindDescription = (k: string) => KINDS.find((x) => x.kind === k)?.description ?? "";
 export const kindColor = (k: string) => `var(${KINDS.find((x) => x.kind === k)?.color ?? "--type-autre"})`;
-/** Icône d'un type d'entrée du journal ; un type inconnu retombe sur la note. */
+/** Icon of a log entry type; an unknown type falls back to the note. */
 export const kindIcon = (k: string): IconName => KINDS.find((x) => x.kind === k)?.icon ?? "note";

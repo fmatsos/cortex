@@ -2,9 +2,9 @@
 	import { ICONS, strokeFor, type IconName } from "#lib/icons.js";
 	import { cn } from "#lib/utils.js";
 
-	// Pack d'icônes du projet (voir lib/icons.ts). Décorative par défaut (aria-hidden) ; avec `label`, l'icône porte
-	// son propre nom accessible (role="img"). Un bouton garde de préférence son texte visible : l'icône l'accompagne.
-	// `filled` : réservé à l'étoile active.
+	// The project's icon pack (see lib/icons.ts). Decorative by default (aria-hidden); with `label`, the icon carries
+	// its own accessible name (role="img"). A button preferably keeps its visible text: the icon accompanies it.
+	// `filled`: reserved for the active star.
 	let { name, size = 20, label, filled = false, class: className, style }: { name: IconName; size?: number; label?: string; filled?: boolean; class?: string; style?: string } = $props();
 </script>
 

@@ -4,12 +4,12 @@ import { dirname, join, normalize, resolve, sep } from "node:path";
 import { localIso, RAW_ID, rawPath, readDocs, slugify } from "./lib";
 
 /**
- * Journal : wiki/log.jsonl (une entrée par ligne, ordre chronologique, append-only) est la source de vérité ;
- * wiki/log.md (réservé OKF) en est généré, comme wiki/index.md.
+ * Journal: wiki/log.jsonl (one entry per line, chronological order, append-only) is the source of truth;
+ * wiki/log.md (OKF-reserved) is generated from it, like wiki/index.md.
  */
 export const KINDS = ["add", "ingest", "query", "lint", "update"] as const;
 export type Kind = (typeof KINDS)[number];
-/** `sources` : ids raw ; `pages` : chemins `wiki/…md`. Champs vides omis. */
+/** `sources`: raw ids; `pages`: `wiki/…md` paths. Empty fields omitted. */
 export type LogEntry = { at: string; kind: Kind; text: string; sources?: string[]; pages?: string[] };
 
 const LABEL: Record<Kind, string> = { add: "Add", ingest: "Ingest", query: "Query", lint: "Lint", update: "Update" };
@@ -18,7 +18,7 @@ export const kindLabel = (k: string) => LABEL[k as Kind] ?? k;
 const AT = /^\d{4}-\d\d-\d\d(T\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d))?$/;
 const KEYS = new Set(["at", "kind", "text", "sources", "pages"]);
 
-/** Entrée valide ou message d'erreur (une seule erreur par ligne : la première). */
+/** Valid entry or error message (a single error per line: the first). */
 export function parseEntry(v: unknown): LogEntry | string {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return "l'entrée doit être un objet JSON";
   const o = v as Record<string, unknown>;
@@ -34,7 +34,7 @@ export function parseEntry(v: unknown): LogEntry | string {
   return o as LogEntry;
 }
 
-/** Lit wiki/log.jsonl : entrées valides (ordre du fichier) et erreurs par ligne. Fichier absent = journal vide. */
+/** Reads wiki/log.jsonl: valid entries (file order) and per-line errors. Missing file = empty journal. */
 export function readLog(root: string): { entries: LogEntry[]; errors: { line: number; msg: string }[] } {
   const f = join(root, "wiki/log.jsonl");
   const entries: LogEntry[] = [], errors: { line: number; msg: string }[] = [];
@@ -50,29 +50,29 @@ export function readLog(root: string): { entries: LogEntry[]; errors: { line: nu
 }
 
 const day = (e: LogEntry) => e.at.slice(0, 10);
-/** Du plus récent au plus ancien : jours décroissants, et dans un jour l'ordre inverse du fichier. */
+/** Most recent to oldest: days descending, and within a day the reverse of file order. */
 export const newestFirst = (entries: LogEntry[]) =>
   entries.map((e, i) => [e, i] as const).sort(([a, i], [b, j]) => (day(a) === day(b) ? j - i : day(b).localeCompare(day(a)))).map(([e]) => e);
 
-/** Entrées des `n` jours les plus récents qui en ont (plus récent d'abord), filtrées par `kind` si donné. */
+/** Entries of the `n` most recent days that have any (most recent first), filtered by `kind` if given. */
 export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntry[] {
   const all = newestFirst(entries.filter((e) => !kind || e.kind === kind));
   const days = [...new Set(all.map(day))].slice(0, n);
   return all.filter((e) => days.includes(day(e)));
 }
 
-/** Titre de chaque page wiki (chemin → titre) : les pages se nomment par leur titre, pas par leur nom de fichier. */
+/** Title of each wiki page (path → title): pages are named by their title, not by their file name. */
 export type Titles = Map<string, string>;
 export const pageTitles = async (root: string): Promise<Titles> =>
   new Map((await readDocs(root, "wiki")).filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
 
 const words = (s: string) => `-${slugify(s, Infinity)}-`;
-/** Le texte nomme déjà la page : son nom de fichier ou son titre, mots entiers, sans accents ni casse. */
+/** The text already names the page: its file name or its title, whole words, ignoring accents and case. */
 const namesPage = (text: string, p: string, title?: string) =>
   text.includes(p.replace(/\.md$/, "").split("/").at(-1)!) || (!!title && words(text).includes(words(title)));
 const namesId = (text: string, id: string) => text.includes(`\`${id}\``);
 
-/** Une ligne de log.md : le texte, puis les sources et pages que le texte ne nomme pas déjà. */
+/** A line of log.md: the text, then the sources and pages that the text does not already name. */
 function renderLine(e: LogEntry, titles: Titles): string {
   const src = (e.sources ?? []).filter((s) => !namesId(e.text, s)).map((s) => `\`${s}\``);
   const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p, titles.get(p))).map((p) => `[${titles.get(p) ?? p.replace(/^wiki\/|\.md$/g, "")}](/${p})`);
@@ -80,7 +80,7 @@ function renderLine(e: LogEntry, titles: Titles): string {
   return `- **${kindLabel(e.kind)}** ${e.text}${refs ? ` (${refs})` : ""}\n`;
 }
 
-/** wiki/log.md : le journal, sections par date (la plus récente d'abord). Déterministe. */
+/** wiki/log.md: the journal, sections by date (most recent first). Deterministic. */
 export function renderLogMd(entries: LogEntry[], titles: Titles = new Map()): string {
   let out = "# Log\n\n> Généré depuis `wiki/log.jsonl` : ne pas éditer à la main (`cortex log add`, puis `cortex index`).\n";
   let cur = "";
@@ -95,7 +95,7 @@ export async function writeLogMd(root: string) {
   await Bun.write(join(root, "wiki/log.md"), renderLogMd(readLog(root).entries, await pageTitles(root)));
 }
 
-/** Ajoute une ligne à wiki/log.jsonl (un seul append) puis régénère wiki/log.md. */
+/** Appends a line to wiki/log.jsonl (a single append) then regenerates wiki/log.md. */
 export async function appendLog(root: string, entry: Omit<LogEntry, "at">, d = new Date()) {
   const e: LogEntry = { at: localIso(d), kind: entry.kind, text: entry.text.replace(/\s*[\r\n]+\s*/g, " ").trim() };
   if (entry.sources?.length) e.sources = entry.sources;
@@ -104,13 +104,13 @@ export async function appendLog(root: string, entry: Omit<LogEntry, "at">, d = n
   if (typeof bad === "string") throw new Error(`Entrée de journal invalide : ${bad}`);
   const f = join(root, "wiki/log.jsonl");
   mkdirSync(dirname(f), { recursive: true });
-  // le fichier se termine par une fin de ligne ; sinon (édition à la main) l'entrée se collerait à la précédente
+  // the file ends with a newline; otherwise (hand edit) the entry would stick to the previous one
   const prev = existsSync(f) ? readFileSync(f, "utf8") : "";
   await appendFile(f, `${prev && !prev.endsWith("\n") ? "\n" : ""}${JSON.stringify(e)}\n`);
   await writeLogMd(root);
 }
 
-/** `cortex log add` : valide les références (pages existantes sous wiki/, ids raw existants) avant d'écrire. */
+/** `cortex log add`: validates references (existing pages under wiki/, existing raw ids) before writing. */
 export async function logAdd(root: string, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()): Promise<LogEntry> {
   if (!KINDS.includes(kind as Kind)) throw new Error(`kind inconnu : ${kind} (${KINDS.join(" | ")})`);
   if (!text.trim()) throw new Error("texte vide");

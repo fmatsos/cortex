@@ -22,7 +22,7 @@ const LINKS = [
 ];
 const DATA = { nodes: NODES, links: LINKS };
 
-// --- UI01 : la vue filtrée est une pure fonction des données et des filtres ---
+// --- UI01: the filtered view is a pure function of the data and the filters ---
 
 test("buildView : sans filtre, tout est visible et le degré est recalculé", () => {
   const v = buildView(DATA, { off: new Set(), tag: "" });
@@ -36,7 +36,7 @@ test("buildView : le filtre de tag retire les liens dont une extrémité est mas
   const v = buildView(DATA, { off: new Set(), tag: "benchmark" });
   expect(v.nodes.map((n) => n.id)).toEqual(["concepts/a", "sources/d"]);
   expect(v.links).toEqual([{ source: "sources/d", target: "concepts/a" }]);
-  expect(v.nodes.map((n) => n.degree)).toEqual([1, 1]); // `concepts/a` a 2 liens dans le graphe complet
+  expect(v.nodes.map((n) => n.degree)).toEqual([1, 1]); // `concepts/a` has 2 links in the full graph
 });
 
 test("buildView : un tag à une seule page donne un nœud isolé de degré 0 (cas du plantage benchmark)", () => {
@@ -69,7 +69,7 @@ test("reconcileSelection : la sélection survit tant que le nœud est visible", 
   expect(reconcileSelection("a", new Set())).toBeNull();
 });
 
-// --- relations orientées (UX45) ---
+// --- directed relations (UX45) ---
 
 test("relationsOf : cite / cité par, et un lien réciproque compte dans les deux sens", () => {
   expect(relationsOf("concepts/a", LINKS)).toEqual({ cites: ["concepts/b"], citedBy: ["sources/d"] });
@@ -96,7 +96,7 @@ test("simLinks : un lien réciproque reçoit un jumeau inverse, les autres garde
   const out = simLinks(LINKS);
   expect(out).toHaveLength(5);
   expect(out.filter((l) => l.twin)).toEqual([{ source: "entities/c", target: "concepts/b", twin: true }]);
-  expect(out[0]).toEqual({ source: "concepts/a", target: "concepts/b" }); // source → target : le sens des particules
+  expect(out[0]).toEqual({ source: "concepts/a", target: "concepts/b" }); // source → target: the direction of the particles
   expect(out.find((l) => l.source === "sources/d" && l.target === "concepts/a")).toBeDefined();
   expect(out.find((l) => l.source === "concepts/a" && l.target === "sources/d")).toBeUndefined();
 });
@@ -105,14 +105,14 @@ test("particleCount : voisinage en valeur, ambiance, mouvement réduit, pause", 
   const base = { calm: false, paused: false, hot: false, dim: false, linkCount: 10 };
   expect(particleCount({ ...base, hot: true })).toBe(3);
   expect(particleCount(base)).toBe(1);
-  expect(particleCount({ ...base, dim: true })).toBe(0); // un voisinage est isolé : le reste se tait
+  expect(particleCount({ ...base, dim: true })).toBe(0); // a neighborhood is isolated: the rest goes quiet
   expect(particleCount({ ...base, linkCount: AMBIENT_MAX_LINKS + 1 })).toBe(0);
   expect(particleCount({ ...base, linkCount: AMBIENT_MAX_LINKS + 1, hot: true })).toBe(3);
   expect(particleCount({ ...base, calm: true, hot: true })).toBe(0); // prefers-reduced-motion
   expect(particleCount({ ...base, paused: true, hot: true })).toBe(0);
 });
 
-// --- UX32 : recherche de nœud et ?focus= ---
+// --- UX32: node search and ?focus= ---
 
 test("searchNodes : préfixe d'abord, accents et casse ignorés, plus liées d'abord à égalité", () => {
   const ns = [node("1", "Concept", [], "Context rot"), node("2", "Concept", [], "Prévenir le context rot"), node("3", "Source", [], "Context Rot — Chroma"), node("4", "Concept", [], "Chroma")];
@@ -120,7 +120,7 @@ test("searchNodes : préfixe d'abord, accents et casse ignorés, plus liées d'a
   expect(searchNodes(ns, "context").map((n) => n.id)).toEqual(["3", "1", "2"]);
   expect(searchNodes(ns, "CONTEXT ROT").map((n) => n.id)).toEqual(["3", "1", "2"]);
   expect(searchNodes([node("e", "Source", [], "Été à Paris")], "ete a").map((n) => n.id)).toEqual(["e"]);
-  expect(searchNodes(ns, "rot context").map((n) => n.id).sort()).toEqual(["1", "2", "3"]); // tous les mots présents
+  expect(searchNodes(ns, "rot context").map((n) => n.id).sort()).toEqual(["1", "2", "3"]); // all the words present
   expect(searchNodes(ns, "")).toEqual([]);
   expect(searchNodes(ns, "   ")).toEqual([]);
   expect(searchNodes(ns, "zzz")).toEqual([]);
@@ -136,7 +136,7 @@ test("resolveFocus : id connu, normalisé ; inconnu ; absent", () => {
   expect(resolveFocus("", NODES)).toEqual({ id: null, asked: null });
 });
 
-// --- UI06 / UX34 : un seul recadrage différé, annulable ---
+// --- UI06 / UX34: a single deferred refit, cancelable ---
 
 test("createTimer : reprogrammer annule le précédent ; cancel l'annule ; l'échéance s'exécute une fois", () => {
   const pending = new Map<number, () => void>();
@@ -149,10 +149,10 @@ test("createTimer : reprogrammer annule le précédent ; cancel l'annule ; l'éc
   t.schedule(() => ran.push("b"), 700);
   expect(pending.size).toBe(1);
   expect(t.pending).toBe(true);
-  t.cancel(); // interaction manuelle ou démontage
+  t.cancel(); // manual interaction or unmount
   expect(pending.size).toBe(0);
   expect(t.pending).toBe(false);
-  t.cancel(); // sans effet
+  t.cancel(); // no effect
   t.schedule(() => ran.push("c"), 700);
   [...pending.values()][0]();
   expect(ran).toEqual(["c"]);
@@ -169,7 +169,7 @@ test("createTimer : avec de vraies minuteries, l'annulation empêche l'exécutio
   expect(n).toBe(1);
 });
 
-// --- UI18 : titre tronqué à la largeur ---
+// --- UI18: title truncated to the width ---
 
 test("truncateToWidth : un titre qui tient reste intact, un long titre est coupé avec une ellipse et tient", () => {
   const measure = (s: string) => s.length * 7;
@@ -179,12 +179,12 @@ test("truncateToWidth : un titre qui tient reste intact, un long titre est coup�
   expect(out.endsWith("…")).toBe(true);
   expect(measure(out)).toBeLessThanOrEqual(120);
   expect(measure(truncateToWidth(long, 121, measure))).toBeLessThanOrEqual(121);
-  expect(truncateToWidth(long, 120, measure).length).toBeGreaterThan(10); // pas trop court : coupe au plus près
+  expect(truncateToWidth(long, 120, measure).length).toBeGreaterThan(10); // not too short: cuts as close as possible
   expect(truncateToWidth(long, 3, measure)).toBe("…");
   expect(truncateToWidth("", 10, measure)).toBe("");
 });
 
-// --- D04 / D02 : formes ---
+// --- D04 / D02 : shapes ---
 
 test("shapeOf : une forme distincte par type, cercle par défaut", () => {
   expect(new Set(["Concept", "Entity", "Synthesis", "Source"].map(shapeOf)).size).toBe(4);
@@ -215,7 +215,7 @@ test("svgPoints : chaîne de points pour la légende, null pour le cercle", () =
   expect(svgPoints("triangle", 14)!.split(" ")).toHaveLength(3);
 });
 
-// --- UI01 : garde de non-régression sur l'effet de filtrage (le plantage venait de dépendances réactives lues dans apply) ---
+// --- UI01: non-regression guard on the filtering effect (the crash came from reactive dependencies read in apply) ---
 
 test("graph-view : l'effet de filtrage n'appelle apply() que sous untrack, avec la vue en seul suivi", async () => {
   const src = await Bun.file(new URL("../site/src/lib/components/graph-view.svelte", import.meta.url)).text();

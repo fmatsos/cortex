@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { TocItem } from "#lib/types.js";
 
-	// Liste du sommaire (titres du corps, Notes, Sources) : la section courante porte aria-current="location".
+	// Table of contents list (body headings, Notes, Sources): the current section carries aria-current="location".
 	let { items, current = "", onnavigate }: { items: TocItem[]; current?: string; onnavigate?: () => void } = $props();
 </script>
 

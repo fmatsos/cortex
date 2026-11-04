@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from "svelte";
 
-	// Puce-bouton à deux états (aria-pressed) : filtre de type du journal, tri des tags. Texte à 14 px, zone tactile agrandie.
+	// Two-state button chip (aria-pressed): log type filter, tag sort. Text at 14 px, enlarged touch area.
 	let { pressed, onclick, describedby, children }: { pressed: boolean; onclick: () => void; describedby?: string; children: Snippet } = $props();
 </script>
 

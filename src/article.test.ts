@@ -24,7 +24,7 @@ test("sommaire : affiché dès trois sections, dès deux si la page est longue, 
 test("section courante : dernier titre passé sous la ligne, dernière section tout en bas", () => {
 	const tops = [{ id: "a", top: -400 }, { id: "b", top: -20 }, { id: "c", top: 300 }];
 	expect(currentSection(tops, 100)).toBe("b");
-	expect(currentSection([{ id: "a", top: 50 }], 10)).toBe(""); // rien n'a encore passé la ligne
+	expect(currentSection([{ id: "a", top: 50 }], 10)).toBe(""); // nothing has crossed the line yet
 	expect(currentSection(tops, 100, true)).toBe("c");
 	expect(currentSection([], 100, true)).toBe("");
 });
@@ -36,7 +36,7 @@ test("pages liées : motifs courts et dédupliqués, sources communes nommées",
 	expect(relatedReasons(["lien sortant", "lien entrant", "source partagée"], ["Chroma Research", "OpenAI"]))
 		.toEqual([{ icon: "copy-link", label: "citée ici" }, { icon: "backlink", label: "cite cette page" }, { icon: "source", label: "2 sources communes", detail: "Chroma Research · OpenAI" }]);
 	expect(relatedReasons([])).toEqual([]);
-	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "source commune", detail: "Titre" }]); // le serveur connaît la source même sans raison exportée
+	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "source commune", detail: "Titre" }]); // the server knows the source even without an exported reason
 	expect(actor("human:franck")).toBe("franck");
 	expect(actor("claude-code/opus-5.5")).toBe("claude-code · opus-5.5");
 });
@@ -73,13 +73,13 @@ test("lecture d'un résultat : mots (préfixes compris), phrases, accents et che
 	const text = "Le Contexte se dégrade : le context rot touche le contexte long.";
 	const words = (q: string) => hitRanges(text, terms(q)).map(([a, b]) => text.slice(a, b));
 	expect(words("contexte")).toEqual(["Contexte", "contexte"]);
-	expect(words("cont")).toEqual(["Contexte", "context", "contexte"]); // la frappe en cours compte
-	expect(words("degrade")).toEqual(["dégrade"]); // sans accents
-	expect(words("c")).toEqual([]); // une lettre seule ne doit être que le mot entier
+	expect(words("cont")).toEqual(["Contexte", "context", "contexte"]); // the word being typed counts
+	expect(words("degrade")).toEqual(["dégrade"]); // without accents
+	expect(words("c")).toEqual([]); // a single letter must only match the whole word
 	expect(words('"context rot"')).toEqual(["context rot"]);
-	expect(words('context "context rot"')).toEqual(["Contexte", "context rot", "contexte"]); // la phrase absorbe le mot qu'elle recouvre
-	expect(words("type:source -long")).toEqual([]); // filtres et exclusions ne se surlignent pas
-	expect(hitRanges("é́x", terms("ex"))).toEqual([]); // repli de longueur différente : ignoré plutôt que décalé
+	expect(words('context "context rot"')).toEqual(["Contexte", "context rot", "contexte"]); // the phrase absorbs the word it covers
+	expect(words("type:source -long")).toEqual([]); // filters and exclusions are not highlighted
+	expect(hitRanges("é́x", terms("ex"))).toEqual([]); // folding of a different length: ignored rather than shifted
 });
 
 test("tableaux : chaque tableau est enveloppé dans une région défilante focalisable et nommée", () => {
@@ -91,7 +91,7 @@ test("tableaux : chaque tableau est enveloppé dans une région défilante focal
 	const two = wrapTables(`${t}<h2>B</h2>${t}`);
 	expect(two).toContain('aria-label="Tableau 1 sur 2"');
 	expect(two).toContain('aria-label="Tableau 2 sur 2 : B"');
-	expect(wrapTables(`<h2>"A"</h2>${t}`)).toContain('aria-label="Tableau : &quot;A&quot;"'); // l'attribut reste bien formé
+	expect(wrapTables(`<h2>"A"</h2>${t}`)).toContain('aria-label="Tableau : &quot;A&quot;"'); // the attribute stays well-formed
 });
 
 test("export : les tableaux du Markdown sortent enveloppés, le texte indexé n'en est pas changé", () => {

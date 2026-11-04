@@ -9,6 +9,6 @@ export const load = ({ params }) => {
 	const page = pages.find((p) => p.id === params.path.replace(/\/$/, ""));
 	if (!page) error(404, "Page introuvable");
 	const slugs = Object.fromEntries(tags.map((t) => [t.tag, t.slug]));
-	// sources que chaque page liée partage avec celle-ci : le motif « source commune » dit lesquelles
+	// sources that each related page shares with this one: the "source commune" reason says which ones
 	return { page, slugs, shared: sharedSources(page, pages) };
 };

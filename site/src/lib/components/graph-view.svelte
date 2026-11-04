@@ -20,14 +20,14 @@
 
 	let el: HTMLDivElement;
 	let raw = $state<GraphData>();
-	let off = $state(new Set<string>()); // types masqués
+	let off = $state(new Set<string>()); // hidden types
 	let tag = $state("");
 	let shown = $state(0);
 	let error = $state("");
-	let ready = $state(false); // graphe construit : les commandes ne servent à rien avant
-	let sel = $state.raw<N | null>(null); // nœud sélectionné (brut : force-graph mute les nœuds)
+	let ready = $state(false); // graph built: the controls are useless before that
+	let sel = $state.raw<N | null>(null); // selected node (raw: force-graph mutates the nodes)
 	let paused = $state(false);
-	let calm = $state(false); // prefers-reduced-motion : ni particules, ni cadrage animé, simulation figée
+	let calm = $state(false); // prefers-reduced-motion: no particles, no animated framing, frozen simulation
 	let listMode = $state(false);
 	let notice = $state("");
 	let query = $state("");
@@ -40,11 +40,11 @@
 	let zoomBy: (f: number) => void = () => {};
 	let togglePause: () => void = () => {};
 	let nodeById: (id: string) => N | undefined = () => undefined;
-	let retry: () => void = () => {}; // « Réessayer » : reconstruit le graphe depuis zéro
-	let pendingFocus: string | null = null; // page à sélectionner dès que les filtres réinitialisés sont appliqués
+	let retry: () => void = () => {}; // "Réessayer": rebuilds the graph from scratch
+	let pendingFocus: string | null = null; // page to select as soon as the reset filters are applied
 
 	const EMPTY: GraphView = { nodes: [], links: [], ids: new Set() };
-	// vue filtrée : pures dérivations des données et des filtres (voir graph-model.ts)
+	// filtered view: pure derivations of the data and filters (see graph-model.ts)
 	const view = $derived(raw ? buildView(raw, { off, tag }) : EMPTY);
 	const types = $derived([...new Set(raw?.nodes.map((n) => n.type))].sort((a, b) => TYPES.findIndex((t) => t.type === a) - TYPES.findIndex((t) => t.type === b)));
 	const tags = $derived.by(() => {
@@ -65,14 +65,14 @@
 	const toggle = (type: string) => { const s = new Set(off); s.has(type) ? s.delete(type) : s.add(type); off = s; };
 	const resetFilters = () => { off = new Set(); tag = ""; notice = ""; };
 
-	// ré-applique les filtres. Seuls `view` (donc les données et les filtres) sont suivis : apply() lit et écrit `sel`, `shown`…,
-	// et ne doit pas rendre l'effet dépendant d'eux (sinon il se relance à chaque sélection et boucle : plantage 500 après filtre puis clic).
+	// re-applies the filters. Only `view` (hence the data and the filters) is tracked: apply() reads and writes `sel`, `shown`…,
+	// and must not make the effect depend on them (otherwise it reruns on every selection and loops: 500 crash after filter then click).
 	$effect(() => {
 		const v = view;
 		untrack(() => apply?.(v));
 	});
 
-	/** Sélectionne une page et la centre ; si un filtre la masque, les filtres sont réinitialisés d'abord. */
+	/** Selects a page and centers it; if a filter hides it, the filters are reset first. */
 	async function focusNode(id: string) {
 		if (!raw?.nodes.some((n) => n.id === id)) { notice = "Cette page n'est pas dans le graphe."; return; }
 		notice = "";
@@ -107,7 +107,7 @@
 	onMount(() => {
 		let graph: any, ro: ResizeObserver | undefined, mq: MediaQueryList | undefined, mqMotion: MediaQueryList | undefined, onTheme: (() => void) | undefined, onMotion: ((e: MediaQueryListEvent) => void) | undefined;
 		let gen = 0, raf = 0;
-		const fitTimer = createTimer(); // un seul recadrage différé à la fois, annulé dès que l'utilisateur reprend la main
+		const fitTimer = createTimer(); // only one deferred reframing at a time, canceled as soon as the user takes back control
 		const stopManual = () => { touched = true; fitTimer.cancel(); };
 		let touched = false;
 
@@ -119,7 +119,7 @@
 			if (onTheme) { mq?.removeEventListener("change", onTheme); window.removeEventListener("themechange", onTheme); }
 			if (onMotion) mqMotion?.removeEventListener("change", onMotion);
 			for (const ev of ["pointerdown", "wheel"]) el?.removeEventListener(ev, stopManual);
-			graph?._destructor?.(); // l'instance détruite reste référencée : ses derniers rappels (simulation, rendu) ne tombent pas sur `undefined`
+			graph?._destructor?.(); // the destroyed instance stays referenced: its last callbacks (simulation, rendering) do not hit `undefined`
 			apply = fit = undefined;
 			select = () => {};
 			zoomBy = togglePause = () => {};
@@ -138,7 +138,7 @@
 				if (me !== gen) return;
 				raw = g;
 
-				// couleurs lues dans le thème (variables CSS), converties en rgb pour le canvas ; relues si le thème système change
+				// colors read from the theme (CSS variables), converted to rgb for the canvas; re-read if the system theme changes
 				const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
 				const rgb = (css: string, a = 1) => { probe.clearRect(0, 0, 1, 1); probe.fillStyle = css; probe.fillRect(0, 0, 1, 1); const [r, gg, b] = probe.getImageData(0, 0, 1, 1).data; return `rgba(${r},${gg},${b},${a})`; };
 				const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -155,12 +155,12 @@
 				mq = matchMedia("(prefers-color-scheme: dark)");
 				onTheme = readPalette;
 				mq.addEventListener("change", onTheme);
-				window.addEventListener("themechange", onTheme); // thème forcé depuis la palette
+				window.addEventListener("themechange", onTheme); // theme forced from the palette
 				mqMotion = matchMedia("(prefers-reduced-motion: reduce)");
 				calm = mqMotion.matches;
 				onMotion = (e) => { calm = e.matches; redraw(); };
 				mqMotion.addEventListener("change", onMotion);
-				const hitPad = matchMedia("(pointer: coarse)").matches ? 12 : 6; // zone de toucher élargie sur écran tactile
+				const hitPad = matchMedia("(pointer: coarse)").matches ? 12 : 6; // enlarged touch area on touch screens
 
 				let hover: N | null = null, settled = false, k = 1, byDegree: N[] = [], last = { id: "", t: 0 }, linkTotal = 0, applied: GraphView | undefined, first = true;
 				touched = false;
@@ -168,14 +168,14 @@
 				const dim = () => (hover ?? sel) !== null;
 				const widths = new Map<string, number>();
 				const short = (t: string) => (t.length > 28 ? `${t.slice(0, 27)}…` : t);
-				let full = { key: "", text: "" }; // titre du nœud survolé ou sélectionné, tronqué à la largeur du canvas
+				let full = { key: "", text: "" }; // title of the hovered or selected node, truncated to the canvas width
 				const hot = (l: L) => hotLinks.has(l);
 				const particles = (l: L) => particleCount({ calm, paused, hot: hot(l), dim: dim(), linkCount: linkTotal });
-				const linkColor = (l: L) => (l.twin ? "rgba(0,0,0,0)" : hot(l) ? pal.hot : dim() ? pal.edgeDim : pal.edge); // le jumeau d'un lien réciproque n'a pas de trait : il ne porte que ses particules
-				const linkWidth = (l: L) => (hot(l) ? 2.25 : 1.4) / Math.sqrt(k); // épaisseur à peu près constante à l'écran
-				// refaire un set d'accesseur redessine (autoPauseRedraw) ; celui des particules les recrée
+				const linkColor = (l: L) => (l.twin ? "rgba(0,0,0,0)" : hot(l) ? pal.hot : dim() ? pal.edgeDim : pal.edge); // the twin of a reciprocal link has no stroke: it only carries its particles
+				const linkWidth = (l: L) => (hot(l) ? 2.25 : 1.4) / Math.sqrt(k); // roughly constant thickness on screen
+				// redoing an accessor set redraws (autoPauseRedraw); the particles one recreates them
 				const redraw = () => { graph?.linkColor(linkColor).linkDirectionalParticles(particles); };
-				// voisinage mis en valeur : celui du survol, à défaut celui de la sélection
+				// highlighted neighborhood: the hovered one, otherwise the selection's
 				const focus = () => {
 					const f = hover ?? sel;
 					hotNodes.clear();
@@ -194,26 +194,26 @@
 					.nodeRelSize(1)
 					.minZoom(0.05)
 					.maxZoom(12)
-					.nodeLabel(() => "") // les libellés sont dessinés sur le canvas
+					.nodeLabel(() => "") // the labels are drawn on the canvas
 					.showPointerCursor((o: unknown) => !!o)
 					.nodeCanvasObjectMode(() => "replace")
 					.nodeCanvasObject((n: N, ctx: CanvasRenderingContext2D, scale: number) => {
 						const r = screenRadius(n.degree, scale) / scale, faded = dim() && !hotNodes.has(n), fav = favs.has(n.id);
-						const pts = shapePoints(shapeOf(n.type), n.x!, n.y!, r); // forme par type : le type ne dépend pas de la couleur seule
+						const pts = shapePoints(shapeOf(n.type), n.x!, n.y!, r); // shape per type: the type does not depend on color alone
 						const outline = () => { if (pts) path(ctx, pts); else { ctx.beginPath(); ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI); } };
 						ctx.globalAlpha = faded ? 0.12 : 1;
 						ctx.lineJoin = "round";
 						outline();
 						ctx.fillStyle = pal.type[n.type] ?? pal.fg;
 						ctx.fill();
-						if (fav) { ctx.lineWidth = 2.5 / scale; ctx.strokeStyle = pal.fav; ctx.stroke(); } // favori : anneau, doublé d'une étoile (le repère ne tient pas à la seule couleur)
+						if (fav) { ctx.lineWidth = 2.5 / scale; ctx.strokeStyle = pal.fav; ctx.stroke(); } // favorite: ring, doubled by a star (the marker does not rely on color alone)
 						if (n === sel) { outline(); ctx.lineWidth = 3 / scale; ctx.strokeStyle = pal.hot; ctx.stroke(); }
 						if (n === hover) { outline(); ctx.lineWidth = 2 / scale; ctx.strokeStyle = pal.fg; ctx.stroke(); }
 						if (fav) {
 							path(ctx, starPoints(n.x! + r * 0.85, n.y! - r * 0.85, 6.5 / scale));
 							ctx.lineWidth = 1.5 / scale;
 							ctx.strokeStyle = pal.bg;
-							ctx.stroke(); // halo : l'étoile se détache de n'importe quel fond
+							ctx.stroke(); // halo: the star stands out against any background
 							ctx.fillStyle = pal.fav;
 							ctx.fill();
 						}
@@ -226,13 +226,13 @@
 						ctx.fill();
 					})
 					.onRenderFramePre((_: unknown, scale: number) => { k = scale; })
-					// libellés dessinés après tous les nœuds : les plus importants (degré) d'abord, jamais l'un sur l'autre
+					// labels drawn after all the nodes: the most important ones (degree) first, never one over another
 					.onRenderFramePost((ctx: CanvasRenderingContext2D, scale: number) => {
 						const W = el.clientWidth, H = el.clientHeight, c = graph.centerAt(), f = hover ?? sel, FS = 12;
 						const font = (bold: boolean, size = FS) => `${bold ? "600 " : ""}${size}px system-ui, sans-serif`;
 						if (f) {
 							const key = `${f.id}|${W}`;
-							if (full.key !== key) { ctx.font = font(true); full = { key, text: truncateToWidth(f.title, W - 8, (s) => ctx.measureText(s).width) }; } // titre complet dans le panneau, tronqué sur le canvas
+							if (full.key !== key) { ctx.font = font(true); full = { key, text: truncateToWidth(f.title, W - 8, (s) => ctx.measureText(s).width) }; } // full title in the panel, truncated on the canvas
 						}
 						const text = (n: N) => (n === f ? full.text : short(n.title));
 						const width = (n: N) => {
@@ -248,7 +248,7 @@
 							if (sx < -w || sx > W + w || sy < -FS || sy > H + FS) return null;
 							return { x: Math.min(Math.max(sx - w / 2, 4), Math.max(4, W - w - 4)), y: sy + screenRadius(n.degree, scale) + 2, w, h: FS + 4, force: n === f };
 						};
-						const kept = placeLabels(f ? [f, ...f.neighbors] : byDegree, rect, f ? 60 : labelBudget(W, H, scale)); // survol ou sélection : le voisinage seul
+						const kept = placeLabels(f ? [f, ...f.neighbors] : byDegree, rect, f ? 60 : labelBudget(W, H, scale)); // hover or selection: the neighborhood only
 						ctx.textAlign = "left";
 						ctx.textBaseline = "top";
 						ctx.lineJoin = "round";
@@ -256,7 +256,7 @@
 							const r = rect(n)!, gx = c.x + (r.x - W / 2) / scale, gy = c.y + (r.y - H / 2) / scale;
 							ctx.font = font(n === f, FS / scale);
 							ctx.lineWidth = 3 / scale;
-							ctx.strokeStyle = pal.bg; // halo : lisible sur les arêtes et les autres nœuds
+							ctx.strokeStyle = pal.bg; // halo: readable over edges and other nodes
 							ctx.strokeText(text(n), gx, gy);
 							ctx.fillStyle = pal.fg;
 							ctx.fillText(text(n), gx, gy);
@@ -264,36 +264,36 @@
 					})
 					.linkColor(linkColor)
 					.linkWidth(linkWidth)
-					.linkDirectionalParticles(particles) // particules de `source` (la page qui cite) vers `target` (la page citée) ; deux sens pour un lien réciproque
+					.linkDirectionalParticles(particles) // particles from `source` (the citing page) to `target` (the cited page); two directions for a reciprocal link
 					.linkDirectionalParticleWidth((l: L) => (hot(l) ? 3.5 : 2.2))
 					.linkDirectionalParticleSpeed(0.008)
 					.linkDirectionalParticleColor((l: L) => (hot(l) ? pal.hot : pal.particle))
 					.onNodeHover((n: N | null) => { hover = n; focus(); })
 					.onNodeClick((n: N) => {
 						const now = performance.now();
-						if (last.id === n.id && now - last.t < 400) { goto(toPage(n.id)); return; } // double clic : ouvre la page
+						if (last.id === n.id && now - last.t < 400) { goto(toPage(n.id)); return; } // double click: opens the page
 						last = { id: n.id, t: now };
 						select(n, "covered");
 					})
 					.onBackgroundClick(() => select(null))
 					.cooldownTime(calm ? 0 : 20000)
-					.warmupTicks(calm ? 300 : 80) // mise en place déjà amorcée : le cadrage initial voit un graphe étalé
+					.warmupTicks(calm ? 300 : 80) // layout already warmed up: the initial framing sees a spread-out graph
 					.onEngineStop(() => { if (!settled) { settled = true; if (!touched) fit?.(); } });
 				readPalette();
-				graph.d3Force("charge").strength(-170).distanceMax(220); // répulsion de portée limitée : les îlots ne se repoussent pas à l'infini
-				// gravité vers le centre (comme Obsidian) : les petits îlots ne partent pas à la dérive
+				graph.d3Force("charge").strength(-170).distanceMax(220); // limited-range repulsion: islands do not push each other away to infinity
+				// gravity toward the center (like Obsidian): small islands do not drift away
 				graph.d3Force("gravity", (alpha: number) => { for (const n of graph.graphData().nodes as N[]) { n.vx = (n.vx ?? 0) - (n.x ?? 0) * 0.1 * alpha; n.vy = (n.vy ?? 0) - (n.y ?? 0) * 0.1 * alpha; } });
 				graph.d3Force("link").distance(45);
 
-				ro = new ResizeObserver(() => { if (el.clientWidth && el.clientHeight) graph.width(el.clientWidth).height(el.clientHeight); }); // masqué (vue liste) : taille nulle ignorée
+				ro = new ResizeObserver(() => { if (el.clientWidth && el.clientHeight) graph.width(el.clientWidth).height(el.clientHeight); }); // hidden (list view): zero size ignored
 				ro.observe(el);
-				// un cadrage différé (fin de simulation, filtre) ne reprend jamais la main sur l'utilisateur
+				// a deferred framing (end of simulation, filter) never takes control back from the user
 				for (const ev of ["pointerdown", "wheel"]) el.addEventListener(ev, stopManual, { passive: true });
 
-				fit = () => { if (el.clientWidth) graph.zoomToFit(calm ? 0 : 500, Math.round(Math.min(70, Math.max(20, el.clientWidth * 0.07)))); }; // marge réduite sur petit écran
+				fit = () => { if (el.clientWidth) graph.zoomToFit(calm ? 0 : 500, Math.round(Math.min(70, Math.max(20, el.clientWidth * 0.07)))); }; // reduced margin on small screens
 				zoomBy = (f) => graph.zoom(Math.min(12, Math.max(0.05, graph.zoom() * f)), calm ? 0 : 250);
 				const center = (n: N, mode: Center) => {
-					// sur écran étroit, le panneau est posé en bas : un nœud qu'il recouvrirait passe dans la moitié haute (sinon la vue ne bouge pas, le double clic reste possible)
+					// on a narrow screen, the panel sits at the bottom: a node it would cover moves to the upper half (otherwise the view does not move, double click remains possible)
 					const narrow = el.clientWidth < 640, covered = narrow && graph.graph2ScreenCoords(n.x, n.y).y > el.clientHeight * 0.5;
 					if (mode === "covered" && !covered) return;
 					if (mode === "focus" && graph.zoom() < 2) graph.zoom(2, calm ? 0 : 300);
@@ -303,9 +303,9 @@
 					sel = n;
 					focus();
 					if (!n || !mode) return;
-					if (mode !== "covered") stopManual(); // centrage explicite : aucun recadrage différé ne doit le défaire
+					if (mode !== "covered") stopManual(); // explicit centering: no deferred reframing must undo it
 					cancelAnimationFrame(raf);
-					// juste après un nouveau jeu de données, les positions ne sont pas encore calculées : on attend quelques images
+					// right after a new dataset, positions are not computed yet: wait a few frames
 					const go = (tries: number) => { if (n.x !== undefined) center(n, mode); else if (tries > 0) raf = requestAnimationFrame(() => go(tries - 1)); };
 					go(90);
 				};
@@ -317,7 +317,7 @@
 					focus();
 				};
 				apply = (v) => {
-					if (v === applied) return; // le premier appel direct et celui de l'effet portent sur la même vue
+					if (v === applied) return; // the first direct call and the effect's call concern the same view
 					applied = v;
 					const old = new Map<string, N>(graph.graphData().nodes.map((n: N) => [n.id, n]));
 					const nodes: N[] = v.nodes.map((n) => {
@@ -336,7 +336,7 @@
 					linkTotal = v.links.length;
 					shown = nodes.length;
 					hover = null;
-					const keep = reconcileSelection(sel?.id, v.ids); // la sélection survit au filtre tant que le nœud reste visible
+					const keep = reconcileSelection(sel?.id, v.ids); // the selection survives the filter as long as the node stays visible
 					sel = keep ? (byId.get(keep) ?? null) : null;
 					touched = false;
 					graph.graphData({ nodes, links });
@@ -348,7 +348,7 @@
 				apply(view);
 				ready = true;
 
-				// `?focus=<id>` : ouvre le graphe centré sur une page (lien « Voir dans le graphe » d'un article)
+				// `?focus=<id>`: opens the graph centered on a page ("Voir dans le graphe" link of an article)
 				const wanted = resolveFocus(location.search, g.nodes);
 				if (wanted.id) await focusNode(wanted.id);
 				else if (wanted.asked) notice = `La page « ${wanted.asked} » n'est pas dans le graphe.`;

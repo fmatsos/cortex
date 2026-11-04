@@ -15,8 +15,8 @@
 	import { typeIcon } from "#lib/type-meta.js";
 
 	let { data } = $props();
-	const STEP = 50; // résultats affichés par tranche
-	// page prérendue vide : la requête (?q=) ne se lit que dans le navigateur ; ensuite l'état partagé (search.q) fait foi pour l'écran
+	const STEP = 50; // results displayed per slice
+	// prerendered page empty: the query (?q=) is only read in the browser; afterwards the shared state (search.q) is authoritative for the screen
 	let engine = $state<Engine>();
 	let failed = $state(false);
 	let ready = $state(false);
@@ -38,7 +38,7 @@
 
 	const load = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
 	onMount(load);
-	// Filtres : sur grand écran ils sont toujours déployés (colonne de gauche), sur petit écran dans un bloc repliable
+	// Filters: on large screens they are always expanded (left column), on small screens in a collapsible block
 	onMount(() => {
 		const mq = matchMedia("(min-width: 1024px)");
 		const sync = () => { if (mq.matches) filtersOpen = true; };
@@ -46,14 +46,14 @@
 		mq.addEventListener("change", sync);
 		return () => mq.removeEventListener("change", sync);
 	});
-	// l'URL fait foi à l'arrivée sur un lien avec ?q= et avec précédent / suivant ; une arrivée sans ?q= garde la requête en cours
+	// the URL is authoritative when arriving on a link with ?q= and with back / forward; an arrival without ?q= keeps the current query
 	afterNavigate((nav) => {
 		const url = nav.to?.url;
 		const p = url?.searchParams.get("q") ?? "";
 		if (url?.searchParams.has("q") || nav.type === "popstate") { if (p !== search.q.trim()) search.q = p; }
 		ready = true;
 	});
-	// la saisie met l'URL à jour sur place (sans entrée d'historique)
+	// typing updates the URL in place (without a history entry)
 	$effect(() => {
 		const v = search.q.trim();
 		limit = STEP;
@@ -61,7 +61,7 @@
 		void goto(v ? urlOf(v) : toRoute("/search"), { shallow: true, replace: true, keepFocus: true, noScroll: true });
 	});
 
-	// Annonce pour les lecteurs d'écran : nombre de résultats (zéro compris), à la fin de la frappe seulement
+	// Announcement for screen readers: number of results (zero included), only at the end of typing
 	let announced = $state("");
 	$effect(() => {
 		const msg = !t ? "" : failed ? "Index de recherche indisponible." : !engine ? "Chargement de l'index." : res.total ? `${res.total} résultat${res.total > 1 ? "s" : ""}.` : "Aucun résultat.";
@@ -69,7 +69,7 @@
 		return () => clearTimeout(id);
 	});
 
-	// retirer un favori depuis la vue des favoris fait disparaître la ligne : le focus passe à « Annuler »
+	// removing a favorite from the favorites view makes the row disappear: focus moves to "Annuler"
 	const onRowClick = async (e: MouseEvent) => {
 		const btn = (e.target as Element).closest("button[aria-pressed]");
 		if (!btn) return;
@@ -100,7 +100,7 @@
 	</aside>
 
 	<section aria-label="Résultats" class="min-w-0">
-		<!-- compteur visible (pas annoncé à chaque frappe) ; l'annonce est dans la région de statut ci-dessous -->
+		<!-- visible counter (not announced on every keystroke); the announcement is in the status region below -->
 		<p class="text-muted-foreground min-h-6 text-sm">
 			{#if !t}
 				{#if facets}{facets.total} pages dans le wiki.{/if}
@@ -159,7 +159,7 @@
 				</div>
 			{/if}
 		{:else}
-			<!-- recherche vide : de quoi démarrer (exemples qui donnent des résultats sur ce wiki, tags fréquents, collections, syntaxe) -->
+			<!-- empty search: what it takes to start (examples that give results on this wiki, frequent tags, collections, syntax) -->
 			<div class="space-y-8 pt-2">
 				{#if data.seed.examples.length}
 					<section aria-labelledby="s-exemples">

@@ -3,8 +3,8 @@ import { readdir, rename, unlink } from "node:fs/promises";
 import { add, describe } from "./add";
 
 /**
- * Vide `inbox/` par `add` : lignes de `urls.txt` (`<url> [note…]`) et fichiers (note facultative dans `<nom>.note`).
- * Une entrée réussie (ajoutée ou déjà présente) quitte l'inbox, un échec y reste. Renvoie le code de sortie.
+ * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`).
+ * A successful entry (added or already present) leaves the inbox, a failure stays in it. Returns the exit code.
  */
 export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Promise<number> {
   const dir = join(root, "inbox");
@@ -13,7 +13,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
   const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note")).sort();
   const lines = (await Bun.file(urlsFile).exists()) ? (await Bun.file(urlsFile).text()).split("\n") : [];
 
-  const done = new Set<string>(); // lignes d'urls.txt à retirer
+  const done = new Set<string>(); // urls.txt lines to remove
   let added = 0, known = 0, failed = 0, noNote = false;
   const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>) => {
     try {
@@ -41,7 +41,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
   }
 
   if (done.size) {
-    // ponytail: relecture juste avant d'écrire, mais pas de verrou : une synchro entre la relecture et le rename peut encore être écrasée
+    // ponytail: re-read just before writing, but no lock: a sync between the re-read and the rename can still be overwritten
     const fresh = (await Bun.file(urlsFile).text()).split("\n").filter((l) => !done.has(l));
     await Bun.write(`${urlsFile}.tmp`, fresh.join("\n"));
     await rename(`${urlsFile}.tmp`, urlsFile);

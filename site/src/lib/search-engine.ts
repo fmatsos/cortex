@@ -4,17 +4,17 @@ import { activeValues, hasText, isEmpty, matches, parseQuery, STATUS_VALUES, TYP
 import type { SearchDoc, SearchIndex } from "./types";
 
 /**
- * Moteur de recherche, sans dépendance à SvelteKit (testable par bun test).
- * Index inversé construit à l'export (mot replié → pages) : le coût d'une recherche dépend des mots tapés, pas de la taille
- * du wiki. Fuse ne sert qu'à la tolérance aux fautes, sur la liste des mots (courts), jamais sur le contenu.
+ * Search engine, with no dependency on SvelteKit (testable by bun test).
+ * Inverted index built at export (folded word → pages): the cost of a search depends on the typed words, not on the size
+ * of the wiki. Fuse is only used for typo tolerance, on the (short) list of words, never on the content.
  */
 
-/** Mots d'un texte, repliés (sans accents, minuscules). Même découpage à l'export et dans le navigateur. */
+/** Words of a text, folded (no accents, lowercase). Same splitting at export and in the browser. */
 export const tokens = (s: string): string[] => fold(s).match(/[\p{L}\p{N}]+/gu) ?? [];
 
-/** Index inversé : chaque mot (titre, description, tags, contenu complet) → numéros des pages qui le contiennent. */
+/** Inverted index: each word (title, description, tags, full content) → numbers of the pages that contain it. */
 export function buildTerms(docs: SearchDoc[]): Record<string, number[]> {
-	// Map, pas un objet : « constructor », « toString »… sont des mots comme les autres, pas des propriétés héritées
+	// Map, not an object: "constructor", "toString"… are words like any other, not inherited properties
 	const terms = new Map<string, number[]>();
 	docs.forEach((d, i) => {
 		for (const w of new Set(tokens(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`))) {
@@ -28,16 +28,16 @@ export function buildTerms(docs: SearchDoc[]): Record<string, number[]> {
 export type Engine = {
 	docs: SearchDoc[];
 	vocab: string[];
-	titles: string[][]; // mots des titres, pour l'autocomplétion
+	titles: string[][]; // title words, for autocompletion
 	terms: Map<string, number[]>;
-	sorted: string[]; // mots de l'index triés : recherche par préfixe en O(log n)
-	fields: { t: Set<string>; d: Set<string>; g: Set<string> }[]; // mots du titre, de la description, des tags
-	hay: string[]; // texte replié complet, pour les phrases exactes et les exclusions
-	fuzzy: () => Fuse<string>; // construit au premier besoin
+	sorted: string[]; // sorted index words: prefix search in O(log n)
+	fields: { t: Set<string>; d: Set<string>; g: Set<string> }[]; // words of the title, description, tags
+	hay: string[]; // complete folded text, for exact phrases and exclusions
+	fuzzy: () => Fuse<string>; // built on first need
 };
 
 export function createEngine(idx: SearchIndex, FuseCtor: typeof Fuse): Engine {
-	const terms = new Map(Object.entries(idx.terms)); // Object.entries ne lit que les propriétés propres
+	const terms = new Map(Object.entries(idx.terms)); // Object.entries only reads own properties
 	const sorted = [...terms.keys()].sort();
 	let fz: Fuse<string> | undefined;
 	return {
@@ -52,7 +52,7 @@ export function createEngine(idx: SearchIndex, FuseCtor: typeof Fuse): Engine {
 	};
 }
 
-/** Premier indice de `xs` (trié) ≥ `x`. */
+/** First index of `xs` (sorted) ≥ `x`. */
 function lower<T>(xs: T[], x: T): number {
 	let lo = 0, hi = xs.length;
 	while (lo < hi) { const m = (lo + hi) >> 1; if (xs[m] < x) lo = m + 1; else hi = m; }
@@ -62,29 +62,29 @@ function lower<T>(xs: T[], x: T): number {
 const EXACT = 1, PREFIX = 0.7, FUZZY = 0.4;
 const MAX_PREFIX = 200, MAX_FUZZY = 5;
 
-/** Mots de l'index qui répondent à un mot saisi, avec leur qualité : exact, préfixe (frappe en cours), proche (faute). */
+/** Index words that match a typed word, with their quality: exact, prefix (typing in progress), close (typo). */
 export function expand(e: Engine, w: string): Map<string, number> {
 	const out = new Map<string, number>();
 	if (e.terms.has(w)) out.set(w, EXACT);
 	if (w.length >= 2)
 		for (let i = lower(e.sorted, w), n = 0; i < e.sorted.length && e.sorted[i].startsWith(w) && n < MAX_PREFIX; i++, n++)
 			if (!out.has(e.sorted[i])) out.set(e.sorted[i], PREFIX);
-	// le flou ne sert qu'aux mots introuvables : « fenetre » ne doit pas ramener « entre »
+	// fuzzy matching is only for words not found: "fenetre" must not bring back "entre"
 	if (w.length >= 4 && !out.size)
 		for (const r of e.fuzzy().search(w, { limit: MAX_FUZZY }))
 			if (!out.has(r.item)) out.set(r.item, FUZZY * (1 - (r.score ?? 0)));
 	return out;
 }
 
-/** Les listes de pages d'un mot sont triées (construites dans l'ordre des pages) : appartenance en O(log n). */
+/** The page lists of a word are sorted (built in page order): membership in O(log n). */
 const has = (ids: number[], i: number) => ids[lower(ids, i)] === i;
 
 export type Ranked = { doc: SearchDoc; i: number; score: number; hits: Set<string> };
 
 /**
- * Pages qui répondent à la requête, classées. Chaque mot libre doit être trouvé (ET), par mot exact, préfixe ou proche ;
- * le score pondère l'endroit (titre 3 > description 1,5 > tags 1 > contenu 0,4) et la qualité de la correspondance.
- * Les mots des phrases exactes resserrent les candidats par l'index avant la vérification sur le texte.
+ * Pages that match the query, ranked. Each free word must be found (AND), by exact word, prefix or close word;
+ * the score weights the location (title 3 > description 1.5 > tags 1 > content 0.4) and the quality of the match.
+ * The words of exact phrases narrow the candidates through the index before the check on the text.
  */
 export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Ranked[] {
 	let cand: Set<number> | undefined;
@@ -121,8 +121,8 @@ export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Rank
 }
 
 /**
- * Plages [début, fin[ de `text` à surligner, triées et sans chevauchement : les mots qui font partie de `hits` et chaque
- * occurrence des phrases exactes `phrases` (repliées). Le repli doit garder les longueurs, sinon aucune plage.
+ * Ranges [start, end[ of `text` to highlight, sorted and non-overlapping: the words that are part of `hits` and each
+ * occurrence of the exact phrases `phrases` (folded). Folding must keep lengths, otherwise no range.
  */
 export function ranges(text: string, hits: Set<string>, phrases: string[] = []): [number, number][] {
 	const f = fold(text);
@@ -147,7 +147,7 @@ export type FilterSuggestion = { label: string; insert: string; count?: number; 
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const words = (q: string) => fold(q).match(/[\p{L}\p{N}]+/gu) ?? [];
 
-/** Texte échappé avec <mark> sur les plages [début, fin[ comprises entre `from` et `to`. */
+/** Escaped text with <mark> on the ranges [start, end[ between `from` and `to`. */
 function mark(text: string, rs: [number, number][] = [], from = 0, to = text.length): string {
 	let out = "", at = from;
 	for (const [a, b] of rs) {
@@ -160,9 +160,9 @@ function mark(text: string, rs: [number, number][] = [], from = 0, to = text.len
 }
 
 /**
- * Résultats : les filtres, phrases et exclusions se résolvent sur les métadonnées et le texte ; le texte libre passe par
- * l'index inversé (mot exact, préfixe pendant la frappe, mot proche pour une faute), titre > description > tags > contenu.
- * Sans texte libre, les pages qui passent les filtres sont listées par titre. `total` : nombre exact de pages, au-delà de `limit`.
+ * Results: filters, phrases and exclusions are resolved on the metadata and the text; free text goes through
+ * the inverted index (exact word, prefix while typing, close word for a typo), title > description > tags > content.
+ * Without free text, the pages that pass the filters are listed by title. `total`: exact number of pages, beyond `limit`.
  */
 export function search(e: Engine, q: string, isFav: (id: string) => boolean, limit = 30): { hits: Hit[]; total: number } {
 	const p = parseQuery(q);
@@ -173,18 +173,18 @@ export function search(e: Engine, q: string, isFav: (id: string) => boolean, lim
 		const text = doc.text, xs = ranges(text, hits, phrases);
 		let snippet: string;
 		if (xs.length) {
-			// extrait centré sur la première occurrence : mot libre ou phrase exacte
+			// excerpt centered on the first occurrence: free word or exact phrase
 			const from = Math.max(0, xs[0][0] - 60), to = Math.min(text.length, from + 200);
 			snippet = (from > 0 ? "… " : "") + mark(text, xs, from, to) + (to < text.length ? " …" : "");
-		} else if (!text_) snippet = ""; // filtres seuls : pas de passage à montrer
+		} else if (!text_) snippet = ""; // filters only: no passage to show
 		else snippet = esc(text.slice(0, 160)) + (text.length > 160 ? " …" : "");
 		return { doc, title: mark(doc.title, ranges(doc.title, hits, phrases)), description: mark(doc.description, ranges(doc.description, hits, phrases)), snippet };
 	}) };
 }
 
 /**
- * Titres proposés pendant la frappe : mots libres de la requête en préfixe des mots du titre, et les mêmes conditions que
- * les résultats (filtres, phrases, exclusions). Sans mot libre, aucun titre : la liste des résultats couvre ce cas.
+ * Titles suggested while typing: free words of the query as a prefix of the title's words, and the same conditions as
+ * the results (filters, phrases, exclusions). Without a free word, no title: the results list covers this case.
  */
 export function suggestTitles(e: Engine, p: Parsed, isFav: (id: string) => boolean, limit = 4): SearchDoc[] {
 	if (!p.words.length) return [];
@@ -205,9 +205,9 @@ export const KEY_HINTS: FilterSuggestion[] = [
 	{ label: "is:partial", insert: "is:partial ", hint: "sources partielles" },
 ];
 
-/** Pages qui passent les filtres, phrases et exclusions de `p` (et ses mots libres) : le contexte des compteurs. */
+/** Pages that pass the filters, phrases and exclusions of `p` (and its free words): the context of the counters. */
 const contextDocs = (e: Engine, p: Parsed, isFav: (id: string) => boolean): SearchDoc[] => (isEmpty(p) ? e.docs : rank(e, p, isFav).map((r) => r.doc));
-/** Le même Parsed sans les opérateurs positifs `keys` : ce que la facette en cours de modification ne doit pas contraindre. */
+/** The same Parsed without the positive operators `keys`: what the facet being modified must not constrain. */
 const without = (p: Parsed, ...keys: string[]): Parsed => ({ ...p, ops: p.ops.filter((o) => o.neg || !keys.includes(o.key)) });
 
 export type Facets = {
@@ -215,13 +215,13 @@ export type Facets = {
 	type: Record<string, number>;
 	status: Record<string, number>;
 	flags: { fav: number; unverified: number; review: number; partial: number };
-	tags: { tag: string; count: number }[]; // plus fréquents d'abord
+	tags: { tag: string; count: number }[]; // most frequent first
 };
 
 /**
- * Compteurs des facettes dans le contexte de la requête courante : le nombre de pages que donnerait le choix de chaque valeur.
- * Pour `type` et `status` (choix unique), on retire seulement la facette en cours de modification ; pour les tags et les
- * indicateurs (qui s'additionnent), on part des résultats actuels. Trois classements au plus, jamais un par valeur.
+ * Facet counters in the context of the current query: the number of pages that choosing each value would give.
+ * For `type` and `status` (single choice), only the facet being modified is removed; for tags and
+ * indicators (which add up), we start from the current results. At most three rankings, never one per value.
  */
 export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean): Facets {
 	const p = parseQuery(q);
@@ -251,20 +251,20 @@ export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean
 }
 
 /**
- * Autocomplétion : valeurs des filtres (`#`, `type:`, `status:`, `is:` avec leur nombre de pages), termes du vocabulaire
- * (préfixe du dernier mot) et titres dont les mots commencent par la saisie.
+ * Autocompletion: filter values (`#`, `type:`, `status:`, `is:` with their page count), vocabulary terms
+ * (prefix of the last word) and titles whose words start with the input.
  */
 export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): { filters: FilterSuggestion[]; terms: string[]; titles: SearchDoc[] } {
 	const none = { filters: [], terms: [], titles: [] };
 	if (!q.trim()) return { ...none, filters: KEY_HINTS };
 	const m = q.match(/(^|\s)(-?)(\S*)$/);
-	if (!m) return none; // la requête se termine par une espace : rien à compléter
+	if (!m) return none; // the query ends with a space: nothing to complete
 	const head = q.slice(0, m.index! + m[1].length) + m[2], tok = m[3], t = fold(tok);
 
 	const values = (all: [string, string, number][], prefix: string): FilterSuggestion[] =>
 		all.filter(([v]) => v.startsWith(prefix)).sort((a, b) => b[2] - a[2] || a[0].localeCompare(b[0])).slice(0, 8)
 			.map(([, ins, n]) => ({ label: ins.trim(), insert: head + ins, count: n }));
-	// compteurs dans le contexte du reste de la saisie : « #llm type: » compte les types parmi les pages #llm, pas dans tout le wiki
+	// counters in the context of the rest of the input: "#llm type:" counts the types among the #llm pages, not across the whole wiki
 	const rest = parseQuery(q.slice(0, m.index! + m[1].length));
 	const tagCounts = () => {
 		const have = activeValues(rest, "tag"), c = new Map<string, [string, number]>();
@@ -284,7 +284,7 @@ export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): {
 			: key === "status" ? STATUS_VALUES.map((s) => [s, `status:${s} `, count(docs, (d) => fold(d.status) === s)])
 			: [["fav", "is:fav ", count(docs, (d) => isFav(d.id))], ["unverified", "is:unverified ", count(docs, (d) => !d.verified)],
 				["review", "is:review ", count(docs, (d) => !!d.needsReview)], ["partial", "is:partial ", count(docs, (d) => !!d.partial)]];
-		// les compteurs sont contextuels : une valeur à zéro page mènerait à une impasse, on ne la propose pas
+		// counters are contextual: a value with zero pages would lead to a dead end, so it is not offered
 		return { ...none, filters: values(all, pre).filter((f) => f.count !== 0) };
 	}
 	if (/^[a-z]+:/.test(t) || t.startsWith('"')) return none;
@@ -293,7 +293,7 @@ export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): {
 	const mm = fold(q).match(/^(.*?)([\p{L}\p{N}]+)$/u);
 	if (!mm) return { ...none, filters };
 	const [, pre, last] = mm;
-	// pas de complétion derrière un mot qui n'est pas dans le vocabulaire (faute de frappe) : la recherche floue s'en charge
+	// no completion after a word that is not in the vocabulary (typo): fuzzy search takes care of it
 	const known = words(pre).every((h) => e.vocab.some((w) => w.startsWith(h)));
 	const terms = known ? e.vocab.filter((w) => w.startsWith(last) && w !== last).slice(0, 4).map((w) => pre + w) : [];
 	return { filters, terms, titles: suggestTitles(e, parseQuery(q), isFav) };

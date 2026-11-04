@@ -2,10 +2,10 @@ import { site } from "#lib/server/data.js";
 import { searchSeed } from "#lib/server/search-seed.js";
 import { TYPES } from "#lib/type-meta.js";
 
-const PREVIEW = 5; // pages montrées par collection ; « Voir tout » ouvre la vue filtrée de /search/
+const PREVIEW = 5; // pages shown per collection; "Voir tout" opens the filtered view of /search/
 
-// L'accueil reste borné quelle que soit la taille du wiki : un aperçu par collection (titre, ordre alphabétique français),
-// l'effectif exact, et de quoi démarrer une recherche. Les favoris se retrouvent dans l'index de recherche, côté navigateur.
+// The home page stays bounded whatever the size of the wiki: a preview per collection (title, French alphabetical order),
+// the exact count, and what it takes to start a search. Favorites are found in the search index, on the browser side.
 export const load = () => {
 	const pages = site().pages;
 	return {

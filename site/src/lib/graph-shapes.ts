@@ -1,18 +1,18 @@
-/** Formes des nœuds du graphe : le type se lit par la forme autant que par la couleur (jamais la couleur seule). Pur, testé par bun test. */
+/** Graph node shapes: the type is read by shape as much as by color (never color alone). Pure, tested by bun test. */
 
 export type Shape = "circle" | "square" | "diamond" | "triangle";
 export type Pt = readonly [number, number];
 
 const SHAPE_OF: Record<string, Shape> = { Concept: "circle", Entity: "square", Synthesis: "diamond", Source: "triangle" };
-/** Forme d'un type de page ; un type inconnu retombe sur le cercle. */
+/** Shape of a page type; an unknown type falls back to the circle. */
 export const shapeOf = (type: string): Shape => SHAPE_OF[type] ?? "circle";
 
 export const SHAPE_LABEL: Record<Shape, string> = { circle: "rond", square: "carré", diamond: "losange", triangle: "triangle" };
 
-/** Facteur de rayon : à surface comparable, un carré ou un triangle inscrits dans le même rayon paraîtraient plus petits qu'un rond. */
+/** Radius factor: at comparable area, a square or triangle inscribed in the same radius would look smaller than a circle. */
 const SCALE: Record<Shape, number> = { circle: 1, square: 0.9, diamond: 1.2, triangle: 1.25 };
 
-/** Sommets du polygone d'une forme centrée en (cx, cy) pour un rayon r ; `null` pour le cercle (tracé par un arc). */
+/** Vertices of the polygon of a shape centered at (cx, cy) for a radius r; `null` for the circle (drawn by an arc). */
 export function shapePoints(shape: Shape, cx: number, cy: number, r: number): Pt[] | null {
 	const k = r * SCALE[shape];
 	switch (shape) {
@@ -23,7 +23,7 @@ export function shapePoints(shape: Shape, cx: number, cy: number, r: number): Pt
 	}
 }
 
-/** Étoile à cinq branches (marque de favori) : 10 sommets alternant rayon externe et interne. */
+/** Five-pointed star (favorite mark): 10 vertices alternating outer and inner radius. */
 export function starPoints(cx: number, cy: number, r: number, inner = 0.45): Pt[] {
 	const out: Pt[] = [];
 	for (let i = 0; i < 10; i++) {
@@ -35,7 +35,7 @@ export function starPoints(cx: number, cy: number, r: number, inner = 0.45): Pt[
 
 const num = (n: number) => String(Math.round(n * 100) / 100);
 
-/** Attribut `points` d'un `<polygon>` SVG ; `null` pour le cercle (utiliser `<circle>`). Sert à la légende dessinée dans les filtres. */
+/** `points` attribute of an SVG `<polygon>`; `null` for the circle (use `<circle>`). Used for the legend drawn in the filters. */
 export function svgPoints(shape: Shape, size: number): string | null {
 	const c = size / 2, pts = shapePoints(shape, c, c, size * 0.4);
 	return pts ? pts.map(([x, y]) => `${num(x)},${num(y)}`).join(" ") : null;

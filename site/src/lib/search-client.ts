@@ -6,7 +6,7 @@ export * from "./search-engine";
 
 let engine: Promise<Engine> | undefined;
 
-/** Charge l'index précalculé à l'export (une seule fois, gardé en mémoire). Un échec n'est pas mémorisé : on peut réessayer. */
+/** Loads the index precomputed at export (only once, kept in memory). A failure is not memoized: one can retry. */
 export const loadEngine = () =>
 	(engine ??= (async () => {
 		const [{ default: Fuse }, idx] = await Promise.all([

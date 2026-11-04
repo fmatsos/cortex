@@ -2,8 +2,8 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { theme, type Mode } from "#lib/theme.svelte.js";
 
-	// Choix explicite du thème (le mécanisme : attribut data-theme sur <html>, mémorisé dans localStorage).
-	// L'icône suit le choix courant ; elle est décorative, le <select> garde son libellé visible ou masqué.
+	// Explicit theme choice (the mechanism: data-theme attribute on <html>, remembered in localStorage).
+	// The icon follows the current choice; it is decorative, the <select> keeps its label visible or hidden.
 	let { class: className = "" } = $props();
 	const ICON = { system: "system", light: "sun", dark: "moon" } as const;
 </script>

@@ -1,8 +1,8 @@
-// Favoris : propres à chaque navigateur (le site est statique), stockés dans localStorage.
+// Favorites: specific to each browser (the site is static), stored in localStorage.
 const KEY = "brain:favs";
 let ids = $state<string[]>([]);
-let failed = $state(false); // la dernière écriture a échoué : les favoris ne durent que pour cette session
-let removed = $state<string | null>(null); // dernier favori retiré, pour l'annuler
+let failed = $state(false); // the last write failed: favorites only last for this session
+let removed = $state<string | null>(null); // last favorite removed, to undo it
 
 const save = () => {
 	try { localStorage.setItem(KEY, JSON.stringify(ids)); failed = false; } catch { failed = true; }
@@ -11,9 +11,9 @@ const load = () => { try { const v = JSON.parse(localStorage.getItem(KEY) ?? "[]
 
 export const favs = {
 	get ids() { return ids; },
-	/** Faux si le navigateur a refusé d'enregistrer : l'interface doit alors le dire (« conservés pour cette session seulement »). */
+	/** False if the browser refused to save: the interface must then say so ("conservés pour cette session seulement"). */
 	get persisted() { return !failed; },
-	/** Dernier favori retiré (id), tant qu'il peut être rétabli par `undo()`. */
+	/** Last favorite removed (id), as long as it can be restored by `undo()`. */
 	get removed() { return removed; },
 	has: (id: string) => ids.includes(id),
 	toggle(id: string) {
@@ -27,7 +27,7 @@ export const favs = {
 		removed = null;
 	},
 	dismissUndo() { removed = null; },
-	/** À appeler une fois côté navigateur (pas au prérendu) ; suit aussi les modifications faites dans un autre onglet. */
+	/** To call once on the browser side (not at prerender); also follows changes made in another tab. */
 	init() {
 		load();
 		const on = (e: StorageEvent) => { if (e.key === KEY) load(); };

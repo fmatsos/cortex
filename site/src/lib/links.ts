@@ -1,7 +1,7 @@
 import { resolve } from "$app/paths";
 
-// Toutes les routes sont prérendues en `x/index.html` (trailingSlash « always ») et les liens sont relatifs
-// pendant le rendu serveur (paths.relative) : le site marche derrière n'importe quel serveur de fichiers, sous-chemin compris.
+// All routes are prerendered as `x/index.html` (trailingSlash "always") and links are relative
+// during server rendering (paths.relative): the site works behind any file server, subpath included.
 const slash = (p: string) => (p.endsWith("/") ? p : `${p}/`);
 
 export const toPage = (id: string) => slash(resolve("/wiki/[...path]", { path: id }));

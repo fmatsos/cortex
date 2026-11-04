@@ -1,6 +1,6 @@
 import { dataFile, site } from "#lib/server/data.js";
 
-/** Pied de page : nom, date d'export et quelques chiffres du wiki, calculés au prérendu. */
+/** Footer: name, export date and a few wiki figures, computed at prerender. */
 export const load = () => {
 	const { pages, tags, log } = site();
 	const build = JSON.parse(dataFile("build.json")) as { generatedAt: string; links: number };

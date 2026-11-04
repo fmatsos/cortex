@@ -6,10 +6,10 @@
 	import { graphFocus, shareUrl } from "#lib/article.js";
 	import { toRoute } from "#lib/links.js";
 
-	// Actions d'un article : Favori et l'action principale (lire la source originale, sur une page Source) restent visibles ;
-	// les actions secondaires (copier le lien, copier le Markdown, voir dans le graphe) sont des boutons en ligne dès `sm`
-	// et se regroupent derrière « Actions » sur mobile (UI24). Les retours de copie passent par une région `role="status"`
-	// persistante (UI13) ; en cas d'échec, le texte est proposé sélectionné dans un champ pour une copie manuelle (UI12).
+	// Actions of an article: Favorite and the main action (read the original source, on a Source page) stay visible;
+	// the secondary actions (copy the link, copy the Markdown, see in the graph) are inline buttons from `sm`
+	// and are grouped behind "Actions" on mobile (UI24). Copy feedback goes through a persistent `role="status"`
+	// region (UI13); on failure, the text is offered selected in a field for manual copy (UI12).
 	let { id, md, original }: { id: string; md: string; original?: { url: string; domain: string } } = $props();
 
 	type What = "lien" | "md";
@@ -27,7 +27,7 @@
 			await navigator.clipboard.writeText(text);
 			manual = null;
 			copied = what;
-			message = ""; // vidé puis reposé : une même confirmation répétée est ré-annoncée
+			message = ""; // cleared then set again: the same repeated confirmation is re-announced
 			await tick();
 			message = `${name} copié dans le presse-papiers.`;
 			timer = setTimeout(() => { copied = ""; message = ""; }, 3000);
@@ -43,7 +43,7 @@
 		}
 	};
 
-	// menu « Actions » (mobile) : bouton à bascule, Échap et clic extérieur le referment
+	// "Actions" menu (mobile): toggle button, Escape and outside click close it again
 	let open = $state(false);
 	let root = $state<HTMLElement>();
 	let trigger = $state<HTMLElement | null>(null);

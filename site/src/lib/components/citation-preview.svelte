@@ -5,11 +5,11 @@
 	import { domainOf } from "#lib/article.js";
 	import type { Note, SourceRef } from "#lib/types.js";
 
-	// Aperçu d'une citation (UX19) : un clic ou Entrée sur un appel de note ouvre, sur place, la précision de la note, la page
-	// Source du wiki et le document original, sans quitter la lecture. Les notes de bas de page restent la solution de repli
-	// (« Aller à la note », et tout appel de note fonctionne comme avant si l'API popover manque ou si JavaScript est coupé).
-	// Panneau natif (`popover`) : Échap et clic extérieur le ferment et rendent le focus à l'appel de note ; sur mobile il se
-	// range en bas de l'écran.
+	// Citation preview (UX19): a click or Enter on a footnote call opens, in place, the note's detail, the wiki Source
+	// page and the original document, without leaving the reading. Footnotes remain the fallback
+	// ("Aller à la note", and every footnote call works as before if the popover API is missing or JavaScript is off).
+	// Native panel (`popover`): Escape and outside click close it and return focus to the footnote call; on mobile it
+	// docks at the bottom of the screen.
 	let supported = $state(false);
 	let box = $state<HTMLElement>();
 	let note = $state<Note>();
@@ -17,7 +17,7 @@
 	let pos = $state("");
 	onMount(() => { supported = "popover" in HTMLElement.prototype; });
 
-	/** Ouvre l'aperçu sous (ou au-dessus de) l'appel de note ; renvoie `false` si l'API n'est pas disponible (le lien suit alors son cours). */
+	/** Opens the preview below (or above) the footnote call; returns `false` if the API is not available (the link then follows its course). */
 	export function show(el: HTMLElement, n: Note, s: SourceRef | undefined): boolean {
 		if (!supported || !box) return false;
 		note = n; source = s;
@@ -26,11 +26,11 @@
 		pos = innerHeight - r.bottom < 260 && r.top > 260 ? `left:${left}px;bottom:${innerHeight - r.top + 6}px;top:auto` : `left:${left}px;top:${r.bottom + 6}px`;
 		if (box.matches(":popover-open")) box.hidePopover();
 		box.showPopover();
-		void tick().then(() => box?.focus()); // le focus entre dans la fenêtre ; Tab atteint ensuite Fermer et les liens
+		void tick().then(() => box?.focus()); // focus enters the window; Tab then reaches Close and the links
 		return true;
 	}
 	const close = () => box?.hidePopover();
-	// un défilement de la page éloigne l'aperçu de sa note : on le referme
+	// scrolling the page moves the preview away from its note: close it
 	const onscroll = () => { if (box?.matches(":popover-open")) close(); };
 </script>
 
@@ -77,8 +77,8 @@
 {/if}
 
 <style>
-	/* fenêtre ancrée près de l'appel de note (position posée en ligne) ; en bas d'écran sur mobile.
-	   `display` n'est posé qu'à l'ouverture (sinon il écraserait le masquage natif). */
+	/* window anchored near the footnote call (position set inline); at the bottom of the screen on mobile.
+	   `display` is only set on opening (otherwise it would override the native hiding). */
 	.cp {
 		margin: 0;
 		inset: auto;

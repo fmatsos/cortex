@@ -10,13 +10,13 @@ import { checkTemplate, type NamingKey } from "../naming";
 export type { Backend, Config, Mode } from "./backend";
 
 /**
- * Bridge : les commandes (compile, ask : l'abstraction, dans agent.ts) ne connaissent que `Backend`.
- * Implémentations : default.ts (agnostique, sous-processus, aucun SDK), claude.ts, codex.ts, opencode.ts.
- * cortex.json à la racine choisit le client ; sans `client`, le CLI reste agnostique.
+ * Bridge: the commands (compile, ask: the abstraction, in agent.ts) only know `Backend`.
+ * Implementations: default.ts (agnostic, subprocess, no SDK), claude.ts, codex.ts, opencode.ts.
+ * cortex.json at the root chooses the client; without `client`, the CLI stays agnostic.
  */
 const CLIENTS: Record<string, (cfg: Config) => Backend> = { claude, codex, opencode };
 
-// effort : vocabulaire de chaque SDK ; opencode = nom de variante, propre à chaque modèle (vérifié par opencode au lancement)
+// effort: vocabulary of each SDK; opencode = variant name, specific to each model (checked by opencode at launch)
 const EFFORTS: Record<string, string[] | undefined> = {
   claude: ["low", "medium", "high", "xhigh", "max"],
   codex: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"],
@@ -37,7 +37,7 @@ const SHAPE = {
 };
 export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 
-/** Schéma de cortex.json ; null vaut « non défini ». */
+/** Schema of cortex.json; null means « not set ». */
 export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
   const allowed = c.client && EFFORTS[c.client];
   if (c.effort && allowed && !allowed.includes(c.effort))
@@ -50,7 +50,7 @@ const issueMsg = (i: z.core.$ZodIssue) =>
   : !i.path.length && i.code === "invalid_type" ? "cortex.json doit contenir un objet JSON."
   : i.message;
 
-/** Contrôles de cortex.json : erreurs du schéma zod, puis avertissements. */
+/** Checks of cortex.json: zod schema errors, then warnings. */
 export function lintConfig(c: unknown): ConfigIssue[] {
   const r = ConfigSchema.safeParse(c);
   if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
@@ -60,7 +60,7 @@ export function lintConfig(c: unknown): ConfigIssue[] {
 
 const configFile = (root: string) => Bun.file(join(root, "cortex.json"));
 
-/** Contenu brut de cortex.json ({} s'il est absent) ; JSON invalide = erreur. */
+/** Raw content of cortex.json ({} if absent); invalid JSON = error. */
 export async function readConfig(root: string): Promise<Record<string, unknown>> {
   const f = configFile(root);
   if (!(await f.exists())) return {};
@@ -74,7 +74,7 @@ export async function loadConfig(root: string): Promise<Config> {
   return Object.fromEntries(Object.entries(c).filter(([, v]) => v != null)) as Config;
 }
 
-/** cortex config init|lint|get|set|remove. Toute écriture est validée avant d'être faite. */
+/** cortex config init|lint|get|set|remove. Every write is validated before being made. */
 export async function configCmd(root: string, [sub, key, value]: string[]): Promise<number> {
   const f = configFile(root);
   const save = async (c: Record<string, unknown>) => {

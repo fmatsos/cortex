@@ -16,7 +16,7 @@ const isWiki = (d: Doc) => !/^wiki\/(index|log)\.md$/.test(d.path);
 const route = (path: string) => `${path.replace(/\.md$/, "")}/`; // wiki/concepts/x.md → wiki/concepts/x/
 const id = (path: string) => path.replace(/^wiki\//, "").replace(/\.md$/, "");
 
-/** Lien relatif d'une route à une autre (toutes deux « a/b/ ») : le site fonctionne sous n'importe quel préfixe. */
+/** Relative link from one route to another (both « a/b/ »): the site works under any prefix. */
 function rel(from: string, to: string): string {
   const a = from.split("/").filter(Boolean), b = to.split("/").filter(Boolean);
   let i = 0;
@@ -27,25 +27,25 @@ function rel(from: string, to: string): string {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const unesc = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
-/** Markdown → HTML assaini (liste blanche, voir sanitize.ts) : le site l'injecte avec `{@html}`, donc rien d'autre n'en sort. */
+/** Markdown → sanitized HTML (whitelist, see sanitize.ts): the site injects it with `{@html}`, so nothing else comes out. */
 export const md = (s: string) => sanitizeHtml(Bun.markdown.html(s, { tagFilter: true, headings: { ids: true }, autolinks: true }));
-/** Tri des listes : ordre alphabétique français des titres visibles, pas l'ordre des chemins. */
+/** List sort: French alphabetical order of the visible titles, not path order. */
 const collator = new Intl.Collator("fr");
 export const byTitle = (a: { title: string; id?: string }, b: { title: string; id?: string }) => collator.compare(a.title, b.title) || collator.compare(a.id ?? "", b.id ?? "");
 const inline = (s: string) => md(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
 export const plain = (html: string) => unesc(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 
 /**
- * Corps Markdown → HTML. Liens `/wiki/x.md` réécrits en liens relatifs (un lien vers une page absente devient un
- * `<span class="lien-manquant">`, jamais un 404 ; un lien vers `raw/` n'est pas publié) ; notes `[^id]` numérotées.
+ * Markdown body → HTML. `/wiki/x.md` links rewritten as relative links (a link to a missing page becomes a
+ * `<span class="lien-manquant">`, never a 404; a link to `raw/` is not published); `[^id]` footnotes numbered.
  */
 /**
- * Un avertissement de contenu partiel (paywall, aperçu) s'écrit dans l'encart de la note, sur une ligne `⚠️ …`.
- * Reconnu ici pour la métadonnée `partial` ; les autres avertissements ne comptent pas.
+ * A partial-content warning (paywall, preview) is written in the note callout, on a `⚠️ …` line.
+ * Recognized here for the `partial` metadata; other warnings do not count.
  */
 export const isPartialWarning = (text: string) => /\b(?:partiel(?:le)?s?|paywall|aper[cç]u public|tronqu[eé]e?s?)\b/i.test(text);
 
-/** Dans un corps d'encart : la ligne qui commence par ⚠️ (et celles qui la suivent dans le paragraphe) en sort. */
+/** In a callout body: the line starting with ⚠️ (and those following it in the paragraph) comes out. */
 function splitWarnings(inner: string): { body: string; warnings: string[] } {
   const warnings: string[] = [];
   const body = inner.replace(/<p>([\s\S]*?)<\/p>/g, (all, text: string) => {
@@ -60,10 +60,10 @@ function splitWarnings(inner: string): { body: string; warnings: string[] } {
 const warningAside = (title: string, inner: string) => `<aside class="callout-warning" role="note"><p class="callout-warning-titre">${title}</p>${inner}</aside>`;
 
 /**
- * Encarts : la syntaxe de callout d'Obsidian `> [!note] Titre` (titre facultatif), rendue par Bun comme une simple
- * citation, devient un `<aside class="note-perso">` ; `> [!warning] Titre` (ou caution, attention) un
- * `<aside class="callout-warning">`. Dans une note, une ligne `⚠️ …` sort de l'encart pour former, à sa suite, un encart
- * d'avertissement distinct. Les titres sont dans un `<p …-titre>`, hors du texte indexé.
+ * Callouts: the Obsidian callout syntax `> [!note] Title` (optional title), rendered by Bun as a plain
+ * quote, becomes an `<aside class="note-perso">`; `> [!warning] Title` (or caution, attention) an
+ * `<aside class="callout-warning">`. In a note, a `⚠️ …` line leaves the callout to form, right after it, a separate
+ * warning callout. Titles are in a `<p …-titre>`, outside the indexed text.
  */
 export const noteCallouts = (html: string) =>
   html.replace(/<blockquote>\s*<p>\[!(note|warning|caution|attention)\][ \t]*([^\n<]*)(\n|<\/p>\s*)([\s\S]*?)<\/blockquote>/gi, (_, kind: string, title: string, sep: string, rest: string) => {
@@ -75,9 +75,9 @@ export const noteCallouts = (html: string) =>
   });
 
 /**
- * Ancres stables des titres : le texte du titre sans accents (le slug de Bun les supprime : « Détail » → « dtail »),
- * suffixé -1, -2… en cas de doublon. Un slug qui ressemblerait à un id de l'interface (`fn-`, `fnref-`, `src-`, `h-`,
- * `contenu-principal`) est préfixé par `t-`.
+ * Stable heading anchors: the heading text without accents (Bun's slug strips them: « Détail » → « dtail »),
+ * suffixed -1, -2… on duplicates. A slug that would look like a UI id (`fn-`, `fnref-`, `src-`, `h-`,
+ * `contenu-principal`) is prefixed with `t-`.
  */
 export function anchors(html: string): string {
   const seen = new Map<string, number>();
@@ -91,9 +91,9 @@ export function anchors(html: string): string {
 }
 
 /**
- * Tableaux : chacun est enveloppé dans un conteneur `.table-wrap`, la région qui défile (horizontalement, et verticalement
- * pour un tableau haut). `tabindex="0"` la rend atteignable et défilable au clavier, `role="region"` et `aria-label` la nomment
- * par le titre qui précède. Ajouté après l'assainissement : le contenu auteur ne peut ni écrire ces attributs ni cette classe.
+ * Tables: each is wrapped in a `.table-wrap` container, the scrolling region (horizontally, and vertically
+ * for a tall table). `tabindex="0"` makes it reachable and scrollable by keyboard, `role="region"` and `aria-label` name it
+ * by the preceding heading. Added after sanitizing: author content can write neither these attributes nor this class.
  */
 export function wrapTables(html: string): string {
   const total = (html.match(/<table[\s>]/g) ?? []).length;
@@ -119,12 +119,12 @@ export function render(body: string, from: string, pages: Set<string>) {
   const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
-    if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // pages de navigation du site
+    if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // navigation pages of the site
     if (!pages.has(page)) return `<span class="lien-manquant" title="${page.startsWith("raw/") ? "source brute, non publiée" : "page à écrire"}">${label}</span>`;
     return `<a href="${rel(from, route(page))}${frag && `#${frag}`}">${label}</a>`;
   }));
   const notes: Note[] = order.map((k, i) => ({
-    n: i + 1, id: k, refs: seen.get(k) ?? 1, // refs : nombre d'occurrences dans le texte (un retour ↩ par occurrence)
+    n: i + 1, id: k, refs: seen.get(k) ?? 1, // refs: number of occurrences in the text (one ↩ back-link per occurrence)
     html: defs.has(k) ? inline(defs.get(k)!) : "",
   }));
   const toc = [...html.matchAll(/<h([23]) id="([^"]+)">([\s\S]*?)<\/h\1>/g)].map((m) => ({ level: +m[1] as 2 | 3, id: m[2], text: plain(m[3]) }));
@@ -133,8 +133,8 @@ export function render(body: string, from: string, pages: Set<string>) {
 }
 
 /**
- * Markdown de la page tel qu'il est dans le wiki (frontmatter compris), pour le bouton « Copier le Markdown ».
- * raw/ n'est pas publié : chaque chemin `/raw/…` devient l'URL d'origine de la source, ou disparaît si elle n'en a pas.
+ * Page Markdown as it is in the wiki (frontmatter included), for the « Copier le Markdown » button.
+ * raw/ is not published: each `/raw/…` path becomes the source's original URL, or disappears if it has none.
  */
 function pageMarkdown(root: string, path: string): string {
   return readFileSync(join(root, path), "utf8")
@@ -142,28 +142,28 @@ function pageMarkdown(root: string, path: string): string {
     .replace(/\/raw\/[^\s)"'\]]+/g, (p) => originUrl(root, p) ?? "(source brute non publiée)");
 }
 
-/** Frontmatter d'une source raw (lecture seule, confinée à raw/). Seuls `url` et `partial` en sortent, jamais le corps. */
+/** Frontmatter of a raw source (read-only, confined to raw/). Only `url` and `partial` come out, never the body. */
 function rawFm(root: string, resource: string): Record<string, any> | undefined {
   const f = join(root, resource);
   if (!existsSync(f) || !realpathSync(f).startsWith(realpathSync(join(root, "raw")) + sep)) return;
   return parseDoc(f, readFileSync(f, "utf8")).fm;
 }
 
-/** URL d'origine d'une source : lue dans le frontmatter raw. Rien d'autre de raw/ n'est lu ni publié. */
+/** Original URL of a source: read from the raw frontmatter. Nothing else from raw/ is read or published. */
 function originUrl(root: string, resource: string): string | undefined {
   const u = rawFm(root, resource)?.url;
   return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
 }
 
-/** Extraction partielle (`partial:` dans le frontmatter raw, écrit par `cortex add` en cas de paywall). */
+/** Partial extraction (`partial:` in the raw frontmatter, written by `cortex add` on a paywall). */
 const rawPartial = (root: string, resource: string) => {
   const p = rawFm(root, resource)?.partial;
   return p != null && p !== false && String(p).trim() !== "" && !/^(false|no|non|0)$/i.test(String(p).trim());
 };
 
 /**
- * Journal : wiki/log.jsonl en entrées structurées (plus récente d'abord). Le texte est rendu en HTML en ligne ; les pages
- * citées deviennent des liens (page absente : ignorée), les sources la page Source du wiki qui les cite (raw/ n'est pas publié).
+ * Journal: wiki/log.jsonl as structured entries (most recent first). The text is rendered as inline HTML; the cited
+ * pages become links (missing page: ignored), the sources the wiki Source page that cites them (raw/ is not published).
  */
 function renderLog(root: string, paths: Set<string>, byPath: Map<string, Doc>, sourcePage: Map<string, Doc>, link: (d: Doc) => Link): LogEntryData[] {
   return newestFirst(readLog(root).entries).map((e) => {
@@ -172,21 +172,21 @@ function renderLog(root: string, paths: Set<string>, byPath: Map<string, Doc>, s
       return { id, ...(page && { page: link(page) }) };
     });
     let html = inline(render(e.text, "log/", paths).html);
-    // un id raw cité dans le texte devient un lien vers sa page Source
+    // a raw id cited in the text becomes a link to its Source page
     for (const s of sources) if (s.page) html = html.replaceAll(`<code>${s.id}</code>`, `<a href="${rel("log/", route(`wiki/${s.page.id}.md`))}"><code>${s.id}</code></a>`);
     const pages = (e.pages ?? []).filter((p) => byPath.has(p)).map((p) => link(byPath.get(p)!));
     return {
       at: e.at, kind: e.kind, html, pages,
-      sources: sources.filter((s) => !e.text.includes(`\`${s.id}\``)), // un id déjà nommé dans le texte n'est pas répété sous l'entrée
-      // tout ce que l'entrée affiche, replié comme la recherche (sans accents, minuscules) : le navigateur n'a qu'à replier la requête
+      sources: sources.filter((s) => !e.text.includes(`\`${s.id}\``)), // an id already named in the text is not repeated under the entry
+      // everything the entry displays, folded like the search (no accents, lowercase): the browser only has to fold the query
       search: fold([e.kind, plain(html), ...pages.map((p) => p.title), ...sources.map((s) => `${s.id} ${s.page?.title ?? ""}`)].join(" ")),
     };
   });
 }
 
 /**
- * Liens orientés du graphe. `directed` : « source\tcible » (source = page qui contient le lien). Une paire réciproque
- * (a → b et b → a) donne un seul lien `mutual: true`, orienté du plus petit id vers le plus grand (ordre stable).
+ * Directed graph links. `directed`: « source\ttarget » (source = page containing the link). A reciprocal pair
+ * (a → b and b → a) gives a single `mutual: true` link, oriented from the smaller id to the larger (stable order).
  */
 export function graphLinks(directed: Set<string>): GraphData["links"] {
   const out: GraphData["links"] = [];
@@ -204,7 +204,7 @@ export async function buildSiteData(root: string) {
   const byPath = new Map(docs.map((d) => [d.path, d]));
   const link = (d: Doc): Link => ({ id: id(d.path), title: String(d.fm.title ?? id(d.path)), type: String(d.fm.type ?? "") });
 
-  // arêtes orientées : liens Markdown entre pages wiki existantes (source = page qui contient le lien, cible = page citée)
+  // directed edges: Markdown links between existing wiki pages (source = page containing the link, target = cited page)
   const directed = new Set<string>(), back = new Map<string, Doc[]>();
   for (const d of docs) for (const t of wikiLinks(d)) {
     if (t === d.path || !paths.has(t)) continue;
@@ -212,7 +212,7 @@ export async function buildSiteData(root: string) {
     back.set(t, [...(back.get(t) ?? []), d]);
   }
   const edges = graphLinks(directed);
-  const resourcePage = new Map<string, Doc>(); // ressource raw → page Source du wiki qui la cite
+  const resourcePage = new Map<string, Doc>(); // raw resource → wiki Source page that cites it
   for (const d of docs) if (d.fm.type === "Source") for (const s of d.fm.sources ?? []) resourcePage.set(s.resource, d);
 
   const pages: PageData[] = docs.map((d) => {
@@ -227,8 +227,8 @@ export async function buildSiteData(root: string) {
       };
     });
     const g = Date.parse(iso(fm.generated?.at) ?? ""), v = Date.parse(iso(fm.verified?.at) ?? "");
-    // source partielle : extraction `partial:` d'une source raw citée (page Source seulement : un concept qui cite une source
-    // partielle n'est pas lui-même partiel), ou encart d'avertissement de contenu partiel dans le corps
+    // partial source: `partial:` extraction of a cited raw source (Source page only: a concept citing a
+    // partial source is not itself partial), or partial-content warning callout in the body
     const partial = (fm.type === "Source" && (fm.sources ?? []).some((s: any) => s.resource && rawPartial(root, String(s.resource)))) || r.warnings.some(isPartialWarning);
     return {
       id: id(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? id(d.path)),
@@ -241,7 +241,7 @@ export async function buildSiteData(root: string) {
     };
   });
 
-  pages.sort(byTitle); // titre en collation française (les ids de chaque collection suivent), et non le chemin
+  pages.sort(byTitle); // title in French collation (each collection's ids follow), not the path
 
   const tagMap = new Map<string, string[]>();
   for (const p of pages) for (const t of p.tags) tagMap.set(t, [...(tagMap.get(t) ?? []), p.id]);
@@ -258,7 +258,7 @@ export async function buildSiteData(root: string) {
   return { data, graph, search: buildSearch(pages) };
 }
 
-/** Index de recherche précalculé : index inversé sur le contenu complet (mot replié → pages) + vocabulaire d'autocomplétion. */
+/** Precomputed search index: inverted index over the full content (folded word → pages) + autocomplete vocabulary. */
 function buildSearch(pages: PageData[]): SearchIndex {
   const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, needsReview: p.needsReview, partial: p.partial, text: plain(p.html.replace(/<p class="(?:note-perso|callout-warning)-titre">[^<]*<\/p>/g, "")) }));
   const terms = buildTerms(docs);
@@ -275,8 +275,8 @@ function buildSearch(pages: PageData[]): SearchIndex {
 }
 
 /**
- * Refuse un dossier de sortie que la construction viderait à tort : la racine, le wiki, raw/, le CLI, le HOME,
- * leurs parents, et tout dossier non vide qui ne ressemble pas à un export précédent (pas de `_app/`).
+ * Refuses an output folder that the build would wrongly empty: the root, the wiki, raw/, the CLI, HOME,
+ * their parents, and any non-empty folder that does not look like a previous export (no `_app/`).
  */
 export function checkOut(root: string, out: string) {
   const o = resolve(out), keep = [root, join(root, "wiki"), join(root, "raw"), dirname(SITE_DIR), homedir(), "/"].map((p) => resolve(p));
@@ -285,10 +285,10 @@ export function checkOut(root: string, out: string) {
 }
 
 /**
- * Empreinte du frontend : sources du site (src/), configuration Vite, manifestes et verrou des dépendances. C'est
- * l'empreinte des entrées du build et non des fichiers qu'il produit : la version est incrustée dans le bundle client
- * (`$app/env`), donc le nom haché des ressources de Vite en dépend (empreinte circulaire). Toute modification du CSS, d'un
- * composant ou d'une dépendance change les ressources produites, et cette empreinte avec elles.
+ * Frontend fingerprint: site sources (src/), Vite config, manifests and dependency lockfile. It is
+ * the fingerprint of the build inputs, not of the files it produces: the version is embedded in the client bundle
+ * (`$app/env`), so the hashed name of Vite's assets depends on it (circular fingerprint). Any change to the CSS, a
+ * component or a dependency changes the produced assets, and this fingerprint with them.
  */
 export function frontendFingerprint(siteDir = SITE_DIR): string {
   const files = (readdirSync(join(siteDir, "src"), { recursive: true }) as string[]).map((f) => join("src", f))
@@ -310,21 +310,21 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   await size("data.json", data);
   await size("graph.json", graph);
   const idxBytes = await size("search-index.json", search);
-  // date et heure d'export (SOURCE_DATE_EPOCH si fourni, pour un export reproductible) : hors de la version du cache
+  // export date and time (SOURCE_DATE_EPOCH if provided, for a reproducible export): outside the cache version
   const at = process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000) : new Date();
   await Bun.write(join(dataDir, "build.json"), JSON.stringify({ generatedAt: at.toISOString(), links: graph.links.length }));
   say(`${data.pages.length} pages, ${graph.links.length} liens, index de recherche ${(idxBytes / 1024).toFixed(0)} Ko`);
 
-  // Vite et SvelteKit ne se chargent qu'ici : les autres commandes restent aussi rapides
-  // version = empreinte des données ET du frontend : même wiki et même code, même site ; l'un ou l'autre change, le cache change
+  // Vite and SvelteKit are only loaded here: the other commands stay as fast
+  // version = fingerprint of the data AND the frontend: same wiki and same code, same site; either changes, the cache changes
   Object.assign(process.env, { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) });
   const cwd = process.cwd(), log = console.log;
-  console.log = () => {}; // SvelteKit et l'adapter bavardent (« npm run preview »…) ; les erreurs passent par console.error
+  console.log = () => {}; // SvelteKit and the adapter are chatty (« npm run preview »…); errors go through console.error
   try {
     const { createBuilder } = await import("vite");
-    rmSync(join(SITE_DIR, ".svelte-kit"), { recursive: true, force: true }); // pas de morceaux périmés d'un export précédent
-    process.chdir(SITE_DIR); // SvelteKit résout src/ et .svelte-kit depuis le dossier courant
-    // build() ne construit qu'un environnement : SvelteKit orchestre client, serveur, prérendu et adapter via buildApp
+    rmSync(join(SITE_DIR, ".svelte-kit"), { recursive: true, force: true }); // no stale pieces from a previous export
+    process.chdir(SITE_DIR); // SvelteKit resolves src/ and .svelte-kit from the current folder
+    // build() only builds one environment: SvelteKit orchestrates client, server, prerender and adapter via buildApp
     await (await createBuilder({ root: SITE_DIR, logLevel: "warn" })).buildApp();
   } catch (e) {
     const m = (e as Error).message;

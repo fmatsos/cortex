@@ -1,7 +1,7 @@
 /**
- * Logique pure du graphe (testée par bun test) : vue filtrée, relations orientées, sélection, recherche de nœud,
- * paramètre `?focus=`, particules et temporisateurs. Aucune dépendance au DOM ni à Svelte : le composant ne fait
- * que brancher ces fonctions sur force-graph.
+ * Pure graph logic (tested by bun test): filtered view, directed relations, selection, node search,
+ * `?focus=` parameter, particles and timers. No dependency on the DOM or Svelte: the component only
+ * has to wire these functions to force-graph.
  */
 import { fold } from "./fold";
 import type { GraphData } from "./types";
@@ -11,12 +11,12 @@ export type GLink = GraphData["links"][number];
 
 export type GraphFilters = { off: ReadonlySet<string>; tag: string };
 
-/** Vue filtrée du graphe : pages visibles (avec leur degré dans cette vue) et liens dont les deux extrémités le sont. */
+/** Filtered view of the graph: visible pages (with their degree in this view) and links whose two ends are visible. */
 export type GraphView = { nodes: GNode[]; links: GLink[]; ids: Set<string> };
 
 /**
- * Applique les filtres (types masqués, tag). Le `degree` de chaque nœud est recalculé dans la vue : la taille d'un nœud
- * ne suggère jamais des relations qui ne sont plus affichées (UX46). Les pages liées sont comptées une fois, même pour un lien réciproque.
+ * Applies the filters (hidden types, tag). The `degree` of each node is recomputed in the view: a node's size
+ * never suggests relations that are no longer displayed (UX46). Linked pages are counted once, even for a reciprocal link.
  */
 export function buildView(data: Pick<GraphData, "nodes" | "links">, { off, tag }: GraphFilters): GraphView {
 	const kept = data.nodes.filter((n) => !off.has(n.type) && (!tag || n.tags.includes(tag)));
@@ -28,7 +28,7 @@ export function buildView(data: Pick<GraphData, "nodes" | "links">, { off, tag }
 	return { nodes: kept.map((n) => ({ ...n, degree: peers.get(n.id)?.size ?? 0 })), links, ids };
 }
 
-/** La sélection survit à un changement de filtre tant que son nœud reste visible ; sinon elle est levée. */
+/** The selection survives a filter change as long as its node stays visible; otherwise it is cleared. */
 export const reconcileSelection = (selId: string | null | undefined, ids: ReadonlySet<string>): string | null => (selId && ids.has(selId) ? selId : null);
 
 export const idOf = (x: string | { id: string }) => (typeof x === "string" ? x : x.id);
@@ -36,8 +36,8 @@ export const idOf = (x: string | { id: string }) => (typeof x === "string" ? x :
 export type Relations = { cites: string[]; citedBy: string[] };
 
 /**
- * Relations orientées d'une page : `cites` = pages vers lesquelles elle fait un lien, `citedBy` = pages qui font un lien vers elle.
- * Un lien réciproque (`mutual`) figure dans les deux listes. Les extrémités peuvent être des ids ou des objets nœud (force-graph).
+ * Directed relations of a page: `cites` = pages it links to, `citedBy` = pages that link to it.
+ * A reciprocal link (`mutual`) appears in both lists. The ends can be ids or node objects (force-graph).
  */
 export function relationsOf(id: string, links: Iterable<{ source: string | { id: string }; target: string | { id: string }; mutual?: boolean }>): Relations {
 	const cites = new Set<string>(), citedBy = new Set<string>();
@@ -49,7 +49,7 @@ export function relationsOf(id: string, links: Iterable<{ source: string | { id:
 	return { cites: [...cites], citedBy: [...citedBy] };
 }
 
-/** Relations de toutes les pages de la vue, en une passe (liste accessible). */
+/** Relations of all the pages of the view, in one pass (accessible list). */
 export function relationIndex(view: Pick<GraphView, "nodes" | "links">): Map<string, Relations> {
 	const m = new Map<string, Relations>(view.nodes.map((n) => [n.id, { cites: [], citedBy: [] }]));
 	for (const l of view.links) {
@@ -63,8 +63,8 @@ export function relationIndex(view: Pick<GraphView, "nodes" | "links">): Map<str
 export type SimLink = { source: string | { id: string }; target: string | { id: string }; twin?: boolean };
 
 /**
- * Liens à donner à force-graph. Les particules vont de `source` vers `target` ; un lien réciproque reçoit un jumeau inverse
- * (`twin`, sans trait propre) pour que des particules circulent dans les deux sens sur la même arête (UX45).
+ * Links to give to force-graph. Particles go from `source` to `target`; a reciprocal link gets an inverse twin
+ * (`twin`, with no stroke of its own) so that particles flow in both directions on the same edge (UX45).
  */
 export function simLinks(links: readonly GLink[]): SimLink[] {
 	const out: SimLink[] = [];
@@ -76,17 +76,17 @@ export function simLinks(links: readonly GLink[]): SimLink[] {
 }
 
 export type ParticleOpts = { calm: boolean; paused: boolean; hot: boolean; dim: boolean; linkCount: number };
-/** Au-delà de ce nombre de liens, plus de particules ambiantes (coût de dessin) ; le voisinage mis en valeur en garde toujours. */
+/** Beyond this number of links, no more ambient particles (drawing cost); the highlighted neighborhood always keeps them. */
 export const AMBIENT_MAX_LINKS = 250;
 
-/** Nombre de particules d'un lien : 3 sur le voisinage en valeur, 1 en ambiance (jamais sous mouvement réduit, en pause ou quand un voisinage est isolé). */
+/** Number of particles of a link: 3 on the highlighted neighborhood, 1 as ambience (never under reduced motion, when paused or when a neighborhood is isolated). */
 export function particleCount({ calm, paused, hot, dim, linkCount }: ParticleOpts): number {
 	if (calm || paused) return 0;
 	if (hot) return 3;
 	return dim || linkCount > AMBIENT_MAX_LINKS ? 0 : 1;
 }
 
-/** Normalise `?focus=` : décodé, sans barre initiale ni finale, sans extension `.md`. Renvoie l'id d'un nœud connu ou `null`. */
+/** Normalizes `?focus=`: decoded, without leading or trailing slash, without `.md` extension. Returns the id of a known node or `null`. */
 export function resolveFocus(search: string, nodes: readonly Pick<GNode, "id">[]): { id: string | null; asked: string | null } {
 	const raw = new URLSearchParams(search).get("focus");
 	if (raw === null) return { id: null, asked: null };
@@ -95,8 +95,8 @@ export function resolveFocus(search: string, nodes: readonly Pick<GNode, "id">[]
 }
 
 /**
- * Recherche d'une page par son titre (insensible à la casse et aux accents). Ordre : titre qui commence par la requête,
- * puis un mot du titre, puis sous-chaîne, puis tous les mots présents ; à égalité, les plus liées d'abord puis l'ordre alphabétique.
+ * Search for a page by its title (case- and accent-insensitive). Order: title that starts with the query,
+ * then a word of the title, then substring, then all words present; on a tie, the most linked first then alphabetical order.
  */
 export function searchNodes<T extends Pick<GNode, "title" | "degree">>(nodes: readonly T[], query: string, limit = 8): T[] {
 	const q = fold(query).trim();
@@ -117,8 +117,8 @@ export function searchNodes<T extends Pick<GNode, "title" | "degree">>(nodes: re
 }
 
 /**
- * Temporisateur à une seule échéance : en programmer un nouveau annule le précédent, `cancel` l'annule (interaction manuelle, démontage).
- * Les fonctions de minuterie sont injectables pour le test.
+ * Single-deadline timer: scheduling a new one cancels the previous, `cancel` cancels it (manual interaction, unmount).
+ * The timer functions are injectable for testing.
  */
 export function createTimer(set: (fn: () => void, ms: number) => unknown = setTimeout, clear: (h: any) => void = clearTimeout) {
 	let handle: unknown;

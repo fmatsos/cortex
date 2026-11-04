@@ -16,10 +16,10 @@ test("withIds : identifiants stables, uniques, indépendants de la position", ()
 	const a = withIds(LOG);
 	expect(new Set(a.map((e) => e.id)).size).toBe(a.length);
 	expect(a[0].id).toMatch(/^e-20261104-[0-9a-z]{6}$/);
-	// ajouter une entrée plus récente en tête ne change aucun identifiant existant
+	// adding a more recent entry at the top changes no existing identifier
 	const b = withIds([entry("2026-11-05", "update", "Correction"), ...LOG]);
 	expect(b.slice(1).map((e) => e.id)).toEqual(a.map((e) => e.id));
-	// le contenu change l'identifiant ; deux entrées identiques restent distinctes
+	// the content changes the identifier; two identical entries remain distinct
 	expect(withIds([entry("2026-11-04", "add", "x")])[0].id).not.toBe(withIds([entry("2026-11-04", "add", "y")])[0].id);
 	const twin = withIds([entry("2026-11-04", "add", "x"), entry("2026-11-04", "add", "x")]);
 	expect(twin[0].id).not.toBe(twin[1].id);
@@ -33,7 +33,7 @@ test("readFilter / filterQuery : aller-retour dans l'URL, valeurs invalides igno
 	expect(readFilter(new URLSearchParams(filterQuery(f)))).toEqual(f);
 	expect(readFilter(new URLSearchParams("type=bogus&mois=nov&jour=hier"))).toEqual(NO_FILTER);
 	expect(filterQuery(NO_FILTER)).toBe("");
-	// un jour précis remplace le mois
+	// a specific day replaces the month
 	expect(filterQuery({ ...NO_FILTER, month: "2026-11", day: "2026-11-04" })).toBe("?jour=2026-11-04");
 	expect(isUnfiltered({ ...NO_FILTER, q: "  " })).toBe(true);
 	expect(isUnfiltered({ ...NO_FILTER, kind: "add" })).toBe(false);
@@ -44,7 +44,7 @@ test("filterEntries : texte en ET, sans accents ni casse, libellés français in
 	expect(filterEntries(log, { ...NO_FILTER, q: "FENETRE contexte" }).map((e) => e.kind)).toEqual(["add"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "cree chroma" }).map((e) => e.kind)).toEqual(["ingest"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "chroma absent" })).toEqual([]);
-	// « Contrôle » et « Compilation » sont les libellés affichés, l'identifiant technique reste « lint » / « ingest »
+	// « Contrôle » and « Compilation » are the displayed labels, the technical identifier stays « lint » / « ingest »
 	expect(filterEntries(log, { ...NO_FILTER, q: "controle" }).map((e) => e.kind)).toEqual(["lint"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "compilation" }).map((e) => e.kind)).toEqual(["ingest"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "" })).toHaveLength(4);

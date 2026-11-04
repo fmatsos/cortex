@@ -6,13 +6,13 @@ export type Seed = {
 	total: number;
 	nbTags: number;
 	types: { type: string; plural: string; count: number }[];
-	tags: { tag: string; count: number }[]; // les plus fréquents
+	tags: { tag: string; count: number }[]; // most frequent
 	examples: Example[];
 };
 
 /**
- * Amorces de recherche calculées à l'export : exemples de requêtes qui donnent vraiment des résultats sur CE wiki, tags fréquents
- * et effectifs par type. Servent l'accueil et la page de recherche vide (aucune requête à l'ouverture de la page).
+ * Search seeds computed at export: example queries that really give results on THIS wiki, frequent tags
+ * and counts per type. They serve the home page and the empty search page (no query when the page opens).
  */
 export function searchSeed(): Seed {
 	const { pages, tags } = site();

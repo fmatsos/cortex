@@ -13,7 +13,7 @@ async function git(root: string, ...args: string[]) {
   return (await p.exited) === 0 ? out : undefined;
 }
 
-/** Fichiers modifiés/créés (porcelain) : sert de garde-fou de périmètre, quel que soit l'agent. */
+/** Modified/created files (porcelain): serves as a scope guard, whatever the agent. */
 async function changed(root: string): Promise<Map<string, string>> {
   const out = await git(root, "status", "--porcelain", "--untracked-files=all");
   const m = new Map<string, string>();
@@ -24,20 +24,20 @@ async function changed(root: string): Promise<Map<string, string>> {
   return m;
 }
 
-/** Ce que l'agent a touché hors de wiki/ (le statut d'une source raw compilée est l'unique exception, géré par le CLI). */
+/** What the agent touched outside wiki/ (the status of a compiled raw source is the only exception, handled by the CLI). */
 async function outOfScope(root: string, before: Map<string, string>): Promise<string[]> {
   const after = await changed(root);
   return [...after].filter(([p, h]) => before.get(p) !== h && !p.startsWith("wiki/")).map(([p]) => p);
 }
 
-/** Abstraction du Bridge : le backend (agnostique, Claude, Codex, opencode) est choisi par config.json. */
+/** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by config.json. */
 async function run(root: string, prompt: string, batch: boolean, mode: Mode): Promise<number> {
   const backend = await backendFor(root);
   prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
-  // session interactive confinée elle aussi : une validation humaine trop rapide ne peut pas écrire hors de wiki/
+  // interactive session confined as well: a too-quick human approval cannot write outside wiki/
   if (!batch) {
-    // Ctrl+C vise l'agent ; sans ce gestionnaire, cortex mourrait aussi (même groupe de processus) avant de vérifier la page Source et de basculer le statut
+    // Ctrl+C targets the agent; without this handler, cortex would die too (same process group) before checking the Source page and flipping the status
     const keep = () => {};
     process.on("SIGINT", keep);
     try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited; }
@@ -47,7 +47,7 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
   catch (e) { console.error(`✗ ${(e as Error).message}`); return 1; }
 }
 
-/** Bascule pending → compiled par remplacement de ligne : jamais de ré-sérialisation YAML (raw est immuable, commentaires compris). */
+/** Flips pending → compiled by line replacement: never a YAML re-serialization (raw is immutable, comments included). */
 async function markCompiled(root: string, path: string) {
   const f = Bun.file(join(root, path));
   const txt = await f.text();

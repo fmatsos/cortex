@@ -8,11 +8,11 @@
 	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
 
 	/**
-	 * Ligne de page commune à la palette, aux résultats, aux listes de tags et à l'accueil : type, titre, informations de confiance
-	 * (statut, relecture, source partielle), description et passage trouvé. `verified` et `needsReview` sont facultatifs : une liste
-	 * qui ne les connaît pas n'affiche rien plutôt qu'une fausse information.
-	 * `compact` : forme de la palette (une ligne, extraits tronqués, aucun lien ni bouton : l'option porte l'action).
-	 * `titleHtml`, `descriptionHtml`, `snippetHtml` : HTML déjà échappé par le moteur (surlignage <mark>).
+	 * Page line shared by the palette, the results, the tag lists and the home page: type, title, trust information
+	 * (status, review, partial source), description and found passage. `verified` and `needsReview` are optional: a list
+	 * that does not know them shows nothing rather than false information.
+	 * `compact`: palette form (one line, truncated excerpts, no link or button: the option carries the action).
+	 * `titleHtml`, `descriptionHtml`, `snippetHtml`: HTML already escaped by the engine (<mark> highlighting).
 	 */
 	type RowDoc = { id: string; type: string; title: string; description?: string; status?: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
 	let {
@@ -60,7 +60,7 @@
 			<div class="text-base">
 				{#if href}<a {href} class="text-link link-content font-medium underline-offset-4 hover:underline" onclick={onopen}>{@render title()}</a>{:else}<span class="font-medium">{@render title()}</span>{/if}
 			</div>
-			<!-- showType=false dans une liste déjà regroupée par type (colonnes de l'accueil) ; ligne masquée si vide -->
+			<!-- showType=false in a list already grouped by type (home columns); line hidden if empty -->
 			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 empty:hidden">
 				{#if showType}<TypeBadge type={doc.type} />{/if}
 				{@render trust()}

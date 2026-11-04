@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* thème : suit le système (prefers-color-scheme) ; data-theme="dark|light" le force (commande de la palette) */
+/* theme: follows the system (prefers-color-scheme); data-theme="dark|light" forces it (palette command) */
 @custom-variant dark {
 	@media (prefers-color-scheme: dark) {
 		&:where(:root:not([data-theme="light"]) *) {
@@ -13,12 +13,12 @@
 }
 
 /*
- * Direction « papier minéral, encre pétrole » : fond teinté, surfaces blanches, action pétrole,
- * couleurs sémantiques réservées aux données. Chaque paire texte/fond est mesurée par cli/src/theme.test.ts
- * (WCAG 2.2 AA) ; le bloc sombre est écrit deux fois (système, puis forcé) et le test vérifie qu'ils restent identiques.
+ * Direction "mineral paper, petrol ink": tinted background, white surfaces, petrol action,
+ * semantic colors reserved for data. Each text/background pair is measured by src/theme.test.ts
+ * (WCAG 2.2 AA); the dark block is written twice (system, then forced) and the test checks that they stay identical.
  */
 :root {
-	--anchor-offset: 5rem; /* hauteur de l'en-tête collant : les ancres arrivent dessous (plus haut sur mobile : recherche en seconde ligne) */
+	--anchor-offset: 5rem; /* height of the sticky header: anchors land below it (taller on mobile: search on a second line) */
 	color-scheme: light dark;
 	--background: #f7f8fa;
 	--foreground: #172a34;
@@ -36,28 +36,28 @@
 	--accent-foreground: #103b47;
 	--destructive: #a81f37;
 	--border: #cbd5de;
-	--input: #7d8d9a; /* bordure d'un champ : ≥ 3:1 sur le fond et sur une carte */
+	--input: #7d8d9a; /* field border: ≥ 3:1 against the background and against a card */
 	--ring: #176b83;
 	--radius: 0.75rem;
 	--link: #075e75;
 	--link-visited: #5b3f99;
 	--mark: #f4e3a7;
-	/* un hue par type de page (Concept, Entity, Synthesis, Source) : badges, légende et graphe ; lisibles aussi en texte */
+	/* one hue per page type (Concept, Entity, Synthesis, Source): badges, legend and graph; also readable as text */
 	--type-concept: #315bc5;
 	--type-entity: #9a4d07;
 	--type-synthesis: #247342;
 	--type-source: #546875;
 	--type-autre: #5b6870;
-	/* un hue par type d'entrée du journal */
+	/* one hue per log entry type */
 	--kind-add: #247342;
 	--kind-ingest: #315bc5;
 	--kind-query: #7844a1;
 	--kind-lint: #8a5a0a;
 	--kind-update: #176b83;
-	/* graphe : relations (≥ 3:1 sur le fond) et favoris */
+	/* graph: relations (≥ 3:1 against the background) and favorites */
 	--graph-edge: #7d8d9a;
 	--favorite: #8a5a0a;
-	/* encart « Note personnelle » (intention de l'humain) et encart « Avertissement » (limite de la source) */
+	/* "Note personnelle" callout (the human's intent) and "Avertissement" callout (limit of the source) */
 	--note-background: #fff3da;
 	--note-foreground: #624300;
 	--warning-background: #fdece4;
@@ -188,14 +188,14 @@
 	--color-warning-background: var(--warning-background);
 	--color-warning-foreground: var(--warning-foreground);
 	--radius-sm: calc(var(--radius) * 0.6);
-	--radius-md: 0.5rem; /* boutons, champs : 0,5 rem */
+	--radius-md: 0.5rem; /* buttons, fields: 0.5 rem */
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) * 1.4);
 	--radius-2xl: calc(var(--radius) * 1.8);
-	--radius-4xl: calc(var(--radius) * 2.6); /* pastilles : entièrement arrondies */
+	--radius-4xl: calc(var(--radius) * 2.6); /* pills: fully rounded */
 }
 
-/* titres de page fluides : 28 px sur mobile, 40 px dès ~1150 px de large (tous les h1 du site sont en text-3xl) */
+/* fluid page titles: 28 px on mobile, 40 px from ~1150 px wide (every h1 of the site is text-3xl) */
 @theme {
 	--text-3xl: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem);
 	--text-3xl--line-height: 1.15;
@@ -205,7 +205,7 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
-	/* Tailwind v4 ne met plus de main sur les boutons : tout ce qui se clique l'affiche */
+	/* Tailwind v4 no longer sets a pointer on buttons: everything clickable shows it */
 	button:not(:disabled),
 	[role="button"]:not([aria-disabled="true"]),
 	[role="option"],
@@ -232,7 +232,7 @@
 		outline: 2px solid var(--ring);
 		outline-offset: 2px;
 	}
-	/* mouvement réduit : plus de transition, d'animation ni de défilement fluide, quel que soit le composant */
+	/* reduced motion: no more transition, animation or smooth scrolling, whatever the component */
 	@media (prefers-reduced-motion: reduce) {
 		html {
 			scroll-behavior: auto;
@@ -248,7 +248,7 @@
 	}
 }
 
-/* corps de lecture : 17 px, interligne 1,75, pleine largeur de la colonne (dans le calque components : un utilitaire de la page garde la main) */
+/* reading body: 17 px, line height 1.75, full width of the column (in the components layer: a page utility keeps the upper hand) */
 @layer components {
 	.wiki {
 		font-size: 1.0625rem;
@@ -256,7 +256,7 @@
 	}
 }
 
-/* corps d'une page wiki (HTML produit par l'export) */
+/* body of a wiki page (HTML produced by the export) */
 .wiki {
 	overflow-wrap: anywhere;
 }
@@ -293,8 +293,8 @@
 	text-decoration: underline;
 	text-underline-offset: 3px;
 }
-/* liens déjà consultés : teinte distincte, pour les liens de contenu seulement (pas la navigation) ;
-   les listes de pages (classe text-link) et `.link-content` en profitent aussi */
+/* visited links: distinct tint, for content links only (not navigation);
+   page lists (text-link class) and `.link-content` benefit from it too */
 .wiki a:visited,
 a.text-link:visited,
 a.link-content:visited {
@@ -317,8 +317,8 @@ a.link-content:visited {
 	margin-top: 0.35rem;
 }
 
-/* encarts : note personnelle (jaune) et avertissement (rouille), deux fonctions distinctes ; l'icône du titre vient du pack
-   (masque CSS : le HTML exporté ne porte pas de SVG ; cli/src/icons.test.ts vérifie qu'elle suit lib/icons.ts) */
+/* callouts: personal note (yellow) and warning (rust), two distinct functions; the title icon comes from the pack
+   (CSS mask: the exported HTML carries no SVG; src/icons.test.ts checks that it follows lib/icons.ts) */
 .wiki .note-perso,
 .wiki .callout-warning {
 	margin: 1.25rem 0;
@@ -391,8 +391,8 @@ a.link-content:visited {
 	padding: 0;
 }
 
-/* tableaux : cadre, lignes alternées, en-tête marqué ; le défilement horizontal est signalé par une ombre sur le bord
-   qui cache encore du contenu (dégradés `local` qui masquent l'ombre `scroll` une fois au bout) */
+/* tables: frame, alternating rows, marked header; horizontal scrolling is signaled by a shadow on the edge
+   that still hides content (`local` gradients that mask the `scroll` shadow once at the end) */
 .wiki table {
 	display: block;
 	width: fit-content;
@@ -461,9 +461,9 @@ mark {
 	border-radius: 0.2rem;
 }
 
-/* écran tactile : la zone cliquable atteint ~44 px sans changer l'aspect compact (pseudo-élément transparent) */
+/* touch screen: the clickable area reaches ~44 px without changing the compact look (transparent pseudo-element) */
 @media (pointer: coarse) {
-	/* dans un calque : les utilitaires Tailwind (absolute, sticky…) d'un composant gardent la main sur `position` */
+	/* in a layer: a component's Tailwind utilities (absolute, sticky…) keep control of `position` */
 	@layer components {
 		.touch-target {
 			position: relative;
@@ -475,17 +475,17 @@ mark {
 			inset-inline: min(0px, calc((100% - 44px) / 2));
 		}
 	}
-	/* listes de puces : assez d'espace pour que les zones agrandies ne se chevauchent pas */
+	/* bullet lists: enough space so that the enlarged areas do not overlap */
 	.touch-gap {
 		gap: 0.75rem 0.5rem;
 	}
-	/* appels de note : le padding d'un élément en ligne agrandit la zone cliquable sans bouger le texte */
+	/* footnote calls: the padding of an inline element enlarges the clickable area without moving the text */
 	.wiki .fn-ref a {
 		padding: 0.6rem 0.4rem;
 	}
 }
 
-/* notes de bas de page : repère d'arrivée sous l'en-tête collant, cible surlignée */
+/* footnotes: arrival marker below the sticky header, highlighted target */
 .wiki .fn-ref a,
 .note-item,
 .anchor-target {
@@ -496,8 +496,8 @@ mark {
 	background: var(--mark);
 	border-radius: 0.2rem;
 }
-/* retour d'une note vers le texte : l'appel arrive au tiers de l'écran (pas collé sous l'en-tête),
-   et tout le paragraphe qui le porte est mis en évidence, sinon un « 1 » surligné passe inaperçu */
+/* return from a note to the text: the call lands at a third of the screen (not stuck under the header),
+   and the whole paragraph that holds it is highlighted, otherwise a highlighted "1" goes unnoticed */
 .wiki .fn-ref a {
 	scroll-margin-top: calc(var(--anchor-offset) + 30vh);
 }
@@ -515,7 +515,7 @@ mark {
 	50% { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
 
-/* impression : l'article seul, en noir sur blanc quel que soit le thème, sans commandes ni navigation */
+/* print: the article alone, black on white whatever the theme, without controls or navigation */
 @media print {
 	:root:not([data-theme="light"]),
 	:root[data-theme="dark"],
@@ -534,7 +534,7 @@ mark {
 		--note-foreground: #000000;
 		--warning-background: #ffffff;
 		--warning-foreground: #000000;
-		/* le reste : la palette claire, reprise telle quelle (cli/src/theme.test.ts vérifie qu'elle ne dérive pas) */
+		/* the rest: the light palette, taken as is (src/theme.test.ts checks that it does not drift) */
 		--card-foreground: #172a34;
 		--popover: #ffffff;
 		--popover-foreground: #172a34;
@@ -607,8 +607,8 @@ mark {
 	}
 }
 
-/* pied de page toujours en bas : le corps est une colonne d'au moins la hauteur de l'écran, <main> prend le reste
-   (le conteneur de SvelteKit est en display: contents, ses enfants sont donc ceux de body) */
+/* footer always at the bottom: the body is a column at least as tall as the screen, <main> takes the rest
+   (the SvelteKit container is display: contents, so its children are those of body) */
 body {
 	display: flex;
 	flex-direction: column;

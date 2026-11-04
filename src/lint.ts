@@ -7,12 +7,12 @@ import { readLog, renderLogMd } from "./log";
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
 const DAY = 86_400_000;
-const time = (x: unknown) => (x == null ? NaN : new Date(x as any).getTime()); // YAML peut rendre Date ou string
+const time = (x: unknown) => (x == null ? NaN : new Date(x as any).getTime()); // YAML may yield Date or string
 
 export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   const out: Issue[] = [];
   const push = (level: Issue["level"], path: string, msg: string) => out.push({ level, path, msg });
-  // fichier par fichier : un YAML invalide est signalé sans arrêter le lint
+  // file by file: an invalid YAML is reported without stopping the lint
   const safe = async (dir: string) => {
     const docs: Doc[] = [];
     if (!existsSync(join(root, dir))) return docs;
@@ -28,7 +28,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   const wiki = (await safe("wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
   const raw = await safe("raw");
   const inbound = new Map<string, number>();
-  const cites = new Map<string, string[]>(); // raw resource → pages Source qui la citent
+  const cites = new Map<string, string[]>(); // raw resource → Source pages that cite it
   const titles = new Map<string, string>();
 
   for (const d of wiki) {
@@ -81,7 +81,7 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
     else tags.set(k, tag);
   }
 
-  // journal : lignes invalides = erreur ; log.md doit être exactement la génération de log.jsonl
+  // journal: invalid lines = error; log.md must be exactly the generation of log.jsonl
   const journal = readLog(root);
   for (const e of journal.errors) push("error", `wiki/log.jsonl:${e.line}`, e.msg);
   const md = join(root, "wiki/log.md");

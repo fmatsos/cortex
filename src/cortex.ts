@@ -85,7 +85,7 @@ try {
       console.log("wiki/index.md et wiki/log.md régénérés.");
       break;
     case "log": {
-      // `add` n'est le sous-commande que juste après `log` : `cortex log --json add …` ne doit rien écrire (les gardes des agents reposent là-dessus)
+      // `add` is the subcommand only right after `log`: `cortex log --json add …` must write nothing (the agent guards rely on this)
       const raw = process.argv.slice(2);
       if (args[0] === "add" && raw[raw.indexOf("log") + 1] === "add") {
         const [, kind, ...text] = args;
@@ -127,12 +127,12 @@ try {
       break;
     }
     case "export": {
-      const { exportSite } = await import("./export"); // Vite, Svelte et force-graph ne se chargent qu'ici
+      const { exportSite } = await import("./export"); // Vite, Svelte and force-graph are only loaded here
       await exportSite(root, o.out ?? join(root, ".cortex/site"));
       break;
     }
     case "mcp":
-      (await import("./mcp")).serveMcp(root); // chargé à la demande ; reste ouvert tant que le client lit stdin
+      (await import("./mcp")).serveMcp(root); // loaded on demand; stays open as long as the client reads stdin
       break;
     case "schema": {
       const { schemaText, writeSchema } = await import("./schema");

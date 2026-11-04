@@ -22,15 +22,15 @@
 	const stale = $derived(!!p.stale_after && Date.parse(p.stale_after) < Date.now());
 	const related = $derived(relatedEntries(p.backlinks, p.related, data.shared));
 
-	// Retour d'une note : vers l'appel réellement suivi (mémorisé au clic, par page et par note), sinon le premier ;
-	// une note citée plusieurs fois a en plus un retour par occurrence (a b c).
+	// Return from a note: to the call actually followed (remembered on click, per page and per note), otherwise the first;
+	// a note cited several times additionally has one return per occurrence (a b c).
 	let followed = $state<Record<string, string>>({});
 	const backTo = (id: string) => followed[`${p.id}|${id}`] ?? `fnref-${id}-1`;
 	const letter = (i: number) => (i < 26 ? String.fromCharCode(97 + i) : String(i + 1));
 
-	// Appel de note : un clic (ou Entrée) ouvre l'aperçu de la citation sur place ; sans l'API popover, ou avec une touche
-	// modificatrice, le lien suit son cours vers la note en bas de page. Phase de capture : le défaut est annulé avant
-	// que le routeur ne prenne le clic. Délégation : seuls les liens d'appel de note comptent.
+	// Footnote call: a click (or Enter) opens the citation preview in place; without the popover API, or with a modifier
+	// key, the link follows its course to the note at the bottom of the page. Capture phase: the default is canceled before
+	// the router takes the click. Delegation: only footnote-call links count.
 	let preview = $state.raw<ReturnType<typeof CitationPreview>>();
 	const onBody = (e: MouseEvent) => {
 		const a = (e.target as Element).closest?.(".fn-ref a") as HTMLElement | null;
@@ -41,7 +41,7 @@
 		if (note && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) && preview?.show(a, note, srcOf.get(note.id))) e.preventDefault();
 	};
 
-	// Sommaire : titres du corps, Notes et Sources ; section courante = dernier titre passé sous l'en-tête
+	// Table of contents: body headings, Notes and Sources; current section = last heading that passed below the header
 	const items = $derived(tocItems(p.toc, p.notes.length, p.sources.length));
 	const toc = $derived(showToc(items, p.html.length));
 	let current = $state("");
@@ -60,7 +60,7 @@
 		return () => { removeEventListener("scroll", tick); cancelAnimationFrame(raf); };
 	});
 
-	// Contexte de recherche : `?q=` n'est lisible que dans le navigateur (pages prérendues) ; on sait aussi si l'on vient des résultats
+	// Search context: `?q=` is only readable in the browser (prerendered pages); we also know whether we come from the results
 	let q = $state(""), fromSearch = $state(false);
 	let body = $state<HTMLElement>();
 	afterNavigate((nav) => {
@@ -74,12 +74,12 @@
 	<meta name="description" content={p.description} />
 </svelte:head>
 
-<!-- colonne de lecture ~72 caractères ; tableaux et blocs de code y défilent horizontalement -->
+<!-- reading column ~72 characters; tables and code blocks scroll horizontally in it -->
 <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_16rem] {toc ? 'pb-16' : ''}">
 	<article class="min-w-0">
 		<Breadcrumb type={p.type} title={p.title} />
 		<header class="mb-6">
-			<!-- confiance : le statut stable reste discret, ce qui demande de la prudence est saillant (texte et icône ensemble) -->
+			<!-- trust: the stable status stays discreet, what calls for caution is prominent (text and icon together) -->
 			<div class="flex flex-wrap items-center gap-2">
 				<TypeBadge type={p.type} />
 				<StatusBadge status={p.status} />
@@ -107,7 +107,7 @@
 
 		<ReadingHits container={body} {q} pageId={p.id} {fromSearch} />
 
-		<!-- délégation : seuls les liens d'appel de note déclenchent `onBody` (Entrée sur un lien produit aussi un clic) -->
+		<!-- delegation: only footnote-call links trigger `onBody` (Enter on a link also produces a click) -->
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<div class="wiki" bind:this={body} onclickcapture={onBody}>{@html p.html}</div>
 
@@ -185,9 +185,9 @@
 <CitationPreview bind:this={preview} />
 
 <style>
-	/* tableaux : le conteneur (`.table-wrap`, ajouté à l'export) est la région défilante, focalisable au clavier ; le tableau
-	   garde sa mise en forme (app.css) mais ne défile plus lui-même. Ombre sur le bord qui cache encore du contenu, en-têtes
-	   figés pour les tableaux hauts. */
+	/* tables: the container (`.table-wrap`, added at export) is the scrolling region, keyboard-focusable; the table
+	   keeps its formatting (app.css) but no longer scrolls itself. Shadow on the edge that still hides content, headers
+	   frozen for tall tables. */
 	.wiki :global(.table-wrap) {
 		width: fit-content;
 		max-width: 100%;
@@ -209,12 +209,12 @@
 		border-radius: 0;
 		background: none;
 	}
-	/* les mots ne se coupent pas lettre à lettre (app.css l'autorise pour le corps) : le tableau s'élargit et défile */
+	/* words do not break letter by letter (app.css allows it for the body): the table widens and scrolls */
 	.wiki :global(.table-wrap th),
 	.wiki :global(.table-wrap td) {
 		overflow-wrap: normal;
 	}
-	/* grand écran : un tableau haut défile dans son cadre et garde ses en-têtes ; sur mobile, la page seule défile verticalement */
+	/* large screen: a tall table scrolls within its frame and keeps its headers; on mobile, only the page scrolls vertically */
 	@media (min-width: 640px) {
 		.wiki :global(.table-wrap) {
 			max-height: min(70vh, 36rem);

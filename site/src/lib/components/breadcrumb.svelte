@@ -3,8 +3,8 @@
 	import { collectionLabel, collectionQuery } from "#lib/article.js";
 	import { toRoute } from "#lib/links.js";
 
-	// Fil d'Ariane d'un article : Accueil → collection du type → page. La collection ouvre la recherche filtrée sur le type
-	// (`/search/?q=type:concept`) ; un type inconnu n'a pas de collection et le maillon disparaît.
+	// Breadcrumb of an article: Home → type collection → page. The collection opens the search filtered on the type
+	// (`/search/?q=type:concept`); an unknown type has no collection and the link disappears.
 	let { type, title }: { type: string; title: string } = $props();
 	const collection = $derived(collectionQuery(type));
 	const link = "inline-flex items-center gap-1 underline-offset-4 hover:text-foreground hover:underline touch-target";

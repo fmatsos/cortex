@@ -5,8 +5,8 @@
 	import { TYPES, typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
 
 	/**
-	 * Liste de pages (accueil, tags, favoris) avec la ligne commune ResultRow : type, titre, état de confiance, description.
-	 * `filter` : filtre par type (quand la liste en mélange plusieurs), utile sur une page de tag ; faux pour une liste déjà d'un seul type.
+	 * List of pages (home, tags, favorites) with the common ResultRow line: type, title, trust state, description.
+	 * `filter`: filter by type (when the list mixes several), useful on a tag page; false for a list that already has a single type.
 	 */
 	type P = { id: string; type: string; title: string; description: string; status: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
 	let { pages, filter = true, showFav = false, showType = true }: { pages: P[]; filter?: boolean; showFav?: boolean; showType?: boolean } = $props();

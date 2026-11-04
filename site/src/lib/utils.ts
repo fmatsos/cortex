@@ -1,6 +1,6 @@
 import { twMerge } from "tailwind-merge";
 
-/** `cn` de shadcn-svelte, sans `clsx` : twMerge accepte déjà chaînes, tableaux et valeurs fausses. */
+/** shadcn-svelte's `cn`, without `clsx`: twMerge already accepts strings, arrays and falsy values. */
 export const cn = (...classes: Parameters<typeof twMerge>) => twMerge(...classes);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

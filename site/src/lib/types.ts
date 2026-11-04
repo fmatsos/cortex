@@ -1,10 +1,10 @@
-/** Contrat entre `cli/src/export.ts` (qui écrit data.json, graph.json, search-index.json) et le site (qui les affiche). */
+/** Contract between `src/export.ts` (which writes data.json, graph.json, search-index.json) and the site (which displays them). */
 export type Link = { id: string; title: string; type: string };
-export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true }; // partial : extraction partielle de la source raw (paywall)
-export type Note = { n: number; id: string; refs: number; html: string }; // refs : occurrences de la note dans le texte
+export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true }; // partial: partial extraction of the raw source (paywall)
+export type Note = { n: number; id: string; refs: number; html: string }; // refs: occurrences of the note in the text
 export type TocItem = { level: 2 | 3; id: string; text: string };
 export type PageData = {
-  id: string; // « concepts/context-rot »
+  id: string; // "concepts/context-rot"
   type: string; // Concept | Entity | Synthesis | Source
   title: string;
   description: string;
@@ -13,26 +13,26 @@ export type PageData = {
   verified?: { by: string; at: string };
   generated?: { by: string; at: string };
   stale_after?: string;
-  needsReview: boolean; // generated.at postérieur à verified.at
-  partial: boolean; // contenu partiel : page Source dont la source raw est une extraction partielle, ou encart d'avertissement de contenu partiel
+  needsReview: boolean; // generated.at later than verified.at
+  partial: boolean; // partial content: Source page whose raw source is a partial extraction, or warning callout for partial content
   html: string;
-  md: string; // Markdown source de la page, chemins raw/ remplacés par l'URL d'origine
+  md: string; // Source Markdown of the page, raw/ paths replaced by the original URL
   sources: SourceRef[];
   notes: Note[];
-  toc: TocItem[]; // titres h2/h3 du corps, avec leur ancre
+  toc: TocItem[]; // h2/h3 headings of the body, with their anchor
   backlinks: Link[];
   related: (Link & { reasons: string[] })[];
 };
-/** Une entrée du journal : `search` = tout le texte affiché (type, texte, titres des pages, ids et pages Source), replié (sans accents, minuscules) pour une recherche locale par `fold(requête)` ; `html` = texte en ligne ; `sources` = ids raw non nommés dans le texte (avec la page Source du wiki qui les cite, s'il y en a une). */
+/** A log entry: `search` = all the displayed text (type, text, page titles, ids and Source pages), folded (no accents, lowercase) for a local search by `fold(query)`; `html` = inline text; `sources` = raw ids not named in the text (with the wiki Source page that cites them, if there is one). */
 export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; search: string };
 export type SiteData = {
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
-  log: LogEntryData[]; // plus récente d'abord
+  log: LogEntryData[]; // most recent first
 };
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];
-  links: { source: string; target: string; mutual?: true }[]; // orienté : source = page qui contient le lien ; mutual : liens dans les deux sens (un seul lien, jamais deux)
+  links: { source: string; target: string; mutual?: true }[]; // directed: source = page that contains the link; mutual: links in both directions (a single link, never two)
 };
 export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; needsReview?: boolean; partial?: boolean; text: string };
 export type SearchIndex = { docs: SearchDoc[]; terms: Record<string, number[]>; vocab: string[] };
