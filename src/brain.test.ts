@@ -206,6 +206,14 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   expect(worst).toBeLessThan(50);
 });
 
+test("export : ancres de titres lisibles, uniques, sans collision avec les ids de l'interface", async () => {
+  const { anchors } = await import("./export");
+  const ids = (m: string) => [...anchors(Bun.markdown.html(m)).matchAll(/<h\d id="([^"]+)"/g)].map((x) => x[1]);
+  expect(ids("## Où ça ? Détail\n\n## Où ça ? Détail\n\n## Où ça ? Détail")).toEqual(["ou-ca-detail", "ou-ca-detail-1", "ou-ca-detail-2"]);
+  expect(ids("## Contenu principal\n\n## Src x\n\n## Fn y\n\n## H notes\n\n## ???\n\n### 日本語")).toEqual(["t-contenu-principal", "t-src-x", "t-fn-y", "t-h-notes", "titre", "日本語"]);
+  expect(anchors("<h2 id=\"x\">Un <em>titre</em> &amp; un autre</h2>")).toBe('<h2 id="un-titre-un-autre">Un <em>titre</em> &amp; un autre</h2>');
+});
+
 test("export : encart « Note personnelle » (callout Obsidian)", async () => {
   const { noteCallouts } = await import("./export");
   const html = (m: string) => noteCallouts(Bun.markdown.html(m));
@@ -370,7 +378,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   const src = `sources:\n  - id: s1\n    resource: /raw/2026/11/20261104-abcd-x/source.md\n    title: "Source un"\n`;
   await Bun.write(join(root, "BRAIN.md"), "");
   await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\ntitle: Source un\nurl: https://exemple.org/article\nnote: n\nstatus: compiled\n---\nSECRET-DU-CORPS-RAW\n");
-  await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n[^s1]: précision *utile*\n");
+  await Bun.write(join(root, "wiki/concepts/a.md"), fm("Concept", "Alpha", src) + "Voir [Beta](/wiki/concepts/b.md#x) et [Gamma](/wiki/entities/c.md), [futur](/wiki/concepts/absent.md). Un fait.[^s1]\n\n## Première partie\n\nEncore un fait.[^s1] Et un autre.[^s1]\n\n### Détail\n\n## Première partie\n\n## Notes\n\n[^s1]: précision *utile*\n");
   await Bun.write(join(root, "wiki/concepts/b.md"), fm("Concept", "Béta") + "Retour vers [Alpha](/wiki/concepts/a.md).\n\n" + "Remplissage. ".repeat(600) + "Motlointain en fin de page.\n"); // ~7 800 caractères
   await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
   await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "Résumé, voir [Alpha](/wiki/concepts/a.md).\n");
@@ -396,6 +404,13 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(a).toContain('id="fn-s1"');
   expect(a).toContain('href="#src-s1"');
   expect(a).toContain("<em>utile</em>");
+  // note citée trois fois : une ancre par occurrence, et un retour ↩ vers chacune (pas seulement la première)
+  for (const k of [1, 2, 3]) {
+    expect(a).toContain(`id="fnref-s1-${k}"`);
+    expect(a).toContain(`href="#fnref-s1-${k}"`);
+  }
+  expect(a).not.toContain('id="fnref-s1-4"');
+  expect(a).toContain("Retour à l'occurrence 2 sur 3");
   expect(a).toContain('href="https://exemple.org/article"'); // source : URL d'origine, pas le chemin raw
   expect(a).not.toContain("/raw/");
   expect(a).toContain("Rétroliens");
@@ -427,6 +442,12 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   expect(pageA.md).toStartWith("---\ntype: Concept\ntitle: Alpha");
   expect(pageA.md).toContain("resource: https://exemple.org/article");
   expect(pageA.md).toContain("Voir [Beta](/wiki/concepts/b.md#x)");
+  // sommaire : titres h2/h3 avec ancres stables (doublon suffixé), repris par les ids du HTML ; nombre d'occurrences par note
+  expect(pageA.toc.map((t: any) => [t.level, t.id, t.text])).toEqual([[2, "premiere-partie", "Première partie"], [3, "detail", "Détail"], [2, "premiere-partie-1", "Première partie"], [2, "notes", "Notes"]]);
+  for (const t of pageA.toc) expect(pageA.html).toContain(`id="${t.id}"`);
+  expect(pageA.notes[0]).toMatchObject({ id: "s1", refs: 3 });
+  expect(a).toContain('href="#premiere-partie-1"'); // quatre titres : le sommaire est affiché (seuil > 3)
+  expect(JSON.parse(readFileSync(join(root, ".brain/site-data/data.json"), "utf8")).pages.find((x: any) => x.id === "entities/c").toc).toEqual([]);
   // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
   const all = (readdirSync(out, { recursive: true }) as string[]).filter((f) => statSync(join(out, f)).isFile());
   for (const f of all) {

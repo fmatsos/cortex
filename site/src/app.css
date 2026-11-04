@@ -13,6 +13,7 @@
 }
 
 :root {
+	--anchor-offset: 5rem; /* hauteur de l'en-tête collant : les ancres arrivent dessous (plus haut sur mobile : recherche en seconde ligne) */
 	color-scheme: light dark;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.145 0 0);
@@ -41,6 +42,12 @@
 	--type-synthesis: oklch(0.55 0.17 150);
 	--type-source: oklch(0.55 0.05 250);
 	--type-autre: oklch(0.55 0 0);
+}
+
+@media (max-width: 639px) {
+	:root {
+		--anchor-offset: 8.5rem;
+	}
 }
 
 @media (prefers-color-scheme: dark) {
@@ -183,7 +190,7 @@
 	font-weight: 650;
 	line-height: 1.3;
 	margin-top: 1.8rem;
-	scroll-margin-top: 5rem;
+	scroll-margin-top: var(--anchor-offset);
 }
 .wiki h1 {
 	font-size: 1.6rem;
@@ -310,5 +317,41 @@
 mark {
 	background: var(--mark);
 	color: inherit;
+	border-radius: 0.2rem;
+}
+
+/* écran tactile : la zone cliquable atteint ~44 px sans changer l'aspect compact (pseudo-élément transparent) */
+@media (pointer: coarse) {
+	/* dans un calque : les utilitaires Tailwind (absolute, sticky…) d'un composant gardent la main sur `position` */
+	@layer components {
+		.touch-target {
+			position: relative;
+		}
+		.touch-target::after {
+			content: "";
+			position: absolute;
+			inset-block: min(0px, calc((100% - 44px) / 2));
+			inset-inline: min(0px, calc((100% - 44px) / 2));
+		}
+	}
+	/* listes de puces : assez d'espace pour que les zones agrandies ne se chevauchent pas */
+	.touch-gap {
+		gap: 0.75rem 0.5rem;
+	}
+	/* appels de note : le padding d'un élément en ligne agrandit la zone cliquable sans bouger le texte */
+	.wiki .fn-ref a {
+		padding: 0.6rem 0.4rem;
+	}
+}
+
+/* notes de bas de page : repère d'arrivée sous l'en-tête collant, cible surlignée */
+.wiki .fn-ref a,
+.note-item,
+.anchor-target {
+	scroll-margin-top: var(--anchor-offset);
+}
+.wiki .fn-ref a:target,
+.note-item:target {
+	background: var(--mark);
 	border-radius: 0.2rem;
 }

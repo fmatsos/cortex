@@ -1,7 +1,8 @@
 /** Contrat entre `cli/src/export.ts` (qui écrit data.json, graph.json, search-index.json) et le site (qui les affiche). */
 export type Link = { id: string; title: string; type: string };
 export type SourceRef = { id: string; title: string; url?: string; page?: Link };
-export type Note = { n: number; id: string; html: string };
+export type Note = { n: number; id: string; refs: number; html: string }; // refs : occurrences de la note dans le texte
+export type TocItem = { level: 2 | 3; id: string; text: string };
 export type PageData = {
   id: string; // « concepts/context-rot »
   type: string; // Concept | Entity | Synthesis | Source
@@ -17,6 +18,7 @@ export type PageData = {
   md: string; // Markdown source de la page, chemins raw/ remplacés par l'URL d'origine
   sources: SourceRef[];
   notes: Note[];
+  toc: TocItem[]; // titres h2/h3 du corps, avec leur ancre
   backlinks: Link[];
   related: (Link & { reasons: string[] })[];
 };
