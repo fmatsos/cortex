@@ -89,11 +89,13 @@ Guardrails verified on 2026-11-04 by trials where the agent tried to write to `r
 | Client | Mechanism | Result |
 |---|---|---|
 | Default (agnostic, any CLI) | repository read-only except `wiki/`: bubblewrap on Linux, `sandbox-exec` on macOS | `raw/` gives “EROFS: read-only file system”, `wiki/` is writable |
-| Claude (Agent SDK) | `canUseTool` on every tool call, `settingSources: ["project"]`, nothing approved by default | writes and shell outside `wiki/` denied |
+| Claude (Agent SDK) | `canUseTool` on every tool call, `settingSources: []` (a settings `permissions.allow` rule or hook would run before `canUseTool`; the schema is passed through `systemPrompt`), nothing approved by default | writes and shell outside `wiki/` denied; `Read`/`Glob`/`Grep`/`LS` confined to the repository |
 | Codex (SDK) | `workspace-write` sandbox launched from `wiki/` | `raw/` and the agent file give “Read-only file system” (`/tmp` always remains writable) |
 | opencode v2 (REST API of `opencode serve`) | permission rules, the last matching rule wins | `edit` denied outside `wiki/*`, shell denied outside `cortex` |
 
 Interactive sessions, whatever the client, also go through this confinement: a human approving too quickly cannot write outside `wiki/`. In every case, `git status` before and after the agent remains the common safety net.
+
+**Residual risk: reads.** Only the Claude SDK backend confines reads (its `guard` refuses any path outside the repository, symlinks resolved). Interactive sessions and the agnostic mode (bubblewrap) cannot: a read-only mount of the whole filesystem is what lets the agent's own binary and state work, and the Codex and opencode sandboxes likewise leave reads open. Raw sources are untrusted web content, so a prompt-injected source could make the agent copy a local secret into a wiki page, and `cortex export` would then publish it. The exfiltration path is therefore *through the wiki*: review the pages (`git diff`) before committing or exporting.
 
 *Prerequisites:* `bwrap` on Linux (`apt install bubblewrap`). On macOS, `sandbox-exec` is built into the system. The macOS variant has not yet been tested on a real machine.
 
