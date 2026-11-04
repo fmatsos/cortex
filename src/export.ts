@@ -33,6 +33,14 @@ export const plain = (html: string) => unesc(html.replace(/<[^>]+>/g, " ")).repl
  * Corps Markdown → HTML. Liens `/wiki/x.md` réécrits en liens relatifs (un lien vers une page absente devient un
  * `<span class="lien-manquant">`, jamais un 404 ; un lien vers `raw/` n'est pas publié) ; notes `[^id]` numérotées.
  */
+/**
+ * Encart « Note personnelle » : la syntaxe de callout d'Obsidian `> [!note] Titre` (titre facultatif), rendue par Bun
+ * comme une simple citation, devient un `<aside>` distinctif.
+ */
+export const noteCallouts = (html: string) =>
+  html.replace(/<blockquote>\s*<p>\[!note\][ \t]*([^\n<]*)(\n|<\/p>\s*)([\s\S]*?)<\/blockquote>/gi, (_, title: string, sep: string, rest: string) =>
+    `<aside class="note-perso" role="note"><p class="note-perso-titre">${title.trim() || "Note personnelle"}</p>${sep === "\n" ? "<p>" : ""}${rest}</aside>`);
+
 function render(body: string, from: string, pages: Set<string>) {
   const defs = new Map<string, string>();
   const text = body.replace(/^\[\^([\w-]+)\]:[ \t]*(.*(?:\n[ \t]+\S.*)*)$/gm, (_, k, v) => (defs.set(k, v.replace(/\n[ \t]+/g, " ").trim()), ""));
@@ -42,7 +50,7 @@ function render(body: string, from: string, pages: Set<string>) {
     const n = order.indexOf(k) + 1, c = (seen.set(k, (seen.get(k) ?? 0) + 1), seen.get(k));
     return `<sup class="fn-ref"><a href="#fn-${k}" id="fnref-${k}-${c}" aria-label="Note ${n}">${n}</a></sup>`;
   });
-  const html = md(withRefs).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
+  const html = noteCallouts(md(withRefs)).replace(/<a href="(\/(?:wiki|raw)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
     if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // pages de navigation du site

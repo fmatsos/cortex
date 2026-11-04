@@ -202,6 +202,14 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   expect(worst).toBeLessThan(50);
 });
 
+test("export : encart « Note personnelle » (callout Obsidian)", async () => {
+  const { noteCallouts } = await import("./export");
+  const html = (m: string) => noteCallouts(Bun.markdown.html(m));
+  expect(html("> [!note] Note personnelle\n> pourquoi *je* garde ça")).toBe('<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>pourquoi <em>je</em> garde ça</p>\n</aside>\n');
+  expect(html("> [!note]\n> sans titre")).toContain('<p class="note-perso-titre">Note personnelle</p><p>sans titre');
+  expect(html("> une citation ordinaire")).toContain("<blockquote>");
+});
+
 test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
   const { confine } = await import("./backends/backend");
   const root = mkdtempSync(join(tmpdir(), "brain-"));

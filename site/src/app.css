@@ -141,6 +141,15 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+	/* Tailwind v4 ne met plus de main sur les boutons : tout ce qui se clique l'affiche */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]),
+	[role="option"],
+	summary,
+	label[for],
+	select {
+		cursor: pointer;
+	}
 	html {
 		@apply font-sans;
 		scroll-behavior: smooth;
@@ -202,6 +211,44 @@
 }
 .wiki li + li {
 	margin-top: 0.35rem;
+}
+.wiki .note-perso {
+	margin: 1.25rem 0;
+	padding: 0.85rem 1rem;
+	border-radius: var(--radius-md);
+	border: 1px solid oklch(0.85 0.09 85);
+	border-left: 4px solid oklch(0.75 0.15 75);
+	background: oklch(0.97 0.035 90);
+	color: var(--foreground);
+}
+.wiki .note-perso-titre {
+	margin: 0 0 0.3rem;
+	font-size: 0.8rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: oklch(0.48 0.1 70);
+}
+.wiki .note-perso > p:last-child {
+	margin-bottom: 0;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .wiki .note-perso {
+		border-color: oklch(0.45 0.07 80);
+		border-left-color: oklch(0.72 0.14 75);
+		background: oklch(0.27 0.035 80);
+	}
+	:root:not([data-theme="light"]) .wiki .note-perso-titre {
+		color: oklch(0.82 0.12 80);
+	}
+}
+:root[data-theme="dark"] .wiki .note-perso {
+	border-color: oklch(0.45 0.07 80);
+	border-left-color: oklch(0.72 0.14 75);
+	background: oklch(0.27 0.035 80);
+}
+:root[data-theme="dark"] .wiki .note-perso-titre {
+	color: oklch(0.82 0.12 80);
 }
 .wiki blockquote {
 	border-left: 3px solid var(--border);
