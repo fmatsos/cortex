@@ -15,7 +15,7 @@ chevron-down back backlink related external-link note warning citation citation-
 fit-view pause play close-selection list-view offline offline-ready retry new-tab`.split(/\s+/);
 
 test("le pack contient toutes les icônes demandées, et seulement elles", () => {
-  expect([...ICON_NAMES].sort()).toEqual([...WANTED].sort());
+  expect([...(ICON_NAMES as readonly string[])].sort()).toEqual([...WANTED].sort());
   expect(new Set(ICON_NAMES).size).toBe(ICON_NAMES.length);
 });
 

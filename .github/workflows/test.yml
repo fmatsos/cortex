@@ -19,3 +19,4 @@ jobs:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --omit optional
       - run: bun test
+      - run: bunx tsc --noEmit -p tsconfig.json
