@@ -1,5 +1,6 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
+import { isUnder } from "./paths";
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
@@ -29,7 +30,7 @@ export async function getFile(root: string, path: string): Promise<string> {
   const file = join(root, fromResource(path));
   if (!existsSync(file) || !statSync(file).isFile()) throw new Error(`Fichier introuvable : ${path}`);
   const real = realpathSync(file);
-  const inside = ["wiki", "raw"].some((d) => existsSync(join(root, d)) && real.startsWith(realpathSync(join(root, d)) + sep));
+  const inside = ["wiki", "raw"].some((d) => isUnder(root, d, file));
   if (!inside || !real.endsWith(".md")) throw new Error(`Chemin refusé : ${path} (attendu : un .md sous wiki/ ou raw/)`);
   return Bun.file(real).text();
 }

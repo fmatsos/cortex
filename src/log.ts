@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
+import { isUnder } from "./paths";
+import { collator } from "./text";
 import { pageId, pageLink } from "./doc";
 import { openWiki, type Wiki } from "./context";
 import { localIso, RAW_ID, isReservedPage, rawPath, slugify } from "./lib";
@@ -54,7 +56,7 @@ export function readLog(root: string): { entries: LogEntry[]; errors: { line: nu
 const day = (e: LogEntry) => e.at.slice(0, 10);
 /** Most recent to oldest: days descending, and within a day the reverse of file order. */
 export const newestFirst = (entries: LogEntry[]) =>
-  entries.map((e, i) => [e, i] as const).sort(([a, i], [b, j]) => (day(a) === day(b) ? j - i : day(b).localeCompare(day(a)))).map(([e]) => e);
+  entries.map((e, i) => [e, i] as const).sort(([a, i], [b, j]) => (day(a) === day(b) ? j - i : collator.compare(day(b), day(a)))).map(([e]) => e);
 
 /** Entries of the `n` most recent days that have any (most recent first), filtered by `kind` if given. */
 export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntry[] {
@@ -120,11 +122,10 @@ export async function logAddCtx(w: Wiki, kind: string, text: string, sources: st
   const root = w.root;
   if (!KINDS.includes(kind as Kind)) throw new Error(`kind inconnu : ${kind} (${KINDS.join(" | ")})`);
   if (!text.trim()) throw new Error("texte vide");
-  const wiki = resolve(root, "wiki");
   const pp = pages.map((p) => {
     const rel = normalize(p.trim().replace(/^\/+/, ""));
     const abs = resolve(root, rel);
-    if (!abs.startsWith(wiki + sep) || !rel.endsWith(".md") || isReservedPage(rel) || !existsSync(abs)) throw new Error(`page introuvable sous wiki/ : ${p}`);
+    if (!isUnder(root, "wiki", abs) || !rel.endsWith(".md") || isReservedPage(rel) || !existsSync(abs)) throw new Error(`page introuvable sous wiki/ : ${p}`);
     return rel.split(sep).join("/");
   });
   for (const s of sources)

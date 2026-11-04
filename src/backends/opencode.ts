@@ -36,8 +36,21 @@ export default function opencode(cfg: Config): Backend {
   };
 }
 
+/** Grace period between SIGTERM and SIGKILL when stopping the server (mutable for tests). */
+export const killGrace = { ms: 3_000 };
+
+/** Reads a pipe to the end in the background, keeping the last `keep` characters (a pipe nobody reads fills up and blocks the writer). */
+function drain(stream: ReadableStream<Uint8Array>, keep = 4_000) {
+  const box = { tail: "" };
+  const dec = new TextDecoder();
+  (async () => { for await (const c of stream) box.tail = (box.tail + dec.decode(c, { stream: true })).slice(-keep); })().catch(() => {});
+  return box;
+}
+
 /** `opencode serve` on a free port (4096 would collide), session-specific password (Basic opencode:<pwd>). */
-async function startOpencode() {
+export async function startOpencode() {
+  // ponytail: the port is probed then released before the spawn (small race window); `opencode serve --port=0` is
+  // unverified without the binary (no --help available here), so it is not used.
   const sock = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
   const port = sock.port;
   sock.stop(true);
@@ -45,16 +58,22 @@ async function startOpencode() {
   const proc = Bun.spawn(["opencode", "serve", "--hostname=127.0.0.1", `--port=${port}`], {
     env: { ...process.env, OPENCODE_SERVER_PASSWORD: password }, stdout: "pipe", stderr: "pipe",
   });
-  const close = () => proc.kill();
+  // SIGTERM, then SIGKILL if the server is still there after the grace period
+  const close = () => {
+    proc.kill("SIGTERM");
+    const t = setTimeout(() => proc.kill("SIGKILL"), killGrace.ms);
+    void proc.exited.then(() => clearTimeout(t));
+  };
+  const err = drain(proc.stderr); // never left undrained: a chatty server would block on a full pipe
   const reader = proc.stdout.getReader();
   let out = "";
   const deadline = Date.now() + 30_000;
   while (!/listening on (\S+)/.test(out)) {
     const chunk = await Promise.race([reader.read(), Bun.sleep(Math.max(0, deadline - Date.now())).then(() => null)]);
-    if (!chunk || chunk.done) { close(); throw new Error(`opencode serve n'a pas démarré : ${out || await new Response(proc.stderr).text()}`); }
+    if (!chunk || chunk.done) { close(); throw new Error(`opencode serve n'a pas démarré : ${out || err.tail}`); }
     out += new TextDecoder().decode(chunk.value);
   }
-  reader.releaseLock();
-  return { url: out.match(/listening on (\S+)/)![1], close, headers: { authorization: `Basic ${btoa(`opencode:${password}`)}` } };
+  // keep reading after startup: the server logs for the whole session and would block once the pipe buffer is full
+  (async () => { while (!(await reader.read()).done); })().catch(() => {});
+  return { url: out.match(/listening on (\S+)/)![1], close, exited: proc.exited, headers: { authorization: `Basic ${btoa(`opencode:${password}`)}` } };
 }
-

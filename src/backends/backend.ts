@@ -33,5 +33,11 @@ export function cli(name: string): string {
 /** Lazy loading: the SDK of an unconfigured client is never imported. */
 export async function load<T>(pkg: string): Promise<T> {
   try { return (await import(pkg)) as T; }
-  catch { throw new Error(`SDK absent : bun add --cwd cli ${pkg}`); }
+  catch (e) {
+    // only "this very package is missing" is reported as such; any other failure (syntax error, missing peer…) keeps its own message
+    const { message = "" } = e as { message?: string };
+    const missing = message.match(/^Cannot find (?:module|package) ['"]([^'"]+)['"]/)?.[1]; // the specifier that failed to resolve
+    if (missing !== pkg) throw e;
+    throw new Error(`SDK absent : bun add ${pkg}`);
+  }
 }

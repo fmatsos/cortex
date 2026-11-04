@@ -37,6 +37,8 @@ export async function lintCtx(w: Wiki, now = new Date()): Promise<Issue[]> {
       inbound.set(l, (inbound.get(l) ?? 0) + 1);
       if (!existsSync(join(root, l))) push("error", path, `lien cassé : /${l}`);
     }
+    // a relative link to a .md is not a graph edge nor a working link on the site: only root-relative `/wiki/…md` links count
+    for (const [, target] of d.body.matchAll(/\]\((?![a-z][a-z0-9+.-]*:|\/|#)([^)\s]*\.md(?:#[^)\s]*)?)\)/gi)) push("warning", path, `lien relatif vers un .md : ${target} (utilise un lien depuis la racine : /wiki/….md)`);
     const g = time(fm.generated?.at), v = time(fm.verified?.at);
     if (!fm.verified) push("info", path, "jamais relue");
     else if (g > v) push("warning", path, "modifiée depuis la relecture (generated.at > verified.at) : à relire");

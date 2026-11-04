@@ -19,7 +19,7 @@ export async function newPageCtx(w: Wiki, type: string, title: string, at = new 
   const t = (Object.keys(TYPE_DIRS) as PageType[]).find((k) => k.toLowerCase() === type.toLowerCase());
   if (!t) throw new Error(`type inconnu : ${type} (${Object.keys(TYPE_DIRS).join(" | ")})`);
   if (!title.trim()) throw new Error("titre vide");
-  const same = (await w.pages()).find((d) => d.fm.title && slugify(d.fm.title) === slugify(title));
+  const same = (await w.pages()).find((d) => d.fm.title && slugify(d.fm.title, Infinity) === slugify(title, Infinity));
   if (same) throw new Error(`une page porte déjà ce titre : ${same.path} (mets-la à jour plutôt que d'en créer une autre)`);
   const base = `wiki/${expand((await w.naming()).page_path, { at, title, type: t })}`;
   const path = `${free(base, (p) => existsSync(join(root, `${p}.md`)))}.md`;

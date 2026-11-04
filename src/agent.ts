@@ -21,12 +21,14 @@ const unversioned = new Set<string>();
 
 /** Modified/created files (porcelain v1, NUL-separated: no quoting of non-ASCII paths): serves as a scope guard, whatever the agent. */
 export async function changed(root: string, report?: Report): Promise<Map<string, string>> {
-  const out = await git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all");
+  // `-- .` limits the status to the wiki root; porcelain paths stay relative to the repository top, hence the prefix to strip
+  const out = await git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".");
   const m = new Map<string, string>();
   if (out === undefined) {
     if (!unversioned.has(root)) { unversioned.add(root); report?.({ level: "warn", text: "pas de dépôt git : le périmètre de l'agent n'est pas vérifié" }); }
     return m;
   }
+  const prefix = ((await git(root, "rev-parse", "--show-prefix")) ?? "").trim(); // "" when root is the repository top, else "sub/dir/"
   const fields = out.split("\0");
   for (let i = 0; i < fields.length; i++) {
     const f = fields[i];
@@ -34,7 +36,9 @@ export async function changed(root: string, report?: Report): Promise<Map<string
     const paths = [f.slice(3)];
     // rename/copy: the origin path follows as the next NUL field
     if (f[0] === "R" || f[0] === "C" || f[1] === "R" || f[1] === "C") paths.push(fields[++i]);
-    for (const path of paths) {
+    for (const top of paths) {
+      if (!top.startsWith(prefix)) continue; // outside the wiki root (a rename origin): not ours to report
+      const path = top.slice(prefix.length);
       const file = Bun.file(join(root, path));
       m.set(path, (await file.exists()) ? new Bun.CryptoHasher("sha1").update(await file.arrayBuffer()).digest("hex") : "deleted");
     }

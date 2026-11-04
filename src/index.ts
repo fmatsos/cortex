@@ -4,6 +4,7 @@ import { openWiki, type Wiki } from "./context";
 import { isReservedPage } from "./lib";
 import { warn } from "./style";
 import { writeLogMdCtx } from "./log";
+import { collator } from "./text";
 
 const ORDER: [string, string][] = [["Concept", "Concepts"], ["Entity", "Entités"], ["Synthesis", "Synthèses"], ["Source", "Sources"]];
 
@@ -13,7 +14,7 @@ export async function renderIndexCtx(w: Wiki): Promise<string> {
   for (const e of w.errors.pages) warn(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
   const pages = all.filter((d) => !isReservedPage(d.path));
   const title = (d: Page) => d.fm.title ?? pageId(d.path); // a page without title is listed by its id, never as « undefined »
-  const bullets = (list: Page[]) => list.sort((a, b) => title(a).localeCompare(title(b)))
+  const bullets = (list: Page[]) => list.sort((a, b) => collator.compare(title(a), title(b)))
     .map((d) => `- [${title(d)}](${pageLink(d.path)})${d.fm.description ? ` — ${d.fm.description}` : ""}\n`).join("");
   let idx = "# Index\n";
   for (const [type, heading] of ORDER) idx += `\n## ${heading}\n${bullets(pages.filter((p) => p.fm.type === type))}`;

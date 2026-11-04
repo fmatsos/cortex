@@ -91,12 +91,13 @@ export function rawPath(root: string, id: string): string | undefined {
 
 export const sha256 = (s: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
-/** Comparable URL: no fragment, no tracking parameters, no trailing /, lowercase host. */
+/** Comparable URL: no fragment, no tracking parameters (utm_*, fbclid, gclid; `ref` and `source` are kept, they can name the page), sorted parameters, no trailing /, lowercase host. */
 export function normUrl(u: string): string {
   try {
     const x = new URL(u);
     x.hash = "";
-    for (const k of [...x.searchParams.keys()]) if (/^(utm_|fbclid|gclid|ref$|source$)/.test(k)) x.searchParams.delete(k);
+    for (const k of [...x.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$)/.test(k)) x.searchParams.delete(k);
+    x.searchParams.sort(); // ?a=1&b=2 and ?b=2&a=1 are the same page
     return (x.origin.toLowerCase() + x.pathname.replace(/\/+$/, "") + x.search);
   } catch { return u; }
 }

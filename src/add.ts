@@ -1,6 +1,6 @@
-import { join } from "node:path";
-import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { rename, writeFile } from "node:fs/promises";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { parseHTML } from "linkedom";
@@ -184,9 +184,11 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
 
   const iso = localIso(now);
   // folder according to raw_path (config.json); its last segment is the id, unique under raw/
-  const rel = free(expand((await w.naming()).raw_path, { at: now, title: ex.title, kind: ex.kind }), (p) => !!rawPath(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p)));
-  const id = rel.split("/").at(-1)!;
-  if (opts.dryRun) return { id, duplicate: false, ex };
+  const base = expand((await w.naming()).raw_path, { at: now, title: ex.title, kind: ex.kind });
+  const tried = new Set<string>(); // folders another writer took between the probe and the mkdir
+  const taken = (p: string) => tried.has(p) || !!rawPath(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p));
+  let rel = free(base, taken);
+  if (opts.dryRun) return { id: rel.split("/").at(-1)!, duplicate: false, ex };
 
   const fm: Record<string, unknown> = { type: "RawSource", title: ex.title };
   if (ex.url) fm.url = ex.url;
@@ -203,9 +205,20 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   if (ex.partial) fm.partial = ex.partial;
   fm.status = "pending";
 
-  const dir = join(root, "raw", rel);
-  await mkdir(dir, { recursive: true });
-  await Bun.write(join(dir, "source.md"), serializeDoc(fm, `${ex.content.trim()}\n`));
+  // The leaf folder is created without `recursive`: EEXIST means a concurrent add took the name, so the next free suffix is tried.
+  let dir: string;
+  for (;;) {
+    dir = join(root, "raw", rel);
+    mkdirSync(dirname(dir), { recursive: true });
+    try { mkdirSync(dir); break; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e; tried.add(rel); rel = free(base, taken); }
+  }
+  const id = rel.split("/").at(-1)!;
+  const tmp = join(dir, ".source.md.tmp");
+  try {
+    await writeFile(tmp, serializeDoc(fm, `${ex.content.trim()}\n`), { flag: "wx" });
+    await rename(tmp, join(dir, "source.md"));
+  } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e; } // the folder is ours: no half-written source stays behind
   await appendLogCtx(w, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);
   return { id, duplicate: false, ex };
 }
