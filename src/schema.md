@@ -182,7 +182,7 @@ cortex export [--out <dir>]                                          # the wiki 
 - **`cortex mcp` exposes the wiki to an external agent**: `search`, `get`, `related`, `lint`, `log` (JSON entries of the last days, `kind` filter) read-only, and `add` (URL or text, into `raw/` only, `note` mandatory). It never modifies `wiki/`: ingesting stays the job of `cortex compile`.
 - **`cortex export` publishes the wiki as a static site** (navigation, instant search, link graph) with no LLM and no server. It only reads `wiki/`: `raw/` is never published, sources point to their original URL. The output directory is emptied on every export.
 - **`cortex ask` is read-only.** `--file` allows storing the answer as a Synthesis page (in `draft`), with its journal entry; the index and `log.md` are then regenerated.
-- **`cortex.json` picks the agent** (`{ "client": "claude" | "codex" | "opencode", "model": "…", "effort": "…" }`). `cortex config` manages it and validates every write. `effort` uses the client's vocabulary: `low`…`max` for Claude, `minimal`…`xhigh` for Codex, the name of a model variant for opencode. Model and effort apply to batch and interactive runs alike.
+- **`cortex.json` picks the agent** (`{ "client": "claude" | "codex" | "opencode", "model": "…", "effort": "…" }`). `cortex config` manages it and validates every write. `effort` uses the client's vocabulary: `low`…`max` for Claude, `minimal`…`xhigh`, `max`, `ultra` or `persistent` for Codex, the name of a model variant for opencode. Model and effort apply to batch and interactive runs alike.
 - **`cortex.json` also sets**:
   - `language`: the wiki language (rule 7);
   - `schema`: a Markdown file, relative to the root, that replaces the built-in schema;

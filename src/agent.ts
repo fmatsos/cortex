@@ -4,6 +4,7 @@ import { join, sep } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { rawId, toResource } from "./doc";
 import { openWiki, type Wiki } from "./context";
+import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
 import { confine } from "./backends/sandbox";
 import { agentFile } from "./config";
@@ -133,7 +134,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
       say("ok", `${id} compilée`);
     } else { say("fail", `${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); ok = false; }
   }
-  await (await import("./index")).regenerateCtx(openWiki(root));
+  await regenerateCtx(openWiki(root));
   return done(ok);
 }
 export const compile = (root: string, ids: string[], opts: CompileOpts, report?: Report) => compileCtx(openWiki(root), ids, opts, report);
@@ -153,7 +154,7 @@ export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: 
   let ok = !code;
   if (stray.length) { say("warn", `fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`, "⚠"); ok = false; }
   if (opts.file) {
-    await (await import("./index")).regenerateCtx(openWiki(root)); // fresh context: the agent just wrote pages
+    await regenerateCtx(openWiki(root)); // fresh context: the agent just wrote pages
   }
   return done(ok);
 }

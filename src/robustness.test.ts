@@ -6,7 +6,7 @@ import { add } from "./add";
 import { load } from "./backends/backend";
 import { killGrace, startOpencode } from "./backends/opencode";
 import { render } from "./export";
-import { renderIndex } from "./index";
+import { renderIndex } from "./catalog";
 import { normUrl } from "./lib";
 import { lint } from "./lint";
 import { logAdd } from "./log";

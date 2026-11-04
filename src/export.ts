@@ -6,17 +6,17 @@ import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
-import { type Page, type RawFm, type Stamp, pageId, pageRoute, toRawSource, toResource } from "./doc";
+import { type Page, type RawFm, type Stamp, isoDate, pageId, pageState, pageRoute, toRawSource, toResource } from "./doc";
 import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
 import { collator } from "./text";
 import { isUnder } from "./paths";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
+import { LIMITS } from "./limits";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
-const iso = (x: unknown) => (x == null ? undefined : x instanceof Date ? x.toISOString() : String(x));
-const stamp = (x: Stamp | null | undefined) => (x?.at ? { by: String(x.by ?? ""), at: iso(x.at)! } : undefined);
+const stamp = (x: Stamp | null | undefined) => (x?.at ? { by: String(x.by ?? ""), at: isoDate(x.at)! } : undefined);
 
 /** Relative link from one route to another (both « a/b/ »): the site works under any prefix. */
 function rel(from: string, to: string): string {
@@ -36,10 +36,6 @@ export const byTitle = (a: { title: string; id?: string }, b: { title: string; i
 const inline = (s: string) => md(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
 export const plain = (html: string) => unesc(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 
-/**
- * Markdown body → HTML. `/wiki/x.md` links rewritten as relative links (a link to a missing page becomes a
- * `<span class="lien-manquant">`, never a 404; a link to `raw/` is not published); `[^id]` footnotes numbered.
- */
 /**
  * A partial-content warning (paywall, preview) is written in the note callout, on a `⚠️ …` line.
  * Recognized here for the `partial` metadata; other warnings do not count.
@@ -116,6 +112,10 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![
 /** Inline code span: a backtick run, a body without blank line, the same run again. */
 const INLINE_CODE = /(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])+?(?<!`)\1(?!`)/g;
 
+/**
+ * Markdown body → HTML. `/wiki/x.md` links rewritten as relative links (a link to a missing page becomes a
+ * `<span class="lien-manquant">`, never a 404; a link to `raw/` is not published); `[^id]` footnotes numbered.
+ */
 export function render(body: string, from: string, pages: Set<string>) {
   // code is set aside first: footnote definitions and markers are rewritten outside code only, then the code is put back untouched
   const code: string[] = [];
@@ -249,7 +249,6 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
         ...(s.resource && raw.partial(String(s.resource)) && { partial: true }),
       };
     });
-    const g = Date.parse(iso(fm.generated?.at) ?? ""), v = Date.parse(iso(fm.verified?.at) ?? "");
     // partial source: `partial:` extraction of a cited raw source (Source page only: a concept citing a
     // partial source is not itself partial), or partial-content warning callout in the body
     const partial = (fm.type === "Source" && (fm.sources ?? []).some((s) => s.resource && raw.partial(s.resource))) || r.warnings.some(isPartialWarning);
@@ -257,10 +256,10 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
       id: pageId(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? pageId(d.path)),
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
       status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
-      stale_after: iso(fm.stale_after), needsReview: !!fm.verified && g > v, partial,
+      stale_after: isoDate(fm.stale_after), needsReview: pageState(fm).needsReview, partial,
       html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
       backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
-      related: related(docs, d.path, graph0).slice(0, 8).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),
+      related: related(docs, d.path, graph0).slice(0, LIMITS.relatedPages).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),
     };
   });
 
@@ -297,10 +296,10 @@ function buildSearch(pages: PageData[]): SearchIndex {
   const terms = buildTerms(docs);
 
   const freq = new Map<string, number>(), keep = new Set<string>();
-  const words = (s: string) => fold(s).match(/[\p{L}\p{N}]{3,}/gu) ?? [];
+  const foldedWords = (s: string) => fold(s).match(/[\p{L}\p{N}]{3,}/gu) ?? [];
   pages.forEach((p, i) => {
-    for (const w of words(`${p.title} ${p.tags.join(" ")}`)) keep.add(w);
-    for (const w of words(`${p.title} ${p.description} ${p.tags.join(" ")} ${docs[i].text} ${titles[i]}`)) freq.set(w, (freq.get(w) ?? 0) + 1);
+    for (const w of foldedWords(`${p.title} ${p.tags.join(" ")}`)) keep.add(w);
+    for (const w of foldedWords(`${p.title} ${p.description} ${p.tags.join(" ")} ${docs[i].text} ${titles[i]}`)) freq.set(w, (freq.get(w) ?? 0) + 1);
   });
   const vocab = [...freq].filter(([w, n]) => keep.has(w) || (w.length >= 4 && n >= 2))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([w]) => w);
@@ -328,7 +327,7 @@ export function checkOut(root: string, out: string) {
  */
 export function frontendFingerprint(siteDir = SITE_DIR): string {
   const files = (readdirSync(join(siteDir, "src"), { recursive: true }) as string[]).map((f) => join("src", f))
-    .concat("vite.config.ts", "package.json", "svelte.config.js", join("..", "package.json"), join("..", "bun.lock"))
+    .concat("vite.config.ts", "package.json", join("..", "package.json"), join("..", "bun.lock"))
     .filter((f) => existsSync(join(siteDir, f)) && statSync(join(siteDir, f)).isFile()).sort();
   const h = new Bun.CryptoHasher("sha256");
   for (const f of files) h.update(`${f}\0`).update(readFileSync(join(siteDir, f))).update("\0");

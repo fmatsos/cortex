@@ -1,5 +1,6 @@
 import { interactiveWith, type Backend, type Config } from "./backend";
 import { toOpencodeRules } from "./policy";
+import { LIMITS } from "../limits";
 
 // --- opencode v2: REST API of `opencode serve` (the published SDK, 1.19.5, does not speak v2)----
 
@@ -67,7 +68,7 @@ export async function startOpencode() {
   const err = drain(proc.stderr); // never left undrained: a chatty server would block on a full pipe
   const reader = proc.stdout.getReader();
   let out = "";
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + LIMITS.opencodeStartMs;
   while (!/listening on (\S+)/.test(out)) {
     const chunk = await Promise.race([reader.read(), Bun.sleep(Math.max(0, deadline - Date.now())).then(() => null)]);
     if (!chunk || chunk.done) { close(); throw new Error(`opencode serve n'a pas démarré : ${out || err.tail}`); }

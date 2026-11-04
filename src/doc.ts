@@ -102,3 +102,23 @@ export const pageLink = toResource;
 export const pageId = (path: string) => path.replace(/^wiki\//, "").replace(/\.md$/, "");
 /** Site route of a page: `wiki/concepts/x.md` → `wiki/concepts/x/`. */
 export const pageRoute = (path: string) => `${path.replace(/\.md$/, "")}/`;
+
+// Dates. YAML yields a `Date` or a string depending on how the value is written: one normalisation for lint and the site.
+
+/** ISO text of a YAML date (Date or string); undefined when absent. */
+export const isoDate = (x: unknown) => (x == null ? undefined : x instanceof Date ? x.toISOString() : String(x));
+/** Epoch ms of a YAML date; undefined when absent or unparsable. */
+export const dateMs = (x: unknown) => { const t = x == null ? NaN : new Date(x as string | Date).getTime(); return Number.isNaN(t) ? undefined : t; };
+
+/**
+ * Review state of a page, from its dates: `needsReview` = reviewed once (`verified`) and modified since
+ * (`generated.at` later than `verified.at`); `stale` = `stale_after` passed at `now`.
+ */
+export function pageState(fm: PageFm, now = new Date()) {
+  const generatedAt = dateMs(fm.generated?.at), verifiedAt = dateMs(fm.verified?.at), staleAfter = dateMs(fm.stale_after);
+  return {
+    generatedAt, verifiedAt,
+    needsReview: !!fm.verified && generatedAt !== undefined && verifiedAt !== undefined && generatedAt > verifiedAt,
+    stale: staleAfter !== undefined && staleAfter < now.getTime(),
+  };
+}

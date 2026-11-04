@@ -68,10 +68,10 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
 /** Title of each wiki page (path → title): pages are named by their title, not by their file name. */
 export type Titles = Map<string, string>;
 
-const words = (s: string) => `-${slugify(s, Infinity)}-`;
+const boundedSlug = (s: string) => `-${slugify(s, Infinity)}-`;
 /** The text already names the page: its file name or its title, whole words, ignoring accents and case. */
 const namesPage = (text: string, p: string, title?: string) =>
-  text.includes(p.replace(/\.md$/, "").split("/").at(-1)!) || (!!title && words(text).includes(words(title)));
+  text.includes(p.replace(/\.md$/, "").split("/").at(-1)!) || (!!title && boundedSlug(text).includes(boundedSlug(title)));
 const namesId = (text: string, id: string) => text.includes(`\`${id}\``);
 
 /** A line of log.md: the text, then the sources and pages that the text does not already name. */

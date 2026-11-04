@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fromResource, pageId, pageLink, pageRoute, rawId, toPage, toRawSource, toResource } from "./doc";
-import { renderIndex } from "./index";
+import { renderIndex } from "./catalog";
 import { parseDoc, readPages } from "./lib";
 
 const doc = (fm: string) => parseDoc("wiki/concepts/x.md", `---\n${fm}\n---\ncorps\n`);

@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderIndex } from "./index";
+import { renderIndex } from "./catalog";
 import { isReservedPage, parseDoc, readDocs, serializeDoc } from "./lib";
 import { lint } from "./lint";
 import { search } from "./search";
