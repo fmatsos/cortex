@@ -32,7 +32,13 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
   prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
   // session interactive confinée elle aussi : une validation humaine trop rapide ne peut pas écrire hors de wiki/
-  if (!batch) return Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited;
+  if (!batch) {
+    // Ctrl+C vise l'agent ; sans ce gestionnaire, brain mourrait aussi (même groupe de processus) avant de vérifier la page Source et de basculer le statut
+    const keep = () => {};
+    process.on("SIGINT", keep);
+    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited; }
+    finally { process.off("SIGINT", keep); }
+  }
   try { console.log(await backend.run(root, prompt, mode)); return 0; }
   catch (e) { console.error(`✗ ${(e as Error).message}`); return 1; }
 }
