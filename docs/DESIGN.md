@@ -76,7 +76,21 @@ Le bénéfice : le wiki reste lisible par Obsidian, par le visualiseur OKF et pa
 | `lint` structurel | résoudre ce que le lint remonte (fusionner, déprécier, créer) |
 | serveur MCP | décrire les images, résumer les transcripts |
 
-Le CLI n'embarque **aucun SDK LLM**. L'agent est une session de ton harness existant, avec `BRAIN.md` comme instructions et `brain` comme outil.
+**Par défaut, le CLI n'embarque aucun SDK LLM.** L'agent est une session de ton harness existant, avec `BRAIN.md` comme instructions et `brain` comme outil.
+
+**Les SDK sont optionnels, chargés à la demande** quand `config.json` nomme un client. Ils servent seulement à mieux tirer parti de l'agent, en premier lieu pour bloquer les écritures hors de `wiki/` avant qu'elles aient lieu. Dans le code, c'est un pattern Bridge :
+- **l'abstraction**, ce sont les commandes `compile` et `ask` (`agent.ts`), qui ne connaissent que l'interface `Backend` (`interactive`, `run`) ;
+- **les implémentations** sont dans `cli/src/backends/` : `default.ts` (agnostique, sous-processus), `claude.ts`, `codex.ts` et `opencode.ts`.
+
+Garde-fous vérifiés le 2026-11-04 par des essais où l'agent tentait d'écrire dans `raw/` :
+
+| Client | Mécanisme | Résultat |
+|---|---|---|
+| Claude (Agent SDK) | `canUseTool` sur chaque appel d'outil, `settingSources: ["project"]`, rien d'approuvé d'office | écriture et shell hors de `wiki/` refusés |
+| Codex (SDK) | bac à sable `workspace-write` lancé depuis `wiki/` | `raw/` et `BRAIN.md` en « Read-only file system » (`/tmp` reste toujours inscriptible) |
+| opencode v2 (API REST de `opencode serve`) | règles de permission, la dernière qui correspond l'emporte | `edit` refusé hors de `wiki/*`, shell refusé hors de `brain` |
+
+Dans tous les cas, `git status` avant et après l'agent reste le filet de sécurité commun.
 
 ## 4. Arborescence
 
@@ -119,7 +133,7 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 | `brain search "<q>" [--in wiki\|raw] [--json]` | 1 | BM25 FTS5, sur le wiki d'abord |
 | `brain index` | 1 | régénère `wiki/index.md` à partir des frontmatters |
 | `brain lint [--json]` | 2 | frontmatter (`type`, `description`), liens cassés, orphelins, raw `pending`, `stale_after` dépassé, doublons probables, pages modifiées depuis leur relecture (`generated.at` > `verified.at`) |
-| `brain compile [id…\|--pending] [--batch]` | 2 | lance l'agent configuré, **une session par source** : interactif par défaut (`$BRAIN_AGENT`, `claude`), ou `--batch` (`$BRAIN_AGENT_BATCH`, `claude -p`), qui écrit en `draft` sans validation préalable. Refuse une `note` vide. Ne passe en `compiled` que si une page Source cite la source (ligne remplacée, sans ré-sérialiser le YAML). Signale toute modification hors de `wiki/` (via `git status`). Régénère l'index. Lance le ingest, puis passe le statut à `compiled` |
+| `brain compile [id…\|--pending] [--batch]` | 2 | lance l'agent configuré, **une session par source** : interactif par défaut (la CLI du client, ou `$BRAIN_AGENT`), ou `--batch` (le SDK du client configuré, sinon `$BRAIN_AGENT_BATCH`, par défaut `claude -p`), qui écrit en `draft` sans validation préalable. Refuse une `note` vide. Ne passe en `compiled` que si une page Source cite la source (ligne remplacée, sans ré-sérialiser le YAML). Signale toute modification hors de `wiki/` (via `git status`). Régénère l'index. Lance le ingest, puis passe le statut à `compiled` |
 | `brain ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query, **en lecture seule**. `--file` autorise à écrire une synthèse en `draft` |
 | `brain mcp` | 3 | serveur MCP stdio : `search`, `get`, `related`, `lint`, `add`, `log` |
 | `brain inbox` | 4 | `add` sur tout le contenu de `inbox/` (fichiers et `urls.txt`) |
@@ -196,6 +210,17 @@ Exploration du 2026-11-04 sous Bun 1.4.3. La documentation a été vérifiée vi
 
 Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement par les extracteurs audio et image. Le cœur reste léger.
 
+**Runtime — SDK d'agents, optionnels, chargés seulement si `config.json` nomme le client (2)**
+
+| Package | Version | Rôle | Coût |
+|---|---|---|---|
+| `@anthropic-ai/claude-agent-sdk` | `^0.3.318` | `"client": "claude"` | ~660 Mo (binaire Claude Code embarqué, glibc + musl). Fonctionne avec l'abonnement Claude. |
+| `@openai/codex-sdk` | `^0.166.0` | `"client": "codex"` | ~440 Mo (binaire Codex embarqué). Réutilise la connexion `codex login`. |
+
+opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle pas l'API d'opencode v2 (routes `/api/…`, authentification Basic, nouveau format de permissions). `opencode.ts` appelle directement l'API REST d'`opencode serve`. Modèle par défaut : `opencode/big-pickle`.
+
+Une installation agnostique se fait avec `bun install --omit optional` (33 Mo). On ajoute ensuite seulement le SDK du client choisi.
+
 **Points d'attention :**
 - `onnxruntime-node` est un addon natif, il n'entre donc pas dans un binaire `bun build --compile`. La transcription n'est disponible que dans un `brain` installé via `bun install`.
 - L'OCR local n'est qu'un secours : la vision de l'agent fait mieux (description + texte).
@@ -242,7 +267,7 @@ Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement 
 - pas de cron ni de synthèses périodiques automatiques : les synthèses naissent de questions ;
 - pas d'ingestion sans lecture : le champ `note:` est obligatoire et l'humain reste dans la boucle ;
 - pas de taxonomie de tags a priori : les tags émergent et le lint propose des fusions ;
-- pas de SDK LLM dans le CLI ;
+- pas de SDK LLM obligatoire : le CLI reste agnostique par défaut, les SDK sont optionnels ;
 - pas de RAG par chunks.
 
 ## Sources

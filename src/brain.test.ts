@@ -49,3 +49,41 @@ test("lint : erreurs bloquantes et avertissements", async () => {
   expect(msgs).toContain("warning note manquante : à demander avant de compiler");
   expect(msgs).toContain("warning en attente depuis plus de 7 jours");
 });
+
+test("garde-fou : écritures limitées à wiki/, Bash limité à brain", async () => {
+  const { guard } = await import("./backends/claude");
+  const { symlinkSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  await Bun.write(join(root, "BRAIN.md"), "");
+  await Bun.write(join(root, "wiki/concepts/x.md"), "");
+  symlinkSync("BRAIN.md", join(root, "CLAUDE.md"));
+  symlinkSync("../BRAIN.md", join(root, "wiki/piege.md")); // lien qui ressort de wiki/
+  const ok = (tool: string, input: object, mode: "read" | "write" = "write") => guard(root, tool, input, mode).allow;
+  expect(ok("Write", { file_path: join(root, "wiki/concepts/nouveau.md") })).toBe(true);
+  expect(ok("Edit", { file_path: "wiki/concepts/x.md" })).toBe(true);
+  expect(ok("Write", { file_path: join(root, "wiki/sous/dossier/neuf.md") })).toBe(true);
+  expect(ok("Edit", { file_path: join(root, "raw/2026/11/a/source.md") })).toBe(false);
+  expect(ok("Edit", { file_path: join(root, "wiki/../BRAIN.md") })).toBe(false);
+  expect(ok("Edit", { file_path: join(root, "CLAUDE.md") })).toBe(false);
+  expect(ok("Edit", { file_path: join(root, "wiki/piege.md") })).toBe(false);
+  expect(ok("Write", { file_path: join(root, "wiki/x.md") }, "read")).toBe(false);
+  expect(ok("Bash", { command: "brain search context rot" }, "read")).toBe(true);
+  expect(ok("Bash", { command: "brain index" }, "read")).toBe(false);
+  expect(ok("Bash", { command: "brain index" })).toBe(true);
+  expect(ok("Bash", { command: "brain search x; sed -i s/a/b/ raw/x.md" })).toBe(false);
+  expect(ok("Bash", { command: "echo x > raw/a.md" })).toBe(false);
+  expect(ok("Read", { file_path: "/etc/passwd" }, "read")).toBe(true);
+  expect(ok("WebFetch", { url: "https://x" })).toBe(false);
+});
+
+test("config.json : absent = agnostique, client inconnu = erreur", async () => {
+  const { loadConfig, backendFor } = await import("./backends/index");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  expect(await loadConfig(root)).toEqual({});
+  await Bun.write(join(root, "config.json"), '{"client":"gpt"}');
+  expect(loadConfig(root)).rejects.toThrow("client inconnu");
+  await Bun.write(join(root, "config.json"), '{"client":"opencode"}');
+  expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--prompt", "p"]);
+  await Bun.write(join(root, "config.json"), "{}");
+  expect((await backendFor(root)).interactive("p")).toEqual(["claude", "p"]);
+});

@@ -1,16 +1,12 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { readDocs } from "./lib";
 
 export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number };
 
-/** Reconstruit l'index FTS5 (cache jetable dans .brain/) depuis wiki/ et raw/. */
+/** Index FTS5 en mémoire, reconstruit depuis wiki/ et raw/ : aucune écriture, donc utilisable en bac à sable lecture seule. */
 export async function buildIndex(root: string): Promise<Database> {
-  mkdirSync(join(root, ".brain"), { recursive: true });
-  const db = new Database(join(root, ".brain/index.sqlite"));
-  // ponytail: reconstruction complète à chaque recherche (~ms pour 100 fichiers) ; incrémental par mtime au-delà de quelques milliers
-  db.run("DROP TABLE IF EXISTS docs");
+  // ponytail: reconstruction complète à chaque recherche (~ms pour 100 fichiers) ; index persistant incrémental par mtime au-delà de quelques milliers
+  const db = new Database(":memory:");
   db.run(`CREATE VIRTUAL TABLE docs USING fts5(path UNINDEXED, area UNINDEXED, title, body, tokenize = 'unicode61 remove_diacritics 2')`);
   const ins = db.prepare("INSERT INTO docs (path, area, title, body) VALUES (?, ?, ?, ?)");
   for (const area of ["wiki", "raw"] as const) {

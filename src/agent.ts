@@ -1,19 +1,6 @@
 import { join } from "node:path";
 import { readDocs } from "./lib";
-
-/**
- * L'agent est une commande externe ; le CLI ne contient aucun SDK LLM.
- * BRAIN_AGENT : session interactive (défaut `claude`), le prompt est passé en dernier argument.
- * BRAIN_AGENT_BATCH : non interactif (défaut `claude -p`), le prompt est envoyé sur l'entrée standard.
- */
-const split = (s: string) => s.split(/\s+/).filter(Boolean);
-const INTERACTIVE = () => split(process.env.BRAIN_AGENT ?? "claude");
-const BATCH = () => split(process.env.BRAIN_AGENT_BATCH ?? "claude -p");
-const isClaude = (cmd: string[]) => cmd[0] === "claude";
-
-// outils accordés à `claude -p` (ignorés pour un autre agent, le garde-fou git couvre le reste)
-const READ_TOOLS = ["Read", "Glob", "Grep", "Bash(brain search:*)"];
-const WRITE_TOOLS = [...READ_TOOLS, "Write", "Edit", "Bash(brain index)", "Bash(brain lint:*)"];
+import { backendFor, type Mode } from "./backends/index";
 
 async function git(root: string, ...args: string[]) {
   const p = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "ignore" });
@@ -38,14 +25,14 @@ async function outOfScope(root: string, before: Map<string, string>): Promise<st
   return [...after].filter(([p, h]) => before.get(p) !== h && !p.startsWith("wiki/")).map(([p]) => p);
 }
 
-async function run(root: string, prompt: string, batch: boolean, tools: string[]): Promise<number> {
-  if (!batch) {
-    return Bun.spawn([...INTERACTIVE(), prompt], { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited;
-  }
-  const cmd = BATCH();
-  // --allowedTools est variadique : le prompt passe par l'entrée standard, pas en argument
-  const args = isClaude(cmd) ? [...cmd, "--allowedTools", ...tools] : cmd;
-  return Bun.spawn(args, { cwd: root, stdin: new TextEncoder().encode(prompt), stdout: "inherit", stderr: "inherit" }).exited;
+/** Abstraction du Bridge : le backend (agnostique, Claude, Codex, opencode) est choisi par config.json. */
+async function run(root: string, prompt: string, batch: boolean, mode: Mode): Promise<number> {
+  const backend = await backendFor(root);
+  prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
+    (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
+  if (!batch) return Bun.spawn(backend.interactive(prompt), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited;
+  try { console.log(await backend.run(root, prompt, mode)); return 0; }
+  catch (e) { console.error(`✗ ${(e as Error).message}`); return 1; }
 }
 
 /** Bascule pending → compiled par remplacement de ligne : jamais de ré-sérialisation YAML (raw est immuable, commentaires compris). */
@@ -74,7 +61,7 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
     console.log(`→ compile ${id}${opts.batch ? " (batch)" : ""}`);
     const before = await changed(root);
-    const code = await run(root, prompt, !!opts.batch, WRITE_TOOLS);
+    const code = await run(root, prompt, !!opts.batch, "write");
     const stray = await outOfScope(root, before);
     if (stray.length) { console.error(`⚠ l'agent a modifié hors de wiki/ : ${stray.join(", ")}`); process.exitCode = 1; }
     if (await isCited(root, d.path)) {
@@ -91,7 +78,7 @@ export async function ask(root: string, question: string, opts: { file?: boolean
     (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au log et lance brain index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
-  const code = await run(root, prompt, !opts.interactive, opts.file ? WRITE_TOOLS : READ_TOOLS);
+  const code = await run(root, prompt, !opts.interactive, opts.file ? "write" : "read");
   const after = await changed(root);
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
