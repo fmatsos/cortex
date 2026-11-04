@@ -2,7 +2,6 @@
 	import Icon from "#lib/components/icon.svelte";
 	import type { RelatedEntry } from "#lib/article.js";
 	import { toPage } from "#lib/links.js";
-	import { typeIcon } from "#lib/type-meta.js";
 	import type { Link } from "#lib/types.js";
 
 	// Colonne latérale de navigation : les pages qui citent celle-ci (rétroliens), puis les pages à explorer ensuite.
@@ -17,14 +16,18 @@
 
 {#snippet row(l: Link, why: RelatedEntry["why"] = [])}
 	<a href={toPage(l.id)} class="hover:bg-muted focus-visible:ring-ring/50 group -mx-2 flex items-start gap-2 rounded-md px-2 py-1.5 focus-visible:ring-3 focus-visible:outline-none">
-		<Icon name={typeIcon(l.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" />
 		<span class="min-w-0">
 			<span class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
 			<!-- motifs en icônes discrètes à la suite du titre : détail au survol, lu en entier par les lecteurs d'écran -->
+			<!-- seule l'icône de tag est montrée ; les autres motifs restent lus par les lecteurs d'écran -->
 			{#each why as w (w.label)}
-				<span class="text-muted-foreground ml-1 inline-flex translate-y-0.5" title={w.detail ? `${w.label} : ${w.detail}` : w.label}>
-					<Icon name={w.icon} size={12} /><span class="sr-only">{w.label}{w.detail ? ` : ${w.detail}` : ""}</span>
-				</span>
+				{#if w.icon === "tags"}
+					<span class="text-muted-foreground ml-1 inline-flex translate-y-0.5" title={w.label}>
+						<Icon name="tags" size={12} /><span class="sr-only">thème commun : {w.label}</span>
+					</span>
+				{:else}
+					<span class="sr-only">, {w.label}{w.detail ? ` : ${w.detail}` : ""}</span>
+				{/if}
 			{/each}
 		</span>
 	</a>

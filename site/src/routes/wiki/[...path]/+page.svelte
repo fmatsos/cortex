@@ -166,12 +166,10 @@
 			<dl class="space-y-2">
 				{#if p.generated}
 					<div class="flex items-start gap-2">
-						<Icon name="generated" size={16} class="text-muted-foreground mt-0.5 shrink-0" />
 						<div><dt class="text-muted-foreground text-xs">Rédigée par</dt><dd><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
 					</div>
 				{/if}
 				<div class="flex items-start gap-2">
-					<Icon name={p.verified ? "verified" : "unverified"} size={16} class="{p.verified ? 'text-primary' : 'text-muted-foreground'} mt-0.5 shrink-0" />
 					{#if p.verified}
 						<div><dt class="text-muted-foreground text-xs">Relue par</dt><dd><span class="font-medium">{actor(p.verified.by)}</span> · <time datetime={p.verified.at}>{day(p.verified.at)}</time></dd></div>
 					{:else}
