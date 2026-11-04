@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { add } from "./add";
+import { add, describe } from "./add";
+import { inbox } from "./inbox";
 import { renderIndex } from "./index";
 import { search } from "./search";
 import { lint } from "./lint";
@@ -12,6 +13,7 @@ import { findRoot } from "./lib";
 const HELP = `brain — second cerveau
 
   brain add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]
+  brain inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
   brain search "<requête>" [--in wiki|raw] [--json] [--limit N]
   brain index
   brain lint [--json]
@@ -41,8 +43,7 @@ try {
       for (const input of args) {
         try {
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
-          if (r.duplicate || !r.ex) console.log(`= déjà présent : ${r.id}`);
-          else console.log(`${o["dry-run"] ? "~ (dry-run)" : "+"} ${r.id}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`);
+          console.log(describe(r, o["dry-run"]));
         } catch (e) {
           console.error(`✗ ${(e as Error).message}`);
           process.exitCode = 1;
@@ -51,6 +52,9 @@ try {
       if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation (BRAIN.md).");
       break;
     }
+    case "inbox":
+      process.exitCode = await inbox(root, { dryRun: o["dry-run"] });
+      break;
     case "search": {
       const q = args.join(" ");
       if (!q) throw new Error('Usage : brain search "<requête>"');

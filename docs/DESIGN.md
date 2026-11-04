@@ -142,7 +142,7 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 | `brain ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query, **en lecture seule**. `--file` autorise à écrire une synthèse en `draft` |
 | `brain config init\|lint\|get\|set\|remove` | 2 | squelette de `config.json` (clés `client`, `model`, `effort` à `null`), contrôle, lecture et écriture validée des propriétés. L'effort est traduit pour chaque client : `effort` (Claude), `modelReasoningEffort` (Codex), variante du modèle (opencode, `modèle#variante` en CLI) |
 | `brain mcp` | 3 | serveur MCP stdio : `search`, `get`, `related`, `lint`, `add`, `log` |
-| `brain inbox` | 4 | `add` sur tout le contenu de `inbox/` (fichiers et `urls.txt`) |
+| `brain inbox [--dry-run]` | 4 | `add` sur tout le contenu de `inbox/`. `urls.txt` : une entrée par ligne, `<url> [note libre…]` (le reste de la ligne est la `note`), lignes vides et `#` ignorées et conservées. Tout autre fichier visible (PDF, `.md`, `.txt`) passe par `add`, avec pour note le contenu de `<nom>.note` s'il existe. **Une entrée réussie (ajoutée ou déjà présente) quitte l'inbox** (ligne retirée, fichier et `.note` supprimés) ; un échec y reste, et le code de sortie est 1. `urls.txt` est réécrit par fichier temporaire puis `rename`, après relecture. `--dry-run` n'écrit rien et ne vide rien. Sans `note`, l'avertissement de `brain add` s'affiche et `compile` refusera la source tant qu'elle manque |
 | `brain export [--out <dossier>]` | 6 | site HTML statique du wiki (voir §10 bis), avec une page de graphe interactive |
 | `brain related`, `ls`, `show`, `doctor`, `reextract` | à la demande | — |
 
@@ -265,7 +265,7 @@ opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle p
 - **Étape 1.** `add` (URL, texte, Markdown, PDF texte), `search`, `index`. *Critère :* 20 sources ingérées et `search` réellement utilisé.
 - **Étape 2.** `lint`, `compile`, `ask`.
 - **Étape 3.** `mcp`.
-- **Étape 4.** `inbox`, avec un raccourci mobile « Partager → `inbox/urls.txt` ».
+- **Étape 4.** `inbox`, avec un raccourci mobile « Partager → `inbox/urls.txt` » : l'action « Partager » du téléphone ajoute `<url>` en fin de `inbox/urls.txt`, dans le dossier synchronisé. Le contenu de `inbox/` n'est pas versionné (`.gitignore`) : la synchro se fait hors git, avec Syncthing ou un équivalent, au choix de l'humain ; le CLI ne lit que le dossier. Un `brain inbox` ultérieur ingère puis vide.
 - **Étape 5.** Images, puis vidéo et audio.
 - **Étape 6.** `export` : le wiki en site HTML statique, avec un graphe interactif, déployé automatiquement sur le homelab pour le parcourir depuis un navigateur.
 - **Étape 7, seulement si nécessaire.** Embeddings, `reextract`.
