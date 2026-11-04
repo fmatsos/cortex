@@ -496,6 +496,24 @@ mark {
 	background: var(--mark);
 	border-radius: 0.2rem;
 }
+/* retour d'une note vers le texte : l'appel arrive au tiers de l'écran (pas collé sous l'en-tête),
+   et tout le paragraphe qui le porte est mis en évidence, sinon un « 1 » surligné passe inaperçu */
+.wiki .fn-ref a {
+	scroll-margin-top: calc(var(--anchor-offset) + 30vh);
+}
+.wiki :is(p, li, td, blockquote):has(> .fn-ref a:target, > * > .fn-ref a:target) {
+	background: color-mix(in oklab, var(--mark) 45%, transparent);
+	box-shadow: -0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent), 0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent);
+	border-radius: 0.25rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+	.wiki .fn-ref a:target {
+		animation: fn-arrivee 1.2s ease-out 2;
+	}
+}
+@keyframes fn-arrivee {
+	50% { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
 
 /* impression : l'article seul, en noir sur blanc quel que soit le thème, sans commandes ni navigation */
 @media print {
