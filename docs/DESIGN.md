@@ -119,8 +119,8 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 | `brain search "<q>" [--in wiki\|raw] [--json]` | 1 | BM25 FTS5, sur le wiki d'abord |
 | `brain index` | 1 | régénère `wiki/index.md` à partir des frontmatters |
 | `brain lint [--json]` | 2 | frontmatter (`type`, `description`), liens cassés, orphelins, raw `pending`, `stale_after` dépassé, doublons probables, pages modifiées depuis leur relecture (`generated.at` > `verified.at`) |
-| `brain compile [id…\|--pending]` | 2 | lance l'agent configuré (`claude -p`, `opencode run`…) avec le workflow ingest, puis passe le statut à `compiled` |
-| `brain ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query |
+| `brain compile [id…\|--pending] [--batch]` | 2 | lance l'agent configuré, **une session par source** : interactif par défaut (`$BRAIN_AGENT`, `claude`), ou `--batch` (`$BRAIN_AGENT_BATCH`, `claude -p`), qui écrit en `draft` sans validation préalable. Refuse une `note` vide. Ne passe en `compiled` que si une page Source cite la source (ligne remplacée, sans ré-sérialiser le YAML). Signale toute modification hors de `wiki/` (via `git status`). Régénère l'index. Lance le ingest, puis passe le statut à `compiled` |
+| `brain ask "<q>" [--file]` | 2 | même mécanisme avec le workflow query, **en lecture seule**. `--file` autorise à écrire une synthèse en `draft` |
 | `brain mcp` | 3 | serveur MCP stdio : `search`, `get`, `related`, `lint`, `add`, `log` |
 | `brain inbox` | 4 | `add` sur tout le contenu de `inbox/` (fichiers et `urls.txt`) |
 | `brain related`, `ls`, `show`, `doctor`, `reextract` | à la demande | — |

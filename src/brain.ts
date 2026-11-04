@@ -4,13 +4,20 @@ import { join } from "node:path";
 import { add } from "./add";
 import { renderIndex } from "./index";
 import { search } from "./search";
+import { lint } from "./lint";
+import { ask, compile } from "./agent";
 import { findRoot } from "./lib";
 
-const HELP = `brain — second cerveau (étape 1)
+const HELP = `brain — second cerveau
 
   brain add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]
   brain search "<requête>" [--in wiki|raw] [--json] [--limit N]
   brain index
+  brain lint [--json]
+  brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
+  brain ask "<question>" [--file] [--interactive]
+
+Agent : $BRAIN_AGENT (interactif, défaut « claude »), $BRAIN_AGENT_BATCH (défaut « claude -p »).
 
 Racine : $BRAIN_ROOT, sinon le premier dossier parent qui contient BRAIN.md.`;
 
@@ -18,7 +25,8 @@ const { values: o, positionals: [cmd, ...args] } = parseArgs({
   allowPositionals: true,
   options: {
     note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
-    json: { type: "boolean" }, limit: { type: "string" }, help: { type: "boolean", short: "h" },
+    json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
+    file: { type: "boolean" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
   },
 });
 
@@ -55,6 +63,28 @@ try {
       await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
       console.log("wiki/index.md régénéré.");
       break;
+    case "lint": {
+      const issues = await lint(root);
+      if (o.json) console.log(JSON.stringify(issues, null, 2));
+      else {
+        const icon = { error: "✗", warning: "!", info: "·" };
+        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${i.path} : ${i.msg}`);
+        const n = (l: string) => issues.filter((i) => i.level === l).length;
+        console.log(`${n("error")} erreur(s), ${n("warning")} avertissement(s), ${n("info")} page(s) jamais relue(s).`);
+      }
+      if (issues.some((i) => i.level === "error")) process.exitCode = 1;
+      break;
+    }
+    case "compile":
+      if (!args.length && !o.pending) throw new Error("Usage : brain compile <id…> | --pending [--batch]");
+      await compile(root, args, { pending: o.pending, batch: o.batch });
+      break;
+    case "ask": {
+      const q = args.join(" ");
+      if (!q) throw new Error('Usage : brain ask "<question>" [--file]');
+      await ask(root, q, { file: o.file, interactive: o.interactive });
+      break;
+    }
     default:
       console.log(HELP);
       if (cmd && !o.help) process.exitCode = 1;

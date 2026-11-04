@@ -39,7 +39,7 @@ export async function extractUrl(url: string): Promise<Extract> {
   return {
     title: d.title || r?.title || url, content, kind: "article",
     url: canonical ? new URL(canonical, res.url).href : res.url,
-    author: d.author || r?.byline || undefined, published: d.published || undefined,
+    author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist : defuddle rend un id numérique */, published: d.published || undefined,
     extractor: useRb ? "readability/0.6+turndown" : "defuddle/0.19.6+linkedom",
     partial: paywall ? "paywall : contenu partiel" : undefined,
   };
