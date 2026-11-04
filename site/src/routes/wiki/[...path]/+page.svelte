@@ -75,8 +75,8 @@
 </svelte:head>
 
 <!-- colonne de lecture ~72 caractères ; tableaux et blocs de code y défilent horizontalement -->
-<div class="grid gap-10 lg:grid-cols-[minmax(0,72ch)_16rem] lg:justify-center {toc ? 'pb-16 lg:pb-0' : ''}">
-	<article class="min-w-0 max-w-[72ch]">
+<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_16rem] {toc ? 'pb-16' : ''}">
+	<article class="min-w-0">
 		<Breadcrumb type={p.type} title={p.title} />
 		<header class="mb-6">
 			<!-- confiance : le statut stable reste discret, ce qui demande de la prudence est saillant (texte et icône ensemble) -->
@@ -153,7 +153,7 @@
 		{/if}
 	</article>
 
-	<aside class="space-y-8 self-start text-sm lg:sticky lg:top-16 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto" aria-label="Liens">
+	<aside class="space-y-8 self-start text-sm" aria-label="Liens">
 		{#if toc}
 			<nav aria-labelledby="h-toc" class="hidden lg:block">
 				<h2 id="h-toc" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="toc" size={20} />Sommaire</h2>

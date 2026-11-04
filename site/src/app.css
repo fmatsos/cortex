@@ -248,12 +248,11 @@
 	}
 }
 
-/* corps de lecture : 17 px, interligne 1,75, ~68 caractères (dans le calque components : un utilitaire de la page garde la main) */
+/* corps de lecture : 17 px, interligne 1,75, pleine largeur de la colonne (dans le calque components : un utilitaire de la page garde la main) */
 @layer components {
 	.wiki {
 		font-size: 1.0625rem;
 		line-height: 1.75;
-		max-width: 68ch;
 	}
 }
 

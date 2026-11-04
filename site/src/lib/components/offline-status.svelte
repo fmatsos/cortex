@@ -23,6 +23,9 @@
 	let root = $state<HTMLDivElement>();
 	let toggle = $state<HTMLButtonElement | null>(null);
 	let registration: ServiceWorkerRegistration | undefined;
+	// un service worker actif qui ne répond pas à `status` (version d'avant le panneau) a fini d'installer : il est prêt
+	let silent = $state(false);
+	let quiet: ReturnType<typeof setTimeout>;
 	const uid = $props.id();
 	const panelId = `hl-${uid}`;
 
@@ -30,7 +33,7 @@
 	const phase = $derived<Phase>(
 		!supported ? "unsupported"
 		: failed || sw?.phase === "error" ? "error"
-		: sw?.phase === "ready" ? "ready"
+		: sw?.phase === "ready" || silent ? "ready"
 		: registered === false ? "inactive"
 		: "preparing",
 	);
@@ -55,11 +58,15 @@
 	}
 
 	const post = (message: { type: "status" | "download-all" | "cancel" }) => {
-		(registration?.active ?? navigator.serviceWorker.controller)?.postMessage(message);
+		const target = registration?.active ?? navigator.serviceWorker.controller;
+		target?.postMessage(message);
+		if (target && message.type === "status") { clearTimeout(quiet); quiet = setTimeout(() => { if (!sw) silent = true; }, 2000); }
 	};
 
 	function onMessage(e: MessageEvent) {
 		if (!isOfflineState(e.data)) return;
+		clearTimeout(quiet);
+		silent = false;
 		const wasReady = sw?.phase === "ready", wasFailed = failed || sw?.phase === "error";
 		sw = e.data;
 		if (e.data.phase === "ready") {
@@ -95,6 +102,9 @@
 		if (reg.active) post({ type: "status" });
 	}
 
+	// la nouvelle version vient de prendre le relais (skipWaiting + claim) : on lui redemande son état
+	function onController() { waiting = false; post({ type: "status" }); }
+
 	onMount(() => {
 		offline = !navigator.onLine;
 		const sync = (e: Event) => { offline = e.type === "offline"; say(offline ? "Hors ligne" : "De nouveau en ligne"); };
@@ -104,6 +114,7 @@
 		let check: ReturnType<typeof setTimeout>;
 		if (supported) {
 			navigator.serviceWorker.addEventListener("message", onMessage);
+			navigator.serviceWorker.addEventListener("controllerchange", onController);
 			// SvelteKit enregistre le service worker à l'événement `load` : on regarde ensuite, avec un court délai
 			const start = () => { check = setTimeout(watch, 300); };
 			if (document.readyState === "complete") start(); else addEventListener("load", start, { once: true });
@@ -112,7 +123,11 @@
 		return () => {
 			removeEventListener("online", sync);
 			removeEventListener("offline", sync);
-			if (supported) navigator.serviceWorker.removeEventListener("message", onMessage);
+			if (supported) {
+				navigator.serviceWorker.removeEventListener("message", onMessage);
+				navigator.serviceWorker.removeEventListener("controllerchange", onController);
+			}
+			clearTimeout(quiet);
 			clearTimeout(timer);
 			clearTimeout(check);
 		};

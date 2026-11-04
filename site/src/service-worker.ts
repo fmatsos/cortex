@@ -89,6 +89,9 @@ async function precache() {
 	}
 	phase = "ready";
 	phaseMessage = undefined;
+	// site en lecture seule : la nouvelle version prend le relais sans attendre la fermeture des onglets
+	// (sinon un ancien service worker, qui ne connaît pas le message `status`, laisse l'indicateur en « Préparation »)
+	await self.skipWaiting();
 }
 
 // --- Activation : nettoyage du seul wiki ---------------------------------------------------------------------------------

@@ -19,7 +19,7 @@
 	<button
 		type="button"
 		popovertarget="toc-sheet"
-		class="bg-card text-foreground hover:bg-muted border-input fixed right-3 bottom-3 z-30 inline-flex h-11 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-md lg:hidden print:hidden"
+		class="bg-card text-foreground hover:bg-muted border-input fixed right-3 bottom-3 z-30 inline-flex h-11 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-md print:hidden"
 	>
 		<Icon name="toc" size={20} />
 		<span>Sommaire</span>
