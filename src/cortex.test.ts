@@ -328,17 +328,17 @@ test("cortex log add : valide kind, pages et sources, écrit une ligne, régén�
   const run = (...a: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "cortex.ts"), ...a], { env: { ...process.env, CORTEX_ROOT: root } });
   expect(run("log", "add", "update", "via la CLI ; | >", "--source", "01a1a5c9-5e80-7075-ae13-aab03b0a8697", "--page", "wiki/concepts/a.md").exitCode).toBe(0);
   expect(run("log", "add", "update", "x", "--page", "wiki/concepts/nope.md").exitCode).toBe(1);
-  expect(run("log", "add", "update").exitCode).toBe(1);
+  expect(run("log", "add", "update").exitCode).toBe(2); // usage error
   // `add` is the subcommand only right after `log`: the (read-only) agent guards rely on this order
   const count = () => readLog(root).entries.length, before = count();
   for (const a of [["log", "--json", "add", "update", "x"], ["log", "--", "add", "update", "x"], ["log", "--kind", "lint", "add", "update", "x"]]) {
-    expect(run(...a).exitCode).toBe(1);
+    expect(run(...a).exitCode).toBe(2); // usage error
     expect(count()).toBe(before);
   }
   const j = JSON.parse(run("log", "--json", "--limit", "2").stdout.toString());
   expect(j.map((x: any) => x.text)).toEqual(["via la CLI ; | >", "suite"]);
   expect(JSON.parse(run("log", "--json", "--kind", "lint").stdout.toString()).map((x: any) => x.text)).toEqual(["0 erreur."]);
-  expect(run("log", "--kind", "zz").exitCode).toBe(1);
+  expect(run("log", "--kind", "zz").exitCode).toBe(2); // usage error
   await Bun.write(join(root, "wiki/log.md"), "édité");
   expect(run("index").exitCode).toBe(0);
   expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("via la CLI ; | >"); // cortex index also regenerates log.md

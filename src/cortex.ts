@@ -9,7 +9,7 @@ import { search } from "./search";
 import { lint } from "./lint";
 import { ask, compile } from "./agent";
 import { configCmd } from "./backends/index";
-import { findRoot } from "./lib";
+import { CortexError, findRoot } from "./lib";
 import { newPage } from "./naming";
 import { fail, paint, warn } from "./style";
 
@@ -36,21 +36,42 @@ $CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut �
 
 Racine : $CORTEX_ROOT, sinon le premier dossier parent qui contient cortex.json.`;
 
-const { values: o, positionals: [cmd, ...args] } = parseArgs({
-  allowPositionals: true,
-  options: {
-    note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
-    json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-    file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, write: { type: "boolean" },
-  },
-});
+const usage = (msg: string) => new CortexError(msg, "usage");
+/** Optional integer option: undefined when absent, a usage error unless it is an integer >= min. */
+const int = (name: string, value: string | undefined, { min }: { min: number }) => {
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < min) throw usage(`${name} attend un entier >= ${min} (reçu : ${value})`);
+  return n;
+};
 
 try {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      allowPositionals: true,
+      tokens: true, // token order tells whether `add` directly follows `log`
+      options: {
+        note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
+        json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, write: { type: "boolean" },
+      },
+    });
+  } catch (e) {
+    const code = (e as { code?: string }).code, opt = (e as Error).message.match(/'(-[^' ]*)/)?.[1] ?? "";
+    if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") throw usage(`option inconnue : ${opt} (voir cortex --help)`);
+    if (code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") throw usage(`valeur manquante ou invalide pour ${opt} (voir cortex --help)`);
+    throw e;
+  }
+  const { values: o, positionals: [cmd, ...args], tokens } = parsed;
+  // `log add` only when `add` is the very next token after `log`: `cortex log --json add …` and `cortex search log add` must write nothing
+  const first = tokens!.findIndex((t) => t.kind === "positional");
+  const isLogAdd = cmd === "log" && tokens![first + 1]?.kind === "positional" && (tokens![first + 1] as { value?: string }).value === "add";
   // config init creates cortex.json, the root marker: it runs where it is called
   const root = cmd === "config" && args[0] === "init" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   switch (cmd) {
     case "add": {
-      if (!args[0]) throw new Error("Usage : cortex add <url|fichier|-> --note \"…\"");
+      if (!args[0]) throw usage("Usage : cortex add <url|fichier|-> --note \"…\"");
       for (const input of args) {
         try {
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
@@ -68,9 +89,9 @@ try {
       break;
     case "search": {
       const q = args.join(" ");
-      if (!q) throw new Error('Usage : cortex search "<requête>"');
-      if (o.in && o.in !== "wiki" && o.in !== "raw") throw new Error("--in attend wiki ou raw");
-      const hits = await search(root, q, { in: o.in as any, limit: o.limit ? Number(o.limit) : undefined });
+      if (!q) throw usage('Usage : cortex search "<requête>"');
+      if (o.in && o.in !== "wiki" && o.in !== "raw") throw usage("--in attend wiki ou raw");
+      const hits = await search(root, q, { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) });
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
       if (!hits.length) console.log(paint.dim("Aucun résultat."));
       for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(`/${h.path}`)}\n      ${h.snippet.replace(/\s+/g, " ")}`);
@@ -78,7 +99,7 @@ try {
       break;
     }
     case "new":
-      if (args.length !== 2) { fail('usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"'); process.exitCode = 2; break; }
+      if (args.length !== 2) throw usage('Usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"');
       console.log(await newPage(root, args[0], args[1]));
       break;
     case "index":
@@ -87,19 +108,19 @@ try {
       break;
     case "log": {
       // `add` is the subcommand only right after `log`: `cortex log --json add …` must write nothing (the agent guards rely on this)
-      const raw = process.argv.slice(2);
-      if (args[0] === "add" && raw[raw.indexOf("log") + 1] === "add") {
+      if (isLogAdd) {
         const [, kind, ...text] = args;
-        if (!kind || !text.length) throw new Error(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
+        if (!kind || !text.length) throw usage(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
         const e = await logAdd(root, kind, text.join(" "), o.source, o.page);
         console.log(`${paint.ok("+")} ${paint.dim(e.at)} ${paint.bold(kindLabel(e.kind))} : ${e.text}`);
         break;
       }
-      if (args.length) throw new Error(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
-      if (o.kind && !KINDS.includes(o.kind as any)) throw new Error(`--kind attend ${KINDS.join(" | ")}`);
+      if (args.length) throw usage(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
+      if (o.kind && !KINDS.includes(o.kind as any)) throw usage(`--kind attend ${KINDS.join(" | ")}`);
+      const limit = int("--limit", o.limit, { min: 1 }) ?? 20;
       const { entries, errors } = readLog(root);
       for (const x of errors) warn(`wiki/log.jsonl:${x.line} : ${x.msg}`);
-      const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, o.limit ? Number(o.limit) : 20);
+      const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, limit);
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
       if (!shown.length) console.log(paint.dim("Journal vide."));
       for (const e of shown) console.log(`${paint.dim(e.at.slice(0, 16).replace("T", " "))}  ${paint.bold(kindLabel(e.kind).padEnd(6))}  ${e.text}`);
@@ -119,12 +140,12 @@ try {
       break;
     }
     case "compile":
-      if (!args.length && !o.pending) throw new Error("Usage : cortex compile <id…> | --pending [--batch]");
+      if (!args.length && !o.pending) throw usage("Usage : cortex compile <id…> | --pending [--batch]");
       await compile(root, args, { pending: o.pending, batch: o.batch });
       break;
     case "ask": {
       const q = args.join(" ");
-      if (!q) throw new Error('Usage : cortex ask "<question>" [--file]');
+      if (!q) throw usage('Usage : cortex ask "<question>" [--file]');
       await ask(root, q, { file: o.file, interactive: o.interactive });
       break;
     }
@@ -134,7 +155,7 @@ try {
       break;
     }
     case "mcp":
-      (await import("./mcp")).serveMcp(root); // loaded on demand; stays open as long as the client reads stdin
+      await (await import("./mcp")).serveMcp(root); // loaded on demand; stays open as long as the client reads stdin
       break;
     case "schema": {
       const { schemaText, writeSchema } = await import("./schema");
@@ -150,6 +171,6 @@ try {
       if (cmd && !o.help) process.exitCode = 1;
   }
 } catch (e) {
-  fail((e as Error).message);
-  process.exitCode = 1;
+  fail(e instanceof Error ? e.message : String(e));
+  process.exitCode = e instanceof CortexError && e.code === "usage" ? 2 : 1; // lint errors keep exit 1 (documented contract)
 }
