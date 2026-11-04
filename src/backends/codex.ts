@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { interactiveWith, load, type Backend, type Config } from "./backend";
+import { cli, interactiveWith, load, type Backend, type Config } from "./backend";
 
 // --- Codex SDK : bac à sable OS ; en écriture, seul wiki/ est inscriptible ----------------------
 
@@ -8,7 +8,7 @@ export default function codex(cfg: Config): Backend {
     interactive: interactiveWith((p) => ["codex", p]),
     async run(root, prompt, mode) {
       const { Codex } = await load<typeof import("@openai/codex-sdk")>("@openai/codex-sdk");
-      const thread = new Codex().startThread({
+      const thread = new Codex({ codexPathOverride: cli("codex") }).startThread({
         // workspace-write n'autorise l'écriture que sous workingDirectory (vérifié : raw/ et BRAIN.md en lecture seule)
         workingDirectory: mode === "write" ? join(root, "wiki") : root,
         sandboxMode: mode === "write" ? "workspace-write" : "read-only",

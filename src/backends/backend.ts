@@ -17,6 +17,16 @@ export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 export const interactiveWith = (fallback: (prompt: string) => string[]) => (prompt: string) =>
   process.env.BRAIN_AGENT ? [...split(process.env.BRAIN_AGENT), prompt] : fallback(prompt);
 
+/**
+ * CLI de l'agent déjà installée : les SDK la pilotent au lieu d'embarquer leur propre binaire
+ * (installation `bun install --omit optional` : ~94 Mo au lieu de ~1,2 Go de binaires par plateforme).
+ */
+export function cli(name: string): string {
+  const p = Bun.which(name);
+  if (!p) throw new Error(`CLI « ${name} » introuvable dans le PATH : le SDK s'appuie sur la CLI installée.`);
+  return p;
+}
+
 /** Chargement à la demande : le SDK d'un client non configuré n'est jamais importé. */
 export async function load<T>(pkg: string): Promise<T> {
   try { return (await import(pkg)) as T; }

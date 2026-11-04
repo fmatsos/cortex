@@ -213,16 +213,18 @@ Exploration du 2026-11-04 sous Bun 1.4.3. La documentation a été vérifiée vi
 
 Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement par les extracteurs audio et image. Le cœur reste léger.
 
-**Runtime — SDK d'agents, optionnels, chargés seulement si `config.json` nomme le client (2)**
+**Runtime — SDK d'agents, chargés seulement si `config.json` nomme le client (2)**
 
 | Package | Version | Rôle | Coût |
 |---|---|---|---|
-| `@anthropic-ai/claude-agent-sdk` | `^0.3.318` | `"client": "claude"` | ~660 Mo (binaire Claude Code embarqué, glibc + musl). Fonctionne avec l'abonnement Claude. |
-| `@openai/codex-sdk` | `^0.166.0` | `"client": "codex"` | ~440 Mo (binaire Codex embarqué). Réutilise la connexion `codex login`. |
+| `@anthropic-ai/claude-agent-sdk` | `^0.3.318` | `"client": "claude"` | 5 Mo, plus ses pairs `@anthropic-ai/sdk` (25 Mo) et `@modelcontextprotocol/sdk` (6 Mo). Fonctionne avec l'abonnement Claude. |
+| `@openai/codex-sdk` | `^0.166.0` | `"client": "codex"` | 100 Ko. Réutilise la connexion `codex login`. |
+
+Ces SDK ne sont que des surcouches qui pilotent la CLI de l'agent. Ils tirent en dépendances optionnelles un binaire par plateforme : ~630 Mo pour Claude (glibc + musl), ~440 Mo pour Codex. Le CLI les en dispense : il installe avec `bun install --omit optional` et pointe les SDK vers les CLI déjà installées (`pathToClaudeCodeExecutable`, `codexPathOverride`). Bilan : `node_modules` pèse ~97 Mo au lieu de ~1,2 Go. En contrepartie, la CLI installée (`claude`, `codex`) doit rester dans une version compatible avec le SDK.
 
 opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle pas l'API d'opencode v2 (routes `/api/…`, authentification Basic, nouveau format de permissions). `opencode.ts` appelle directement l'API REST d'`opencode serve`. Modèle par défaut : `opencode/big-pickle`.
 
-Une installation agnostique se fait avec `bun install --omit optional` (33 Mo). On ajoute ensuite seulement le SDK du client choisi.
+*À revoir à l'étape 5 :* `--omit optional` écartera aussi `@huggingface/transformers` et `tesseract.js`. Il faudra alors les passer en dépendances normales chargées à la demande, ou les installer explicitement.
 
 **Points d'attention :**
 - `onnxruntime-node` est un addon natif, il n'entre donc pas dans un binaire `bun build --compile`. La transcription n'est disponible que dans un `brain` installé via `bun install`.

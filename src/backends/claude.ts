@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
+import { cli, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 
 // --- Claude Agent SDK : chaque appel d'outil passe par le garde-fou, avant exécution ------------
 
@@ -15,6 +15,7 @@ export default function claude(cfg: Config): Backend {
         options: {
           cwd: root,
           model: cfg.model,
+          pathToClaudeCodeExecutable: cli("claude"),
           settingSources: ["project"], // CLAUDE.md, sans les autorisations de ~/.claude qui court-circuiteraient le garde-fou
           permissionMode: "default", // acceptEdits/bypass sauteraient canUseTool
           allowedTools: [], // rien d'approuvé d'office : chaque appel passe par canUseTool
