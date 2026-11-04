@@ -10,6 +10,8 @@ import { related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
 import { search } from "./search";
+import { mcpInstructions } from "./prompts";
+import { loadConfig } from "./config";
 
 export { related };
 
@@ -36,9 +38,9 @@ const safe = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async (a: A)
   catch (e) { return { ...text(`Erreur : ${(e as Error).message}`), isError: true }; }
 };
 
-export function buildServer(root: string): McpServer {
+export function buildServer(root: string, language?: string): McpServer {
   const s = new McpServer({ name: "cortex", version: "0.1.0" }, {
-    instructions: "Cortex : wiki en français sous wiki/, sources brutes sous raw/. Cherche dans le wiki d'abord ; une réponse trouvée seulement dans raw/ est un trou à compiler.",
+    instructions: mcpInstructions(language),
   });
   const readOnly = { readOnlyHint: true };
 
@@ -115,7 +117,8 @@ export function buildServer(root: string): McpServer {
  * MCP stdio server. Stdout is reserved for the protocol. Domain code no longer prints (PRA-03), but the redirection stays
  * as a safety net for third-party code reachable from the tools (PDF/HTML extraction libraries may log warnings).
  */
-export function serveMcp(root: string) {
+export async function serveMcp(root: string) {
   console.log = console.error;
-  serveStdio(() => buildServer(root));
+  const { language } = await loadConfig(root);
+  serveStdio(() => buildServer(root, language));
 }
