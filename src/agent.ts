@@ -3,6 +3,7 @@ import { readDocs } from "./lib";
 import { backendFor, loadConfig, type Mode } from "./backends/index";
 import { confine } from "./backends/backend";
 import { agentFile } from "./schema";
+import { fail, paint, warn } from "./style";
 
 /** The agent file holding the schema (CLAUDE.md or AGENTS.md, per client). */
 const schemaName = async (root: string) => agentFile((await loadConfig(root)).client);
@@ -44,7 +45,7 @@ async function run(root: string, prompt: string, batch: boolean, mode: Mode): Pr
     finally { process.off("SIGINT", keep); }
   }
   try { console.log(await backend.run(root, prompt, mode)); return 0; }
-  catch (e) { console.error(`✗ ${(e as Error).message}`); return 1; }
+  catch (e) { fail((e as Error).message); return 1; }
 }
 
 /** Flips pending → compiled by line replacement: never a YAML re-serialization (raw is immutable, comments included). */
@@ -67,19 +68,19 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
 
   for (const d of targets) {
     const id = d.path.split("/").at(-2)!;
-    if (!String(d.fm.note ?? "").trim()) { console.error(`✗ ${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
-    if (d.fm.status !== "pending") console.log(`(${id} est déjà ${d.fm.status} : recompilation)`);
+    if (!String(d.fm.note ?? "").trim()) { fail(`${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
+    if (d.fm.status !== "pending") console.log(paint.dim(`(${id} est déjà ${d.fm.status} : recompilation)`));
     const prompt = `Applique le workflow INGEST de ${await schemaName(root)} à la source /${d.path}.` +
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
-    console.log(`→ compile ${id}${opts.batch ? " (batch)" : ""}`);
+    console.log(`${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root);
     const code = await run(root, prompt, !!opts.batch, "write");
     const stray = await outOfScope(root, before);
-    if (stray.length) { console.error(`⚠ l'agent a modifié hors de wiki/ : ${stray.join(", ")}`); process.exitCode = 1; }
+    if (stray.length) { warn(`l'agent a modifié hors de wiki/ : ${stray.join(", ")}`, "⚠"); process.exitCode = 1; }
     if (await isCited(root, d.path)) {
       if (d.fm.status === "pending") await markCompiled(root, d.path);
-      console.log(`✓ ${id} compilée`);
-    } else { console.error(`✗ ${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
+      console.log(`${paint.ok("✓")} ${id} compilée`);
+    } else { fail(`${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
   }
   await (await import("./index")).regenerate(root);
 }
@@ -93,7 +94,7 @@ export async function ask(root: string, question: string, opts: { file?: boolean
   const after = await changed(root);
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
-  if (stray.length) { console.error(`⚠ fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`); process.exitCode = 1; }
+  if (stray.length) { warn(`fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`, "⚠"); process.exitCode = 1; }
   if (opts.file) {
     await (await import("./index")).regenerate(root);
   }

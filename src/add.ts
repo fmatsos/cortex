@@ -8,6 +8,7 @@ import TurndownService from "turndown";
 import { localIso, normUrl, readDocs, sha256 } from "./lib";
 import { expand, free, naming, rawIdTaken } from "./naming";
 import { appendLog } from "./log";
+import { paint } from "./style";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) cortex-cli/0.1";
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
@@ -122,6 +123,6 @@ export async function add(root: string, input: string, opts: { note?: string; dr
 
 /** Report line of a successful `add`, shared by `cortex add` and `cortex inbox`. */
 export function describe(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
-  if (r.duplicate || !r.ex) return `= déjà présent : ${r.id}`;
-  return `${dryRun ? "~ (dry-run)" : "+"} ${r.id}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;
+  if (r.duplicate || !r.ex) return `${paint.dim("=")} déjà présent : ${r.id}`;
+  return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;
 }

@@ -11,6 +11,7 @@ import { ask, compile } from "./agent";
 import { configCmd } from "./backends/index";
 import { findRoot } from "./lib";
 import { newPage } from "./naming";
+import { fail, paint, warn } from "./style";
 
 const HELP = `cortex — second cerveau
 
@@ -55,11 +56,11 @@ try {
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
           console.log(describe(r, o["dry-run"]));
         } catch (e) {
-          console.error(`✗ ${(e as Error).message}`);
+          fail((e as Error).message);
           process.exitCode = 1;
         }
       }
-      if (!o.note && !o["dry-run"]) console.error("! note manquante : à renseigner avant compilation.");
+      if (!o.note && !o["dry-run"]) warn("note manquante : à renseigner avant compilation.");
       break;
     }
     case "inbox":
@@ -71,18 +72,18 @@ try {
       if (o.in && o.in !== "wiki" && o.in !== "raw") throw new Error("--in attend wiki ou raw");
       const hits = await search(root, q, { in: o.in as any, limit: o.limit ? Number(o.limit) : undefined });
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
-      if (!hits.length) console.log("Aucun résultat.");
-      for (const h of hits) console.log(`${h.area === "raw" ? "raw " : "wiki"}  /${h.path}  ${h.title}\n      ${h.snippet.replace(/\s+/g, " ")}`);
-      if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log("\n→ Trouvé seulement dans raw/ : un trou à compiler ?");
+      if (!hits.length) console.log(paint.dim("Aucun résultat."));
+      for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(`/${h.path}`)}\n      ${h.snippet.replace(/\s+/g, " ")}`);
+      if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Trouvé seulement dans raw/ : un trou à compiler ?"));
       break;
     }
     case "new":
-      if (args.length !== 2) { console.error('usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"'); process.exitCode = 2; break; }
+      if (args.length !== 2) { fail('usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"'); process.exitCode = 2; break; }
       console.log(await newPage(root, args[0], args[1]));
       break;
     case "index":
       await regenerate(root);
-      console.log("wiki/index.md et wiki/log.md régénérés.");
+      console.log(`${paint.ok("✓")} wiki/index.md et wiki/log.md régénérés.`);
       break;
     case "log": {
       // `add` is the subcommand only right after `log`: `cortex log --json add …` must write nothing (the agent guards rely on this)
@@ -91,27 +92,28 @@ try {
         const [, kind, ...text] = args;
         if (!kind || !text.length) throw new Error(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
         const e = await logAdd(root, kind, text.join(" "), o.source, o.page);
-        console.log(`+ ${e.at} ${kindLabel(e.kind)} : ${e.text}`);
+        console.log(`${paint.ok("+")} ${paint.dim(e.at)} ${paint.bold(kindLabel(e.kind))} : ${e.text}`);
         break;
       }
       if (args.length) throw new Error(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
       if (o.kind && !KINDS.includes(o.kind as any)) throw new Error(`--kind attend ${KINDS.join(" | ")}`);
       const { entries, errors } = readLog(root);
-      for (const x of errors) console.error(`! wiki/log.jsonl:${x.line} : ${x.msg}`);
+      for (const x of errors) warn(`wiki/log.jsonl:${x.line} : ${x.msg}`);
       const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, o.limit ? Number(o.limit) : 20);
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
-      if (!shown.length) console.log("Journal vide.");
-      for (const e of shown) console.log(`${e.at.slice(0, 16).replace("T", " ")}  ${kindLabel(e.kind).padEnd(6)}  ${e.text}`);
+      if (!shown.length) console.log(paint.dim("Journal vide."));
+      for (const e of shown) console.log(`${paint.dim(e.at.slice(0, 16).replace("T", " "))}  ${paint.bold(kindLabel(e.kind).padEnd(6))}  ${e.text}`);
       break;
     }
     case "lint": {
       const issues = await lint(root);
       if (o.json) console.log(JSON.stringify(issues, null, 2));
       else {
-        const icon = { error: "✗", warning: "!", info: "·" };
-        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${i.path} : ${i.msg}`);
+        const icon = { error: paint.error("✗"), warning: paint.warn("!"), info: "·" };
+        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${paint.dim(i.path)} : ${i.msg}`);
         const n = (l: string) => issues.filter((i) => i.level === l).length;
-        console.log(`${n("error")} erreur(s), ${n("warning")} avertissement(s), ${n("info")} page(s) jamais relue(s).`);
+        const count = (k: string, s: string, color: (s: string) => string) => (n(k) ? color(`${n(k)} ${s}`) : `${n(k)} ${s}`);
+        console.log(`${count("error", "erreur(s)", paint.error)}, ${count("warning", "avertissement(s)", paint.warn)}, ${n("info")} page(s) jamais relue(s).`);
       }
       if (issues.some((i) => i.level === "error")) process.exitCode = 1;
       break;
@@ -136,7 +138,7 @@ try {
       break;
     case "schema": {
       const { schemaText, writeSchema } = await import("./schema");
-      if (o.write) console.log(`${(await writeSchema(root, true)).file} écrit.`);
+      if (o.write) console.log(`${paint.ok("✓")} ${(await writeSchema(root, true)).file} écrit.`);
       else process.stdout.write(await schemaText(root));
       break;
     }
@@ -148,6 +150,6 @@ try {
       if (cmd && !o.help) process.exitCode = 1;
   }
 } catch (e) {
-  console.error(`✗ ${(e as Error).message}`);
+  fail((e as Error).message);
   process.exitCode = 1;
 }

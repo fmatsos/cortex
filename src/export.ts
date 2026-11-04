@@ -7,6 +7,7 @@ import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteDa
 import { newestFirst, readLog } from "./log";
 import { type Doc, parseDoc, rawPath, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 import { sanitizeHtml } from "./sanitize";
+import { paint } from "./style";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
@@ -331,5 +332,5 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
     if (/native binding/i.test(m)) throw new Error(`binding natif de Vite introuvable pour ${process.platform}-${process.arch} : réinstalle avec « bun install --cwd cli --omit optional » (voir DESIGN §9).`);
     throw e;
   } finally { process.chdir(cwd); console.log = log; }
-  say(`Site écrit dans ${resolve(out)} (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+  say(`${paint.ok("✓")} Site écrit dans ${resolve(out)} (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
 }

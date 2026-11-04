@@ -6,6 +6,7 @@ import codex from "./codex";
 import opencode from "./opencode";
 import { z } from "zod";
 import { checkTemplate, type NamingKey } from "../naming";
+import { paint } from "../style";
 
 export type { Backend, Config, Mode } from "./backend";
 
@@ -90,18 +91,18 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
       if (await f.exists()) throw new Error("cortex.json existe déjà.");
       await save({ client: key ?? null, model: null, effort: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
-      console.log(`cortex.json créé${key ? ` (client ${key})` : " (agnostique)"}.`);
+      console.log(`${paint.ok("✓")} cortex.json créé${key ? ` (client ${key})` : " (agnostique)"}.`);
       const { writeSchema } = await import("../schema");
       const w = await writeSchema(root, false);
-      console.log(w.written ? `${w.file} créé : le schéma que suit l'agent.` : `${w.file} existe déjà : inchangé (cortex schema --write le remplace).`);
+      console.log(w.written ? `${paint.ok("✓")} ${w.file} créé : le schéma que suit l'agent.` : `${paint.dim("=")} ${w.file} existe déjà : inchangé (cortex schema --write le remplace).`);
       return 0;
     }
     case "lint": {
       if (!(await f.exists())) { console.log("Pas de cortex.json : mode agnostique."); return 0; }
       let issues: ConfigIssue[];
       try { issues = lintConfig(await readConfig(root)); } catch (e) { issues = [{ level: "error", msg: (e as Error).message }]; }
-      for (const i of issues) console.log(`${i.level === "error" ? "✗" : "!"} ${i.msg}`);
-      if (!issues.length) console.log("cortex.json valide.");
+      for (const i of issues) console.log(`${i.level === "error" ? paint.error("✗") : paint.warn("!")} ${i.msg}`);
+      if (!issues.length) console.log(`${paint.ok("✓")} cortex.json valide.`);
       return issues.some((i) => i.level === "error") ? 1 : 0;
     }
     case "get": {

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
 import { add, describe } from "./add";
+import { fail, paint, warn } from "./style";
 
 /**
  * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`).
@@ -22,7 +23,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
       if (r.duplicate) known++; else { added++; noNote ||= !note; }
       if (!opts.dryRun) await onOk();
     } catch (e) {
-      console.error(`✗ ${label} : ${(e as Error).message}`);
+      fail(`${label} : ${(e as Error).message}`);
       failed++;
     }
   };
@@ -47,8 +48,8 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}): Prom
     await rename(`${urlsFile}.tmp`, urlsFile);
   }
 
-  if (!added && !known && !failed) console.log("Inbox vide.");
+  if (!added && !known && !failed) console.log(paint.dim("Inbox vide."));
   else console.log(`${opts.dryRun ? "(dry-run, inbox inchangée) " : ""}${added} ajouté(s), ${known} déjà présent(s), ${failed} échec(s).`);
-  if (noNote && !opts.dryRun) console.error("! note manquante : à renseigner avant compilation.");
+  if (noNote && !opts.dryRun) warn("note manquante : à renseigner avant compilation.");
   return failed ? 1 : 0;
 }

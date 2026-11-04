@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
+import { warn } from "../style";
 
 // --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
 
@@ -23,7 +24,7 @@ export default function claude(cfg: Config): Backend {
           canUseTool: async (tool, input) => {
             const v = guard(root, tool, input as Record<string, any>, mode);
             if (v.allow) return { behavior: "allow", updatedInput: input };
-            console.error(`  ⊘ refusé : ${v.reason}`);
+            warn(`refusé : ${v.reason}`, "  ⊘");
             return { behavior: "deny", message: v.reason };
           },
         },
