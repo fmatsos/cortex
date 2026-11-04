@@ -25,7 +25,8 @@ export default function opencode(cfg: Config): Backend {
           ...(mode === "write" ? [rule("edit", "wiki/*", "allow"), rule("edit", `${join(root, "wiki")}/*`, "allow")] : []),
           rule("shell", "*", "deny"),
           rule("shell", "brain search*", "allow"),
-          ...(mode === "write" ? [rule("shell", "brain index*", "allow"), rule("shell", "brain lint*", "allow")] : []),
+          rule("shell", "brain log --*", "allow"), // lecture du journal ; « brain log add » n'y correspond pas
+          ...(mode === "write" ? [rule("shell", "brain index*", "allow"), rule("shell", "brain lint*", "allow"), rule("shell", "brain log add *", "allow")] : []),
           rule("external_directory", "*", "deny"),
           rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
         ];

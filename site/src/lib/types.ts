@@ -22,10 +22,12 @@ export type PageData = {
   backlinks: Link[];
   related: (Link & { reasons: string[] })[];
 };
+/** Une entrée du journal : `html` = texte en ligne ; `sources` = ids raw non nommés dans le texte (avec la page Source du wiki qui les cite, s'il y en a une). */
+export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[] };
 export type SiteData = {
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
-  log: string; // HTML
+  log: LogEntryData[]; // plus récente d'abord
 };
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];

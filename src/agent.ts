@@ -77,13 +77,12 @@ export async function compile(root: string, ids: string[], opts: { pending?: boo
       console.log(`✓ ${id} compilée`);
     } else { console.error(`✗ ${id} : aucune page wiki/sources ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); process.exitCode = 1; }
   }
-  const { renderIndex } = await import("./index");
-  await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
+  await (await import("./index")).regenerate(root);
 }
 
 export async function ask(root: string, question: string, opts: { file?: boolean; interactive?: boolean }) {
   const prompt = `Applique le workflow QUERY de BRAIN.md à la question : « ${question} ».` +
-    (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au log et lance brain index."
+    (opts.file ? " Range la réponse dans wiki/syntheses/ (status: draft), ajoute l'entrée Query au journal (brain log add query \"…\" --page wiki/syntheses/….md) et lance brain index."
       : " Ne modifie aucun fichier : réponds seulement. Si la réponse mérite une synthèse, dis-le en une ligne (relancer avec --file).");
   const before = await changed(root);
   const code = await run(root, prompt, !opts.interactive, opts.file ? "write" : "read");
@@ -92,8 +91,7 @@ export async function ask(root: string, question: string, opts: { file?: boolean
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
   if (stray.length) { console.error(`⚠ fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`); process.exitCode = 1; }
   if (opts.file) {
-    const { renderIndex } = await import("./index");
-    await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
+    await (await import("./index")).regenerate(root);
   }
   if (code) process.exitCode = code;
 }

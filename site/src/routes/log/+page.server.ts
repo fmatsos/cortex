@@ -1,3 +1,3 @@
 import { site } from "#lib/server/data.js";
 
-export const load = () => ({ html: site().log });
+export const load = () => ({ entries: site().log });

@@ -4,7 +4,8 @@ import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
-import { appendLog, localIso, normUrl, randomId4, readDocs, sha256, slugify } from "./lib";
+import { localIso, normUrl, randomId4, readDocs, sha256, slugify } from "./lib";
+import { appendLog } from "./log";
 
 const UA = "Mozilla/5.0 (X11; Linux x86_64) brain-cli/0.1";
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
@@ -111,7 +112,7 @@ export async function add(root: string, input: string, opts: { note?: string; dr
   const dir = join(root, "raw", iso.slice(0, 4), iso.slice(5, 7), id);
   await mkdir(dir, { recursive: true });
   await Bun.write(join(dir, "source.md"), `---\n${Bun.YAML.stringify(fm, null, 2)}\n---\n${ex.content.trim()}\n`);
-  await appendLog(root, `**Add** \`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, now);
+  await appendLog(root, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);
   return { id, duplicate: false, ex };
 }
 

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseDoc, slugify, type Doc } from "./lib";
+import { readLog, renderLogMd } from "./log";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
@@ -69,6 +70,15 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
     const seen = tags.get(k);
     if (seen && seen !== tag) push("warning", d.path, `tags quasi synonymes : « ${seen} » et « ${tag} »`);
     else tags.set(k, tag);
+  }
+
+  // journal : lignes invalides = erreur ; log.md doit être exactement la génération de log.jsonl
+  const journal = readLog(root);
+  for (const e of journal.errors) push("error", `wiki/log.jsonl:${e.line}`, e.msg);
+  const md = join(root, "wiki/log.md");
+  if (existsSync(md) || journal.entries.length) {
+    if (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries))
+      push("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : brain index le régénère");
   }
   return out;
 }

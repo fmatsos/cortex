@@ -61,17 +61,6 @@ export function normUrl(u: string): string {
   } catch { return u; }
 }
 
-/** Ajoute une puce en tête de la section du jour de wiki/log.md (crée la section si besoin). */
-export async function appendLog(root: string, line: string, d = new Date()) {
-  const f = join(root, "wiki/log.md");
-  const day = localIso(d).slice(0, 10);
-  let txt = (await Bun.file(f).exists()) ? await Bun.file(f).text() : "# Log\n";
-  const h = `## ${day}\n`;
-  if (txt.includes(h)) txt = txt.replace(h, `${h}- ${line}\n`);
-  else txt = txt.replace(/^# Log\n\n?/, `# Log\n\n${h}- ${line}\n\n`);
-  await Bun.write(f, txt);
-}
-
 const norm = (p: string) => p.trim().replace(/^\/+/, "");
 export type Related = { path: string; title: string; score: number; reasons: string[] };
 

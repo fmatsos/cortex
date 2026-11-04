@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
-import type { GraphData, Link, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
+import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
+import { newestFirst, readLog } from "./log";
 import { type Doc, parseDoc, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
@@ -99,10 +100,25 @@ function originUrl(root: string, resource: string): string | undefined {
   return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
 }
 
-/** Journal : wiki/log.md rendu en HTML. Seul endroit qui connaît le format du log (à remplacer si le journal change de format). */
-async function renderLog(root: string, paths: Set<string>): Promise<string> {
-  const f = join(root, "wiki/log.md");
-  return existsSync(f) ? render(parseDoc("log", await Bun.file(f).text()).body, "log/", paths).html : "";
+/**
+ * Journal : wiki/log.jsonl en entrées structurées (plus récente d'abord). Le texte est rendu en HTML en ligne ; les pages
+ * citées deviennent des liens (page absente : ignorée), les sources la page Source du wiki qui les cite (raw/ n'est pas publié).
+ */
+function renderLog(root: string, paths: Set<string>, byPath: Map<string, Doc>, sourcePage: Map<string, Doc>, link: (d: Doc) => Link): LogEntryData[] {
+  return newestFirst(readLog(root).entries).map((e) => {
+    const sources = (e.sources ?? []).map((id) => {
+      const page = sourcePage.get(`/raw/${id.slice(0, 4)}/${id.slice(4, 6)}/${id}/source.md`);
+      return { id, ...(page && { page: link(page) }) };
+    });
+    let html = inline(render(e.text, "log/", paths).html);
+    // un id raw cité dans le texte devient un lien vers sa page Source
+    for (const s of sources) if (s.page) html = html.replaceAll(`<code>${s.id}</code>`, `<a href="${rel("log/", route(`wiki/${s.page.id}.md`))}"><code>${s.id}</code></a>`);
+    return {
+      at: e.at, kind: e.kind, html,
+      pages: (e.pages ?? []).filter((p) => byPath.has(p)).map((p) => link(byPath.get(p)!)),
+      sources: sources.filter((s) => !e.text.includes(`\`${s.id}\``)), // un id déjà nommé dans le texte n'est pas répété sous l'entrée
+    };
+  });
 }
 
 export async function buildSiteData(root: string) {
@@ -155,7 +171,7 @@ export async function buildSiteData(root: string) {
     links: [...edges.values()].map((e) => { const [source, target] = e.split("\t"); return { source, target }; }),
   };
 
-  const data: SiteData = { pages, tags, log: await renderLog(root, paths) };
+  const data: SiteData = { pages, tags, log: renderLog(root, paths, byPath, resourcePage, link) };
   return { data, graph, search: buildSearch(pages) };
 }
 

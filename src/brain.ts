@@ -3,7 +3,8 @@ import { parseArgs } from "node:util";
 import { join } from "node:path";
 import { add, describe } from "./add";
 import { inbox } from "./inbox";
-import { renderIndex } from "./index";
+import { regenerate } from "./index";
+import { KINDS, kindLabel, logAdd, newestFirst, readLog } from "./log";
 import { search } from "./search";
 import { lint } from "./lint";
 import { ask, compile } from "./agent";
@@ -17,6 +18,8 @@ const HELP = `brain — second cerveau
   brain search "<requête>" [--in wiki|raw] [--json] [--limit N]
   brain index
   brain lint [--json]
+  brain log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
+  brain log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
   brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
   brain ask "<question>" [--file] [--interactive]
   brain export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .brain/site)
@@ -33,7 +36,7 @@ const { values: o, positionals: [cmd, ...args] } = parseArgs({
   options: {
     note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
     json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-    file: { type: "boolean" }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
+    file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" },
   },
 });
 
@@ -69,9 +72,29 @@ try {
       break;
     }
     case "index":
-      await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
-      console.log("wiki/index.md régénéré.");
+      await regenerate(root);
+      console.log("wiki/index.md et wiki/log.md régénérés.");
       break;
+    case "log": {
+      // `add` n'est le sous-commande que juste après `log` : `brain log --json add …` ne doit rien écrire (les gardes des agents reposent là-dessus)
+      const raw = process.argv.slice(2);
+      if (args[0] === "add" && raw[raw.indexOf("log") + 1] === "add") {
+        const [, kind, ...text] = args;
+        if (!kind || !text.length) throw new Error(`Usage : brain log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
+        const e = await logAdd(root, kind, text.join(" "), o.source, o.page);
+        console.log(`+ ${e.at} ${kindLabel(e.kind)} : ${e.text}`);
+        break;
+      }
+      if (args.length) throw new Error(`Usage : brain log [--limit N] [--json] [--kind k] | brain log add …`);
+      if (o.kind && !KINDS.includes(o.kind as any)) throw new Error(`--kind attend ${KINDS.join(" | ")}`);
+      const { entries, errors } = readLog(root);
+      for (const x of errors) console.error(`! wiki/log.jsonl:${x.line} : ${x.msg}`);
+      const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, o.limit ? Number(o.limit) : 20);
+      if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
+      if (!shown.length) console.log("Journal vide.");
+      for (const e of shown) console.log(`${e.at.slice(0, 16).replace("T", " ")}  ${kindLabel(e.kind).padEnd(6)}  ${e.text}`);
+      break;
+    }
     case "lint": {
       const issues = await lint(root);
       if (o.json) console.log(JSON.stringify(issues, null, 2));

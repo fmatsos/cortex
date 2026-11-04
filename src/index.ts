@@ -1,4 +1,6 @@
+import { join } from "node:path";
 import { readDocs } from "./lib";
+import { writeLogMd } from "./log";
 
 const ORDER: [string, string][] = [["Concept", "Concepts"], ["Entity", "Entités"], ["Synthesis", "Synthèses"], ["Source", "Sources"]];
 
@@ -12,4 +14,10 @@ export async function renderIndex(root: string): Promise<string> {
       idx += `- [${d.fm.title}](/${d.path}) — ${d.fm.description}\n`;
   }
   return idx;
+}
+
+/** Les deux fichiers générés du wiki : index.md (depuis les frontmatters) et log.md (depuis log.jsonl). */
+export async function regenerate(root: string) {
+  await Bun.write(join(root, "wiki/index.md"), await renderIndex(root));
+  await writeLogMd(root);
 }

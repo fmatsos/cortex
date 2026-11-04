@@ -40,7 +40,12 @@ export default function claude(cfg: Config): Backend {
 
 // --- Garde-fou de permissions (utilisé par le backend Claude) ----------------------------------
 
-const BRAIN_CMD = { read: /^brain search( |$)/, write: /^brain (search|index|lint)( |$)/ };
+// `brain log` en lecture : seules ses options ; `brain log add` n'est permis qu'en écriture
+const LOG_READ = "log( --json| --limit \\d+| --kind \\w+)*$";
+const BRAIN_CMD = {
+  read: new RegExp(`^brain (search( |$)|${LOG_READ})`),
+  write: new RegExp(`^brain (search|index|lint|log add)( |$)|^brain ${LOG_READ}`),
+};
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
@@ -54,14 +59,33 @@ function real(p: string): string {
 
 export type Verdict = { allow: true } | { allow: false; reason: string };
 
+/**
+ * Remplace chaque chaîne entre guillemets par `Q` : le shell la prend pour du texte (celui d'une entrée de journal
+ * contient `;`, `|`, `>`…). Refusé (undefined) : guillemet non fermé, ou `$`, accent grave, `\` dans des guillemets
+ * doubles (l'expansion s'y exécuterait). Les guillemets simples sont littéraux.
+ */
+export function unquote(cmd: string): string | undefined {
+  let out = "";
+  for (let i = 0; i < cmd.length; i++) {
+    const q = cmd[i];
+    if (q !== "'" && q !== '"') { out += q; continue; }
+    const j = cmd.indexOf(q, i + 1);
+    if (j < 0 || (q === '"' && /[$`\\]/.test(cmd.slice(i + 1, j)))) return undefined;
+    out += "Q";
+    i = j;
+  }
+  return out;
+}
+
 /** Fonction pure : un outil demandé par l'agent est-il permis ? Écritures limitées à wiki/, Bash limité à brain. */
 export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode): Verdict {
   if (READ_ONLY.has(tool)) return { allow: true };
   if (tool === "Bash") {
-    const cmd = String(input.command ?? "").trim();
-    if (/[;&|<>`$\n]/.test(cmd)) return { allow: false, reason: `Bash : pas d'enchaînement ni de redirection (${cmd.slice(0, 80)}). Lance brain seul.` };
+    const raw = String(input.command ?? "").trim();
+    const cmd = raw.includes("\n") ? undefined : unquote(raw);
+    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash : pas d'enchaînement ni de redirection, texte entre guillemets sans $ ni accent grave (${raw.slice(0, 80)}). Lance brain seul.` };
     return BRAIN_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limité à ${mode === "read" ? "brain search" : "brain search|index|lint"}.` };
+      : { allow: false, reason: `Bash limité à ${mode === "read" ? "brain search|log" : "brain search|index|lint|log add"}.` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Lecture seule : relance avec --file pour écrire une synthèse." };

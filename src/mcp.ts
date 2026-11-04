@@ -6,6 +6,7 @@ import * as z from "zod/v4";
 import { add } from "./add";
 import { readDocs, related } from "./lib";
 import { lint } from "./lint";
+import { KINDS, lastDays, readLog, type LogEntry } from "./log";
 import { search } from "./search";
 
 export { related };
@@ -22,11 +23,9 @@ export async function getFile(root: string, path: string): Promise<string> {
   return Bun.file(real).text();
 }
 
-/** Les `limit` dernières sections datées (## AAAA-MM-JJ) de wiki/log.md. */
-export async function lastLog(root: string, limit: number): Promise<string> {
-  const f = Bun.file(join(root, "wiki/log.md"));
-  if (!(await f.exists())) return "";
-  return (await f.text()).split(/^(?=## )/m).filter((s) => s.startsWith("## ")).slice(0, limit).join("").trim();
+/** Entrées des `days` derniers jours du journal (wiki/log.jsonl), plus récentes d'abord, filtrées par `kind`. */
+export function lastLog(root: string, days: number, kind?: string): LogEntry[] {
+  return lastDays(readLog(root).entries, days, kind);
 }
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -101,10 +100,13 @@ export function buildServer(root: string): McpServer {
   }));
 
   s.registerTool("log", {
-    description: "Lecture seule : les dernières sections datées de wiki/log.md (ingests, ajouts, lint récents). Le journal ne s'écrit pas par MCP.",
-    inputSchema: z.object({ limit: z.number().int().min(1).max(30).optional().describe("nombre de jours (défaut 1)") }),
+    description: "Lecture seule : les entrées structurées du journal (wiki/log.jsonl : at, kind, text, sources, pages) des derniers jours, plus récentes d'abord. Le journal ne s'écrit pas par MCP.",
+    inputSchema: z.object({
+      limit: z.number().int().min(1).max(30).optional().describe("nombre de jours (défaut 1)"),
+      kind: z.enum(KINDS).optional().describe("ne garder que ce type d'entrée"),
+    }),
     annotations: readOnly,
-  }, safe(async ({ limit }) => text(await lastLog(root, limit ?? 1))));
+  }, safe(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
 
   return s;
 }

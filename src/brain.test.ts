@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { add } from "./add";
@@ -18,7 +18,7 @@ test("utilitaires", () => {
 test("add → index → search, idempotent", async () => {
   const root = mkdtempSync(join(tmpdir(), "brain-"));
   await Bun.write(join(root, "BRAIN.md"), "");
-  await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2000-01-01\n- ancien\n");
+  await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2000-01-01","kind":"update","text":"ancien"}\n');
   await Bun.write(join(root, "wiki/concepts/x.md"), "---\ntype: Concept\ntitle: Relecture\ndescription: D.\n---\nCorps sur la relecture.\n");
   const note = join(root, "n.md");
   await Bun.write(note, "# Ma note\n\nUne idée sur l'hydroponie et la relecture.\n");
@@ -27,8 +27,12 @@ test("add → index → search, idempotent", async () => {
   const a = await add(root, note, { note: "test", now });
   expect(a.duplicate).toBe(false);
   expect((await add(root, note, { note: "test", now })).duplicate).toBe(true);
+  const jsonl = (await Bun.file(join(root, "wiki/log.jsonl")).text()).trim().split("\n").map((l) => JSON.parse(l));
+  expect(jsonl).toHaveLength(2); // l'add dupliqué n'écrit rien
+  expect(jsonl[1]).toMatchObject({ kind: "add", text: `\`${a.id}\`.`, sources: [a.id] });
+  expect(jsonl[1].at).toMatch(/^2026-11-04T10:00:00[+-]\d\d:\d\d$/);
   const log = await Bun.file(join(root, "wiki/log.md")).text();
-  expect(log).toStartWith(`# Log\n\n## 2026-11-04\n- **Add** \`${a.id}\``);
+  expect(log).toContain(`## 2026-11-04\n- **Add** \`${a.id}\`.\n\n## 2000-01-01\n- **Update** ancien\n`); // sans répéter l'id déjà dans le texte
 
   expect(await renderIndex(root)).toContain("- [Relecture](/wiki/concepts/x.md) — D.");
   const hits = await search(root, "relecture");
@@ -120,10 +124,133 @@ test("garde-fou : écritures limitées à wiki/, Bash limité à brain", async (
   expect(ok("Bash", { command: "brain search context rot" }, "read")).toBe(true);
   expect(ok("Bash", { command: "brain index" }, "read")).toBe(false);
   expect(ok("Bash", { command: "brain index" })).toBe(true);
+  // journal : lecture permise partout, écriture (brain log add) seulement en mode write ; le texte entre guillemets peut contenir ; | > &
+  expect(ok("Bash", { command: "brain log --limit 5 --kind lint --json" }, "read")).toBe(true);
+  expect(ok("Bash", { command: "brain log add update \"x\"" }, "read")).toBe(false);
+  expect(ok("Bash", { command: "brain log add update \"CLI : a ; b | c > d & l'idée\" --page wiki/concepts/x.md --source 20261104-abcd-x" })).toBe(true);
+  expect(ok("Bash", { command: "brain log add ingest 'texte avec `backticks` et $HOME' --source 20261104-abcd-x" })).toBe(true); // guillemets simples : littéral
+  expect(ok("Bash", { command: "brain log add update \"x $(rm -rf wiki)\"" })).toBe(false); // expansion sous guillemets doubles
+  expect(ok("Bash", { command: "brain log add update \"x `id`\"" })).toBe(false);
+  expect(ok("Bash", { command: "brain log add update \"x\" ; rm -rf wiki" })).toBe(false); // chaînage
+  expect(ok("Bash", { command: "brain log add update \"x\" && brain index" })).toBe(false);
+  expect(ok("Bash", { command: "brain log add update \"x" })).toBe(false); // guillemet non fermé
+  expect(ok("Bash", { command: "brain log add update x > wiki/log.jsonl" })).toBe(false);
+  expect(ok("Bash", { command: "brain log add update \"x\"\nrm -rf wiki" })).toBe(false);
+  expect(ok("Bash", { command: "brain logs add" })).toBe(false);
+  expect(ok("Bash", { command: "brain log --json add update \"x\"" }, "read")).toBe(false); // `add` caché derrière une option
+  expect(ok("Bash", { command: "brain log --json add update \"x\"" })).toBe(false);
   expect(ok("Bash", { command: "brain search x; sed -i s/a/b/ raw/x.md" })).toBe(false);
   expect(ok("Bash", { command: "echo x > raw/a.md" })).toBe(false);
   expect(ok("Read", { file_path: "/etc/passwd" }, "read")).toBe(true);
   expect(ok("WebFetch", { url: "https://x" })).toBe(false);
+});
+
+test("journal : parse et sérialise une entrée, champs vides omis, entrées invalides refusées", async () => {
+  const { parseEntry, readLog } = await import("./log");
+  const ok: any = { at: "2026-11-04T10:00:00+01:00", kind: "ingest", text: "Fait.", sources: ["20261104-abcd-x"], pages: ["wiki/concepts/a.md"] };
+  expect(parseEntry(ok)).toEqual(ok);
+  expect(parseEntry({ at: "2026-11-04", kind: "lint", text: "0 erreur" })).toEqual({ at: "2026-11-04", kind: "lint", text: "0 erreur" });
+  for (const bad of [null, [], { ...ok, kind: "creation" }, { ...ok, at: "hier" }, { ...ok, at: "2026-13-45" }, { ...ok, at: "2026-11-04T10:00:00" }, { ...ok, text: "" }, { ...ok, text: "a\nb" },
+    { ...ok, extra: 1 }, { ...ok, sources: [] }, { ...ok, sources: ["x"] }, { ...ok, pages: ["concepts/a.md"] }, { ...ok, pages: "wiki/a.md" }, { at: "2026-11-04", kind: "add" }])
+    expect(typeof parseEntry(bad)).toBe("string");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  await Bun.write(join(root, "wiki/log.jsonl"), `${JSON.stringify(ok)}\n\nn'importe quoi\n{"at":"2026-11-04","kind":"zz","text":"x"}\n`);
+  const r = readLog(root);
+  expect(r.entries).toEqual([ok]);
+  expect(r.errors).toEqual([{ line: 3, msg: "JSON invalide" }, { line: 4, msg: expect.stringContaining("kind") }]);
+});
+
+test("journal : log.md généré, déterministe, plus récent d'abord, références non répétées", async () => {
+  const { renderLogMd } = await import("./log");
+  const entries: any[] = [
+    { at: "2026-11-03", kind: "update", text: "Ancien." },
+    { at: "2026-11-04T09:00:00+01:00", kind: "add", text: "`20261104-abcd-x`.", sources: ["20261104-abcd-x"] },
+    { at: "2026-11-04T10:00:00+01:00", kind: "ingest", text: "Créé sources/x, concepts/{a, c}.", sources: ["20261104-abcd-x"], pages: ["wiki/sources/x.md", "wiki/concepts/a.md", "wiki/concepts/c.md", "wiki/entities/b.md"] },
+  ];
+  const md = renderLogMd([...entries]);
+  expect(md).toBe(`# Log
+
+> Généré depuis \`wiki/log.jsonl\` : ne pas éditer à la main (\`brain log add\`, puis \`brain index\`).
+
+## 2026-11-04
+- **Ingest** Créé sources/x, concepts/{a, c}. (sources : \`20261104-abcd-x\` ; pages : [entities/b](/wiki/entities/b.md))
+- **Add** \`20261104-abcd-x\`.
+
+## 2026-11-03
+- **Update** Ancien.
+`);
+  expect(renderLogMd([...entries])).toBe(md);
+  expect(renderLogMd([])).toStartWith("# Log\n");
+});
+
+test("brain log add : valide kind, pages et sources, écrit une ligne, régénère log.md ; brain log lit", async () => {
+  const { logAdd, readLog } = await import("./log");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  await Bun.write(join(root, "BRAIN.md"), "");
+  await Bun.write(join(root, "raw/2026/11/20261104-abcd-x/source.md"), "---\ntype: RawSource\n---\nx\n");
+  await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\n---\n");
+  await Bun.write(join(root, "wiki/log.md"), "à écraser");
+  await expect(logAdd(root, "creation", "x")).rejects.toThrow("kind inconnu");
+  await expect(logAdd(root, "update", "  ")).rejects.toThrow("texte vide");
+  await expect(logAdd(root, "update", "x", [], ["wiki/concepts/nope.md"])).rejects.toThrow("page introuvable");
+  await expect(logAdd(root, "update", "x", [], ["wiki/../BRAIN.md"])).rejects.toThrow("page introuvable");
+  await expect(logAdd(root, "update", "x", [], ["wiki/log.md"])).rejects.toThrow("page introuvable");
+  await expect(logAdd(root, "update", "x", ["20261104-zzzz-nope"])).rejects.toThrow("source raw introuvable");
+  await expect(logAdd(root, "update", "x", ["../../etc"])).rejects.toThrow("source raw introuvable");
+  expect(existsSync(join(root, "wiki/log.jsonl"))).toBe(false); // aucun refus n'écrit
+  const d = new Date("2026-11-04T10:00:00");
+  const e = await logAdd(root, "ingest", "Ligne un\n  suite.", ["20261104-abcd-x", "20261104-abcd-x"], ["/wiki/concepts/a.md", "wiki/concepts/a.md"], d);
+  expect(e).toMatchObject({ kind: "ingest", text: "Ligne un suite.", sources: ["20261104-abcd-x"], pages: ["wiki/concepts/a.md"] });
+  await logAdd(root, "lint", "0 erreur.", [], [], new Date("2026-11-04T11:00:00"));
+  const raw = await Bun.file(join(root, "wiki/log.jsonl")).text();
+  expect(raw.split("\n")).toHaveLength(3); // deux lignes complètes + fin de ligne
+  expect(JSON.parse(raw.split("\n")[1])).not.toHaveProperty("sources"); // champs vides omis
+  expect(readLog(root).errors).toEqual([]);
+  const md = await Bun.file(join(root, "wiki/log.md")).text();
+  expect(md).toContain("## 2026-11-04\n- **Lint** 0 erreur.\n- **Ingest** Ligne un suite. (sources : `20261104-abcd-x` ; pages : [concepts/a](/wiki/concepts/a.md))\n");
+  // fichier édité sans fin de ligne : l'entrée suivante ne se colle pas à la précédente
+  await Bun.write(join(root, "wiki/log.jsonl"), raw.trimEnd());
+  await logAdd(root, "update", "suite", [], [], d);
+  expect(readLog(root).errors).toEqual([]);
+  expect(readLog(root).entries).toHaveLength(3);
+
+  // CLI
+  const run = (...a: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "brain.ts"), ...a], { env: { ...process.env, BRAIN_ROOT: root } });
+  expect(run("log", "add", "update", "via la CLI ; | >", "--source", "20261104-abcd-x", "--page", "wiki/concepts/a.md").exitCode).toBe(0);
+  expect(run("log", "add", "update", "x", "--page", "wiki/concepts/nope.md").exitCode).toBe(1);
+  expect(run("log", "add", "update").exitCode).toBe(1);
+  // `add` n'est le sous-commande que juste après `log` : les gardes des agents (lecture seule) s'appuient sur cet ordre
+  const count = () => readLog(root).entries.length, before = count();
+  for (const a of [["log", "--json", "add", "update", "x"], ["log", "--", "add", "update", "x"], ["log", "--kind", "lint", "add", "update", "x"]]) {
+    expect(run(...a).exitCode).toBe(1);
+    expect(count()).toBe(before);
+  }
+  const j = JSON.parse(run("log", "--json", "--limit", "2").stdout.toString());
+  expect(j.map((x: any) => x.text)).toEqual(["via la CLI ; | >", "suite"]);
+  expect(JSON.parse(run("log", "--json", "--kind", "lint").stdout.toString()).map((x: any) => x.text)).toEqual(["0 erreur."]);
+  expect(run("log", "--kind", "zz").exitCode).toBe(1);
+  await Bun.write(join(root, "wiki/log.md"), "édité");
+  expect(run("index").exitCode).toBe(0);
+  expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("via la CLI ; | >"); // brain index régénère aussi log.md
+});
+
+test("lint du journal : ligne invalide = erreur, log.md édité à la main = avertissement", async () => {
+  const { lint } = await import("./lint");
+  const { writeLogMd } = await import("./log");
+  const root = mkdtempSync(join(tmpdir(), "brain-"));
+  const msgs = async () => (await lint(root)).map((i) => `${i.level} ${i.path} ${i.msg}`);
+  expect(await msgs()).toEqual([]); // pas de journal : rien à dire
+  await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-04","kind":"add","text":"x"}\n');
+  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]); // jamais généré
+  await writeLogMd(root);
+  expect(await msgs()).toEqual([]);
+  await Bun.write(join(root, "wiki/log.md"), (await Bun.file(join(root, "wiki/log.md")).text()) + "- à la main\n");
+  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]);
+  await writeLogMd(root);
+  await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-04","kind":"add","text":"x"}\n{pas du json\n{"at":"2026-11-04","kind":"zz","text":"x"}\n');
+  const m = await msgs();
+  expect(m).toContain("error wiki/log.jsonl:2 JSON invalide");
+  expect(m.some((x) => x.startsWith("error wiki/log.jsonl:3 kind"))).toBe(true);
 });
 
 test("config.json : absent = agnostique, client inconnu = erreur", async () => {
@@ -284,7 +411,7 @@ async function mcpRoot() {
   await Bun.write(join(root, "wiki/concepts/b.md"), page("Concept", "Beta", "ctx", "Rien."));
   await Bun.write(join(root, "wiki/entities/c.md"), page("Entity", "Gamma", "llm", "Voir [A](/wiki/concepts/a.md#x)."));
   await Bun.write(join(root, "wiki/index.md"), "# Index\n- [Alpha](/wiki/concepts/a.md)\n- [Beta](/wiki/concepts/b.md)\n- [Gamma](/wiki/entities/c.md)\n");
-  await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2026-11-04\n- **Add** x.\n\n## 2026-11-03\n- **Add** y.\n");
+  await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-03","kind":"add","text":"y"}\n{"at":"2026-11-04T09:00:00+01:00","kind":"lint","text":"0 erreur"}\n{"at":"2026-11-04T10:00:00+01:00","kind":"add","text":"x","sources":["20261104-abcd-x"]}\n');
   return root;
 }
 
@@ -316,11 +443,13 @@ test("get : refuse tout chemin hors de wiki/ et raw/", async () => {
   expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // un dossier n'est pas un fichier
 });
 
-test("lastLog : sections datées les plus récentes", async () => {
+test("lastLog : entrées structurées des derniers jours, filtre par kind", async () => {
   const { lastLog } = await import("./mcp");
   const root = await mcpRoot();
-  expect(await lastLog(root, 1)).toBe("## 2026-11-04\n- **Add** x.");
-  expect(await lastLog(root, 5)).toContain("## 2026-11-03");
+  expect(lastLog(root, 1).map((e) => e.text)).toEqual(["x", "0 erreur"]); // plus récente d'abord
+  expect(lastLog(root, 1)[0]).toMatchObject({ kind: "add", sources: ["20261104-abcd-x"] });
+  expect(lastLog(root, 5).map((e) => e.text)).toEqual(["x", "0 erreur", "y"]);
+  expect(lastLog(root, 5, "lint").map((e) => e.text)).toEqual(["0 erreur"]);
 });
 
 test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RPC sur stdio)", async () => {
@@ -367,7 +496,10 @@ test("brain mcp : initialize, tools/list, search, get, add sans réseau (JSON-RP
     expect(added).toMatchObject({ duplicate: false, title: "Idée" });
     expect(JSON.parse((await call(8, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text).id).toBe(added.id);
     expect((await call(10, "add", { input: "/etc/hostname", note: "fuite" })).isError).toBe(true); // pas de fichier local via MCP
-    expect((await call(9, "log", {})).content[0].text).toContain(`**Add** \`${added.id}\``);
+    const today = JSON.parse((await call(9, "log", { kind: "add" })).content[0].text);
+    expect(today[0]).toMatchObject({ kind: "add", sources: [added.id] });
+    expect(today.every((e: any) => e.kind === "add")).toBe(true);
+    expect((await call(11, "log", { kind: "inconnu" })).isError).toBe(true);
     expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toContain("wiki/concepts/b.md");
   } finally { proc.stdin.end(); proc.kill(); }
 });
@@ -433,7 +565,11 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   await Bun.write(join(root, "wiki/entities/c.md"), fm("Entity", "Gamma") + "Isolé. [Accueil](/wiki/index.md), [journal](/wiki/log.md).\n");
   await Bun.write(join(root, "wiki/sources/s.md"), fm("Source", "Source un", src) + "> [!note] Note personnelle\n> pourquoi je garde ça\n\nRésumé, voir [Alpha](/wiki/concepts/a.md).\n");
   await Bun.write(join(root, "wiki/index.md"), "# Index\n");
-  await Bun.write(join(root, "wiki/log.md"), "# Log\n\n## 2026-11-04\n- **Ingest** x\n");
+  await Bun.write(join(root, "wiki/log.jsonl"), [
+    { at: "2026-11-03", kind: "update", text: "Un [lien](/wiki/concepts/a.md) et **gras**." },
+    { at: "2026-11-04T09:30:00+01:00", kind: "ingest", text: "`20261104-abcd-x` compilée.", sources: ["20261104-abcd-x"], pages: ["wiki/concepts/a.md", "wiki/concepts/absente.md"] },
+    { at: "2026-11-04T11:00:00+01:00", kind: "add", text: "Ajout.", sources: ["20261104-abcd-x", "20261104-zzzz-inconnue"] },
+  ].map((e) => JSON.stringify(e)).join("\n") + "\n");
 
   expect(() => checkOut(root, root)).toThrow("refusé");
   expect(() => checkOut(root, join(root, "wiki"))).toThrow("refusé");
@@ -468,6 +604,17 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   const c = html("wiki/entities/c/index.html");
   expect(c).toContain('href="../../../"'); // /wiki/index.md → accueil
   expect(c).toContain('href="../../../log/"'); // /wiki/log.md → journal
+  // journal : entrées structurées, plus récente d'abord ; pages citées en liens, source → page Source du wiki, sinon id en texte
+  const log = JSON.parse(readFileSync(join(root, ".brain/site-data/data.json"), "utf8")).log;
+  expect(log.map((e: any) => [e.at.slice(0, 10), e.kind])).toEqual([["2026-11-04", "add"], ["2026-11-04", "ingest"], ["2026-11-03", "update"]]);
+  expect(log[1].pages).toEqual([{ id: "concepts/a", title: "Alpha", type: "Concept" }]); // la page absente est écartée
+  expect(log[1].sources).toEqual([]); // l'id est déjà nommé dans le texte
+  expect(log[1].html).toContain('<a href="../wiki/sources/s/"><code>20261104-abcd-x</code></a>');
+  expect(log[0].sources).toEqual([{ id: "20261104-abcd-x", page: { id: "sources/s", title: "Source un", type: "Source" } }, { id: "20261104-zzzz-inconnue" }]);
+  expect(log[2].html).toBe('Un <a href="../wiki/concepts/a/">lien</a> et <strong>gras</strong>.');
+  const logPage = html("log/index.html");
+  for (const t of ["Journal", "Ajout.", "Alpha", "Source un", "20261104-zzzz-inconnue", "3 entrées"]) expect(logPage).toContain(t);
+  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("compilée")); // l'ajout de 11 h avant l'ingest de 9 h 30
   const out2 = join(root, "site2");
   await exportSite(root, out2, () => {}); // reproductible : même wiki, même site
   const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
@@ -510,7 +657,7 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
   for (const f of all) {
     const t = readFileSync(join(out, f), "utf8");
     expect(t).not.toContain("SECRET-DU-CORPS-RAW");
-    expect(t).not.toContain("20261104-abcd-x");
+    if (!f.startsWith("log/")) expect(t).not.toContain("20261104-abcd-x"); // le journal nomme les ids raw dans son texte
   }
 }, 120_000);
 
