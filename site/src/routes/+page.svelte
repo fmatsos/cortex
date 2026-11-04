@@ -83,19 +83,3 @@
 	{/each}
 </div>
 
-<style>
-	/* le mot suit le logo : quand l'influx a atteint les nœuds (vers 2 s sur un cycle de 4 s), une lumière balaie « Cortex » */
-	@media (prefers-reduced-motion: no-preference) {
-		.titre-anime {
-			background: linear-gradient(100deg, var(--foreground) 40%, var(--primary) 50%, var(--foreground) 60%) 100% 0 / 300% 100% no-repeat;
-			-webkit-background-clip: text;
-			background-clip: text;
-			color: transparent;
-			animation: balaye 4s ease-in-out infinite;
-		}
-	}
-	@keyframes balaye {
-		0%, 48% { background-position: 100% 0; }
-		72%, 100% { background-position: 0% 0; }
-	}
-</style>
