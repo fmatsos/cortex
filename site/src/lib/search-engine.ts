@@ -69,7 +69,8 @@ export function expand(e: Engine, w: string): Map<string, number> {
 	if (w.length >= 2)
 		for (let i = lower(e.sorted, w), n = 0; i < e.sorted.length && e.sorted[i].startsWith(w) && n < MAX_PREFIX; i++, n++)
 			if (!out.has(e.sorted[i])) out.set(e.sorted[i], PREFIX);
-	if (w.length >= 4)
+	// le flou ne sert qu'aux mots introuvables : « fenetre » ne doit pas ramener « entre »
+	if (w.length >= 4 && !out.size)
 		for (const r of e.fuzzy().search(w, { limit: MAX_FUZZY }))
 			if (!out.has(r.item)) out.set(r.item, FUZZY * (1 - (r.score ?? 0)));
 	return out;

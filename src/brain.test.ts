@@ -298,7 +298,7 @@ test("brain config : init, set, get, remove, lint", async () => {
 });
 
 test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, classement, instantanée à grande échelle", async () => {
-  const { buildTerms, createEngine, rank } = await import("../site/src/lib/search-engine");
+  const { buildTerms, createEngine, expand, rank } = await import("../site/src/lib/search-engine");
   const { parseQuery } = await import("../site/src/lib/query");
   const Fuse = (await import("fuse.js")).default;
   const doc = (id: string, title: string, text: string, tags: string[] = [], type = "Concept") =>
@@ -314,6 +314,8 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   expect(ids("contexte")).toEqual(["a", "b"]); // mot en fin d'une longue page trouvé ; « Context » au titre classe a devant
   expect(ids("conte")).toContain("b"); // préfixe pendant la frappe
   expect(ids("contexet")).toContain("a"); // faute de frappe
+  expect(ids("dégrade")).toEqual(["a"]); // mot connu : pas de flou (« degrade » ne ramène pas un voisin approché)
+  expect([...expand(e, "fenetre").keys()]).toEqual(["fenetre"]);
   expect(ids("decentralisation")).toEqual(["c"]); // accents ignorés
   expect(ids("contexte #llm")).toEqual(["b"]);
   expect(ids("contexte -fenetre")).toEqual(["b"]);
