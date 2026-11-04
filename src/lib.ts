@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+/** Error with a category the CLI maps to an exit code: `usage` → 2, anything else → 1. */
+export class CortexError extends Error {
+  constructor(message: string, readonly code: "usage" | "notfound" | "refused" | "external") { super(message); }
+}
+
 /** Wiki root: $CORTEX_ROOT, otherwise the nearest parent directory holding cortex.json. */
 export function findRoot(from = process.cwd()): string {
   if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
