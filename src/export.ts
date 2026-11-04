@@ -151,7 +151,7 @@ export async function buildSiteData(root: string) {
   const degree = new Map<string, number>();
   for (const e of edges.values()) for (const n of e.split("\t")) degree.set(n, (degree.get(n) ?? 0) + 1);
   const graph: GraphData = {
-    nodes: pages.map((p) => ({ id: p.id, title: p.title, type: p.type, tags: p.tags, degree: degree.get(p.id) ?? 0 })),
+    nodes: pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, degree: degree.get(p.id) ?? 0 })),
     links: [...edges.values()].map((e) => { const [source, target] = e.split("\t"); return { source, target }; }),
   };
 
