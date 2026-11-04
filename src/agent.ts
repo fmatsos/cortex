@@ -1,4 +1,6 @@
-import { join } from "node:path";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, sep } from "node:path";
 import { readDocs } from "./lib";
 import { backendFor, loadConfig, type Mode } from "./backends/index";
 import { confine } from "./backends/backend";
@@ -14,25 +16,46 @@ async function git(root: string, ...args: string[]) {
   return (await p.exited) === 0 ? out : undefined;
 }
 
-/** Modified/created files (porcelain): serves as a scope guard, whatever the agent. */
-async function changed(root: string): Promise<Map<string, string>> {
-  const out = await git(root, "status", "--porcelain", "--untracked-files=all");
+const unversioned = new Set<string>();
+
+/** Modified/created files (porcelain v1, NUL-separated: no quoting of non-ASCII paths): serves as a scope guard, whatever the agent. */
+export async function changed(root: string): Promise<Map<string, string>> {
+  const out = await git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all");
   const m = new Map<string, string>();
-  for (const line of (out ?? "").split("\n").filter(Boolean)) {
-    const path = line.slice(3);
-    m.set(path, (await Bun.file(join(root, path)).exists()) ? new Bun.CryptoHasher("sha1").update(await Bun.file(join(root, path)).arrayBuffer()).digest("hex") : "deleted");
+  if (out === undefined) {
+    if (!unversioned.has(root)) { unversioned.add(root); warn("pas de dépôt git : le périmètre de l'agent n'est pas vérifié"); }
+    return m;
+  }
+  const fields = out.split("\0");
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i];
+    if (!f) continue;
+    const paths = [f.slice(3)];
+    // rename/copy: the origin path follows as the next NUL field
+    if (f[0] === "R" || f[0] === "C" || f[1] === "R" || f[1] === "C") paths.push(fields[++i]);
+    for (const path of paths) {
+      const file = Bun.file(join(root, path));
+      m.set(path, (await file.exists()) ? new Bun.CryptoHasher("sha1").update(await file.arrayBuffer()).digest("hex") : "deleted");
+    }
   }
   return m;
 }
 
+/** A root holding the home directory would make the sandbox read-only on the agent's own state (~/.claude…). */
+function homeInside(root: string): boolean {
+  const r = realpathSync(root), h = realpathSync(homedir());
+  return r === h || h.startsWith(r.endsWith(sep) ? r : r + sep);
+}
+
 /** What the agent touched outside wiki/ (the status of a compiled raw source is the only exception, handled by the CLI). */
-async function outOfScope(root: string, before: Map<string, string>): Promise<string[]> {
+export async function outOfScope(root: string, before: Map<string, string>): Promise<string[]> {
   const after = await changed(root);
   return [...after].filter(([p, h]) => before.get(p) !== h && !p.startsWith("wiki/")).map(([p]) => p);
 }
 
 /** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by config.json. */
 async function run(root: string, prompt: string, batch: boolean, mode: Mode): Promise<number> {
+  if (homeInside(root)) { fail("la racine du cerveau contient ton répertoire personnel : l'agent ne pourrait plus écrire son état (~/.claude…). Utilise un dossier dédié."); return 1; }
   const backend = await backendFor(root);
   prompt = `Racine du cerveau : ${root} (les chemins /raw/… et /wiki/… sont relatifs à cette racine). ` +
     (mode === "write" ? `Tu n'écris que sous ${join(root, "wiki")}/. ` : "Lecture seule. ") + prompt;
