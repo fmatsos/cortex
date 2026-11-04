@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { Badge } from "#lib/components/ui/badge/index.js";
-	import { typeColor, typeLabel } from "#lib/type-meta.js";
+	import Icon from "#lib/components/icon.svelte";
+	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
 
+	// L'icône dit le type par sa forme, la couleur du type la renforce (jamais la couleur seule) ; le libellé reste le nom accessible.
 	let { type }: { type: string } = $props();
 </script>
 
-<Badge variant="outline" class="gap-1.5">
-	<span class="inline-block size-2 rounded-full" style:background={typeColor(type)} aria-hidden="true"></span>
+<Badge variant="outline">
+	<Icon name={typeIcon(type)} size={16} style="color: {typeColor(type)}" />
 	{typeLabel(type)}
 </Badge>
