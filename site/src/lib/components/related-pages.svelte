@@ -20,14 +20,12 @@
 		<Icon name={typeIcon(l.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" />
 		<span class="min-w-0">
 			<span class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
-			{#if why.length}
-				<span class="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
-					{#each why as w, i (w.label)}
-						{#if i}<span aria-hidden="true">·</span>{/if}
-						<span class="inline-flex items-center gap-1" title={w.detail}><Icon name={w.icon} size={12} />{w.label}{#if w.detail}<span class="sr-only"> : {w.detail}</span>{/if}</span>
-					{/each}
+			<!-- motifs en icônes discrètes à la suite du titre : détail au survol, lu en entier par les lecteurs d'écran -->
+			{#each why as w (w.label)}
+				<span class="text-muted-foreground ml-1 inline-flex translate-y-0.5" title={w.detail ? `${w.label} : ${w.detail}` : w.label}>
+					<Icon name={w.icon} size={12} /><span class="sr-only">{w.label}{w.detail ? ` : ${w.detail}` : ""}</span>
 				</span>
-			{/if}
+			{/each}
 		</span>
 	</a>
 {/snippet}
