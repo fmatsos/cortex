@@ -127,6 +127,8 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 
 **Détection des extractions tronquées dans `brain add`.** Leçon de l'étape 0 : defuddle a coupé l'article OKF de Google au milieu (841 mots au lieu de 1 577), sans erreur ni avertissement. `brain add` doit comparer le nombre de mots extraits à celui du texte visible de la page. Sous un seuil (à calibrer, par exemple 70 %), il relance avec Readability + Turndown, garde le résultat le plus long, et marque `partial: true` si les deux extractions restent courtes. Paywall et blocage Cloudflare (corps vide) produisent un refus explicite.
 
+**Heuristique retenue à l'étape 1** (calibrée sur les 21 sources de l'étape 0). La comparaison au texte visible de la page a été abandonnée : la navigation et les blocs « articles liés » de Next la faussent. `brain add` lance **defuddle et Readability + Turndown à chaque fois** et garde Readability si son texte est **plus de 1,3 fois plus long**. Seul OKF bascule, et aucune autre source ne perd de contenu. `partial:` est posé sur des **marqueurs de paywall vérifiés** dans le HTML : « Il reste N % de l'article » pour Next, « This post is for paid subscribers » pour Substack. Ils retrouvent exactement les 3 sources partielles. Un statut HTTP d'erreur ou un corps de moins de 50 mots est refusé. *Limite connue :* une coquille de page servie avec un statut 200 (en-tête Medium sans article, par exemple) passe ce seuil. La relecture au compile la rattrape.
+
 L'index SQLite est un **cache reconstructible**, jamais une source de vérité.
 
 ## 7. Extraction
@@ -175,12 +177,13 @@ Le risque n'est pas le langage, c'est de **changer de langage** (cf. v1). On cho
 
 Exploration du 2026-11-04 sous Bun 1.4.3. La documentation a été vérifiée via Context7, et chaque brique a été exécutée sur des cas réels.
 
-**Runtime — cœur (4)**
+**Runtime — cœur (6)**
 
 | Package | Version | Rôle | Pourquoi celui-là |
 |---|---|---|---|
-| `defuddle` | `0.19.6` (épinglée exacte, car 0.x) | page web → Markdown, plus les métadonnées (titre, auteur, date de publication, image, schema.org) | Moteur d'Obsidian Web Clipper (kepano), ~9,9k ★, releases toutes les semaines. Il remplace à lui seul Readability + Turndown. |
+| `defuddle` | `0.19.6` (épinglée exacte, car 0.x) | page web → Markdown, plus les métadonnées (titre, auteur, date de publication, image, schema.org) | Moteur d'Obsidian Web Clipper (kepano), ~9,9k ★, releases toutes les semaines. Extracteur principal. |
 | `linkedom` | `^0.18` | DOM côté serveur pour defuddle | Léger, très actif. `jsdom` reste compatible en secours. |
+| `@mozilla/readability` + `turndown` | `^0.6` / `^7` | repli quand defuddle tronque | Implémentation de référence de Firefox. Passés du plan B au cœur dès l'étape 0 : defuddle a tronqué l'article OKF sans prévenir (voir §6). |
 | `@modelcontextprotocol/server` | `^2.4` | `brain mcp` (`serveStdio`) | SDK officiel v2, qui ne dépend que de `zod` et `core` (la v1 `@modelcontextprotocol/sdk` tirait express, hono, cors, ajv…) |
 | `zod` | `^4` | schémas d'entrée des outils MCP | Requis par le SDK MCP |
 
@@ -202,7 +205,7 @@ Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement 
   - `whisper-base` (9 s/min) **saute un passage entier** et déforme beaucoup de mots.
   - `whisper-large-v3-turbo` (1,1 Go, 32 s/min) **perd aussi un passage** et toute la ponctuation en q8 : il ne vaut pas son coût.
 
-**Dev (1) :** `@types/bun`.
+**Dev (2) :** `@types/bun`, `@types/turndown`.
 
 **Intégré à Bun, donc aucune dépendance :**
 
@@ -218,7 +221,7 @@ Ces deux packages sont rangés en `optionalDependencies` et chargés uniquement 
 | tests | `bun test` |
 | binaire | `bun build --compile` |
 
-Écartés : `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`, `@mozilla/readability` + `turndown` (plan B si defuddle déçoit), `nodejs-whisper`/`smart-whisper` (ils compilent whisper.cpp), et le SDK MCP v1.
+Écartés : `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`, `nodejs-whisper`/`smart-whisper` (ils compilent whisper.cpp), et le SDK MCP v1.
 
 **Outils système, appelés via `Bun.spawn` :** `ffmpeg` (décodage audio, également requis par yt-dlp), `yt-dlp`, `pdftotext` (poppler) et `pandoc`. Tous sont disponibles dans les gestionnaires de paquets standard. `brain doctor` signale ceux qui manquent.
 

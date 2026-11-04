@@ -1,0 +1,19 @@
+{
+  "name": "brain",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "brain": "src/brain.ts"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6",
+    "defuddle": "0.19.6",
+    "linkedom": "^0.18",
+    "turndown": "^7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/turndown": "^5.0.6"
+  }
+}
