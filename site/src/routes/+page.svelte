@@ -24,7 +24,7 @@
 
 <!-- la recherche est la porte d'entrée : un grand champ, des exemples qui donnent des résultats, les recherches récentes -->
 <section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-accueil" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground border-border ml-1 self-end border-l pl-4 text-base leading-tight font-normal tracking-normal sm:text-lg">Mon second cerveau : lu, relié, sourcé.</span></h1>
+	<h1 id="h-accueil" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground self-end pb-1 text-sm leading-tight font-normal tracking-normal">Mon second cerveau : lu, relié, sourcé.</span></h1>
 	<p class="text-muted-foreground mt-2">
 		{data.seed.total} pages et {data.seed.nbTags} tags à parcourir, ou
 		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">le graphe des liens</a>.
