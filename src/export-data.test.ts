@@ -6,7 +6,8 @@ import { buildSiteData, frontendFingerprint, graphLinks, isPartialWarning, md, n
 import { parseDoc, readDocs } from "./lib";
 import { safeUrl, sanitizeHtml } from "./sanitize";
 
-const ROOT = join(import.meta.dir, "../..");
+// Non-régression sur un vrai wiki : CORTEX_ROOT=<wiki> bun test (ignorés sans)
+const ROOT = process.env.CORTEX_ROOT;
 const bun = (s: string) => Bun.markdown.html(s, { tagFilter: true, headings: { ids: true }, autolinks: true });
 
 test("assainissement : scripts, gestionnaires d'événements, iframes, styles et protocoles dangereux disparaissent", () => {
@@ -60,8 +61,8 @@ test("assainissement : ce que le site utilise reste intact (tableaux, code, tâc
   expect(sanitizeHtml(raw)).toBe(raw);
 });
 
-test("assainissement : non-régression sur le rendu des pages réelles du wiki", async () => {
-  const docs = (await readDocs(ROOT, "wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
+test.skipIf(!ROOT)("assainissement : non-régression sur le rendu des pages réelles du wiki", async () => {
+  const docs = (await readDocs(ROOT!, "wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
   expect(docs.length).toBeGreaterThan(5);
   const paths = new Set(docs.map((d) => d.path));
   for (const d of docs) {
@@ -90,8 +91,8 @@ test("encarts : l'avertissement de source partielle sort de la note personnelle"
   expect(noteCallouts(md("> [!note]\n> sans titre"))).toContain('<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>sans titre');
   expect(noteCallouts(md("> ⚠️ une citation ordinaire"))).toContain("<blockquote>");
 
-  // sur les pages réelles
-  for (const slug of ["raspberry-pi5-16go-500-euros", "how-codex-is-built"]) {
+  // sur les pages réelles (si CORTEX_ROOT est défini)
+  if (ROOT) for (const slug of ["raspberry-pi5-16go-500-euros", "how-codex-is-built"]) {
     const d = parseDoc(`wiki/sources/${slug}.md`, await Bun.file(join(ROOT, `wiki/sources/${slug}.md`)).text());
     const r = render(d.body, `wiki/sources/${slug}/`, new Set());
     expect(r.html.match(/class="callout-warning"/g)).toHaveLength(1);

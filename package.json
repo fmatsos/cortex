@@ -1,10 +1,19 @@
 {
   "name": "cortex",
   "version": "0.1.0",
+  "description": "A second brain your coding agent maintains: an LLM Wiki CLI on the Open Knowledge Format.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fmatsos/cortex.git"
+  },
   "type": "module",
   "private": true,
   "bin": {
     "cortex": "src/cortex.ts"
+  },
+  "scripts": {
+    "test": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.318",

@@ -10,7 +10,7 @@ import {
 	type OfflineState, type ToWorker,
 } from "#lib/offline.js";
 
-// Hors ligne (voir DESIGN.md, « Hors ligne »). Deux niveaux :
+// Hors ligne (voir docs/DESIGN.md, « Hors ligne »). Deux niveaux :
 //  - le socle (ressources `_app/`, pages hors `wiki/`, index de recherche, graphe) est précaché à l'installation ;
 //  - les pages du wiki sont gardées au fil des consultations (cache `runtime`, borné), ou toutes d'un coup sur demande
 //    explicite (« Télécharger tout le wiki », message `download-all`).
