@@ -282,6 +282,9 @@ function buildSearch(pages: PageData[]): SearchIndex {
 export function checkOut(root: string, out: string) {
   const o = resolve(out), keep = [root, join(root, "wiki"), join(root, "raw"), dirname(SITE_DIR), homedir(), "/"].map((p) => resolve(p));
   if (keep.some((p) => p === o || p.startsWith(o + sep))) throw new Error(`--out ${o} : refusé, ce dossier est vidé à chaque export et contient (ou est) un dossier à garder.`);
+  // Children of these folders are refused too: the build would write into them (raw/ is immutable, wiki/ is the agent's space).
+  const inside = ["raw", "wiki", "inbox", ".git"].map((d) => resolve(root, d));
+  if (inside.some((p) => p === o || o.startsWith(p + sep))) throw new Error(`--out ${o} : refusé, ce dossier est dans raw/, wiki/, inbox/ ou .git/, que l'export ne doit pas toucher.`);
   if (existsSync(o) && readdirSync(o).length && !existsSync(join(o, "_app"))) throw new Error(`--out ${o} : refusé, ce dossier n'est pas vide et ne ressemble pas à un export précédent (pas de _app/).`);
 }
 
