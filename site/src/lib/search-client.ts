@@ -1,65 +1,56 @@
 import { resolve } from "$app/paths";
-import type Fuse from "fuse.js";
 import { fold } from "./fold";
-import { isEmpty, matches, parseQuery } from "./query";
-import { FUSE_OPTIONS } from "./search-config";
+import { isEmpty, parseQuery } from "./query";
+import { createEngine, rank, ranges, type Engine } from "./search-engine";
 import type { SearchDoc, SearchIndex } from "./types";
 
-export type Engine = { fuse: Fuse<SearchDoc>; docs: SearchDoc[]; vocab: string[]; titles: string[][] };
+export type { Engine };
 export type Hit = { doc: SearchDoc; title: string; description: string; snippet: string };
 export type FilterSuggestion = { label: string; insert: string; count?: number; hint?: string };
 
 let engine: Promise<Engine> | undefined;
 
-/** Charge l'index précalculé à l'export (une seule fois, gardé en mémoire) : Fuse n'a rien à reconstruire. */
+/** Charge l'index précalculé à l'export (une seule fois, gardé en mémoire). */
 export const loadEngine = () =>
 	(engine ??= (async () => {
 		const [{ default: Fuse }, idx] = await Promise.all([
 			import("fuse.js"),
 			fetch(resolve("/search-index.json")).then((r) => r.json() as Promise<SearchIndex>),
 		]);
-		const fuse = new Fuse(idx.docs, { ...FUSE_OPTIONS, useExtendedSearch: true }, Fuse.parseIndex(idx.index as any));
-		return { fuse, docs: idx.docs, vocab: idx.vocab, titles: idx.docs.map((d) => fold(d.title).match(/[\p{L}\p{N}]+/gu) ?? []) };
+		return createEngine(idx, Fuse);
 	})());
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const words = (q: string) => fold(q).match(/[\p{L}\p{N}]+/gu) ?? [];
 
-/** Texte échappé avec <mark> sur les plages [début, fin] (fin incluse) de Fuse, fusionnées. */
-function mark(text: string, ranges: readonly (readonly [number, number])[] = [], from = 0, to = text.length): string {
-	const rs = ranges.map(([a, b]) => [Math.max(a, from), Math.min(b + 1, to)] as const).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+/** Texte échappé avec <mark> sur les plages [début, fin[ comprises entre `from` et `to`. */
+function mark(text: string, rs: [number, number][] = [], from = 0, to = text.length): string {
 	let out = "", at = from;
 	for (const [a, b] of rs) {
-		if (b <= at) continue;
-		const s = Math.max(a, at);
-		out += esc(text.slice(at, s)) + `<mark>${esc(text.slice(s, b))}</mark>`;
-		at = b;
+		if (b <= at || a >= to) continue;
+		const s = Math.max(a, at), t = Math.min(b, to);
+		out += esc(text.slice(at, s)) + `<mark>${esc(text.slice(s, t))}</mark>`;
+		at = t;
 	}
 	return out + esc(text.slice(at, to));
 }
 
 /**
- * Résultats : les filtres, phrases et exclusions de la requête se résolvent sur les métadonnées ; le texte libre passe par
- * Fuse (titre > description > tags > contenu, sans accents ni casse, tolérant aux fautes). Sans texte libre, les pages
- * qui passent les filtres sont listées par titre.
+ * Résultats : les filtres, phrases et exclusions se résolvent sur les métadonnées et le texte ; le texte libre passe par
+ * l'index inversé (mot exact, préfixe pendant la frappe, mot proche pour une faute), titre > description > tags > contenu.
+ * Sans texte libre, les pages qui passent les filtres sont listées par titre.
  */
 export function search(e: Engine, q: string, isFav: (id: string) => boolean, limit = 30): Hit[] {
 	const p = parseQuery(q);
 	if (isEmpty(p)) return [];
-	const ok = (d: SearchDoc) => matches(d, p, isFav);
-	if (!p.words.length)
-		return e.docs.filter(ok).sort((a, b) => a.title.localeCompare(b.title)).slice(0, limit)
-			.map((doc) => ({ doc, title: esc(doc.title), description: esc(doc.description), snippet: "" }));
-	// recherche étendue de Fuse : les mots séparés par une espace se combinent en ET, chacun en correspondance floue
-	return e.fuse.search(p.words.join(" ")).filter((r) => ok(r.item)).slice(0, limit).map((r) => {
-		const range = (key: string) => r.matches?.find((m) => m.key === key)?.indices ?? [];
-		const doc = r.item, text = doc.text, xs = range("x");
-		let snippet = "";
-		if (xs.length && fold(text).length === text.length) {
-			const from = Math.max(0, xs[0][0] - 60);
-			snippet = (from > 0 ? "… " : "") + mark(text, xs, from, Math.min(text.length, from + 200)) + (from + 200 < text.length ? " …" : "");
+	return rank(e, p, isFav).slice(0, limit).map(({ doc, hits }) => {
+		const text = doc.text, xs = ranges(text, hits);
+		let snippet: string;
+		if (xs.length) {
+			const from = Math.max(0, xs[0][0] - 60), to = Math.min(text.length, from + 200);
+			snippet = (from > 0 ? "… " : "") + mark(text, xs, from, to) + (to < text.length ? " …" : "");
 		} else snippet = esc(text.slice(0, 160)) + (text.length > 160 ? " …" : "");
-		return { doc, title: mark(doc.title, range("t")), description: mark(doc.description, range("d")), snippet };
+		return { doc, title: mark(doc.title, ranges(doc.title, hits)), description: mark(doc.description, ranges(doc.description, hits)), snippet };
 	});
 }
 

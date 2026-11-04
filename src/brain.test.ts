@@ -166,6 +166,42 @@ test("brain config : init, set, get, remove, lint", async () => {
   expect(lintConfig([])[0].level).toBe("error");
 });
 
+test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, classement, instantanée à grande échelle", async () => {
+  const { buildTerms, createEngine, rank } = await import("../site/src/lib/search-engine");
+  const { parseQuery } = await import("../site/src/lib/query");
+  const Fuse = (await import("fuse.js")).default;
+  const doc = (id: string, title: string, text: string, tags: string[] = [], type = "Concept") =>
+    ({ id, title, description: "", type, tags, status: "stable", verified: true, text });
+  const docs = [
+    doc("a", "Context rot", "La fenêtre de contexte se dégrade."),
+    doc("b", "Harnais", "Un long texte. ".repeat(2000) + "Le contexte compte aussi ici.", ["llm"]),
+    doc("c", "Décentralisation", "Le fédivers et Mastodon.", ["reseau"], "Entity"),
+  ];
+  const e = createEngine({ docs, terms: buildTerms(docs), vocab: [] }, Fuse);
+  const ids = (q: string) => rank(e, parseQuery(q), () => false).map((r) => r.doc.id);
+  expect(ids("contexte")).toEqual(["a", "b"]); // mot en fin d'une longue page trouvé ; « Context » au titre classe a devant
+  expect(ids("conte")).toContain("b"); // préfixe pendant la frappe
+  expect(ids("contexet")).toContain("a"); // faute de frappe
+  expect(ids("decentralisation")).toEqual(["c"]); // accents ignorés
+  expect(ids("contexte #llm")).toEqual(["b"]);
+  expect(ids("contexte -fenetre")).toEqual(["b"]);
+  expect(ids('"fediverse"')).toEqual([]);
+  expect(ids('"le federivers"')).toEqual([]);
+  expect(ids('"et mastodon"')).toEqual(["c"]);
+  expect(ids("type:entity")).toEqual(["c"]);
+
+  // ~3 000 pages de ~1 500 caractères : chaque requête doit rester instantanée
+  const words = Array.from({ length: 4000 }, (_, i) => `mot${i.toString(36)}`);
+  const big = Array.from({ length: 3000 }, (_, i) => doc(`p${i}`, `Page ${i}`, Array.from({ length: 200 }, (_, k) => words[(i * 7 + k * 13) % words.length]).join(" ")));
+  const E = createEngine({ docs: big, terms: buildTerms(big), vocab: [] }, Fuse);
+  rank(E, parseQuery("motzz"), () => false); // construit l'index flou une fois
+  let worst = 0;
+  for (const q of ["mot1a", "mot2 mot3b", "motab", "page 12", "mot1q mot2r mot3s"]) {
+    const t = performance.now(); rank(E, parseQuery(q), () => false); worst = Math.max(worst, performance.now() - t);
+  }
+  expect(worst).toBeLessThan(50);
+});
+
 test("confinement bubblewrap : wiki/ seul inscriptible", async () => {
   const { confine } = await import("./backends/backend");
   const root = mkdtempSync(join(tmpdir(), "brain-"));
@@ -370,10 +406,9 @@ test("export : site statique, liens réécrits, notes reliées, raw/ non publié
 
   const idx = JSON.parse(html("search-index.json"));
   expect(idx.docs).toHaveLength(4);
-  expect(idx.index.records).toHaveLength(4);
+  expect(idx.terms.motlointain).toEqual([idx.docs.findIndex((d: any) => d.id === "concepts/b")]); // index inversé sur tout le contenu
   expect(idx.vocab).toContain("alpha");
   expect(idx.docs.find((d: any) => d.id === "concepts/b").text).toContain("Motlointain"); // contenu complet indexé, pas un extrait
-  expect((await import("fuse.js")).default.parseIndex(idx.index).size()).toBe(4); // index rechargeable tel quel
 
   // aucune donnée de raw/ hors l'URL d'origine, nulle part dans le site
   const all = (readdirSync(out, { recursive: true }) as string[]).filter((f) => statSync(join(out, f)).isFile());

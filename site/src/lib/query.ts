@@ -1,7 +1,7 @@
 import { fold } from "./fold";
 
 /**
- * Requête de la barre de recherche : texte libre (Fuse) + filtres structurés (métadonnées), tous combinés en ET.
+ * Requête de la barre de recherche : texte libre (index inversé) + filtres structurés (métadonnées), tous combinés en ET.
  *   #tag  tag:x  type:concept|entity|synthesis|source  status:draft|stable|deprecated  is:fav  is:unverified
  *   "phrase exacte"   -mot   -#tag   -type:source …
  * Fonction pure, insensible aux accents et à la casse.
@@ -57,9 +57,8 @@ export const removeToken = (q: string, raw: string) => q.replace(raw, "").replac
 
 export type Doc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; text: string };
 
-/** Les filtres structurés, les phrases et les exclusions sur les métadonnées et le texte (le texte libre reste à Fuse). */
-export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean): boolean {
-	const hay = fold(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`);
+/** Les filtres structurés, les phrases et les exclusions sur les métadonnées et le texte (le texte libre reste à l'index). `hay` : texte replié précalculé. */
+export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean, hay = fold(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`)): boolean {
 	for (const o of p.ops) {
 		const hit =
 			o.key === "tag" ? d.tags.some((t) => fold(t) === o.value)

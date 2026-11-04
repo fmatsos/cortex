@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import Fuse from "fuse.js";
 import { fold } from "../site/src/lib/fold";
-import { FUSE_OPTIONS } from "../site/src/lib/search-config";
+import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { type Doc, parseDoc, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
 
@@ -125,11 +124,10 @@ export async function buildSiteData(root: string) {
   return { data, graph, search: buildSearch(pages) };
 }
 
-/** Index de recherche précalculé (Fuse) + vocabulaire d'autocomplétion, repliés (sans accents, minuscules). */
+/** Index de recherche précalculé : index inversé sur le contenu complet (mot replié → pages) + vocabulaire d'autocomplétion. */
 function buildSearch(pages: PageData[]): SearchIndex {
-  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, text: plain(p.html) } /* ponytail: contenu complet, Fuse le parcourt à chaque frappe (19 ms à 47 pages, ~290 ms à ~940) ; au-delà de quelques centaines de pages, index inversé à l'export (DESIGN §10 bis) */));
-  const folded = pages.map((p, i) => ({ t: fold(p.title), d: fold(p.description), g: fold(p.tags.join(" ")), x: fold(docs[i].text) }));
-  const index = Fuse.createIndex(FUSE_OPTIONS.keys as any, folded).toJSON();
+  const docs = pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, status: p.status, verified: !!p.verified, text: plain(p.html) }));
+  const terms = buildTerms(docs);
 
   const freq = new Map<string, number>(), keep = new Set<string>();
   const words = (s: string) => fold(s).match(/[\p{L}\p{N}]{3,}/gu) ?? [];
@@ -139,7 +137,7 @@ function buildSearch(pages: PageData[]): SearchIndex {
   });
   const vocab = [...freq].filter(([w, n]) => keep.has(w) || (w.length >= 4 && n >= 2))
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([w]) => w);
-  return { docs, index, vocab };
+  return { docs, terms, vocab };
 }
 
 /**

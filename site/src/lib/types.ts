@@ -29,4 +29,4 @@ export type GraphData = {
   links: { source: string; target: string }[];
 };
 export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; text: string };
-export type SearchIndex = { docs: SearchDoc[]; index: unknown; vocab: string[] };
+export type SearchIndex = { docs: SearchDoc[]; terms: Record<string, number[]>; vocab: string[] };
