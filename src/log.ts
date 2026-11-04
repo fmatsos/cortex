@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { dirname, join, normalize, resolve, sep } from "node:path";
-import { localIso, RAW_ID, isReservedPage, rawPath, readDocs, slugify } from "./lib";
+import { pageId, pageLink } from "./doc";
+import { localIso, RAW_ID, isReservedPage, rawPath, readPages, slugify } from "./lib";
 
 /**
  * Journal: wiki/log.jsonl (one entry per line, chronological order, append-only) is the source of truth;
@@ -64,7 +65,7 @@ export function lastDays(entries: LogEntry[], n: number, kind?: string): LogEntr
 /** Title of each wiki page (path → title): pages are named by their title, not by their file name. */
 export type Titles = Map<string, string>;
 export const pageTitles = async (root: string): Promise<Titles> =>
-  new Map((await readDocs(root, "wiki")).docs.filter((d) => d.fm.title).map((d) => [d.path, String(d.fm.title)]));
+  new Map((await readPages(root)).pages.filter((d) => d.fm.title).map((d) => [d.path, d.fm.title!]));
 
 const words = (s: string) => `-${slugify(s, Infinity)}-`;
 /** The text already names the page: its file name or its title, whole words, ignoring accents and case. */
@@ -75,7 +76,7 @@ const namesId = (text: string, id: string) => text.includes(`\`${id}\``);
 /** A line of log.md: the text, then the sources and pages that the text does not already name. */
 function renderLine(e: LogEntry, titles: Titles): string {
   const src = (e.sources ?? []).filter((s) => !namesId(e.text, s)).map((s) => `\`${s}\``);
-  const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p, titles.get(p))).map((p) => `[${titles.get(p) ?? p.replace(/^wiki\/|\.md$/g, "")}](/${p})`);
+  const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p, titles.get(p))).map((p) => `[${titles.get(p) ?? pageId(p)}](${pageLink(p)})`);
   const refs = [src.length && `sources : ${src.join(", ")}`, pages.length && `pages : ${pages.join(", ")}`].filter(Boolean).join(" ; ");
   return `- **${kindLabel(e.kind)}** ${e.text}${refs ? ` (${refs})` : ""}\n`;
 }

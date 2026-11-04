@@ -533,8 +533,8 @@ async function mcpRoot() {
 
 test("related : liens, rétroliens, sources et tags, classés par force", async () => {
   const { related } = await import("./mcp");
-  const { readDocs } = await import("./lib");
-  const { docs } = await readDocs(await mcpRoot(), "wiki");
+  const { readPages } = await import("./lib");
+  const { pages: docs } = await readPages(await mcpRoot());
   const a = related(docs, "/wiki/concepts/a.md");
   // B: outgoing link 3 + source 2 + tag ctx 1 = 6; C: incoming link 3 + source 2 + tag llm 1 = 6; index.md excluded
   expect(a.map((r) => r.path)).toEqual(["wiki/concepts/b.md", "wiki/entities/c.md"]);

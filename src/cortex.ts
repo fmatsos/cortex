@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { join } from "node:path";
 import { add, describe } from "./add";
+import { toResource } from "./doc";
 import { inbox } from "./inbox";
 import { regenerate } from "./index";
 import { KINDS, kindLabel, logAdd, newestFirst, readLog } from "./log";
@@ -93,7 +94,7 @@ try {
       const hits = await search(root, q, { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) });
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
       if (!hits.length) console.log(paint.dim("Aucun résultat."));
-      for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(`/${h.path}`)}\n      ${h.snippet.replace(/\s+/g, " ")}`);
+      for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}\n      ${h.snippet.replace(/\s+/g, " ")}`);
       if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Trouvé seulement dans raw/ : un trou à compiler ?"));
       break;
     }
