@@ -14,18 +14,22 @@ export const tokens = (s: string): string[] => fold(s).match(/[\p{L}\p{N}]+/gu) 
 
 /** Index inversé : chaque mot (titre, description, tags, contenu complet) → numéros des pages qui le contiennent. */
 export function buildTerms(docs: SearchDoc[]): Record<string, number[]> {
-	const terms: Record<string, number[]> = {};
+	// Map, pas un objet : « constructor », « toString »… sont des mots comme les autres, pas des propriétés héritées
+	const terms = new Map<string, number[]>();
 	docs.forEach((d, i) => {
-		for (const w of new Set(tokens(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`))) (terms[w] ??= []).push(i);
+		for (const w of new Set(tokens(`${d.title} ${d.description} ${d.tags.join(" ")} ${d.text}`))) {
+			const ids = terms.get(w);
+			if (ids) ids.push(i); else terms.set(w, [i]);
+		}
 	});
-	return terms;
+	return Object.fromEntries(terms);
 }
 
 export type Engine = {
 	docs: SearchDoc[];
 	vocab: string[];
 	titles: string[][]; // mots des titres, pour l'autocomplétion
-	terms: Record<string, number[]>;
+	terms: Map<string, number[]>;
 	sorted: string[]; // mots de l'index triés : recherche par préfixe en O(log n)
 	fields: { t: Set<string>; d: Set<string>; g: Set<string> }[]; // mots du titre, de la description, des tags
 	hay: string[]; // texte replié complet, pour les phrases exactes et les exclusions
@@ -33,12 +37,13 @@ export type Engine = {
 };
 
 export function createEngine(idx: SearchIndex, FuseCtor: typeof Fuse): Engine {
-	const sorted = Object.keys(idx.terms).sort();
+	const terms = new Map(Object.entries(idx.terms)); // Object.entries ne lit que les propriétés propres
+	const sorted = [...terms.keys()].sort();
 	let fz: Fuse<string> | undefined;
 	return {
 		docs: idx.docs,
 		vocab: idx.vocab,
-		terms: idx.terms,
+		terms,
 		sorted,
 		titles: idx.docs.map((d) => tokens(d.title)),
 		fields: idx.docs.map((d) => ({ t: new Set(tokens(d.title)), d: new Set(tokens(d.description)), g: new Set(tokens(d.tags.join(" "))) })),
@@ -60,7 +65,7 @@ const MAX_PREFIX = 200, MAX_FUZZY = 5;
 /** Mots de l'index qui répondent à un mot saisi, avec leur qualité : exact, préfixe (frappe en cours), proche (faute). */
 export function expand(e: Engine, w: string): Map<string, number> {
 	const out = new Map<string, number>();
-	if (e.terms[w]) out.set(w, EXACT);
+	if (e.terms.has(w)) out.set(w, EXACT);
 	if (w.length >= 2)
 		for (let i = lower(e.sorted, w), n = 0; i < e.sorted.length && e.sorted[i].startsWith(w) && n < MAX_PREFIX; i++, n++)
 			if (!out.has(e.sorted[i])) out.set(e.sorted[i], PREFIX);
@@ -88,10 +93,10 @@ export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Rank
 	};
 	const perWord = p.words.map((w) => {
 		const m = expand(e, w);
-		narrow([...m.keys()].flatMap((t) => e.terms[t]));
+		narrow([...m.keys()].flatMap((t) => e.terms.get(t)!));
 		return m;
 	});
-	for (const ph of p.phrases) for (const w of tokens(ph.text)) narrow(e.terms[w] ?? []);
+	for (const ph of p.phrases) for (const w of tokens(ph.text)) narrow(e.terms.get(w) ?? []);
 	const ids = cand ?? new Set(e.docs.keys());
 
 	const out: Ranked[] = [];
@@ -103,7 +108,7 @@ export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Rank
 		for (const m of perWord) {
 			let best = 0;
 			for (const [t, q] of m) {
-				if (!has(e.terms[t], i)) continue;
+				if (!has(e.terms.get(t)!, i)) continue;
 				hits.add(t);
 				best = Math.max(best, q * (f.t.has(t) ? 3 : f.d.has(t) ? 1.5 : f.g.has(t) ? 1 : 0.4));
 			}

@@ -176,6 +176,7 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
     doc("a", "Context rot", "La fenêtre de contexte se dégrade."),
     doc("b", "Harnais", "Un long texte. ".repeat(2000) + "Le contexte compte aussi ici.", ["llm"]),
     doc("c", "Décentralisation", "Le fédivers et Mastodon.", ["reseau"], "Entity"),
+    doc("d", "Constructor", "Le constructor et toString d'une classe."), // mots qui sont aussi des propriétés d'Object
   ];
   const e = createEngine({ docs, terms: buildTerms(docs), vocab: [] }, Fuse);
   const ids = (q: string) => rank(e, parseQuery(q), () => false).map((r) => r.doc.id);
@@ -189,6 +190,9 @@ test("recherche : index inversé (exact, préfixe, faute), filtres, phrases, cla
   expect(ids('"le federivers"')).toEqual([]);
   expect(ids('"et mastodon"')).toEqual(["c"]);
   expect(ids("type:entity")).toEqual(["c"]);
+  expect(ids("constructor")).toEqual(["d"]);
+  expect(ids("tostring")).toEqual(["d"]);
+  expect(ids("hasownproperty")).toEqual([]);
 
   // ~3 000 pages de ~1 500 caractères : chaque requête doit rester instantanée
   const words = Array.from({ length: 4000 }, (_, i) => `mot${i.toString(36)}`);
