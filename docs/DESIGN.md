@@ -78,6 +78,8 @@ Le bénéfice : le wiki reste lisible par Obsidian, par le visualiseur OKF et pa
 
 **Par défaut, le CLI n'embarque aucun SDK LLM.** L'agent est une session de ton harness existant, avec `BRAIN.md` comme instructions et `brain` comme outil.
 
+**Le CLI ne fournit pas les agents.** `claude`, `codex` ou `opencode` doivent déjà être installés et authentifiés sur le poste. `brain` les pilote, sans jamais les embarquer ni les installer.
+
 **Les SDK sont optionnels, chargés à la demande** quand `config.json` nomme un client. Ils servent seulement à mieux tirer parti de l'agent, en premier lieu pour bloquer les écritures hors de `wiki/` avant qu'elles aient lieu. Dans le code, c'est un pattern Bridge :
 - **l'abstraction**, ce sont les commandes `compile` et `ask` (`agent.ts`), qui ne connaissent que l'interface `Backend` (`interactive`, `run`) ;
 - **les implémentations** sont dans `cli/src/backends/` : `default.ts` (agnostique, sous-processus), `claude.ts`, `codex.ts` et `opencode.ts`.
