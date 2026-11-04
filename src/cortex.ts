@@ -10,6 +10,7 @@ import { KINDS, kindLabel, logAddCtx, newestFirst } from "./log";
 import { search } from "./search";
 import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
+import { CONFIG_KEYS } from "./config";
 import { CortexError, findRoot } from "./lib";
 import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
@@ -32,7 +33,7 @@ const HELP = `cortex — second cerveau
   cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
   cortex schema [--write]                      (le schéma que suit l'agent ; --write le réécrit dans CLAUDE.md ou AGENTS.md)
   cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>
-                                               (clés : client, model, effort, language, schema, raw_path, page_path)
+                                               (clés : ${CONFIG_KEYS.join(", ")})
 
 Agent : cortex.json (client claude|codex|opencode, model, effort). Sans client :
 $CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut « claude -p »).

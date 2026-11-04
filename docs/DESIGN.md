@@ -123,6 +123,8 @@ cortex/
 
 **Binaries:** PDFs, videos, audio files and DOCX go to `.cortex/blobs/` (content-addressed, **outside git**) and are referenced by `blob:`. For a video, the file is never kept, only the transcript and a thumbnail. The knowledge is in the Markdown. The original is only a convenience.
 
+**Dotfiles are invisible.** Every scan of `wiki/` and `raw/` goes through `Bun.Glob`, which skips dotfiles and does not follow symlinked directories. A `wiki/.drafts/` folder (or any `.hidden.md`) is therefore ignored by every command: `index`, `search`, `lint`, `export`, `mcp`. That is a handy place for scratch notes, and a trap if a page is expected to be listed.
+
 ## 5. Formats
 
 The format of `raw/.../source.md` and that of the wiki pages are defined in the agent schema ([`src/schema.md`](../src/schema.md)), which is authoritative.
@@ -132,6 +134,8 @@ The format of `raw/.../source.md` and that of the wiki pages are defined in the 
 **Identifiers: UUID v7**, for raw sources (`raw/YYYY/MM/<uuid>/source.md`, month of addition) as well as for wiki pages (`wiki/<type>/<uuid>.md`). Decision of 2026-11-04, which replaces `YYYYMMDD-<4 characters>-<slug>` and readable slugs: uniqueness is guaranteed without depending on the title (two sources with the same title on the same day, a renamed page), at the cost of unreadable file names. Timestamped then random (74 bits), a UUID v7 sorts in creation order; `Bun.randomUUIDv7()`, no dependency. Neither the agent nor the human writes one: `cortex add` names a source, `cortex new <type> "<title>"` creates a page (refused if the title already exists: update before creating). A page is found by its title (index, search); the journal (`log.md`) names it by its title. The path of a raw source is found from its id (`rawPath`, a search for `raw/*/*/<id>/`), never by splitting the id. A link to a page yet to be written is no longer possible: the stub is created first (`cortex new`, as `draft`).
 
 **Configurable naming** (same day): `raw_path` and `page_path` in `cortex.json` (validated by a zod schema, like the whole config) compose paths and names from placeholders (`{uuid}`, date and time, `{slug}`, `{rand}`, `{kind}`, `{type}`); UUID v7 remains the default. The last segment of `raw_path` is the raw id, unique under `raw/` (the journal cites only that). A collision gets `-2`, `-3`… Lint compares each path to the pattern derived from the template (warning: changing the template renames nothing) and rejects two identical raw ids. `naming.ts`.
+
+**Time zone and naming.** `{yyyy}`, `{mm}`, `{dd}`, `{hh}`, `{mi}` and `{ss}` are the **local** time of the machine that runs `cortex add` / `cortex new` (like `fetched_at`). The default `raw_path` `{yyyy}/{mm}/{uuid}` therefore depends on `TZ`: a wiki synced between machines in different time zones files two sources added at the same instant, around midnight on the last day of a month, under two different months. The raw id (the UUID) is the same either way, so nothing breaks; only the folder differs. Nothing else in the generated files depends on `TZ` or `LANG`: `wiki/index.md` is sorted by one French collator (`text.ts`), and `wiki/log.md` groups entries by the date written in the entry (`determinism.test.ts` spawns `cortex index` under opposite settings and compares the bytes).
 
 ## 6. `cortex` CLI
 
@@ -201,6 +205,34 @@ The CLI is mostly **glue**: HTTP fetch, HTML extraction, SQLite, YAML, calls to 
 The risk is not the language, it is **changing language** (cf. v1). We choose once and do not go back. The contract is the file format, not the code: the CLI can be rewritten without touching the wiki.
 
 **I/O rule.** Small metadata reads (existence checks, `cortex.json`, the journal, one page) use synchronous `node:fs`: simpler stack traces, no accidental concurrency. Bulk or specialised work goes through `Bun.*`: `Bun.file`/`Bun.write` for file contents, `Bun.CryptoHasher` for hashing, `Bun.YAML` for frontmatter, `Bun.Glob` for scans, `Bun.spawn` for external commands. `node:fs/promises` is kept only where Bun has no equivalent (`rename`, `appendFile`, exclusive-create writes).
+
+### Module layout
+
+`src/cortex.ts` parses the arguments and dispatches; commands are functions of a root (or of a `Wiki` context) that return data or a `Result`, and report progress through `print.ts` rather than printing. The modules, from the bottom up:
+
+| Module | Role |
+|---|---|
+| `limits.ts` | Every tunable threshold (word counts, timeouts, display caps), with its calibration. A magic number belongs here. |
+| `text.ts` | The one collator (French rules) used to sort titles everywhere, whatever the runtime locale. |
+| `paths.ts` | `realPath` and `isUnder`: symlink-aware containment checks, shared by the guards, `log add --page`, `get` and the export. |
+| `template.ts` | Pure part of the naming: placeholders, template validation, `expand`, the pattern lint matches. Imports no config, so `config.ts` and `naming.ts` can both use it. |
+| `config.ts` | `cortex.json`: the zod schema (`CONFIG_KEYS` is the one list of keys), clients, effort vocabularies, reading, linting. |
+| `doc.ts` | Domain types of the file format (`Page`, `RawSource`) and the conversions between the spellings of an identity (path, resource, route). Pure: no I/O. |
+| `lib.ts` | Reading and writing frontmatter and documents, `readDocs` / `readPages`, links and `related`. |
+| `context.ts` | `openWiki(root)`: what one command knows about the wiki (config, pages, raw, journal, link graph), each read at most once, on first use. A snapshot. |
+| `catalog.ts` | Renders `wiki/index.md` from the frontmatters. |
+| `print.ts` | `Result`, `Report` and `collector`: what domain code returns or says instead of printing. |
+| `prompts.ts` + `prompts.md` | The orchestration prompts (compile, ask, MCP instructions), shipped next to `schema.md`. |
+| `backends/policy.ts` | What an agent may run, as one table, rendered in each backend's dialect (`--allowedTools`, Claude regexes, opencode rules). |
+| `backends/sandbox.ts` | `confine`: bubblewrap on Linux, `sandbox-exec` on macOS. |
+| `backends/*.ts` | One adapter per client (`default`, `claude`, `codex`, `opencode`) behind the `Backend` interface of `backend.ts`. |
+
+Tests live next to the module they cover (`<module>.test.ts`); fixtures shared by several files are in `test-helpers.ts`. Test names are in English; assertions on CLI output stay in French.
+
+### Known limits
+
+- **`wiki/log.md` can be stale after concurrent writers.** `appendLog` is one `O_APPEND` write, so `wiki/log.jsonl` (the source of truth) never loses a line. `writeLogMd`, though, regenerates `log.md` from a read that may predate another process's append (for example `cortex mcp add` and `cortex log add` at the same moment): the last writer wins and `log.md` can miss an entry. `cortex lint` reports it (`log.md` differs from the journal) and `cortex index` repairs it. Accepted: no lock.
+- **`cortex inbox` rewrites `urls.txt` without a lock.** It re-reads the file just before writing through `tmp` + `rename`, but a sync client that writes between the re-read and the rename loses its line. Accepted, as a lock file would be over-engineering for a mobile share target; the `ponytail:` comment in `inbox.ts` keeps the decision visible.
 
 ### Dependencies
 
