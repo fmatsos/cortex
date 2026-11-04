@@ -2,7 +2,8 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { readDocs, type Doc } from "./lib";
+import { rawId, toResource } from "./doc";
+import { readPages, readRawSources } from "./lib";
 import { backendFor, type Mode } from "./backends/index";
 import { confine } from "./backends/sandbox";
 import { agentFileFor } from "./config";
@@ -81,8 +82,8 @@ export async function markCompiled(root: string, path: string) {
 }
 
 /** Resolves a raw source by id (folder name): exact match wins, else a unique prefix; ambiguous or unknown → error. */
-export function resolveRawId(docs: Doc[], id: string): Doc {
-  const idOf = (d: Doc) => d.path.split("/").at(-2) ?? "";
+export function resolveRawId<T extends { path: string }>(docs: T[], id: string): T {
+  const idOf = (d: T) => rawId(d.path);
   const exact = docs.find((d) => idOf(d) === id);
   if (exact) return exact;
   const hits = docs.filter((d) => id !== "" && idOf(d).startsWith(id));
@@ -92,21 +93,21 @@ export function resolveRawId(docs: Doc[], id: string): Doc {
 }
 
 async function isCited(root: string, path: string) {
-  return (await readDocs(root, "wiki")).docs.some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s: any) => s.resource === `/${path}`));
+  return (await readPages(root)).pages.some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s) => s.resource === toResource(path)));
 }
 
 export async function compile(root: string, ids: string[], opts: { pending?: boolean; batch?: boolean }) {
-  const raw = (await readDocs(root, "raw")).docs;
+  const raw = (await readRawSources(root)).raws;
   const targets = opts.pending
     ? raw.filter((d) => d.fm.status === "pending")
     : ids.map((id) => resolveRawId(raw, id));
   if (!targets.length) { console.log("Rien à compiler."); return; }
 
   for (const d of targets) {
-    const id = d.path.split("/").at(-2)!;
+    const id = rawId(d.path);
     if (!String(d.fm.note ?? "").trim()) { fail(`${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); process.exitCode = 1; continue; }
     if (d.fm.status !== "pending") console.log(paint.dim(`(${id} est déjà ${d.fm.status} : recompilation)`));
-    const prompt = `Applique le workflow INGEST de ${await agentFileFor(root)} à la source /${d.path}.` +
+    const prompt = `Applique le workflow INGEST de ${await agentFileFor(root)} à la source ${toResource(d.path)}.` +
       (opts.batch ? " Mode non interactif : personne ne validera ta présentation ; écris directement, toutes les pages créées ou modifiées en status: draft. Ne touche pas au statut de la source raw : le CLI s'en charge." : " Ne touche pas au statut de la source raw : le CLI s'en charge.");
     console.log(`${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root);

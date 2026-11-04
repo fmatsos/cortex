@@ -4,18 +4,17 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import { add } from "./add";
-import { readDocs, related } from "./lib";
+import { fromResource, toResource } from "./doc";
+import { readPages, related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
 import { search } from "./search";
 
 export { related };
 
-const norm = (p: string) => p.trim().replace(/^\/+/, "");
-
 /** Content of a .md under wiki/ or raw/; refuses any path that leaves it once resolved (.., symbolic links). */
 export async function getFile(root: string, path: string): Promise<string> {
-  const file = join(root, norm(path));
+  const file = join(root, fromResource(path));
   if (!existsSync(file) || !statSync(file).isFile()) throw new Error(`Fichier introuvable : ${path}`);
   const real = realpathSync(file);
   const inside = ["wiki", "raw"].some((d) => existsSync(join(root, d)) && real.startsWith(realpathSync(join(root, d)) + sep));
@@ -54,7 +53,7 @@ export function buildServer(root: string): McpServer {
     const hits = await search(root, q, { in: area, limit: limit ?? 10 });
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
-      hits: hits.map((h) => ({ path: `/${h.path}`, title: h.title, area: h.area, snippet: h.snippet })),
+      hits: hits.map((h) => ({ path: toResource(h.path), title: h.title, area: h.area, snippet: h.snippet })),
       ...(gap && { hint: "Trouvé seulement dans raw/ : un trou à compiler (cortex compile)." }),
     });
   }));
@@ -72,7 +71,7 @@ export function buildServer(root: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("nombre maximal de pages (défaut 10)"),
     }),
     annotations: readOnly,
-  }, safe(async ({ path, limit }) => json(related((await readDocs(root, "wiki")).docs, path).slice(0, limit ?? 10).map((r) => ({ ...r, path: `/${r.path}` })))));
+  }, safe(async ({ path, limit }) => json(related((await readPages(root)).pages, path).slice(0, limit ?? 10).map((r) => ({ ...r, path: toResource(r.path) })))));
 
   s.registerTool("lint", {
     description: "Contrôles mécaniques du wiki : erreurs et avertissements (liens cassés, orphelins, sources en attente, pages à relire…). Les contradictions entre pages restent à ta charge.",

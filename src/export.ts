@@ -5,16 +5,15 @@ import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { newestFirst, readLog } from "./log";
-import { type Doc, isReservedPage, parseDoc, rawPath, readDocs, related, sha256, slugify, wikiLinks } from "./lib";
+import { type Page, type RawFm, type Stamp, pageId, pageRoute, toRawSource, toResource } from "./doc";
+import { isReservedPage, parseDoc, rawPath, readPages, related, sha256, slugify, wikiLinks } from "./lib";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
 const iso = (x: unknown) => (x == null ? undefined : x instanceof Date ? x.toISOString() : String(x));
-const stamp = (x: any) => (x?.at ? { by: String(x.by ?? ""), at: iso(x.at)! } : undefined);
-const route = (path: string) => `${path.replace(/\.md$/, "")}/`; // wiki/concepts/x.md → wiki/concepts/x/
-const id = (path: string) => path.replace(/^wiki\//, "").replace(/\.md$/, "");
+const stamp = (x: Stamp | null | undefined) => (x?.at ? { by: String(x.by ?? ""), at: iso(x.at)! } : undefined);
 
 /** Relative link from one route to another (both « a/b/ »): the site works under any prefix. */
 function rel(from: string, to: string): string {
@@ -121,7 +120,7 @@ export function render(body: string, from: string, pages: Set<string>) {
     const page = path.replace(/^\//, "");
     if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // navigation pages of the site
     if (!pages.has(page)) return `<span class="lien-manquant" title="${page.startsWith("raw/") ? "source brute, non publiée" : "page à écrire"}">${label}</span>`;
-    return `<a href="${rel(from, route(page))}${frag && `#${frag}`}">${label}</a>`;
+    return `<a href="${rel(from, pageRoute(page))}${frag && `#${frag}`}">${label}</a>`;
   }));
   const notes: Note[] = order.map((k, i) => ({
     n: i + 1, id: k, refs: seen.get(k) ?? 1, // refs: number of occurrences in the text (one ↩ back-link per occurrence)
@@ -143,10 +142,10 @@ function pageMarkdown(root: string, path: string): string {
 }
 
 /** Frontmatter of a raw source (read-only, confined to raw/). Only `url` and `partial` come out, never the body. */
-function rawFm(root: string, resource: string): Record<string, any> | undefined {
+function rawFm(root: string, resource: string): RawFm | undefined {
   const f = join(root, resource);
   if (!existsSync(f) || !realpathSync(f).startsWith(realpathSync(join(root, "raw")) + sep)) return;
-  return parseDoc(f, readFileSync(f, "utf8")).fm;
+  return toRawSource(parseDoc(f, readFileSync(f, "utf8"))).fm;
 }
 
 /** Original URL of a source: read from the raw frontmatter. Nothing else from raw/ is read or published. */
@@ -165,15 +164,15 @@ const rawPartial = (root: string, resource: string) => {
  * Journal: wiki/log.jsonl as structured entries (most recent first). The text is rendered as inline HTML; the cited
  * pages become links (missing page: ignored), the sources the wiki Source page that cites them (raw/ is not published).
  */
-function renderLog(root: string, paths: Set<string>, byPath: Map<string, Doc>, sourcePage: Map<string, Doc>, link: (d: Doc) => Link): LogEntryData[] {
+function renderLog(root: string, paths: Set<string>, byPath: Map<string, Page>, sourcePage: Map<string, Page>, link: (d: Page) => Link): LogEntryData[] {
   return newestFirst(readLog(root).entries).map((e) => {
     const sources = (e.sources ?? []).map((id) => {
-      const raw = rawPath(root, id), page = raw && sourcePage.get(`/${raw}`);
+      const raw = rawPath(root, id), page = raw && sourcePage.get(toResource(raw));
       return { id, ...(page && { page: link(page) }) };
     });
     let html = inline(render(e.text, "log/", paths).html);
     // a raw id cited in the text becomes a link to its Source page
-    for (const s of sources) if (s.page) html = html.replaceAll(`<code>${s.id}</code>`, `<a href="${rel("log/", route(`wiki/${s.page.id}.md`))}"><code>${s.id}</code></a>`);
+    for (const s of sources) if (s.page) html = html.replaceAll(`<code>${s.id}</code>`, `<a href="${rel("log/", pageRoute(`wiki/${s.page.id}.md`))}"><code>${s.id}</code></a>`);
     const pages = (e.pages ?? []).filter((p) => byPath.has(p)).map((p) => link(byPath.get(p)!));
     return {
       at: e.at, kind: e.kind, html, pages,
@@ -199,29 +198,29 @@ export function graphLinks(directed: Set<string>): GraphData["links"] {
 }
 
 export async function buildSiteData(root: string, say: (m: string) => void = warn) {
-  const read = await readDocs(root, "wiki");
+  const read = await readPages(root);
   for (const e of read.errors) say(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
-  const docs = read.docs.filter((d) => !isReservedPage(d.path)).sort((a, b) => a.path.localeCompare(b.path));
+  const docs = read.pages.filter((d) => !isReservedPage(d.path)).sort((a, b) => a.path.localeCompare(b.path));
   const paths = new Set<string>(docs.map((d) => d.path));
   const byPath = new Map(docs.map((d) => [d.path, d]));
-  const link = (d: Doc): Link => ({ id: id(d.path), title: String(d.fm.title ?? id(d.path)), type: String(d.fm.type ?? "") });
+  const link = (d: Page): Link => ({ id: pageId(d.path), title: String(d.fm.title ?? pageId(d.path)), type: String(d.fm.type ?? "") });
 
   // directed edges: Markdown links between existing wiki pages (source = page containing the link, target = cited page)
-  const directed = new Set<string>(), back = new Map<string, Doc[]>();
+  const directed = new Set<string>(), back = new Map<string, Page[]>();
   for (const d of docs) for (const t of wikiLinks(d)) {
     if (t === d.path || !paths.has(t)) continue;
-    directed.add(`${id(d.path)}\t${id(t)}`);
+    directed.add(`${pageId(d.path)}\t${pageId(t)}`);
     back.set(t, [...(back.get(t) ?? []), d]);
   }
   const edges = graphLinks(directed);
-  const resourcePage = new Map<string, Doc>(); // raw resource → wiki Source page that cites it
-  for (const d of docs) if (d.fm.type === "Source") for (const s of d.fm.sources ?? []) resourcePage.set(s.resource, d);
+  const resourcePage = new Map<string, Page>(); // raw resource → wiki Source page that cites it
+  for (const d of docs) if (d.fm.type === "Source") for (const s of d.fm.sources ?? []) if (s.resource) resourcePage.set(s.resource, d);
 
   const pages: PageData[] = docs.map((d) => {
     const { fm } = d;
-    const r = render(d.body, route(d.path), paths);
-    const sources: SourceRef[] = (fm.sources ?? []).map((s: any) => {
-      const page = resourcePage.get(s.resource);
+    const r = render(d.body, pageRoute(d.path), paths);
+    const sources: SourceRef[] = (fm.sources ?? []).map((s) => {
+      const page = s.resource ? resourcePage.get(s.resource) : undefined;
       return {
         id: String(s.id), title: String(s.title ?? s.id), url: originUrl(root, String(s.resource)),
         ...(page && page !== d && { page: link(page) }),
@@ -231,9 +230,9 @@ export async function buildSiteData(root: string, say: (m: string) => void = war
     const g = Date.parse(iso(fm.generated?.at) ?? ""), v = Date.parse(iso(fm.verified?.at) ?? "");
     // partial source: `partial:` extraction of a cited raw source (Source page only: a concept citing a
     // partial source is not itself partial), or partial-content warning callout in the body
-    const partial = (fm.type === "Source" && (fm.sources ?? []).some((s: any) => s.resource && rawPartial(root, String(s.resource)))) || r.warnings.some(isPartialWarning);
+    const partial = (fm.type === "Source" && (fm.sources ?? []).some((s) => s.resource && rawPartial(root, s.resource))) || r.warnings.some(isPartialWarning);
     return {
-      id: id(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? id(d.path)),
+      id: pageId(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? pageId(d.path)),
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
       status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
       stale_after: iso(fm.stale_after), needsReview: !!fm.verified && g > v, partial,

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "./config";
-import { readDocs, serializeDoc, slugify } from "./lib";
+import { readPages, serializeDoc, slugify } from "./lib";
 import { expand, NAMING_DEFAULTS, TYPE_DIRS, type NamingKey, type PageType } from "./template";
 
 /** Templates in force: config.json, otherwise the defaults (UUID v7). */
@@ -28,7 +28,7 @@ export async function newPage(root: string, type: string, title: string, at = ne
   const t = (Object.keys(TYPE_DIRS) as PageType[]).find((k) => k.toLowerCase() === type.toLowerCase());
   if (!t) throw new Error(`type inconnu : ${type} (${Object.keys(TYPE_DIRS).join(" | ")})`);
   if (!title.trim()) throw new Error("titre vide");
-  const same = (await readDocs(root, "wiki")).docs.find((d) => d.fm.title && slugify(String(d.fm.title)) === slugify(title));
+  const same = (await readPages(root)).pages.find((d) => d.fm.title && slugify(d.fm.title) === slugify(title));
   if (same) throw new Error(`une page porte déjà ce titre : ${same.path} (mets-la à jour plutôt que d'en créer une autre)`);
   const base = `wiki/${expand((await naming(root)).page_path, { at, title, type: t })}`;
   const path = `${free(base, (p) => existsSync(join(root, `${p}.md`)))}.md`;

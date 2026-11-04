@@ -7,7 +7,8 @@ import { parseHTML } from "linkedom";
 import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
-import { localIso, normUrl, readDocs, serializeDoc, sha256 } from "./lib";
+import { rawId } from "./doc";
+import { localIso, normUrl, readRawSources, serializeDoc, sha256 } from "./lib";
 import { free, naming, rawIdTaken } from "./naming";
 import { expand } from "./template";
 import { appendLog } from "./log";
@@ -149,8 +150,8 @@ export function extractText(txt: string, name?: string): Extract {
 /** Source already present (one of the normalized URLs or same fingerprint) → its id, otherwise undefined. */
 export async function findDuplicate(root: string, urls: (string | undefined)[], hash?: string): Promise<string | undefined> {
   const u = new Set(urls.filter(Boolean).map((x) => normUrl(x!)));
-  for (const d of (await readDocs(root, "raw")).docs) {
-    if ((hash && d.fm.sha256 === hash) || (d.fm.url && u.has(normUrl(String(d.fm.url))))) return d.path.split("/").at(-2);
+  for (const d of (await readRawSources(root)).raws) {
+    if ((hash && d.fm.sha256 === hash) || (d.fm.url && u.has(normUrl(String(d.fm.url))))) return rawId(d.path);
   }
 }
 

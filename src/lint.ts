@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { isReservedPage, readDocs, slugify } from "./lib";
+import { fromResource, rawId, REPORTED_FIELDS, toResource } from "./doc";
+import { isReservedPage, readPages, readRawSources, slugify } from "./lib";
 import { naming } from "./naming";
 import { pattern } from "./template";
 import { readLog, renderLogMd } from "./log";
@@ -8,33 +9,33 @@ import { readLog, renderLogMd } from "./log";
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
 const DAY = 86_400_000;
-const time = (x: unknown) => (x == null ? NaN : new Date(x as any).getTime()); // YAML may yield Date or string
+const time = (x: string | Date | null | undefined) => (x == null ? NaN : new Date(x).getTime()); // YAML may yield Date or string
 
 export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   const out: Issue[] = [];
   const push = (level: Issue["level"], path: string, msg: string) => out.push({ level, path, msg });
   const tpl = await naming(root), pagePat = pattern(tpl.page_path), rawPat = pattern(tpl.raw_path);
-  const [w, r] = [await readDocs(root, "wiki"), await readDocs(root, "raw")];
+  const [w, r] = [await readPages(root), await readRawSources(root)];
   for (const e of [...w.errors, ...r.errors]) push("error", e.path, `YAML invalide : ${e.msg}`);
-  const wiki = w.docs.filter((d) => !isReservedPage(d.path));
-  const raw = r.docs;
+  const wiki = w.pages.filter((d) => !isReservedPage(d.path));
+  const raw = r.raws;
   const inbound = new Map<string, number>();
   const cites = new Map<string, string[]>(); // raw resource → Source pages that cite it
   const titles = new Map<string, string>();
 
   for (const d of wiki) {
     const { fm, path } = d;
-    if (!fm.type) push("error", path, "type manquant");
+    for (const i of d.issues) if (REPORTED_FIELDS.has(i.field)) push("error", path, i.msg); // type, title, status, tags
     if (!pagePat.test(path.replace(/^wiki\//, "").replace(/\.md$/, ""))) push("warning", path, `nom hors du modèle page_path « ${tpl.page_path} » (les pages se créent par cortex new)`);
     if (!fm.description) push("error", path, "description manquante");
-    const ids = new Set((fm.sources ?? []).map((s: any) => s.id));
+    const ids = new Set((fm.sources ?? []).map((s) => s.id));
     for (const s of fm.sources ?? []) {
       if (!s.resource || !existsSync(join(root, s.resource))) push("error", path, `source introuvable : ${s.resource}`);
       else if (fm.type === "Source") cites.set(s.resource, [...(cites.get(s.resource) ?? []), path]);
     }
     for (const [, id] of d.body.matchAll(/\[\^([\w-]+)\]/g)) if (!ids.has(id)) push("error", path, `note [^${id}] sans entrée sources[]`);
     for (const [, l] of d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)) {
-      inbound.set(l.slice(1), (inbound.get(l.slice(1)) ?? 0) + 1);
+      inbound.set(fromResource(l), (inbound.get(fromResource(l)) ?? 0) + 1);
       if (!existsSync(join(root, l))) push("error", path, `lien cassé : ${l}`);
     }
     const g = time(fm.generated?.at), v = time(fm.verified?.at);
@@ -52,16 +53,16 @@ export async function lint(root: string, now = new Date()): Promise<Issue[]> {
   for (const d of raw) {
     const { fm, path } = d;
     if (fm.type !== "RawSource") push("error", path, "type: RawSource attendu");
-    const dir = path.replace(/^raw\//, "").replace(/\/source\.md$/, "");
+    const dir = path.replace(/^raw\//, "").replace(/\/source\.md$/, ""); // the folder of the source, checked against raw_path
     if (!path.endsWith("/source.md") || !rawPat.test(dir)) push("warning", path, `chemin hors du modèle raw_path « ${tpl.raw_path} » (les sources s'ajoutent par cortex add)`);
-    const id = dir.split("/").at(-1)!;
+    const id = rawId(path);
     if (rawIds.has(id)) push("error", path, `id raw en double : ${id} (aussi ${rawIds.get(id)}) ; le journal ne peut pas distinguer les deux`);
     else rawIds.set(id, path);
     if (fm.status === "pending") {
       if (!String(fm.note ?? "").trim()) push("warning", path, "note manquante : à demander avant de compiler");
       if (now.getTime() - time(fm.fetched_at) > 7 * DAY) push("warning", path, "en attente depuis plus de 7 jours");
     }
-    if (fm.status === "compiled" && !cites.has(`/${path}`)) push("warning", path, "compilée mais aucune page Source ne la cite");
+    if (fm.status === "compiled" && !cites.has(toResource(path))) push("warning", path, "compilée mais aucune page Source ne la cite");
   }
 
   const tags = new Map<string, string>();

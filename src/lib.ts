@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fromResource, type Page, type RawSource, toPage, toRawSource } from "./doc";
 
 /** Error with a category the CLI maps to an exit code: `usage` → 2, anything else → 1. */
 export class CortexError extends Error {
@@ -15,7 +16,9 @@ export function findRoot(from = process.cwd()): string {
   }
 }
 
-export type Doc = { path: string; fm: Record<string, any>; body: string };
+/** A parsed .md file: the frontmatter as YAML gave it. `toPage` / `toRawSource` (doc.ts) type it. */
+export type Fm = Record<string, unknown>;
+export type Doc = { path: string; fm: Fm; body: string };
 
 export function parseDoc(path: string, txt: string): Doc {
   txt = txt.replace(/^﻿/, ""); // BOM
@@ -23,7 +26,7 @@ export function parseDoc(path: string, txt: string): Doc {
   if (!m) return { path, fm: {}, body: txt };
   const fm = (m[1] === undefined ? null : Bun.YAML.parse(m[1])) ?? {};
   if (typeof fm !== "object" || Array.isArray(fm)) throw new Error("frontmatter invalide : objet YAML attendu");
-  return { path, fm: fm as Record<string, any>, body: txt.slice(m[0].length) };
+  return { path, fm: fm as Fm, body: txt.slice(m[0].length) };
 }
 
 /** Inverse of parseDoc: `---`, YAML frontmatter, `---`, then the body as is. */
@@ -41,12 +44,24 @@ export type DocError = { path: string; msg: string };
 export async function readDocs(root: string, dir: string): Promise<{ docs: Doc[]; errors: DocError[] }> {
   const docs: Doc[] = [], errors: DocError[] = [];
   if (!existsSync(join(root, dir))) return { docs, errors };
-  for (const f of new Bun.Glob("**/*.md").scanSync(join(root, dir))) {
+  for (const f of [...new Bun.Glob("**/*.md").scanSync(join(root, dir))].sort()) { // sorted: lint and index do not depend on the file system order
     const path = `${dir}/${f}`;
     try { docs.push(parseDoc(path, await Bun.file(join(root, path)).text())); }
     catch (e) { errors.push({ path, msg: (e as Error).message.split("\n")[0] }); }
   }
   return { docs, errors };
+}
+
+/** The wiki pages under `dir` (default: all of wiki/), typed. A page whose frontmatter does not conform still loads: see `Page.issues`. */
+export async function readPages(root: string, dir = "wiki"): Promise<{ pages: Page[]; errors: DocError[] }> {
+  const { docs, errors } = await readDocs(root, dir);
+  return { pages: docs.map(toPage), errors };
+}
+
+/** The raw sources, typed. */
+export async function readRawSources(root: string): Promise<{ raws: RawSource[]; errors: DocError[] }> {
+  const { docs, errors } = await readDocs(root, "raw");
+  return { raws: docs.map(toRawSource), errors };
 }
 
 /** Local ISO timestamp with the real UTC offset (handles daylight saving). */
@@ -89,19 +104,18 @@ export function normUrl(u: string): string {
   } catch { return u; }
 }
 
-const norm = (p: string) => p.trim().replace(/^\/+/, "");
 export type Related = { path: string; title: string; score: number; reasons: string[] };
 
-export const wikiLinks = (d: Doc) => new Set([...d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)].map((m) => norm(m[1])));
-const resources = (d: Doc) => new Set<string>((d.fm.sources ?? []).map((s: any) => s.resource));
+export const wikiLinks = (d: { body: string }) => new Set([...d.body.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)].map((m) => fromResource(m[1])));
+const resources = (d: Page) => new Set<string>((d.fm.sources ?? []).flatMap((s) => (s.resource ? [s.resource] : [])));
 
 /**
  * Wiki pages linked to `path`, by decreasing strength: outgoing or incoming link (3 each), shared raw source (2),
  * shared tag (1). Pure: works on pages already read (index.md and log.md excluded).
  */
-export function related(docs: Doc[], path: string): Related[] {
+export function related(docs: Page[], path: string): Related[] {
   const pages = docs.filter((d) => !isReservedPage(d.path));
-  const me = pages.find((d) => d.path === norm(path));
+  const me = pages.find((d) => d.path === fromResource(path));
   if (!me) throw new Error(`Page wiki introuvable : ${path}`);
   const out = wikiLinks(me), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
   const hits: Related[] = [];
