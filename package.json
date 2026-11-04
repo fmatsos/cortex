@@ -7,12 +7,14 @@
     "brain": "src/brain.ts"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
+    "@modelcontextprotocol/server": "^2.4",
     "@mozilla/readability": "^0.6",
+    "@openai/codex-sdk": "^0.166.0",
     "defuddle": "0.19.6",
     "linkedom": "^0.18",
     "turndown": "^7",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
-    "@openai/codex-sdk": "^0.166.0"
+    "zod": "^4"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

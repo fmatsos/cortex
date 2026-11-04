@@ -17,6 +17,7 @@ const HELP = `brain — second cerveau
   brain lint [--json]
   brain compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
   brain ask "<question>" [--file] [--interactive]
+  brain mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
   brain config init | lint | get [clé] | set <clé> <valeur> | remove <clé>   (clés : client, model, effort)
 
 Agent : config.json (client claude|codex|opencode, model, effort). Sans client :
@@ -88,6 +89,9 @@ try {
       await ask(root, q, { file: o.file, interactive: o.interactive });
       break;
     }
+    case "mcp":
+      (await import("./mcp")).serveMcp(root); // chargé à la demande ; reste ouvert tant que le client lit stdin
+      break;
     case "config":
       process.exitCode = await configCmd(root, args);
       break;
