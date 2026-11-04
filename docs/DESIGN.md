@@ -143,6 +143,7 @@ Le format de `raw/.../source.md` et celui des pages du wiki sont définis dans [
 | `brain config init\|lint\|get\|set\|remove` | 2 | squelette de `config.json` (clés `client`, `model`, `effort` à `null`), contrôle, lecture et écriture validée des propriétés. L'effort est traduit pour chaque client : `effort` (Claude), `modelReasoningEffort` (Codex), variante du modèle (opencode, `modèle#variante` en CLI) |
 | `brain mcp` | 3 | serveur MCP stdio : `search`, `get`, `related`, `lint`, `add`, `log` |
 | `brain inbox` | 4 | `add` sur tout le contenu de `inbox/` (fichiers et `urls.txt`) |
+| `brain export [--out <dossier>]` | 6 | site HTML statique du wiki (voir §10 bis), avec une page de graphe interactive |
 | `brain related`, `ls`, `show`, `doctor`, `reextract` | à la demande | — |
 
 **Détection des extractions tronquées dans `brain add`.** Leçon de l'étape 0 : defuddle a coupé l'article OKF de Google au milieu (841 mots au lieu de 1 577), sans erreur ni avertissement. `brain add` doit comparer le nombre de mots extraits à celui du texte visible de la page. Sous un seuil (à calibrer, par exemple 70 %), il relance avec Readability + Turndown, garde le résultat le plus long, et marque `partial: true` si les deux extractions restent courtes. Paywall et blocage Cloudflare (corps vide) produisent un refus explicite.
@@ -266,7 +267,26 @@ opencode n'a pas de SDK : le seul publié, `@opencode-ai/sdk` 1.19.5, ne parle p
 - **Étape 3.** `mcp`.
 - **Étape 4.** `inbox`, avec un raccourci mobile « Partager → `inbox/urls.txt` ».
 - **Étape 5.** Images, puis vidéo et audio.
-- **Étape 6, seulement si nécessaire.** Embeddings, `reextract`, export HTML (visualiseur OKF).
+- **Étape 6.** `export` : le wiki en site HTML statique, avec un graphe interactif, déployé automatiquement sur le homelab pour le parcourir depuis un navigateur.
+- **Étape 7, seulement si nécessaire.** Embeddings, `reextract`.
+
+## 10 bis. Export HTML et déploiement
+
+**But :** parcourir le wiki depuis un navigateur, sur le homelab, sans Obsidian ni agent.
+
+**`brain export` produit un site statique**, sans serveur applicatif. C'est une étape déterministe, sans LLM, comme `index` et `lint`.
+- **Une page HTML par page wiki.** Le Markdown est rendu ; les liens `/wiki/…` deviennent des liens relatifs vers les pages HTML ; les notes de bas de page renvoient aux sources.
+- **L'index, les tags et le log** deviennent des pages de navigation, générés depuis les frontmatters, comme `wiki/index.md`.
+- **Chaque page affiche ses métadonnées OKF** : type, statut (`draft`, `stable`, `deprecated`), relue ou non, sources, et ses liens entrants (rétroliens).
+- **Une page de graphe interactive**, à la manière de la vue graphe d'Obsidian. Les nœuds sont les pages, colorés par type ; les arêtes, les liens Markdown. On zoome, on déplace, on filtre par type ou tag, on ouvre une page en cliquant son nœud. Les données du graphe sont un JSON produit à l'export.
+- **Une recherche plein texte côté navigateur**, sur un index JSON produit à l'export.
+- **`raw/` n'est pas publié.** Les sources pointent vers leur URL d'origine. Le site ne contient que le wiki, que l'humain a relu ou peut relire.
+- **Le site fonctionne hors ligne.** La bibliothèque de graphe (une seule, choisie à l'étape 6) est copiée dans le site plutôt que chargée depuis un CDN.
+
+**Déploiement automatisé sur le homelab.** Le mécanisme exact se décide à l'étape 6, selon ce que le homelab expose. Les principes :
+- l'export est reproductible : le même commit donne le même site, donc on peut le reconstruire n'importe où ;
+- le déclencheur est un push sur `main` ; pas de LLM dans la chaîne (voir §11) ;
+- le homelab sert des fichiers statiques derrière son reverse proxy, qui gère l'accès. Le wiki est personnel : il n'est pas exposé publiquement.
 
 ## 11. Non-goals
 
