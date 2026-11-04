@@ -92,11 +92,11 @@ export function resolveRawId(docs: Doc[], id: string): Doc {
 }
 
 async function isCited(root: string, path: string) {
-  return (await readDocs(root, "wiki")).some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s: any) => s.resource === `/${path}`));
+  return (await readDocs(root, "wiki")).docs.some((d) => d.fm.type === "Source" && (d.fm.sources ?? []).some((s: any) => s.resource === `/${path}`));
 }
 
 export async function compile(root: string, ids: string[], opts: { pending?: boolean; batch?: boolean }) {
-  const raw = await readDocs(root, "raw");
+  const raw = (await readDocs(root, "raw")).docs;
   const targets = opts.pending
     ? raw.filter((d) => d.fm.status === "pending")
     : ids.map((id) => resolveRawId(raw, id));

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildSiteData, frontendFingerprint, graphLinks, isPartialWarning, md, noteCallouts, render } from "./export";
-import { parseDoc, readDocs } from "./lib";
+import { isReservedPage, parseDoc, readDocs } from "./lib";
 import { safeUrl, sanitizeHtml } from "./sanitize";
 
 // Non-regression on a real wiki: CORTEX_ROOT=<wiki> bun test (skipped without)
@@ -62,7 +62,7 @@ test("assainissement : ce que le site utilise reste intact (tableaux, code, tâc
 });
 
 test.skipIf(!ROOT)("assainissement : non-régression sur le rendu des pages réelles du wiki", async () => {
-  const docs = (await readDocs(ROOT!, "wiki")).filter((d) => !/^wiki\/(index|log)\.md$/.test(d.path));
+  const docs = (await readDocs(ROOT!, "wiki")).docs.filter((d) => !isReservedPage(d.path));
   expect(docs.length).toBeGreaterThan(5);
   const paths = new Set(docs.map((d) => d.path));
   for (const d of docs) {
@@ -92,7 +92,7 @@ test("encarts : l'avertissement de source partielle sort de la note personnelle"
   expect(noteCallouts(md("> ⚠️ une citation ordinaire"))).toContain("<blockquote>");
 
   // on real pages (if CORTEX_ROOT is set)
-  const real = ROOT ? (await readDocs(ROOT, "wiki/sources")).filter((d) => /^(Raspberry Pi 5 16 Go|How Codex is built)/.test(String(d.fm.title))) : [];
+  const real = ROOT ? (await readDocs(ROOT, "wiki/sources")).docs.filter((d) => /^(Raspberry Pi 5 16 Go|How Codex is built)/.test(String(d.fm.title))) : [];
   if (ROOT) expect(real).toHaveLength(2);
   for (const d of real) {
     const r = render(d.body, `${d.path.replace(/\.md$/, "")}/`, new Set());

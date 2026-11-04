@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
-import { readDocs } from "./lib";
+import { isReservedPage, readDocs } from "./lib";
+import { warn } from "./style";
 
 export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number };
 
@@ -10,10 +11,11 @@ export async function buildIndex(root: string): Promise<Database> {
   db.run(`CREATE VIRTUAL TABLE docs USING fts5(path UNINDEXED, area UNINDEXED, title, body, tokenize = 'unicode61 remove_diacritics 2')`);
   const ins = db.prepare("INSERT INTO docs (path, area, title, body) VALUES (?, ?, ?, ?)");
   for (const area of ["wiki", "raw"] as const) {
-    const docs = await readDocs(root, area);
+    const { docs, errors } = await readDocs(root, area);
+    for (const e of errors) warn(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
     db.transaction(() => {
       for (const d of docs) {
-        if (/^wiki\/(index|log)\.md$/.test(d.path)) continue;
+        if (isReservedPage(d.path)) continue;
         ins.run(d.path, area, String(d.fm.title ?? ""), `${d.fm.description ?? ""}\n${d.fm.note ?? ""}\n${d.body}`);
       }
     })();
