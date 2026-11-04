@@ -1,3 +1,4 @@
+import type { IconName } from "#lib/icons.js";
 import { fold } from "./fold";
 import type { Parsed } from "./query";
 import type { Link, PageData, SourceRef, TocItem } from "./types";
@@ -46,22 +47,30 @@ export function currentSection(tops: { id: string; top: number }[], limit: numbe
 // --- Pages liées ------------------------------------------------------------------------------------------------
 
 export type RelatedIn = Link & { reasons: string[] };
-export type RelatedEntry = Link & { why: string[] };
+/** Un motif de page liée : icône, libellé court, et détail (titres des sources) lu au survol et par les lecteurs d'écran. */
+export type Reason = { icon: IconName; label: string; detail?: string };
+export type RelatedEntry = Link & { why: Reason[] };
 
 /**
  * Les raisons d'une page liée telles que l'export les écrit (« lien sortant », « source partagée » répété une fois par
  * source, « tag partagé : x »…), ramenées à des motifs courts et dédupliqués. `shared` : titres des sources partagées.
  */
-export function relatedReasons(reasons: string[], shared: string[] = []): string[] {
+export function relatedReasons(reasons: string[], shared: string[] = []): Reason[] {
 	const has = (r: string) => reasons.includes(r);
 	const tags = [...new Set(reasons.filter((r) => r.startsWith("tag partagé")).map((r) => r.replace(/^tag partagé\s*:\s*/, "")).filter(Boolean))];
+	const n = shared.length;
 	return [
-		...(has("lien sortant") ? ["citée dans cette page"] : []),
-		...(has("lien entrant") ? ["cite cette page"] : []),
-		...(has("source partagée") || shared.length ? [shared.length ? `source commune : ${shared.join(", ")}` : "source commune"] : []),
-		...(tags.length ? [`thème commun : ${tags.join(", ")}`] : []),
+		...(has("lien sortant") ? [{ icon: "copy-link" as const, label: "citée ici" }] : []),
+		...(has("lien entrant") ? [{ icon: "backlink" as const, label: "cite cette page" }] : []),
+		...(has("source partagée") || n
+			? [{ icon: "source" as const, label: n > 1 ? `${n} sources communes` : "source commune", ...(n ? { detail: shared.join(" · ") } : {}) }]
+			: []),
+		...(tags.length ? [{ icon: "tags" as const, label: tags.join(", ") }] : []),
 	];
 }
+
+/** Auteur lisible : `human:franck` → `franck`, `claude-code/opus-5.5` → `claude-code · opus-5.5`. */
+export const actor = (by: string) => by.replace(/^human:/, "").replace("/", " · ");
 
 /**
  * Pages à explorer : les pages liées qui ne sont pas déjà des rétroliens (UX22 : une destination n'apparaît qu'une fois),

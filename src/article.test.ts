@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-	collectionQuery, currentSection, domainOf, graphFocus, hitRanges, hitTerms, originalSource, relatedEntries, relatedReasons,
+	collectionQuery, currentSection, domainOf, graphFocus, hitRanges, hitTerms, originalSource, relatedEntries, relatedReasons, actor,
 	shareUrl, sharedSources, showToc, tocItems,
 } from "../site/src/lib/article";
 import { parseQuery } from "../site/src/lib/query";
@@ -30,18 +30,21 @@ test("section courante : dernier titre passé sous la ligne, dernière section t
 });
 
 test("pages liées : motifs courts et dédupliqués, sources communes nommées", () => {
-	expect(relatedReasons(["source partagée", "source partagée", "tag partagé : llm", "tag partagé : agents", "tag partagé : llm"]))
-		.toEqual(["source commune", "thème commun : llm, agents"]);
-	expect(relatedReasons(["lien sortant", "lien entrant", "source partagée"], ["Chroma Research"]))
-		.toEqual(["citée dans cette page", "cite cette page", "source commune : Chroma Research"]);
+	const labels = (r: { label: string }[]) => r.map((x) => x.label);
+	expect(labels(relatedReasons(["source partagée", "source partagée", "tag partagé : llm", "tag partagé : agents", "tag partagé : llm"])))
+		.toEqual(["source commune", "llm, agents"]);
+	expect(relatedReasons(["lien sortant", "lien entrant", "source partagée"], ["Chroma Research", "OpenAI"]))
+		.toEqual([{ icon: "copy-link", label: "citée ici" }, { icon: "backlink", label: "cite cette page" }, { icon: "source", label: "2 sources communes", detail: "Chroma Research · OpenAI" }]);
 	expect(relatedReasons([])).toEqual([]);
-	expect(relatedReasons([], ["Titre"])).toEqual(["source commune : Titre"]); // le serveur connaît la source même sans raison exportée
+	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "source commune", detail: "Titre" }]); // le serveur connaît la source même sans raison exportée
+	expect(actor("human:franck")).toBe("franck");
+	expect(actor("claude-code/opus-5.5")).toBe("claude-code · opus-5.5");
 });
 
 test("pages liées : une destination déjà en rétrolien n'est pas répétée", () => {
 	const link = (id: string) => ({ id, title: id, type: "Concept" });
 	const out = relatedEntries([link("a"), link("b")], [{ ...link("a"), reasons: ["lien entrant"] }, { ...link("c"), reasons: ["tag partagé : x"] }]);
-	expect(out).toEqual([{ id: "c", title: "c", type: "Concept", why: ["thème commun : x"] }]);
+	expect(out).toEqual([{ id: "c", title: "c", type: "Concept", why: [{ icon: "tags", label: "x" }] }]);
 });
 
 test("sources partagées : titres des sources communes à chaque page liée", () => {

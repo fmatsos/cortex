@@ -11,7 +11,7 @@
 	import Toc from "#lib/components/toc.svelte";
 	import TocSheet from "#lib/components/toc-sheet.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
-	import { NOTES_ID, SOURCES_ID, currentSection, domainOf, originalSource, relatedEntries, showToc, tocItems } from "#lib/article.js";
+	import { NOTES_ID, SOURCES_ID, actor, currentSection, domainOf, originalSource, relatedEntries, showToc, tocItems } from "#lib/article.js";
 	import { toPage, toTag } from "#lib/links.js";
 
 	let { data } = $props();
@@ -161,10 +161,25 @@
 			</nav>
 		{/if}
 		<RelatedPages backlinks={p.backlinks} {related} />
-		<dl class="text-muted-foreground space-y-1">
-			{#if p.generated}<div><dt class="inline">Généré par</dt> <dd class="inline">{p.generated.by}, {day(p.generated.at)}</dd></div>{/if}
-			{#if p.verified}<div><dt class="inline">Relu par</dt> <dd class="inline">{p.verified.by}, {day(p.verified.at)}</dd></div>{/if}
-		</dl>
+		<section aria-labelledby="h-prov" class="bg-muted/50 rounded-lg border p-3">
+			<h2 id="h-prov" class="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">Provenance</h2>
+			<dl class="space-y-2">
+				{#if p.generated}
+					<div class="flex items-start gap-2">
+						<Icon name="generated" size={16} class="text-muted-foreground mt-0.5 shrink-0" />
+						<div><dt class="text-muted-foreground text-xs">Rédigée par</dt><dd><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
+					</div>
+				{/if}
+				<div class="flex items-start gap-2">
+					<Icon name={p.verified ? "verified" : "unverified"} size={16} class="{p.verified ? 'text-primary' : 'text-muted-foreground'} mt-0.5 shrink-0" />
+					{#if p.verified}
+						<div><dt class="text-muted-foreground text-xs">Relue par</dt><dd><span class="font-medium">{actor(p.verified.by)}</span> · <time datetime={p.verified.at}>{day(p.verified.at)}</time></dd></div>
+					{:else}
+						<div><dt class="sr-only">Relecture</dt><dd class="text-muted-foreground">Jamais relue</dd></div>
+					{/if}
+				</div>
+			</dl>
+		</section>
 	</aside>
 </div>
 

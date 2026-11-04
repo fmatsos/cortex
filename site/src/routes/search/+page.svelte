@@ -82,7 +82,7 @@
 <svelte:head><title>Recherche · Second cerveau</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">Recherche</h1>
-<SearchBox variant="main" live class="mt-4 max-w-3xl" />
+<SearchBox variant="main" live class="mt-4" />
 <FilterChips bind:value={search.q} class="mt-3" />
 
 <div class="mt-6 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
@@ -138,7 +138,7 @@
 
 		{#if t}
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-			<ul class="divide-border mt-2 max-w-[82ch] divide-y" onclick={onRowClick}>
+			<ul class="divide-border mt-2 divide-y" onclick={onRowClick}>
 				{#each res.hits as h (h.doc.id)}
 					<li class="py-4">
 						<ResultRow doc={h.doc} href={withPassage(toPage(h.doc.id), q)} titleHtml={h.title} descriptionHtml={h.description} snippetHtml={h.snippet} showFav onopen={() => search.remember(q)} />
@@ -149,7 +149,7 @@
 				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>Afficher davantage ({res.hits.length} sur {res.total})</button>
 			{/if}
 			{#if engine && !res.total && !issues.length}
-				<div class="max-w-[82ch] py-6">
+				<div class="py-6">
 					<p class="font-medium">{noFav ? "Aucun favori pour l'instant." : "Aucune page ne correspond à cette recherche."}</p>
 					<p class="text-muted-foreground mt-1 text-[0.9375rem]">
 						{#if noFav}Ajoutez-en avec l'étoile d'une page ou d'un résultat : ils restent dans ce navigateur.
@@ -160,7 +160,7 @@
 			{/if}
 		{:else}
 			<!-- recherche vide : de quoi démarrer (exemples qui donnent des résultats sur ce wiki, tags fréquents, collections, syntaxe) -->
-			<div class="max-w-[82ch] space-y-8 pt-2">
+			<div class="space-y-8 pt-2">
 				{#if data.seed.examples.length}
 					<section aria-labelledby="s-exemples">
 						<h2 id="s-exemples" class="text-lg font-semibold">Essayer</h2>

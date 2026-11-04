@@ -67,7 +67,7 @@
 {/if}
 
 <!-- aperçu borné par collection, quelle que soit la taille du wiki ; la vue complète est la recherche filtrée (par tranches) -->
-<div class="mt-10 grid gap-10 lg:grid-cols-2">
+<div class="mt-10 grid gap-10 lg:grid-cols-2 2xl:grid-cols-4">
 	{#each data.collections as c (c.type)}
 		<section aria-labelledby="h-{c.type}">
 			<h2 id="h-{c.type}" class="anchor-target flex items-center gap-2 text-xl font-semibold">

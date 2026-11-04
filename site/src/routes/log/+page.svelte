@@ -87,7 +87,7 @@
 <h1 class="text-3xl font-semibold tracking-tight">Journal</h1>
 
 {#if total}
-	<div class="mt-4 grid max-w-3xl gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+	<div class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
 		<div>
 			<label for="journal-recherche" class="mb-1 block text-sm font-medium">Rechercher dans le journal</label>
 			<Input id="journal-recherche" bind:ref={search} type="search" placeholder="Mot, page, source…" autocomplete="off" value={f.q} oninput={(e) => set({ q: e.currentTarget.value })} />
@@ -130,7 +130,7 @@
 		{/each}
 	</ul>
 
-	<details class="group mt-3 max-w-3xl">
+	<details class="group mt-3">
 		<summary class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 touch-target inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md text-sm focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
 			<Icon name="chevron-down" size={16} class="motion-safe:transition-transform group-open:rotate-180" />
 			Que signifient les types d'entrée ?
@@ -150,7 +150,7 @@
 	</p>
 
 	{#if filtered.length}
-		<ol class="mt-6 max-w-3xl space-y-10">
+		<ol class="mt-6 space-y-10">
 			{#each days as d (d.day)}
 				<li>
 					<h2 class="flex items-baseline gap-2 text-lg font-semibold first-letter:uppercase">
@@ -174,7 +174,7 @@
 			</div>
 		{/if}
 	{:else}
-		<div class="mt-6 max-w-3xl">
+		<div class="mt-6">
 			<p class="text-muted-foreground">Aucune entrée du journal ne correspond{f.q.trim() ? ` à « ${f.q.trim()} »` : ""}.</p>
 			{#if !isUnfiltered(f)}
 				<Button variant="outline" class="mt-3" onclick={reset}>
