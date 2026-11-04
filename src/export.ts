@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
@@ -321,8 +321,13 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
 
   // Vite and SvelteKit are only loaded here: the other commands stay as fast
   // version = fingerprint of the data AND the frontend: same wiki and same code, same site; either changes, the cache changes
-  Object.assign(process.env, { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) });
+  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) };
+  // The build is process-global (env, cwd, console) and shares site/.svelte-kit: one at a time per machine.
+  const unlock = lockBuild();
+  // The build reads these from the environment (SvelteKit's forked workers reload vite.config.ts): set for the build only, then restored.
+  const prev = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
   const cwd = process.cwd(), log = console.log;
+  Object.assign(process.env, vars);
   console.log = () => {}; // SvelteKit and the adapter are chatty (« npm run preview »…); errors go through console.error
   try {
     const { createBuilder } = await import("vite");
@@ -332,8 +337,31 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
     await (await createBuilder({ root: SITE_DIR, logLevel: "warn" })).buildApp();
   } catch (e) {
     const m = (e as Error).message;
-    if (/native binding/i.test(m)) throw new Error(`binding natif de Vite introuvable pour ${process.platform}-${process.arch} : réinstalle avec « bun install --cwd cli --omit optional » (voir DESIGN §9).`);
+    if (/native binding/i.test(m)) throw new Error(`binding natif de Vite introuvable pour ${process.platform}-${process.arch} : réinstalle avec « bun install --omit optional » dans le dossier de Cortex (voir DESIGN §9).`);
     throw e;
-  } finally { process.chdir(cwd); console.log = log; }
+  } finally {
+    process.chdir(cwd); console.log = log;
+    for (const [k, v] of Object.entries(prev)) v === undefined ? delete process.env[k] : (process.env[k] = v);
+    unlock();
+  }
   say(`${paint.ok("✓")} Site écrit dans ${resolve(out)} (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+}
+
+/**
+ * Lock file next to the build folder (`flag: "wx"`, holds the pid). The server bundle imports `@sveltejs/kit`, so
+ * SvelteKit's output cannot leave the install tree (kit.outDir elsewhere fails to resolve it): the lock serializes
+ * exports instead. A lock left by a dead process is taken over.
+ */
+function lockBuild(): () => void {
+  const file = join(SITE_DIR, ".export.lock");
+  for (let attempt = 0; ; attempt++) {
+    try { writeFileSync(file, String(process.pid), { flag: "wx" }); break; } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      const pid = Number(readFileSync(file, "utf8"));
+      const alive = !(pid > 0) || (() => { try { return process.kill(pid, 0), true; } catch (err) { return (err as NodeJS.ErrnoException).code === "EPERM"; } })();
+      if (alive || attempt) throw new Error("un export est déjà en cours (verrou : site/.export.lock).");
+      rmSync(file, { force: true });
+    }
+  }
+  return () => rmSync(file, { force: true });
 }
