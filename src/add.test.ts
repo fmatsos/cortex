@@ -2,7 +2,16 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { add, pageTitle } from "./add";
+import { add, pageTitle, socialPost } from "./add";
+
+test("socialPost: the post's text from JSON-LD, without its comments; nothing on an ordinary page", () => {
+  const ld = { "@context": "http://schema.org", "@type": "SocialMediaPosting", articleBody: "Le post.\n\nSuite.", datePublished: "2026-11-04T11:29:06Z",
+    author: { "@type": "Person", name: "Clement" }, comment: [{ "@type": "Comment", text: "un commentaire" }] };
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify(ld)}</script></head><body>un commentaire</body></html>`;
+  expect(socialPost(html)).toEqual({ body: "Le post.\n\nSuite.", author: "Clement", published: "2026-11-04T11:29:06Z" });
+  expect(socialPost(`<script type="application/ld+json">{"@type":"Article","articleBody":"x"}</script>`)).toBeUndefined();
+  expect(socialPost(`<script type="application/ld+json">{oops</script>`)).toBeUndefined();
+});
 import { renderIndex } from "./catalog";
 import { rawPath } from "./lib";
 import { search } from "./search";

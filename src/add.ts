@@ -121,7 +121,26 @@ export function pageTitle(defuddle: string | undefined, full: string | undefined
 }
 
 /**
- * Web page → Markdown. defuddle first; Readability + Turndown in parallel, kept if clearly longer
+ * Social post (LinkedIn, and any page declaring a schema.org SocialMediaPosting / DiscussionForumPosting in JSON-LD):
+ * the post's own text, without the comments and the page around it that defuddle would keep.
+ */
+export function socialPost(html: string): { body: string; author?: string; published?: string } | undefined {
+  for (const [, raw] of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data: unknown;
+    try { data = JSON.parse(raw); } catch { continue; }
+    const nodes = [data].flat().flatMap((n: any) => (n?.["@graph"] ? [n, ...[n["@graph"]].flat()] : [n]));
+    for (const n of nodes as any[]) {
+      if (!/^(SocialMediaPosting|DiscussionForumPosting)$/.test(String(n?.["@type"]))) continue;
+      const body = String(n.articleBody ?? n.text ?? "").trim();
+      if (!body) continue;
+      const author = [n.author].flat()[0]?.name;
+      return { body, author: typeof author === "string" ? author : undefined, published: n.datePublished || undefined };
+    }
+  }
+}
+
+/**
+ * Web page → Markdown. A social post (see socialPost) is taken as is. Otherwise defuddle first; Readability + Turndown in parallel, kept if clearly longer
  * (defuddle sometimes truncates without warning, cf. OKF at step 0).
  */
 export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Extract> {
@@ -129,6 +148,15 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
   const type = res.headers.get("content-type") ?? "";
   if (type.includes("pdf")) return extractPdf(bytes, url);
   const html = new TextDecoder().decode(bytes);
+  const post = socialPost(html);
+  if (post) {
+    const canonical = parseHTML(html).document.querySelector('link[rel="canonical"]')?.getAttribute("href");
+    return {
+      title: post.body.split("\n")[0].trim().slice(0, LIMITS.textTitleChars), content: post.body, kind: "article",
+      url: canonical ? new URL(canonical, finalUrl).href : finalUrl, author: post.author, published: post.published,
+      extractor: "json-ld",
+    };
+  }
   const d = await Defuddle(parseHTML(html).document, url, { markdown: true });
   const doc = parseHTML(html).document; // second DOM on purpose: Readability mutates its input (REL-26: a clone is not clearly cheaper)
   const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute("href");
