@@ -64,10 +64,13 @@ test("openai: a server error is cut to 300 characters, the tool-calling hint onl
 test("openai: a page with invalid YAML is never written, WritePage writes the frontmatter itself", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
   mkdirSync(join(root, "wiki"));
+  const keep = "---\ntype: Entity\ntitle: Claude Code\n---\nhuman\n";
+  await Bun.write(join(root, "wiki/e.md"), keep);
   const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
   const script = [
     { role: "assistant", content: null, tool_calls: [
       call("1", "Write", { file_path: "wiki/bad.md", content: "---\ntype: Concept\n title: A\n---\nx\n" }),
+      call("3", "WritePage", { file_path: "wiki/e.md", frontmatter: { type: "Entity", title: "Qwen-Agent" }, body: "x\n" }),
       call("2", "WritePage", { file_path: "wiki/good.md", frontmatter: { type: "Concept", title: "A: b" }, body: "x\n" }),
     ] },
     { role: "assistant", content: "done" },
@@ -78,6 +81,8 @@ test("openai: a page with invalid YAML is never written, WritePage writes the fr
     await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "write");
     expect(await Bun.file(join(root, "wiki/bad.md")).exists()).toBe(false);
     expect(seen[1].messages.find((m: any) => m.tool_call_id === "1").content).toContain("not written: invalid YAML");
+    expect(seen[1].messages.find((m: any) => m.tool_call_id === "3").content).toContain('not written: wiki/e.md is an existing page and its title "Claude Code" would become "Qwen-Agent"');
+    expect(await Bun.file(join(root, "wiki/e.md")).text()).toBe(keep);
     const { parseDoc } = await import("./lib");
     expect(parseDoc("g", await Bun.file(join(root, "wiki/good.md")).text()).fm).toEqual({ type: "Concept", title: "A: b" });
   } finally { server.stop(true); }
@@ -96,13 +101,16 @@ test("openai: a failed compile check goes back to the model, even without a page
   } finally { server.stop(true); }
 });
 
-test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML is caught before the write", async () => {
+test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML, or replacing a page, is caught before the write", async () => {
   const { pageError } = await import("./backends/claude");
   const root = mkdtempSync(join(tmpdir(), "cortex-claude-"));
   await Bun.write(join(root, "wiki/a.md"), "---\ntype: Concept\ntitle: A\n---\nx\n");
   expect(await pageError(root, "Write", { file_path: "wiki/b.md", content: "---\ntype: Concept\n title: B\n---\n" })).toContain("invalid YAML");
   expect(await pageError(root, "Edit", { file_path: "wiki/a.md", old_string: "title: A", new_string: " title: A" })).toContain("invalid YAML");
-  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "title: A", new_string: "title: B" }] })).toBeUndefined();
+  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "x", new_string: "y" }] })).toBeUndefined();
+  // another page over an existing one, or under the file name of an existing one: refused too
+  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "title: A", new_string: "title: B" }] })).toContain('its title "A" would become "B"');
+  expect(await pageError(root, "Write", { file_path: "wiki/concepts/a.md", content: "---\ntype: Concept\ntitle: C\n---\n" })).toContain("reuses the file name of the existing page wiki/a.md");
   expect(await pageError(root, "Write", { file_path: "wiki/c.txt", content: " bad: : yaml" })).toBeUndefined();
 });
 

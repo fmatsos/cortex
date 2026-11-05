@@ -367,6 +367,26 @@ mkdir -p wiki/concepts; printf -- '---\\nstatus: draft\\n---\\nx\\n' > wiki/conc
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
   });
 
+  test("compile --batch: a page the agent replaces by another one comes back byte for byte, a new page under an existing file name goes; the compile fails", () => {
+    const root = wiki();
+    mkdirSync(join(root, "wiki/entities"), { recursive: true });
+    const keep = "---\ntype: Entity\ntitle: Claude Code\ndescription: d\nstatus: stable\n# verified by hand\n---\nTexte humain.\n";
+    writeFileSync(join(root, "wiki/entities/e1.md"), keep);
+    const id = addNote(root);
+    // fills the Source page properly, but writes a new entity over e1.md and a concept under the name e1.md, every run
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && { sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; echo 'Summary.' >> $p; }
+printf -- '---\\ntype: Entity\\ntitle: Qwen-Agent\\ndescription: d\\nstatus: draft\\n---\\nx\\n' > wiki/entities/e1.md
+mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: Autre\\ndescription: d\\nstatus: draft\\n---\\nx\\n' > wiki/concepts/e1.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('its title "Claude Code" would become "Qwen-Agent"');
+    expect(readFileSync(join(root, "wiki/entities/e1.md"), "utf8")).toBe(keep);
+    expect(existsSync(join(root, "wiki/concepts/e1.md"))).toBe(false);
+    const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
+    expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+  });
+
   test("compile usage error: nothing to compile → 2", () => {
     const r = cortex(wiki(), ["compile"], { env: silent() });
     expect(r.code).toBe(2);

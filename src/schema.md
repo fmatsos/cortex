@@ -28,7 +28,7 @@ wiki/entities/<uuid>.md      # type: Entity: a person, tool, project or organiza
 wiki/syntheses/<uuid>.md     # type: Synthesis: a stored answer, comparison or thesis
 ```
 
-- **Identifiers: UUID v7 by default**, for raw sources and wiki pages alike (time-ordered then random: unique, no name collision, sorted in creation order). Naming and folder structure are set in `cortex.json` (`raw_path`, `page_path`); the layout above is the default one. You never make up a name: `cortex add` names a source, `cortex new` creates a page, following the configuration. You find a page by its **title** (index, `cortex search`), not by its file name.
+- **Identifiers: UUID v7 by default**, for raw sources and wiki pages alike (time-ordered then random: unique, no name collision, sorted in creation order). Naming and folder structure are set in `cortex.json` (`raw_path`, `page_path`); the layout above is the default one. You never make up a name: `cortex add` names a source, `cortex new` creates a page, following the configuration. Never write a page into a file that already exists, nor under the file name of another page: the CLI refuses it, and puts back a page replaced by another (other type, title or sources). You find a page by its **title** (index, `cortex search`), not by its file name.
 - **A name is final.** A page is never renamed: change its title, its path stays.
 
 ## Raw source format (`raw/.../source.md`)

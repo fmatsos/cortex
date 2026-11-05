@@ -3,7 +3,7 @@ import { interactiveWith, type Backend, type Config, type Mode } from "./backend
 import { guard } from "./claude";
 import { confine } from "./sandbox";
 import { LIMITS } from "../limits";
-import { frontmatterError, serializeDoc } from "../lib";
+import { frontmatterError, identityChange, serializeDoc, stemClash } from "../lib";
 
 // --- Any OpenAI-compatible API (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter…): cortex runs the agent loop itself.
 // The tools take Claude's names and fields, so every call goes through the same `guard` as the Claude backend.
@@ -42,6 +42,11 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
   const save = async (path: string, text: string, done: string) => {
     const bad = path.endsWith(".md") && frontmatterError(text);
     if (bad) return `not written: ${bad} Or use WritePage, which writes the YAML for you.`;
+    if (path.endsWith(".md")) {
+      const f = Bun.file(abs(path)), rel = relative(root, abs(path));
+      const clash = await f.exists() ? identityChange(rel, await f.text(), text) : stemClash(rel, new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root }));
+      if (clash) return `not written: ${clash}`;
+    }
     await Bun.write(abs(path), text);
     return done;
   };
@@ -59,7 +64,7 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     }
     case "WritePage":
       if (!a.frontmatter || typeof a.frontmatter !== "object" || Array.isArray(a.frontmatter) || typeof a.body !== "string") return "frontmatter must be an object and body a string.";
-      await Bun.write(abs(a.file_path), serializeDoc(a.frontmatter, a.body)); return "written";
+      return save(a.file_path, serializeDoc(a.frontmatter, a.body), "written");
     case "Append": {
       if (typeof a.content !== "string") return "content must be a string.";
       const f = Bun.file(abs(a.file_path));

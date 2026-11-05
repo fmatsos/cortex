@@ -1,6 +1,6 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { isUnder } from "../paths";
-import { frontmatterError } from "../lib";
+import { frontmatterError, identityChange, stemClash } from "../lib";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
@@ -49,7 +49,7 @@ export default function claude(cfg: Config): Backend {
   };
 }
 
-/** Frontmatter error of the .md page a Write, Edit or MultiEdit would leave on disk; undefined otherwise. */
+/** Error of the .md page a Write, Edit or MultiEdit would leave on disk (unreadable frontmatter, another page over an existing one, a reused file name); undefined otherwise. */
 export async function pageError(root: string, tool: string, input: Record<string, any>): Promise<string | undefined> {
   const path = String(input.file_path ?? "");
   if (!path.endsWith(".md") || !WRITERS.has(tool)) return undefined;
@@ -57,7 +57,9 @@ export async function pageError(root: string, tool: string, input: Record<string
   let text: string = tool === "Write" ? String(input.content ?? "") : await file.exists() ? await file.text() : "";
   const edits: any[] = tool === "MultiEdit" ? input.edits ?? [] : tool === "Edit" ? [input] : [];
   for (const e of edits) text = e.replace_all ? text.split(String(e.old_string)).join(String(e.new_string)) : text.replace(String(e.old_string), () => String(e.new_string));
-  return frontmatterError(text);
+  const rel = relative(root, resolve(root, path));
+  return frontmatterError(text) ?? (await file.exists() ? identityChange(rel, await file.text(), text)
+    : stemClash(rel, new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root })));
 }
 
 // --- Permission guard (used by the Claude backend)----------------------------------------------

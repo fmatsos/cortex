@@ -12,7 +12,7 @@ import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 import { LIMITS } from "./limits";
-import { frontmatterError, isReservedPage, localIso, parseDoc, setFmLine, sha256 } from "./lib";
+import { frontmatterError, identityChange, isReservedPage, localIso, parseDoc, setFmLine, sha256, stemClash } from "./lib";
 import { newPageCtx } from "./naming";
 import { appendLogCtx } from "./log";
 import { split } from "./backends/backend";
@@ -101,11 +101,25 @@ async function pageHashes(root: string): Promise<Map<string, string>> {
 async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Report, extra?: Check): Promise<{ code: number; errors: () => Promise<string[]> }> {
   const root = w.root;
   const before = await pageHashes(root);
-  /** Lint errors of the files under wiki/ the agent changed. */
+  const texts = new Map<string, string>();
+  for (const p of before.keys()) if (p.endsWith(".md")) texts.set(p, await Bun.file(join(root, p)).text());
+  /**
+   * Errors of the files under wiki/ the agent changed: a page it replaced by another one (type, title or sources) comes
+   * back as it was, a new page under the file name of an existing one goes, both reported; then lint errors.
+   */
   const errors = async () => {
+    const out: string[] = [];
+    for (const [p, h] of await pageHashes(root)) {
+      if (!p.endsWith(".md") || before.get(p) === h) continue;
+      const prev = texts.get(p), file = join(root, p);
+      const why = prev !== undefined ? identityChange(p, prev, await Bun.file(file).text()) : stemClash(p, texts.keys());
+      if (!why) continue;
+      if (prev !== undefined) await Bun.write(file, prev); else await rm(file, { force: true });
+      out.push(`${why} ${prev !== undefined ? "Restored as it was." : "Removed."}`);
+    }
     const files = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
     const { lint } = await import("./lint");
-    return files.size ? (await lint(root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [];
+    return [...out, ...(files.size ? (await lint(root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [])];
   };
   const check: Check = async () => [...await errors(), ...(await extra?.() ?? [])];
   let code = await run(w, prompt, batch, "write", report, check);
@@ -222,6 +236,8 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const bodyless = async () => {
       const text = prepared && await Bun.file(join(root, prepared.path)).text().catch(() => undefined);
       if (!text) return [];
+      const callout = parseDoc(prepared.path, prepared.text).body.trim();
+      if (!text.includes(callout)) return [`${prepared.path}: the note callout written by the CLI was changed. Put it back exactly, as the first lines of the body:\n${callout}`];
       const prose = (() => { try { return parseDoc(prepared.path, text).body.split("\n").filter((l) => l.trim() && !l.startsWith(">")); } catch { return []; } })();
       return prose.length ? [] : [`${prepared.path}: the body holds only the note callout. Write the summary, the key points and the links as Markdown in the body, after the callout, never as frontmatter keys.`];
     };

@@ -36,6 +36,28 @@ export function frontmatterError(text: string): string | undefined {
 }
 
 /**
+ * Why writing `next` over the existing page text `prev` replaces the page with another one, or undefined: its type or
+ * title changes, or a source it cites disappears. A model reusing a path it saw would otherwise erase a page.
+ */
+export function identityChange(path: string, prev: string, next: string): string | undefined {
+  let a: Fm, b: Fm;
+  try { a = parseDoc(path, prev).fm; b = parseDoc(path, next).fm; } catch { return undefined; } // unreadable YAML: frontmatterError reports it
+  const ids = (fm: Fm) => (Array.isArray(fm.sources) ? fm.sources : []).map((s) => String((s as Fm)?.id ?? ""));
+  const lost = ids(a).filter((id) => id && !ids(b).includes(id));
+  const why = a.type !== b.type ? `its type ${JSON.stringify(a.type)} would become ${JSON.stringify(b.type)}`
+    : a.title !== b.title ? `its title ${JSON.stringify(a.title)} would become ${JSON.stringify(b.title)}`
+    : lost.length ? `it would stop citing ${lost.join(", ")}` : undefined;
+  return why && `${path} is an existing page and ${why}: another page goes in a file of its own (cortex new <Type> "<title>"), an existing one is completed with Edit.`;
+}
+
+/** Why a new page at `path` takes the file name of an existing page elsewhere under wiki/ (`known`: existing paths), or undefined. */
+export function stemClash(path: string, known: Iterable<string>): string | undefined {
+  const stem = path.split("/").pop();
+  for (const k of known) if (k !== path && k.endsWith(".md") && k.split("/").pop() === stem)
+    return `${path} reuses the file name of the existing page ${k}: a new page gets its own name from cortex new <Type> "<title>".`;
+}
+
+/**
  * Sets one top-level frontmatter key by line replacement, never a YAML re-serialization: the key's line and its indented
  * continuation (a block list or mapping) become `line`; absent, `line` goes last. Comments, order and style of the other
  * keys stay byte for byte. Text without frontmatter is returned unchanged.
