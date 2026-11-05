@@ -8,7 +8,7 @@ import { checkTemplate, type NamingKey } from "./template";
  */
 
 /** Agent clients. Without `client`, the CLI stays agnostic. */
-export const CLIENT_NAMES = ["claude", "codex", "opencode"] as const;
+export const CLIENT_NAMES = ["claude", "codex", "opencode", "openai"] as const;
 export type Client = (typeof CLIENT_NAMES)[number];
 
 // effort: vocabulary of each SDK; opencode = variant name, specific to each model (checked by opencode at launch)
@@ -28,6 +28,7 @@ const SHAPE = {
   client: z.enum(CLIENT_NAMES, { error: (i) => `unknown client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
   model: str("model"),
   effort: str("effort"),
+  base_url: str("base_url"),
   language: str("language"),
   schema: str("schema"),
   raw_path: template("raw_path"),
@@ -57,8 +58,9 @@ const issueMsg = (i: z.core.$ZodIssue) =>
 export function lintConfig(c: unknown): ConfigIssue[] {
   const r = ConfigSchema.safeParse(c);
   if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
-  return !r.data.client && (r.data.model || r.data.effort)
-    ? [{ level: "warning", msg: "model/effort without a client: ignored by the agnostic mode ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
+  if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
+  return !r.data.client && (r.data.model || r.data.effort || r.data.base_url)
+    ? [{ level: "warning", msg: "model/effort/base_url without a client: ignored by the agnostic mode ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
 }
 
 export const configFile = (root: string) => Bun.file(join(root, "cortex.json"));
@@ -78,7 +80,7 @@ export async function loadConfig(root: string): Promise<Config> {
 }
 
 /** Agent file the schema is written to: the one the configured client loads on its own. */
-export const agentFile = (client?: Client) => (client === "codex" || client === "opencode" ? "AGENTS.md" : "CLAUDE.md");
+export const agentFile = (client?: Client) => (client && client !== "claude" ? "AGENTS.md" : "CLAUDE.md");
 
 /** Agent file of this wiki (CLAUDE.md or AGENTS.md, per the configured client). */
 export const agentFileFor = async (root: string) => agentFile((await loadConfig(root)).client);

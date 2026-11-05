@@ -51,6 +51,7 @@ const TOOLS: [string, string, string][] = [
 export async function doctor(root: string) {
   const client = await loadConfig(root).then((c) => c.client, () => undefined); // outside a wiki or broken cortex.json: agnostic
   const agent = client ?? process.env.CORTEX_AGENT?.trim().split(/\s+/)[0] ?? "claude";
-  return [...TOOLS, [agent, `compile/ask agent${client ? ` (client ${client})` : ""}`, "see the client's documentation"] as const]
+  // the openai client calls an HTTP API: no CLI to look for
+  return [...TOOLS, ...(client === "openai" ? [] : [[agent, `compile/ask agent${client ? ` (client ${client})` : ""}`, "see the client's documentation"] as const])]
     .map(([name, use, install]) => ({ name, use, install, path: Bun.which(name) ?? undefined }));
 }

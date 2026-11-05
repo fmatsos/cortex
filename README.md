@@ -17,7 +17,7 @@
 
 Cortex is a command-line tool for running a personal wiki that an LLM agent maintains. It implements the [LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) on top of the [Open Knowledge Format (OKF v0.2)](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md).
 
-You pick the sources, ask the questions and review the pages. Your agent does the bookkeeping: it summarizes, links, updates and flags contradictions. Claude Code, Codex and opencode are supported. Cortex itself never calls an LLM. It captures sources, runs the mechanical checks, publishes the wiki and keeps the agent confined to `wiki/`.
+You pick the sources, ask the questions and review the pages. Your agent does the bookkeeping: it summarizes, links, updates and flags contradictions. Claude Code, Codex, opencode and any OpenAI-compatible API (Ollama, llama.cpp, OpenRouter…) are supported. Cortex calls an LLM only in that last mode, where it runs the agent loop itself. It captures sources, runs the mechanical checks, publishes the wiki and keeps the agent confined to `wiki/`.
 
 > [!NOTE]
 > Cortex is a personal project. The CLI messages are in English; the exported site UI is in English or French (it follows `language`). The agent schema is in English, and the wiki language is a setting (`language`).
@@ -41,7 +41,7 @@ You pick the sources, ask the questions and review the pages. Your agent does th
 ## Requirements
 
 - [Bun](https://bun.sh) 1.4.3 or later, unless you install the standalone binary (it includes Bun).
-- One agent CLI on your `PATH`: [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), [Codex](https://github.com/openai/codex) (`codex`) or [opencode](https://opencode.ai) (`opencode`).
+- One agent CLI on your `PATH`: [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), [Codex](https://github.com/openai/codex) (`codex`) or [opencode](https://opencode.ai) (`opencode`). Or no CLI at all: an OpenAI-compatible endpoint, local or remote (client `openai`).
 - On Linux, [bubblewrap](https://github.com/containers/bubblewrap) (`apt install bubblewrap`), used to confine the agent. On macOS, `sandbox-exec` ships with the system.
 - Optionally, `pdftotext` (poppler-utils), to import PDFs.
 
@@ -142,8 +142,20 @@ Naming a client in `cortex.json` lets Cortex drive that agent through its SDK or
 
 ```sh
 cortex config init
-cortex config set client codex   # claude | codex | opencode
+cortex config set client codex   # claude | codex | opencode | openai
 cortex config set effort high    # low…max for Claude, minimal…xhigh, max, ultra or persistent for Codex, a model variant for opencode
+```
+
+Local model, or any OpenAI-compatible API: client `openai`. Cortex runs the agent loop itself, and every tool call goes through the same guard as Claude's (writes limited to `wiki/`, shell limited to `cortex`). This client runs in batch only (`compile --batch`, `ask`).
+
+> [!IMPORTANT]
+> The model must support tool calling. Claude, Codex and opencode read and write files on their own; an OpenAI-compatible API only provides the model, so Cortex offers it tools (read a page, write under `wiki/`, run `cortex index`…) and the model decides when to call them. Many small local models do not support tool calling, or handle it poorly: Ollama then returns an error, or the model answers in plain text and `compile` writes no page. Pick a model tagged **tools** in the [Ollama catalog](https://ollama.com/search?c=tools) (Qwen 3, Llama 3.1 and later…).
+
+```sh
+cortex config set client openai
+cortex config set model qwen3:8b                            # required
+cortex config set base_url http://localhost:11434/v1        # default: $OPENAI_BASE_URL, else Ollama on localhost
+export OPENAI_API_KEY=…                                     # if the endpoint needs one (OpenRouter…); never in cortex.json, and only sent to $OPENAI_BASE_URL (or a base_url equal to it)
 ```
 
 ### The agent schema

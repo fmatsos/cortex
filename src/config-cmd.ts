@@ -22,7 +22,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "init": {
       // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
       if (await f.exists()) throw new Error("cortex.json already exists.");
-      await save({ client: key ?? null, model: null, effort: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
+      await save({ client: key ?? null, model: null, effort: null, base_url: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
       say("ok", `cortex.json created${key ? ` (client ${key})` : " (agnostic)"}.`);
       const { writeSchema } = await import("./schema");
       const w = await writeSchema(root, false);
@@ -58,6 +58,6 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       return done(true);
     }
     default:
-      throw new CortexError("Usage: cortex config init [claude|codex|opencode] | lint | get [key] | set <key> <value> | remove <key>", "usage");
+      throw new CortexError("Usage: cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>", "usage");
   }
 }
