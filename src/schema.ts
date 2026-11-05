@@ -1,18 +1,20 @@
 import { join, resolve } from "node:path";
 import { agentFileFor, loadConfig } from "./config";
+import SCHEMA from "./schema.md" with { type: "text" }; // embedded: a compiled binary has no src/ next to it
 
 /** Wiki language when `language` is unset in cortex.json. */
 export const DEFAULT_LANGUAGE = "English";
 
-/** The schema the agent follows (rules, page format, workflows), shipped with the CLI. */
-export const BUILTIN_SCHEMA = join(import.meta.dir, "schema.md");
-
 /** Effective schema: the file named by `schema` in cortex.json (relative to the root), else the built-in one; `{{language}}` filled from `language`. */
 export async function schemaText(root: string): Promise<string> {
   const c = await loadConfig(root);
-  const f = Bun.file(c.schema ? resolve(root, c.schema) : BUILTIN_SCHEMA);
-  if (!(await f.exists())) throw new Error(`schéma introuvable : ${c.schema} (clé schema de cortex.json)`);
-  return (await f.text()).replaceAll("{{language}}", c.language ?? DEFAULT_LANGUAGE);
+  let text = SCHEMA;
+  if (c.schema) {
+    const f = Bun.file(resolve(root, c.schema));
+    if (!(await f.exists())) throw new Error(`schéma introuvable : ${c.schema} (clé schema de cortex.json)`);
+    text = await f.text();
+  }
+  return text.replaceAll("{{language}}", c.language ?? DEFAULT_LANGUAGE);
 }
 
 /** Writes the effective schema to CLAUDE.md or AGENTS.md (per client). Keeps an existing file unless `overwrite`. */

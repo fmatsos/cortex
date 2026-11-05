@@ -134,3 +134,16 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
     if (!f.startsWith("log/")) expect(t).not.toContain("01a1a5c9-5e80-7075-ae13-aab03b0a8697"); // the journal names raw ids in its text
   }
 }, 120_000);
+
+test("export: a wiki with no tag, then with no page at all, still exports (tags are optional)", async () => {
+  const { existsSync } = await import("node:fs");
+  const { exportSite } = await import("./export");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await exportSite(root, join(root, ".cortex/vide"), () => {});
+  expect(existsSync(join(root, ".cortex/vide/index.html"))).toBe(true);
+  await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: Sans tag\ndescription: Aucune étiquette.\n---\nCorps.\n");
+  await exportSite(root, join(root, ".cortex/site"), () => {});
+  expect(existsSync(join(root, ".cortex/site/wiki/concepts/a/index.html"))).toBe(true);
+  expect(existsSync(join(root, ".cortex/site/tags/index.html"))).toBe(true);
+}, 60_000);

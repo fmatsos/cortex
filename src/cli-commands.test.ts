@@ -345,3 +345,30 @@ describe.skipIf(process.platform === "linux" && !Bun.which("bwrap"))("compile / 
     expect(r.err).toContain("sorti en erreur");
   });
 });
+
+describe("ls, show, related, doctor", () => {
+  test("list, show and relate pages; doctor reports", () => {
+    const root = wiki();
+    const id = addNote(root);
+    const a = cortex(root, ["new", "Concept", "Fermentation"]).out.trim();
+    const b = cortex(root, ["new", "Concept", "Lactobacille"]).out.trim();
+    writeFileSync(join(root, b), readFileSync(join(root, b), "utf8") + `\nVoir [la fermentation](/${a}).\n`);
+
+    const ls = cortex(root, ["ls", "--type", "Concept", "--json"]);
+    expect(ls.code).toBe(0);
+    expect(JSON.parse(ls.out).map((r: any) => r.title)).toEqual(["Fermentation", "Lactobacille"]);
+    expect(cortex(root, ["ls", "--type", "Nope"]).code).toBe(2);
+
+    expect(cortex(root, ["show", "Fermentation"]).out).toContain("title: Fermentation");
+    expect(cortex(root, ["show", id]).out).toContain("fermentation lactique");
+    expect(cortex(root, ["show", "Inconnu"]).code).toBe(1);
+
+    const rel = JSON.parse(cortex(root, ["related", "Fermentation", "--json"]).out);
+    expect(rel[0]).toMatchObject({ title: "Lactobacille", reasons: ["lien entrant"] });
+
+    const doc = cortex(root, ["doctor"]);
+    expect(doc.code).toBe(0);
+    expect(doc.out).toContain("pdftotext");
+
+  });
+});

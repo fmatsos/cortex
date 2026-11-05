@@ -17,7 +17,13 @@ export default defineConfig({
       adapter: adapter({ pages: out, assets: out, fallback: "404.html" }),
       version: { name: process.env.CORTEX_SITE_VERSION ?? "dev" }, // deterministic (fingerprint of the data and the frontend): the export is reproducible
       paths: { relative: true, base: process.env.CORTEX_SITE_BASE ?? "" }, // relative links and resources: works under any subpath
-      prerender: { handleHttpError: "fail", handleMissingId: "ignore" }, // a broken anchor in a wiki link is harmless, a 404 is not
+      prerender: {
+        handleHttpError: "fail", handleMissingId: "ignore", // a broken anchor in a wiki link is harmless, a 404 is not
+        // tags are optional and a new wiki has no page: these routes may have no entry; any other unseen route is a bug
+        handleUnseenRoutes: ({ routes, message }) => {
+          if (routes.some((r) => r !== "/tags/[tag]" && r !== "/wiki/[...path]")) throw new Error(message);
+        },
+      },
     }),
   ],
 });

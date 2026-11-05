@@ -16,7 +16,7 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - run: bun install --frozen-lockfile --omit optional
       - run: bun test
       - run: bunx tsc --noEmit -p tsconfig.json

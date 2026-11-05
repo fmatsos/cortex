@@ -1,16 +1,13 @@
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import PROMPTS from "./prompts.md" with { type: "text" }; // embedded: a compiled binary has no src/ next to it
 import { DEFAULT_LANGUAGE } from "./schema";
-
-/** Orchestration prompts (compile, ask, MCP instructions), shipped with the CLI next to schema.md. */
-export const BUILTIN_PROMPTS = join(import.meta.dir, "prompts.md");
 
 let cache: Map<string, string> | undefined;
 /** `## name` sections of prompts.md, trimmed (text before the first heading is ignored). */
 function sections(): Map<string, string> {
   if (cache) return cache;
   const m = new Map<string, string>();
-  for (const part of readFileSync(BUILTIN_PROMPTS, "utf8").split(/^## /m).slice(1)) {
+  for (const part of PROMPTS.split(/^## /m).slice(1)) {
     const nl = part.indexOf("\n");
     m.set(part.slice(0, nl).trim(), part.slice(nl + 1).trim());
   }

@@ -30,6 +30,11 @@ const HELP = `cortex — second cerveau
   cortex compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .cortex/site)
+  cortex ls [--type T] [--json]                (les pages du wiki, par titre)
+  cortex show <chemin|id raw|titre>            (affiche une page ou une source)
+  cortex related <chemin|titre> [--limit N] [--json]
+  cortex doctor                                (outils système présents ou manquants)
+  cortex upgrade [--check]                     (binaire compilé : installe la dernière release GitHub)
   cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
   cortex schema [--write]                      (le schéma que suit l'agent ; --write le réécrit dans CLAUDE.md ou AGENTS.md)
   cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>
@@ -62,7 +67,7 @@ try {
       options: {
         note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, write: { type: "boolean" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" },
       },
     });
   } catch (e) {
@@ -76,7 +81,8 @@ try {
   const first = tokens!.findIndex((t) => t.kind === "positional");
   const isLogAdd = cmd === "log" && tokens![first + 1]?.kind === "positional" && (tokens![first + 1] as { value?: string }).value === "add";
   // config init creates cortex.json, the root marker: it runs where it is called
-  const root = cmd === "config" && args[0] === "init" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
+  // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
+  const root = cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {
@@ -159,8 +165,46 @@ try {
       break;
     }
     case "export": {
+      if ((await import("./upgrade")).COMPILED) { // Vite cannot run inside the binary: rerun from its embedded sources
+        process.exitCode = await (await import("./payload")).runFromSources(root);
+        break;
+      }
       const { exportSite } = await import("./export"); // Vite, Svelte and force-graph are only loaded here
       await exportSite(root, o.out ?? join(root, ".cortex/site"));
+      break;
+    }
+    case "ls": {
+      const rows = await (await import("./extras")).lsCtx(wiki, o.type);
+      if (o.json) { console.log(JSON.stringify(rows, null, 2)); break; }
+      if (!rows.length) console.log(paint.dim("Aucune page."));
+      for (const r of rows) console.log(`${paint.accent(String(r.type ?? "?").padEnd(9))} ${paint.dim(String(r.status ?? "").padEnd(10))} ${paint.bold(r.title)}  ${paint.dim(toResource(r.path))}`);
+      break;
+    }
+    case "show":
+      if (args.length !== 1) throw usage("Usage : cortex show <chemin|id raw|titre>");
+      process.stdout.write(await (await import("./extras")).showCtx(wiki, args[0]));
+      break;
+    case "related": {
+      if (args.length !== 1) throw usage("Usage : cortex related <chemin|titre> [--limit N] [--json]");
+      const hits = await (await import("./extras")).relatedCtx(wiki, args[0], int("--limit", o.limit, { min: 1 }) ?? 10);
+      if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
+      if (!hits.length) console.log(paint.dim("Aucune page liée."));
+      for (const h of hits) console.log(`${String(h.score).padStart(3)}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}
+     ${paint.dim(h.reasons.join(", "))}`);
+      break;
+    }
+    case "doctor":
+      for (const t of (await import("./extras")).doctor()) {
+        if (t.path) console.log(`${paint.ok("✓")} ${t.name.padEnd(13)} ${paint.dim(t.path)}`);
+        else console.log(`${paint.warn("!")} ${t.name.padEnd(13)} absent : ${t.use} ; ${paint.dim(t.install)}`);
+      }
+      break;
+    case "upgrade": {
+      const { upgrade, compareVersions } = await import("./upgrade");
+      const r = await upgrade(o.check);
+      if (r.upgraded) console.log(`${paint.ok("✓")} cortex ${r.current} → ${r.latest}`);
+      else if (compareVersions(r.current, r.latest) >= 0) console.log(`cortex ${r.current} : à jour (dernière release : ${r.latest}).`);
+      else console.log(`cortex ${r.current} → ${paint.warn(r.latest)} disponible : cortex upgrade`);
       break;
     }
     case "mcp":
