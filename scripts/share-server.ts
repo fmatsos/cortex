@@ -53,12 +53,21 @@ async function flush() {
       q = q.filter((x) => x !== item); save(q); sent++;
     } catch (e) { s.textContent = "Pas envoyé (" + e.message + "). Gardé sur le téléphone : rouvre Cortex pour réessayer."; return; }
   }
-  s.textContent = sent ? "Envoyé ✓ (" + sent + ")" : q.length ? "" : "Rien en attente.";
+  if (sent) s.textContent = "Envoyé ✓ (" + sent + ")";
 }
+// sites whose pages need a login: the link alone gives nothing, so the post's text is asked for instead
+const WALLED = /(^|\\.)(facebook\\.com|fb\\.watch|reddit\\.com|redd\\.it|instagram\\.com|threads\\.net|x\\.com|twitter\\.com)$/;
 const p = new URLSearchParams(location.search);
 if (p.get("title") || p.get("text") || p.get("url")) {
-  save([...load(), { title: p.get("title") || "", text: p.get("text") || "", url: p.get("url") || "" }]);
+  const item = { title: p.get("title") || "", text: p.get("text") || "", url: p.get("url") || "" };
   history.replaceState(null, "", "/share/");
+  const link = item.url || (item.text.trim().match(/^https?:\\/\\/\\S+$/) || [""])[0];
+  let host = ""; try { host = new URL(link).hostname; } catch {}
+  if (link && WALLED.test(host) && !item.text.replace(link, "").trim()) {
+    document.getElementById("u").value = link;
+    document.getElementById("t").focus();
+    s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le ci-dessous, puis envoie.";
+  } else save([...load(), item]);
 }
 document.getElementById("f").onsubmit = (e) => { e.preventDefault();
   const url = document.getElementById("u").value, text = document.getElementById("t").value;
