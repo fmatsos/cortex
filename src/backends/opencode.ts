@@ -1,8 +1,10 @@
 import { cli, interactiveWith, type Backend, type Config } from "./backend";
 import { toOpencodeRules } from "./policy";
+import { packServer } from "./tools";
 import { LIMITS } from "../limits";
 
-// --- opencode v2: REST API of `opencode serve` (the published SDK, 1.19.5, does not speak v2)----
+// --- opencode v2: REST API of `opencode serve` (the published SDK, 1.19.5, does not speak v2); the cortex tool pack
+// over MCP (inline config), opencode's own reading, writing and shell tools denied.
 
 export default function opencode(cfg: Config): Backend {
   const model = cfg.model ?? "opencode/big-pickle";
@@ -10,7 +12,8 @@ export default function opencode(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["opencode", "--model", cfg.effort ? `${model}#${cfg.effort}` : model, "--prompt", p]),
     async run(root, prompt, mode) {
-      const server = await startOpencode();
+      const pack = packServer(root, mode);
+      const server = await startOpencode({ mcp: { servers: { cortex: { type: "local", command: [pack.command, ...pack.args], environment: pack.env } } } });
       try {
         const api = async (method: string, path: string, body?: unknown) => {
           const r = await fetch(server.url + path, {
@@ -19,7 +22,7 @@ export default function opencode(cfg: Config): Backend {
           if (!r.ok) throw new Error(`opencode ${method} ${path} → ${r.status} ${await r.text()}`);
           return r.status === 204 ? undefined : r.json();
         };
-        const permissions = toOpencodeRules(mode, root);
+        const permissions = toOpencodeRules();
         const { data: session } = await api("POST", "/api/session", {
           location: { directory: root }, permissions, model: { providerID, id: id.join("/"), ...(cfg.effort && { variant: cfg.effort }) }, // effort = opencode model variant
         });
@@ -49,7 +52,7 @@ function drain(stream: ReadableStream<Uint8Array>, keep = 4_000) {
 }
 
 /** `opencode serve` on a free port (4096 would collide), session-specific password (Basic opencode:<pwd>). */
-export async function startOpencode() {
+export async function startOpencode(config?: object) {
   // ponytail: the port is probed then released before the spawn (small race window); `opencode serve --port=0` is
   // unverified without the binary (no --help available here), so it is not used.
   const sock = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
@@ -57,7 +60,7 @@ export async function startOpencode() {
   sock.stop(true);
   const password = crypto.randomUUID();
   const proc = Bun.spawn([cli("opencode"), "serve", "--hostname=127.0.0.1", `--port=${port}`], {
-    env: { ...process.env, OPENCODE_SERVER_PASSWORD: password }, stdout: "pipe", stderr: "pipe",
+    env: { ...process.env, OPENCODE_SERVER_PASSWORD: password, ...(config && { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) }) }, stdout: "pipe", stderr: "pipe",
   });
   // SIGTERM, then SIGKILL if the server is still there after the grace period
   const close = () => {

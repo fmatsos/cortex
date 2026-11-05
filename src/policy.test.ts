@@ -102,7 +102,7 @@ test("garde Claude : commandes Bash autorisées par mode", () => {
   }
 });
 
-test("règles de permission opencode, modes read et write", async () => {
+test("opencode : le pack d'outils cortex par MCP (config inline), ses propres outils refusés, en read comme en write", async () => {
   const bodies: any[] = [];
   const server = Bun.serve({
     port: 0,
@@ -113,26 +113,18 @@ test("règles de permission opencode, modes read et write", async () => {
       return new Response(null, { status: 204 });
     },
   });
-  const bin = await fakeBin("opencode", `echo "listening on http://127.0.0.1:${server.port}"; exec sleep 30`);
+  const out = join(mkdtempSync(join(tmpdir(), "cortex-out-")), "config");
+  const bin = await fakeBin("opencode", `printf '%s' "$OPENCODE_CONFIG_CONTENT" > ${out}; echo "listening on http://127.0.0.1:${server.port}"; exec sleep 30`);
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   try { for (const mode of ["read", "write"] as const) await runBackend("opencode", {}, bin, root, mode); }
   finally { await server.stop(true); }
+  const cortex = JSON.parse(readFileSync(out, "utf8")).mcp.servers.cortex; // the last run: write mode
+  expect(cortex).toMatchObject({ type: "local", environment: { CORTEX_ROOT: root } });
+  expect(cortex.command.slice(-3)).toEqual(["mcp", "--agent", "write"]);
   const r = (action: string, resource: string, effect: "allow" | "deny") => ({ action, resource, effect });
-  const tail = [
-    r("external_directory", "*", "deny"),
-    r("webfetch", "*", "deny"), r("websearch", "*", "deny"), r("subagent", "*", "deny"), r("question", "*", "deny"),
+  const rules = [
+    ...["read", "edit", "glob", "grep", "shell", "external_directory", "webfetch", "websearch", "subagent", "question", "skill", "execute"].map((a) => r(a, "*", "deny")),
+    r("cortex_*", "*", "allow"),
   ];
-  expect(bodies.map((b) => b.permissions)).toEqual([
-    [
-      r("edit", "*", "deny"),
-      r("shell", "*", "deny"), r("shell", "cortex search*", "allow"), r("shell", "cortex log --*", "allow"),
-      ...tail,
-    ],
-    [
-      r("edit", "*", "deny"), r("edit", "wiki/*", "allow"), r("edit", `${join(root, "wiki")}/*`, "allow"),
-      r("shell", "*", "deny"), r("shell", "cortex search*", "allow"), r("shell", "cortex log --*", "allow"),
-      r("shell", "cortex index*", "allow"), r("shell", "cortex lint*", "allow"), r("shell", "cortex new *", "allow"), r("shell", "cortex log add *", "allow"),
-      ...tail,
-    ],
-  ]);
+  expect(bodies.map((b) => b.permissions)).toEqual([rules, rules]);
 });

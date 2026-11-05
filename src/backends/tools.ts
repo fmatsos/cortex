@@ -49,10 +49,12 @@ export function zodShape(t: ToolDef): Record<string, z.ZodType> {
  * MCP config that starts the pack for an agent CLI: `cortex mcp --agent <mode>` with this very cortex (the compiled
  * binary, or bun and the script), on `root`.
  */
-export function packMcpConfig(root: string, mode: Mode): string {
+export function packServer(root: string, mode: Mode) {
   const self = /\.[jt]s$/.test(Bun.main) ? [process.execPath, Bun.main] : [process.execPath];
-  return JSON.stringify({ mcpServers: { cortex: { command: self[0], args: [...self.slice(1), "mcp", "--agent", mode], env: { CORTEX_ROOT: root } } } });
+  return { command: self[0], args: [...self.slice(1), "mcp", "--agent", mode], env: { CORTEX_ROOT: root } };
 }
+/** The same, as a Claude Code `--mcp-config` document. */
+export const packMcpConfig = (root: string, mode: Mode) => JSON.stringify({ mcpServers: { cortex: packServer(root, mode) } });
 
 /** One part of a tool result, from `from`; the rest is never dropped: the part names the offset of the next one. */
 export function part(s: string, from = 0): string {

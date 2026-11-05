@@ -54,17 +54,14 @@ export const toLabel = (mode: Mode): string => `cortex ${[...new Set(POLICY[mode
 
 export type OpencodeRule = { action: string; resource: string; effect: "allow" | "deny" };
 
-/** Permission rules of an opencode session: the last matching rule wins; never "ask", nobody would answer. */
-export function toOpencodeRules(mode: Mode, root: string): OpencodeRule[] {
+/**
+ * Permission rules of an opencode session: only the cortex tool pack (MCP server « cortex », tools `cortex_*`), which
+ * guards each call itself; opencode's own tools are denied. Never "ask", nobody would answer.
+ */
+export function toOpencodeRules(): OpencodeRule[] {
   const rule = (action: string, resource: string, effect: "allow" | "deny"): OpencodeRule => ({ action, resource, effect });
   return [
-    rule("edit", "*", "deny"),
-    ...(mode === "write" ? [rule("edit", "wiki/*", "allow"), rule("edit", `${join(root, "wiki")}/*`, "allow")] : []),
-    rule("shell", "*", "deny"),
-    ...POLICY[mode].map((r) =>
-      // `cortex log --*` does not match `cortex log add`
-      rule("shell", isFlags(r) ? `cortex ${r.cmd} --*` : r.args === "required" ? `cortex ${r.cmd} *` : `cortex ${r.cmd}*`, "allow")),
-    rule("external_directory", "*", "deny"),
-    rule("webfetch", "*", "deny"), rule("websearch", "*", "deny"), rule("subagent", "*", "deny"), rule("question", "*", "deny"),
+    ...["read", "edit", "glob", "grep", "shell", "external_directory", "webfetch", "websearch", "subagent", "question", "skill", "execute"].map((a) => rule(a, "*", "deny")),
+    rule("cortex_*", "*", "allow"),
   ];
 }
