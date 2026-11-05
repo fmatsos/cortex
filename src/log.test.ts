@@ -15,7 +15,7 @@ test("journal entry: parse and serialize, empty fields omitted, invalid entries 
   await Bun.write(join(root, "wiki/log.jsonl"), `${JSON.stringify(ok)}\n\nn'importe quoi\n{"at":"2026-11-04","kind":"zz","text":"x"}\n`);
   const r = readLog(root);
   expect(r.entries).toEqual([ok]);
-  expect(r.errors).toEqual([{ line: 3, msg: "JSON invalide" }, { line: 4, msg: expect.stringContaining("kind") }]);
+  expect(r.errors).toEqual([{ line: 3, msg: "invalid JSON" }, { line: 4, msg: expect.stringContaining("kind") }]);
 });
 
 test("log.md: generated, deterministic, newest first, references not repeated", async () => {
@@ -28,10 +28,10 @@ test("log.md: generated, deterministic, newest first, references not repeated", 
   const md = renderLogMd([...entries]);
   expect(md).toBe(`# Log
 
-> Généré depuis \`wiki/log.jsonl\` : ne pas éditer à la main (\`cortex log add\`, puis \`cortex index\`).
+> Generated from \`wiki/log.jsonl\`: do not edit by hand (\`cortex log add\`, then \`cortex index\`).
 
 ## 2026-11-04
-- **Ingest** Créé sources/x, concepts/{a, c}. (sources : \`01a1a5c9-5e80-7075-ae13-aab03b0a8697\` ; pages : [entities/b](/wiki/entities/b.md))
+- **Ingest** Créé sources/x, concepts/{a, c}. (sources: \`01a1a5c9-5e80-7075-ae13-aab03b0a8697\`; pages: [entities/b](/wiki/entities/b.md))
 - **Add** \`01a1a5c9-5e80-7075-ae13-aab03b0a8697\`.
 
 ## 2026-11-03
@@ -48,13 +48,13 @@ test("cortex log add: validates kind, pages and sources, writes one line, regene
   await Bun.write(join(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md"), "---\ntype: RawSource\n---\nx\n");
   await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\n---\n");
   await Bun.write(join(root, "wiki/log.md"), "à écraser");
-  await expect(logAdd(root, "creation", "x")).rejects.toThrow("kind inconnu");
-  await expect(logAdd(root, "update", "  ")).rejects.toThrow("texte vide");
-  await expect(logAdd(root, "update", "x", [], ["wiki/concepts/nope.md"])).rejects.toThrow("page introuvable");
-  await expect(logAdd(root, "update", "x", [], ["wiki/../cortex.json"])).rejects.toThrow("page introuvable");
-  await expect(logAdd(root, "update", "x", [], ["wiki/log.md"])).rejects.toThrow("page introuvable");
-  await expect(logAdd(root, "update", "x", ["01a1a5c9-5e80-7075-ae13-000000000000"])).rejects.toThrow("source raw introuvable");
-  await expect(logAdd(root, "update", "x", ["../../etc"])).rejects.toThrow("source raw introuvable");
+  await expect(logAdd(root, "creation", "x")).rejects.toThrow("unknown kind");
+  await expect(logAdd(root, "update", "  ")).rejects.toThrow("empty text");
+  await expect(logAdd(root, "update", "x", [], ["wiki/concepts/nope.md"])).rejects.toThrow("page not found");
+  await expect(logAdd(root, "update", "x", [], ["wiki/../cortex.json"])).rejects.toThrow("page not found");
+  await expect(logAdd(root, "update", "x", [], ["wiki/log.md"])).rejects.toThrow("page not found");
+  await expect(logAdd(root, "update", "x", ["01a1a5c9-5e80-7075-ae13-000000000000"])).rejects.toThrow("raw source not found");
+  await expect(logAdd(root, "update", "x", ["../../etc"])).rejects.toThrow("raw source not found");
   expect(existsSync(join(root, "wiki/log.jsonl"))).toBe(false); // no refusal writes
   const d = new Date("2026-11-04T10:00:00");
   const e = await logAdd(root, "ingest", "Ligne un\n  suite.", ["01a1a5c9-5e80-7075-ae13-aab03b0a8697", "01a1a5c9-5e80-7075-ae13-aab03b0a8697"], ["/wiki/concepts/a.md", "wiki/concepts/a.md"], d);
@@ -65,7 +65,7 @@ test("cortex log add: validates kind, pages and sources, writes one line, regene
   expect(JSON.parse(raw.split("\n")[1])).not.toHaveProperty("sources"); // empty fields omitted
   expect(readLog(root).errors).toEqual([]);
   const md = await Bun.file(join(root, "wiki/log.md")).text();
-  expect(md).toContain("## 2026-11-04\n- **Lint** 0 erreur.\n- **Ingest** Ligne un suite. (sources : `01a1a5c9-5e80-7075-ae13-aab03b0a8697` ; pages : [concepts/a](/wiki/concepts/a.md))\n");
+  expect(md).toContain("## 2026-11-04\n- **Lint** 0 erreur.\n- **Ingest** Ligne un suite. (sources: `01a1a5c9-5e80-7075-ae13-aab03b0a8697`; pages: [concepts/a](/wiki/concepts/a.md))\n");
   // file edited without a trailing newline: the next entry does not stick to the previous one
   await Bun.write(join(root, "wiki/log.jsonl"), raw.trimEnd());
   await logAdd(root, "update", "suite", [], [], d);
@@ -99,14 +99,14 @@ test("journal lint: invalid line = error, hand-edited log.md = warning", async (
   const msgs = async () => (await lint(root)).map((i) => `${i.level} ${i.path} ${i.msg}`);
   expect(await msgs()).toEqual([]); // no journal: nothing to say
   await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-04","kind":"add","text":"x"}\n');
-  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]); // never generated
+  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md differs")]); // never generated
   await writeLogMd(root);
   expect(await msgs()).toEqual([]);
   await Bun.write(join(root, "wiki/log.md"), (await Bun.file(join(root, "wiki/log.md")).text()) + "- à la main\n");
-  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md diffère")]);
+  expect(await msgs()).toEqual([expect.stringContaining("warning wiki/log.md differs")]);
   await writeLogMd(root);
   await Bun.write(join(root, "wiki/log.jsonl"), '{"at":"2026-11-04","kind":"add","text":"x"}\n{pas du json\n{"at":"2026-11-04","kind":"zz","text":"x"}\n');
   const m = await msgs();
-  expect(m).toContain("error wiki/log.jsonl:2 JSON invalide");
+  expect(m).toContain("error wiki/log.jsonl:2 invalid JSON");
   expect(m.some((x) => x.startsWith("error wiki/log.jsonl:3 kind"))).toBe(true);
 });

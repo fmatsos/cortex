@@ -28,11 +28,11 @@ test("empty frontmatter gives {}", () => {
 });
 
 test("scalar frontmatter throws", () => {
-  expect(() => parseDoc("p.md", "---\njust a string\n---\nCorps\n")).toThrow("frontmatter invalide");
+  expect(() => parseDoc("p.md", "---\njust a string\n---\nCorps\n")).toThrow("invalid frontmatter");
 });
 
 test("array frontmatter throws", () => {
-  expect(() => parseDoc("p.md", "---\n- a\n- b\n---\nCorps\n")).toThrow("frontmatter invalide");
+  expect(() => parseDoc("p.md", "---\n- a\n- b\n---\nCorps\n")).toThrow("invalid frontmatter");
 });
 
 test("--- inside a quoted string does not end the frontmatter", () => {
@@ -55,5 +55,5 @@ test("lint reports a scalar frontmatter as an invalid-frontmatter error", async 
   const issues = await lint(root);
   const e = issues.find((i) => i.path === "wiki/concepts/bad.md");
   expect(e?.level).toBe("error");
-  expect(e?.msg).toContain("frontmatter invalide");
+  expect(e?.msg).toContain("invalid frontmatter");
 });

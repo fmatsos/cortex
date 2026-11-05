@@ -10,6 +10,7 @@
 	import { toRoute } from "#lib/links.js";
 	import { archives, countBy, dayLabel, dayOf, dayShort, filterEntries, filterQuery, groupDays, isUnfiltered, type LogFilter, monthLabel, NO_FILTER, readFilter, withIds } from "#lib/log-view.js";
 	import { KINDS, kindColor, kindDescription, kindIcon } from "#lib/type-meta.js";
+	import { t } from "#lib/i18n/index.js";
 
 	const STEP = 20; // entries displayed per slice
 	let { data } = $props();
@@ -82,29 +83,29 @@
 	const select = "border-input bg-card focus-visible:border-ring focus-visible:ring-ring/50 h-9 pointer-coarse:h-11 w-full rounded-md border px-2.5 text-sm outline-none focus-visible:ring-3";
 </script>
 
-<svelte:head><title>Journal · Cortex</title></svelte:head>
+<svelte:head><title>{t("nav.log")} · Cortex</title></svelte:head>
 
-<h1 class="text-3xl font-semibold tracking-tight">Journal</h1>
+<h1 class="text-3xl font-semibold tracking-tight">{t("nav.log")}</h1>
 
 {#if total}
 	<div class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
 		<div>
-			<label for="journal-recherche" class="mb-1 block text-sm font-medium">Rechercher dans le journal</label>
-			<Input id="journal-recherche" bind:ref={search} type="search" placeholder="Mot, page, source…" autocomplete="off" value={f.q} oninput={(e) => set({ q: e.currentTarget.value })} />
+			<label for="log-search" class="mb-1 block text-sm font-medium">{t("log.search")}</label>
+			<Input id="log-search" bind:ref={search} type="search" placeholder={t("log.search.placeholder")} autocomplete="off" value={f.q} oninput={(e) => set({ q: e.currentTarget.value })} />
 		</div>
 		<div>
-			<label for="journal-mois" class="mb-1 block text-sm font-medium">Période</label>
-			<select id="journal-mois" class={select} value={monthValue} onchange={(e) => set({ month: e.currentTarget.value, day: "" })}>
-				<option value="">Toutes</option>
+			<label for="log-month" class="mb-1 block text-sm font-medium">{t("log.period")}</label>
+			<select id="log-month" class={select} value={monthValue} onchange={(e) => set({ month: e.currentTarget.value, day: "" })}>
+				<option value="">{t("log.period.all")}</option>
 				{#each months as m (m.month)}
 					<option value={m.month}>{monthLabel(m.month)} ({m.n})</option>
 				{/each}
 			</select>
 		</div>
 		<div>
-			<label for="journal-jour" class="mb-1 block text-sm font-medium">Aller à un jour</label>
-			<select id="journal-jour" class={select} value={f.day} onchange={(e) => set({ day: e.currentTarget.value, month: "" })}>
-				<option value="">Tous les jours</option>
+			<label for="log-day" class="mb-1 block text-sm font-medium">{t("log.day")}</label>
+			<select id="log-day" class={select} value={f.day} onchange={(e) => set({ day: e.currentTarget.value, month: "" })}>
+				<option value="">{t("log.day.all")}</option>
 				{#each dayGroups as g (g.month)}
 					<optgroup label={monthLabel(g.month)}>
 						{#each g.days as d (d.day)}
@@ -116,9 +117,9 @@
 		</div>
 	</div>
 
-	<ul class="touch-gap mt-4 flex flex-wrap gap-2" aria-label="Filtrer par type d'entrée">
+	<ul class="touch-gap mt-4 flex flex-wrap gap-2" aria-label={t("log.kindFilter")}>
 		<li>
-			<ChipButton pressed={f.kind === ""} onclick={() => set({ kind: "" })}>Tout <span class="text-muted-foreground">{kindTotal}</span></ChipButton>
+			<ChipButton pressed={f.kind === ""} onclick={() => set({ kind: "" })}>{t("log.kind.all")} <span class="text-muted-foreground">{kindTotal}</span></ChipButton>
 		</li>
 		{#each kindsShown as k (k.kind)}
 			<li>
@@ -133,7 +134,7 @@
 	<details class="group mt-3">
 		<summary class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 touch-target inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md text-sm focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
 			<Icon name="chevron-down" size={16} class="motion-safe:transition-transform group-open:rotate-180" />
-			Que signifient les types d'entrée ?
+			{t("log.kinds.help")}
 		</summary>
 		<dl class="mt-2 space-y-2 text-sm">
 			{#each KINDS as k (k.kind)}
@@ -146,7 +147,7 @@
 	</details>
 
 	<p class="text-muted-foreground mt-4 text-sm" role="status">
-		{filtered.length === total ? `${total} entrées` : `${filtered.length} sur ${total} entrées`}{#if filtered.length && remaining}, {visible.length} affichées{/if}
+		{filtered.length === total ? t("log.entries", { count: total }) : t("log.entriesOf", { shown: filtered.length, count: total })}{#if filtered.length && remaining}, {t("log.displayed", { count: visible.length })}{/if}
 	</p>
 
 	{#if filtered.length}
@@ -155,7 +156,7 @@
 				<li>
 					<h2 class="flex items-baseline gap-2 text-lg font-semibold first-letter:uppercase">
 						<time datetime={d.day}>{dayLabel(d.day)}</time>
-						<span class="text-muted-foreground text-sm font-normal">{dayTotals.get(d.day)} {(dayTotals.get(d.day) ?? 0) > 1 ? "entrées" : "entrée"}</span>
+						<span class="text-muted-foreground text-sm font-normal">{t("log.entries", { count: dayTotals.get(d.day) ?? 0 })}</span>
 					</h2>
 					<ol class="border-border mt-4 ml-1 space-y-5 border-l pl-6">
 						{#each d.entries as e (e.id)}
@@ -168,22 +169,22 @@
 		{#if remaining}
 			<div class="mt-8">
 				<Button variant="outline" onclick={more}>
-					Afficher {Math.min(STEP, remaining)} entrée{Math.min(STEP, remaining) > 1 ? "s" : ""} de plus
-					<span class="text-muted-foreground">({remaining} restante{remaining > 1 ? "s" : ""})</span>
+					{t("log.more", { count: Math.min(STEP, remaining) })}
+					<span class="text-muted-foreground">({t("log.remaining", { count: remaining })})</span>
 				</Button>
 			</div>
 		{/if}
 	{:else}
 		<div class="mt-6">
-			<p class="text-muted-foreground">Aucune entrée du journal ne correspond{f.q.trim() ? ` à « ${f.q.trim()} »` : ""}.</p>
+			<p class="text-muted-foreground">{f.q.trim() ? t("log.noMatchFor", { q: f.q.trim() }) : t("log.noMatch")}</p>
 			{#if !isUnfiltered(f)}
 				<Button variant="outline" class="mt-3" onclick={reset}>
 					<Icon name="clear" size={16} />
-					Effacer les filtres
+					{t("log.clearFilters")}
 				</Button>
 			{/if}
 		</div>
 	{/if}
 {:else}
-	<p class="text-muted-foreground mt-4">Le journal est vide.</p>
+	<p class="text-muted-foreground mt-4">{t("log.empty")}</p>
 {/if}

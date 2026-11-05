@@ -11,7 +11,7 @@ export async function schemaText(root: string): Promise<string> {
   let text = SCHEMA;
   if (c.schema) {
     const f = Bun.file(resolve(root, c.schema));
-    if (!(await f.exists())) throw new Error(`schéma introuvable : ${c.schema} (clé schema de cortex.json)`);
+    if (!(await f.exists())) throw new Error(`schema not found: ${c.schema} (schema key of cortex.json)`);
     text = await f.text();
   }
   return text.replaceAll("{{language}}", c.language ?? DEFAULT_LANGUAGE);

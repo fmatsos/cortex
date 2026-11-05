@@ -1,4 +1,4 @@
-import { interactiveWith, type Backend, type Config } from "./backend";
+import { cli, interactiveWith, type Backend, type Config } from "./backend";
 import { toOpencodeRules } from "./policy";
 import { LIMITS } from "../limits";
 
@@ -27,7 +27,7 @@ export default function opencode(cfg: Config): Backend {
         await api("POST", `/api/experimental/session/${session.id}/wait`);
         const { data: messages } = await api("GET", `/api/session/${session.id}/message?order=desc&limit=50`);
         const idle = messages.find((m: any) => m.type === "idle");
-        if (idle?.outcome === "failed") throw new Error(`agent opencode en échec : ${idle.error?.message ?? "inconnu"}`);
+        if (idle?.outcome === "failed") throw new Error(`opencode agent failed: ${idle.error?.message ?? "unknown"}`);
         const last = messages.find((m: any) => m.type === "assistant");
         return (last?.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
       } finally {
@@ -56,7 +56,7 @@ export async function startOpencode() {
   const port = sock.port;
   sock.stop(true);
   const password = crypto.randomUUID();
-  const proc = Bun.spawn(["opencode", "serve", "--hostname=127.0.0.1", `--port=${port}`], {
+  const proc = Bun.spawn([cli("opencode"), "serve", "--hostname=127.0.0.1", `--port=${port}`], {
     env: { ...process.env, OPENCODE_SERVER_PASSWORD: password }, stdout: "pipe", stderr: "pipe",
   });
   // SIGTERM, then SIGKILL if the server is still there after the grace period
@@ -71,7 +71,7 @@ export async function startOpencode() {
   const deadline = Date.now() + LIMITS.opencodeStartMs;
   while (!/listening on (\S+)/.test(out)) {
     const chunk = await Promise.race([reader.read(), Bun.sleep(Math.max(0, deadline - Date.now())).then(() => null)]);
-    if (!chunk || chunk.done) { close(); throw new Error(`opencode serve n'a pas démarré : ${out || err.tail}`); }
+    if (!chunk || chunk.done) { close(); throw new Error(`opencode serve did not start: ${out || err.tail}`); }
     out += new TextDecoder().decode(chunk.value);
   }
   // keep reading after startup: the server logs for the whole session and would block once the pipe buffer is full

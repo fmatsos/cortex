@@ -3,6 +3,7 @@
 	import ResultRow from "#lib/components/result-row.svelte";
 	import { toPage } from "#lib/links.js";
 	import { TYPES, typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	/**
 	 * List of pages (home, tags, favorites) with the common ResultRow line: type, title, trust state, description.
@@ -17,7 +18,7 @@
 </script>
 
 {#if filter && types.length > 1}
-	<div class="touch-gap mt-3 mb-1 flex flex-wrap gap-2" role="group" aria-label="Filtrer par type">
+	<div class="touch-gap mt-3 mb-1 flex flex-wrap gap-2" role="group" aria-label={tr("list.filterByType")}>
 		{#each types as t (t)}
 			<button
 				type="button"
@@ -30,7 +31,7 @@
 			</button>
 		{/each}
 	</div>
-	<p class="sr-only" role="status">{only ? `${shown.length} page${shown.length > 1 ? "s" : ""} de type ${typeLabel(only)}` : `${pages.length} pages`}</p>
+	<p class="sr-only" role="status">{only ? tr("list.ofType", { count: shown.length, type: typeLabel(only) }) : tr("common.pages", { count: pages.length })}</p>
 {/if}
 
 <ul class="divide-border divide-y">

@@ -12,7 +12,8 @@
 	import { SHAPE_LABEL, shapeOf, shapePoints, starPoints, svgPoints } from "#lib/graph-shapes.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import type { GraphData } from "#lib/types.js";
-	import { TYPES, typeColor, typeLabel } from "#lib/type-meta.js";
+	import { TYPES, typeColor, typeLabel, typePlural } from "#lib/type-meta.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	type N = GNode & { x?: number; y?: number; vx?: number; vy?: number; neighbors: N[]; links: L[] };
 	type L = { source: N | string; target: N | string; twin?: boolean };
@@ -40,7 +41,7 @@
 	let zoomBy: (f: number) => void = () => {};
 	let togglePause: () => void = () => {};
 	let nodeById: (id: string) => N | undefined = () => undefined;
-	let retry: () => void = () => {}; // "Réessayer": rebuilds the graph from scratch
+	let retry: () => void = () => {}; // "Retry": rebuilds the graph from scratch
 	let pendingFocus: string | null = null; // page to select as soon as the reset filters are applied
 
 	const EMPTY: GraphView = { nodes: [], links: [], ids: new Set() };
@@ -74,12 +75,12 @@
 
 	/** Selects a page and centers it; if a filter hides it, the filters are reset first. */
 	async function focusNode(id: string) {
-		if (!raw?.nodes.some((n) => n.id === id)) { notice = "Cette page n'est pas dans le graphe."; return; }
+		if (!raw?.nodes.some((n) => n.id === id)) { notice = tr("graph.notInGraph"); return; }
 		notice = "";
 		if (listMode) { listMode = false; await tick(); }
 		if (!view.ids.has(id)) {
 			pendingFocus = id;
-			notice = "Filtres réinitialisés pour afficher cette page.";
+			notice = tr("graph.filtersReset");
 			off = new Set();
 			tag = "";
 			return;
@@ -351,7 +352,7 @@
 				// `?focus=<id>`: opens the graph centered on a page ("Voir dans le graphe" link of an article)
 				const wanted = resolveFocus(location.search, g.nodes);
 				if (wanted.id) await focusNode(wanted.id);
-				else if (wanted.asked) notice = `La page « ${wanted.asked} » n'est pas dans le graphe.`;
+				else if (wanted.asked) notice = tr("graph.pageNotInGraph", { title: wanted.asked });
 			} catch (e) {
 				if (me !== gen) return;
 				error = (e as Error).message || "erreur inconnue";
@@ -376,7 +377,7 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape" && sel && !e.defaultPrevented) select(null); }} />
 
-<div class="touch-gap flex flex-wrap items-center gap-2" role="group" aria-label="Filtres du graphe">
+<div class="touch-gap flex flex-wrap items-center gap-2" role="group" aria-label={tr("graph.filters")}>
 	{#each types as t (t)}
 		<button
 			type="button"
@@ -385,37 +386,37 @@
 			class="focus-visible:ring-ring/50 pointer-coarse:min-h-11 inline-flex h-8 items-center gap-2 rounded-full border px-3 text-sm motion-safe:transition-opacity focus-visible:ring-3 {off.has(t) ? 'opacity-60' : ''}"
 		>
 			{@render shape(t)}
-			{typeLabel(t)}s <span class="text-muted-foreground">{count(t)}</span>
-			<span class="sr-only">, forme : {SHAPE_LABEL[shapeOf(t)]}</span>
+			{typePlural(t)} <span class="text-muted-foreground">{count(t)}</span>
+			<span class="sr-only">{tr("graph.shapeSr", { shape: SHAPE_LABEL[shapeOf(t)] })}</span>
 		</button>
 	{/each}
 	<label class="text-muted-foreground ml-1 flex items-center gap-2 text-sm">
-		Tag
+		{tr("graph.tag")}
 		<select bind:value={tag} class="bg-background text-foreground focus-visible:ring-ring/50 pointer-coarse:h-11 h-8 rounded-lg border px-2 text-sm focus-visible:ring-3">
-			<option value="">tous</option>
+			<option value="">{tr("graph.allTags")}</option>
 			{#each tags as [t, n] (t)}<option value={t}>{t} ({n})</option>{/each}
 		</select>
 	</label>
-	{#if filtered}<Button variant="ghost" size="sm" onclick={resetFilters}><Icon name="clear" size={16} />Réinitialiser les filtres</Button>{/if}
-	<span class="text-muted-foreground ml-auto text-sm" aria-live="polite">{shown} page{shown > 1 ? "s" : ""}</span>
+	{#if filtered}<Button variant="ghost" size="sm" onclick={resetFilters}><Icon name="clear" size={16} />{tr("graph.resetFilters")}</Button>{/if}
+	<span class="text-muted-foreground ml-auto text-sm" aria-live="polite">{tr("common.pages", { count: shown })}</span>
 </div>
 
-<div class="touch-gap mt-2 flex flex-wrap items-center gap-2" role="group" aria-label="Commandes du graphe">
-	<Button variant="outline" size="sm" aria-pressed={listMode} onclick={() => (listMode = !listMode)} disabled={!raw}><Icon name="list-view" size={16} />Vue liste</Button>
-	{#if !calm}<Button variant="outline" size="sm" disabled={!ready || listMode} onclick={() => togglePause()}><Icon name={paused ? "play" : "pause"} size={16} />{paused ? "Reprendre" : "Pause"}</Button>{/if}
-	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1.5)} aria-label="Zoom avant"><Icon name="zoom-in" size={16} /></Button>
-	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1 / 1.5)} aria-label="Zoom arrière"><Icon name="zoom-out" size={16} /></Button>
-	<Button variant="outline" size="sm" disabled={!ready || listMode} onclick={() => fit?.()}><Icon name="fit-view" size={16} />Recentrer</Button>
+<div class="touch-gap mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={tr("graph.controls")}>
+	<Button variant="outline" size="sm" aria-pressed={listMode} onclick={() => (listMode = !listMode)} disabled={!raw}><Icon name="list-view" size={16} />{tr("graph.listView")}</Button>
+	{#if !calm}<Button variant="outline" size="sm" disabled={!ready || listMode} onclick={() => togglePause()}><Icon name={paused ? "play" : "pause"} size={16} />{paused ? tr("graph.resume") : tr("graph.pause")}</Button>{/if}
+	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1.5)} aria-label={tr("graph.zoomIn")}><Icon name="zoom-in" size={16} /></Button>
+	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1 / 1.5)} aria-label={tr("graph.zoomOut")}><Icon name="zoom-out" size={16} /></Button>
+	<Button variant="outline" size="sm" disabled={!ready || listMode} onclick={() => fit?.()}><Icon name="fit-view" size={16} />{tr("graph.recenter")}</Button>
 
 	<div class="relative ml-auto w-full sm:w-72">
-		<label for="graph-search" class="sr-only">Chercher une page dans le graphe</label>
+		<label for="graph-search" class="sr-only">{tr("graph.search.label")}</label>
 		<Icon name="search" size={16} class="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2" />
 		<Input
 			id="graph-search"
 			type="text"
 			role="combobox"
 			autocomplete="off"
-			placeholder="Chercher une page…"
+			placeholder={tr("graph.search.placeholder")}
 			class="pl-8"
 			aria-expanded={searchOpen && query.trim() !== ""}
 			aria-controls="graph-search-list"
@@ -428,7 +429,7 @@
 			onblur={() => { searchOpen = false; }}
 		/>
 		{#if searchOpen && query.trim()}
-			<ul id="graph-search-list" role="listbox" aria-label="Pages trouvées" class="bg-popover text-popover-foreground absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-lg border p-1 shadow-md">
+			<ul id="graph-search-list" role="listbox" aria-label={tr("graph.search.results")} class="bg-popover text-popover-foreground absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-lg border p-1 shadow-md">
 				{#each results as r, i (r.id)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<li
@@ -441,10 +442,10 @@
 					>
 						{@render shape(r.type)}
 						<span class="truncate">{r.title}</span>
-						<span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(r.type)}{view.ids.has(r.id) ? "" : " · masquée"}</span>
+						<span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(r.type)}{view.ids.has(r.id) ? "" : ` · ${tr("graph.hidden")}`}</span>
 					</li>
 				{:else}
-					<li role="option" aria-selected="false" aria-disabled="true" class="text-muted-foreground px-2 py-2 text-sm">Aucune page ne correspond.</li>
+					<li role="option" aria-selected="false" aria-disabled="true" class="text-muted-foreground px-2 py-2 text-sm">{tr("graph.search.none")}</li>
 				{/each}
 			</ul>
 		{/if}
@@ -453,17 +454,17 @@
 <p role="status" class="text-muted-foreground mt-2 min-h-5 text-sm">{notice}</p>
 
 <div class="bg-card relative mt-1 h-[70vh] min-h-[420px] overflow-hidden rounded-xl border" class:hidden={listMode}>
-	<div bind:this={el} class="absolute inset-0" role="img" aria-label="Graphe des liens entre les pages du wiki. Activez « Vue liste » pour parcourir les mêmes pages et leurs relations au clavier."></div>
-	{#if !raw && !error}<p role="status" class="text-muted-foreground absolute inset-0 grid place-items-center text-sm">Chargement du graphe…</p>{/if}
+	<div bind:this={el} class="absolute inset-0" role="img" aria-label={tr("graph.canvasLabel")}></div>
+	{#if !raw && !error}<p role="status" class="text-muted-foreground absolute inset-0 grid place-items-center text-sm">{tr("graph.loading")}</p>{/if}
 	{#if error}
 		<div role="alert" class="absolute inset-0 grid place-items-center p-4">
 			<div class="flex max-w-md flex-col items-center gap-3 text-center">
 				<Icon name="error" size={24} class="text-destructive" />
-				<p class="text-sm"><strong>Le graphe n'a pas pu être chargé.</strong><br /><span class="text-muted-foreground">Vérifiez votre connexion puis réessayez. Détail : {error}</span></p>
+				<p class="text-sm"><strong>{tr("graph.error")}</strong><br /><span class="text-muted-foreground">{tr("graph.error.detail", { error: String(error) })}</span></p>
 				<div class="touch-gap flex flex-wrap justify-center gap-2">
-					<Button size="sm" onclick={() => retry()}><Icon name="retry" size={16} />Réessayer</Button>
-					<Button variant="outline" size="sm" href={toRoute("/search")}><Icon name="search" size={16} />Rechercher une page</Button>
-					<Button variant="outline" size="sm" href={toRoute("/tags")}><Icon name="tags" size={16} />Parcourir par tag</Button>
+					<Button size="sm" onclick={() => retry()}><Icon name="retry" size={16} />{tr("common.retry")}</Button>
+					<Button variant="outline" size="sm" href={toRoute("/search")}><Icon name="search" size={16} />{tr("graph.searchPage")}</Button>
+					<Button variant="outline" size="sm" href={toRoute("/tags")}><Icon name="tags" size={16} />{tr("graph.browseTags")}</Button>
 				</div>
 			</div>
 		</div>
@@ -471,21 +472,21 @@
 	{#if ready && shown === 0}
 		<div role="status" class="bg-card/90 absolute inset-0 grid place-items-center p-4">
 			<div class="flex max-w-sm flex-col items-center gap-3 text-center">
-				<p class="text-sm"><strong>Aucun résultat avec ces filtres.</strong><br /><span class="text-muted-foreground">Aucune page ne correspond aux types et au tag choisis.</span></p>
-				<Button size="sm" onclick={resetFilters}><Icon name="clear" size={16} />Réinitialiser les filtres</Button>
+				<p class="text-sm"><strong>{tr("graph.empty")}</strong><br /><span class="text-muted-foreground">{tr("graph.empty.detail")}</span></p>
+				<Button size="sm" onclick={resetFilters}><Icon name="clear" size={16} />{tr("graph.resetFilters")}</Button>
 			</div>
 		</div>
 	{/if}
 	{#if sel}
-		<aside aria-label="Page sélectionnée" class="bg-background/95 absolute inset-x-2 bottom-2 z-10 flex max-h-[42%] flex-col gap-2 overflow-auto rounded-lg border p-3 shadow-md backdrop-blur-sm sm:inset-x-auto sm:top-2 sm:right-2 sm:bottom-auto sm:max-h-[calc(100%-1rem)] sm:w-72">
+		<aside aria-label={tr("graph.selected")} class="bg-background/95 absolute inset-x-2 bottom-2 z-10 flex max-h-[42%] flex-col gap-2 overflow-auto rounded-lg border p-3 shadow-md backdrop-blur-sm sm:inset-x-auto sm:top-2 sm:right-2 sm:bottom-auto sm:max-h-[calc(100%-1rem)] sm:w-72">
 			<div class="flex items-center justify-between gap-2">
 				<TypeBadge type={sel.type} />
-				<Button variant="ghost" size="icon-sm" onclick={() => select(null)} aria-label="Désélectionner (Échap)"><Icon name="close-selection" size={16} /></Button>
+				<Button variant="ghost" size="icon-sm" onclick={() => select(null)} aria-label={tr("graph.deselect")}><Icon name="close-selection" size={16} /></Button>
 			</div>
 			<h2 class="text-base leading-snug font-semibold">{sel.title}</h2>
 			{#if sel.description}<p class="text-muted-foreground text-sm">{sel.description}</p>{/if}
 			{#if rel.cites.length || rel.citedBy.length}
-				{#each [{ label: "Cite", ids: rel.cites }, { label: "Cité par", ids: rel.citedBy }] as g (g.label)}
+				{#each [{ label: tr("graph.cites"), ids: rel.cites }, { label: tr("graph.citedBy"), ids: rel.citedBy }] as g (g.label)}
 					{#if g.ids.length}
 						<div>
 							<p class="text-muted-foreground mb-1 text-sm">{g.label} ({g.ids.length})</p>
@@ -501,16 +502,16 @@
 					{/if}
 				{/each}
 			{:else}
-				<p class="text-muted-foreground text-sm">Aucune page liée (avec les filtres actuels).</p>
+				<p class="text-muted-foreground text-sm">{tr("graph.noRelated")}</p>
 			{/if}
-			<Button href={toPage(sel.id)} size="sm" class="self-start">Ouvrir la page</Button>
+			<Button href={toPage(sel.id)} size="sm" class="self-start">{tr("graph.open")}</Button>
 		</aside>
 	{/if}
 </div>
 
 {#if listMode}
-	<section aria-label="Liste des pages et de leurs relations" class="mt-1">
-		<p class="text-muted-foreground mb-3 text-sm">{sorted.length} page{sorted.length > 1 ? "s" : ""}. « Cite » : pages vers lesquelles elle fait un lien ; « Cité par » : pages qui font un lien vers elle. Un nom de page lié mène à sa fiche dans cette liste.</p>
+	<section aria-label={tr("graph.list.label")} class="mt-1">
+		<p class="text-muted-foreground mb-3 text-sm">{tr("common.pages", { count: sorted.length })}. {tr("graph.list.help")}</p>
 		<ul class="grid gap-3 lg:grid-cols-2">
 			{#each sorted as n (n.id)}
 				{@const r = index.get(n.id)}
@@ -520,10 +521,10 @@
 						<h3 class="text-base leading-snug font-semibold">{n.title}</h3>
 					</div>
 					<div class="touch-gap mt-2 flex flex-wrap gap-2">
-						<Button size="sm" variant="outline" href={toPage(n.id)}><Icon name="external-link" size={16} />Ouvrir la page</Button>
-						<Button size="sm" variant="outline" onclick={() => focusNode(n.id)}><Icon name="graph" size={16} />Sélectionner dans le graphe</Button>
+						<Button size="sm" variant="outline" href={toPage(n.id)}><Icon name="external-link" size={16} />{tr("graph.open")}</Button>
+						<Button size="sm" variant="outline" onclick={() => focusNode(n.id)}><Icon name="graph" size={16} />{tr("graph.selectInGraph")}</Button>
 					</div>
-					{#each [{ label: "Cite", ids: r?.cites ?? [] }, { label: "Cité par", ids: r?.citedBy ?? [] }] as g (g.label)}
+					{#each [{ label: tr("graph.cites"), ids: r?.cites ?? [] }, { label: tr("graph.citedBy"), ids: r?.citedBy ?? [] }] as g (g.label)}
 						{#if g.ids.length}
 							<p class="mt-2 text-sm"><span class="text-muted-foreground">{g.label} :</span>
 								{#each g.ids as id, i (id)}{#if i}{", "}{/if}<a href="#{rowId(id)}" class="text-link underline underline-offset-3">{titles.get(id) ?? id}</a>{/each}</p>
@@ -539,9 +540,9 @@
 	<div class="text-muted-foreground mt-2 space-y-1 text-sm">
 		<p class="flex flex-wrap items-center gap-x-4 gap-y-1">
 			{#each types as t (t)}<span class="inline-flex items-center gap-1.5">{@render shape(t, 14)}{typeLabel(t)} ({SHAPE_LABEL[shapeOf(t)]})</span>{/each}
-			<span class="inline-flex items-center gap-1.5"><Icon name="star" size={14} filled style="color: var(--favorite)" />Favori</span>
+			<span class="inline-flex items-center gap-1.5"><Icon name="star" size={14} filled style="color: var(--favorite)" />{tr("graph.legend.fav")}</span>
 		</p>
-		<p>Taille d'un nœud : nombre de pages liées affichées avec les filtres actuels. Les particules vont de la page qui cite vers la page citée (dans les deux sens pour un lien réciproque).</p>
-		<p>Glisser pour déplacer, molette ou pincement pour zoomer. Un clic (ou un toucher) sélectionne une page et met son voisinage en valeur ; double-clic ou « Ouvrir la page » pour l'ouvrir, Échap pour désélectionner.</p>
+		<p>{tr("graph.legend.size")}</p>
+		<p>{tr("graph.legend.help")}</p>
 	</div>
 {/if}

@@ -17,20 +17,20 @@ test("cortex new: page named by UUID v7 by default, unique title, name lint, log
   expect(UUID.test(p.slice(14, -3))).toBe(true);
   expect(await Bun.file(join(root, p)).text()).toBe("---\ntype: Concept\ntitle: Context rot\nstatus: draft\n---\n");
   await expect(newPage(root, "Entity", "context  ROT")).rejects.toThrow(p); // same title: the existing page is named
-  await expect(newPage(root, "Note", "x")).rejects.toThrow("type inconnu");
+  await expect(newPage(root, "Note", "x")).rejects.toThrow("unknown type");
   expect((await newPage(root, "Synthesis", "Autre")).startsWith("wiki/syntheses/")).toBe(true);
 
   await Bun.write(join(root, "wiki/concepts/a-la-main.md"), "---\ntype: Concept\ntitle: Main\ndescription: D.\n---\nx\n");
   for (const d of ["2026/11/20261104-abcd-x", "2025/01/20261104-abcd-x"]) await Bun.write(join(root, `raw/${d}/source.md`), "---\ntype: RawSource\nnote: n\nstatus: compiled\n---\nx\n");
   const issues = (await lint(root)).map((i) => `${i.level} ${i.path} ${i.msg}`);
-  expect(issues).toContain("warning wiki/concepts/a-la-main.md nom hors du modèle page_path « {type}/{uuid} » (les pages se créent par cortex new)");
-  expect(issues).toContain("warning raw/2026/11/20261104-abcd-x/source.md chemin hors du modèle raw_path « {yyyy}/{mm}/{uuid} » (les sources s'ajoutent par cortex add)");
-  expect(issues.filter((i) => i.includes("id raw en double : 20261104-abcd-x"))).toHaveLength(1);
-  expect(issues.some((i) => i.includes(p) && i.includes("modèle"))).toBe(false);
+  expect(issues).toContain('warning wiki/concepts/a-la-main.md name outside the page_path template \"{type}/{uuid}\" (pages are created with cortex new)');
+  expect(issues).toContain('warning raw/2026/11/20261104-abcd-x/source.md path outside the raw_path template \"{yyyy}/{mm}/{uuid}\" (sources are added with cortex add)');
+  expect(issues.filter((i) => i.includes("duplicate raw id: 20261104-abcd-x"))).toHaveLength(1);
+  expect(issues.some((i) => i.includes(p) && i.includes("template"))).toBe(false);
 
   // log.md names pages by their title, and does not repeat them when the text already names them
   await logAdd(root, "ingest", "Créé context-rot.", [], [p, "wiki/concepts/a-la-main.md"]);
-  expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("- **Ingest** Créé context-rot. (pages : [Main](/wiki/concepts/a-la-main.md))\n");
+  expect(await Bun.file(join(root, "wiki/log.md")).text()).toContain("- **Ingest** Créé context-rot. (pages: [Main](/wiki/concepts/a-la-main.md))\n");
 });
 
 test("configurable naming: validated templates, placeholders, subfolders, collisions", async () => {
@@ -42,13 +42,13 @@ test("configurable naming: validated templates, placeholders, subfolders, collis
   // validation
   expect(checkTemplate("raw_path", "{yyyy}/{mm}/{uuid}")).toBeUndefined();
   expect(checkTemplate("page_path", "{type}/{yyyy}{mm}{dd}-{slug}")).toBeUndefined();
-  expect(checkTemplate("raw_path", "{type}/{uuid}")).toContain("placeholder inconnu {type}"); // {type}: pages only
-  expect(checkTemplate("page_path", "{kind}/{uuid}")).toContain("placeholder inconnu {kind}");
-  expect(checkTemplate("page_path", "../{uuid}")).toContain("segments vides");
-  expect(checkTemplate("page_path", "{type}//{uuid}")).toContain("segments vides");
-  expect(checkTemplate("page_path", "{type}/a b{uuid}")).toContain("seuls lettres");
-  expect(checkTemplate("page_path", "{uuid}/page")).toContain("dernier segment");
-  expect(lintConfig({ page_path: "{oops}" })[0].msg).toContain("placeholder inconnu {oops}");
+  expect(checkTemplate("raw_path", "{type}/{uuid}")).toContain("unknown placeholder {type}"); // {type}: pages only
+  expect(checkTemplate("page_path", "{kind}/{uuid}")).toContain("unknown placeholder {kind}");
+  expect(checkTemplate("page_path", "../{uuid}")).toContain("empty segments");
+  expect(checkTemplate("page_path", "{type}//{uuid}")).toContain("empty segments");
+  expect(checkTemplate("page_path", "{type}/a b{uuid}")).toContain("only letters");
+  expect(checkTemplate("page_path", "{uuid}/page")).toContain("last segment");
+  expect(lintConfig({ page_path: "{oops}" })[0].msg).toContain("unknown placeholder {oops}");
   expect(lintConfig({ raw_path: "{yyyy}/{rand}-{slug}", page_path: null })).toEqual([]);
   // values and patterns
   const v = { at, title: "Le C++26 refusé", type: "Concept" as const, kind: "pdf" };
@@ -72,7 +72,7 @@ test("configurable naming: validated templates, placeholders, subfolders, collis
   expect(await newPage(root, "Concept", "Context rot", at)).toBe("wiki/2026/context-rot.md");
   await Bun.write(join(root, "wiki/2026/context-rot.md"), "---\ntype: Concept\ntitle: Autre titre\n---\n"); // the name is taken, not the title
   expect(await newPage(root, "Entity", "Context  rot!", at)).toBe("wiki/2026/context-rot-2.md");
-  const issues = (await lint(root)).filter((i) => i.msg.includes("modèle"));
+  const issues = (await lint(root)).filter((i) => i.msg.includes("template"));
   expect(issues).toEqual([]);
 });
 

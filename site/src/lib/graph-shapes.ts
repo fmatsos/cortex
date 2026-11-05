@@ -1,3 +1,5 @@
+import { t } from "./i18n/index";
+
 /** Graph node shapes: the type is read by shape as much as by color (never color alone). Pure, tested by bun test. */
 
 export type Shape = "circle" | "square" | "diamond" | "triangle";
@@ -7,7 +9,7 @@ const SHAPE_OF: Record<string, Shape> = { Concept: "circle", Entity: "square", S
 /** Shape of a page type; an unknown type falls back to the circle. */
 export const shapeOf = (type: string): Shape => SHAPE_OF[type] ?? "circle";
 
-export const SHAPE_LABEL: Record<Shape, string> = { circle: "rond", square: "carré", diamond: "losange", triangle: "triangle" };
+export const SHAPE_LABEL: Record<Shape, string> = { get circle() { return t("shape.circle"); }, get square() { return t("shape.square"); }, get diamond() { return t("shape.diamond"); }, get triangle() { return t("shape.triangle"); } };
 
 /** Radius factor: at comparable area, a square or triangle inscribed in the same radius would look smaller than a circle. */
 const SCALE: Record<Shape, number> = { circle: 1, square: 0.9, diamond: 1.2, triangle: 1.25 };

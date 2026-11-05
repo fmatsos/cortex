@@ -6,25 +6,27 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { theme } from "#lib/theme.svelte.js";
+	import { lang } from "#lib/lang.svelte.js";
+	import { intlLocale, t } from "#lib/i18n/index.js";
 	import Icon from "#lib/components/icon.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import ThemeSwitch from "#lib/components/theme-switch.svelte";
+	import LangSwitch from "#lib/components/lang-switch.svelte";
 	import { toRoute } from "#lib/links.js";
 
 	let { children, data } = $props();
 	const f = $derived(data.footer);
 	const fmtDate = (d: string) => {
-		const t = new Date(d);
-		return `${t.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })} à ${t.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+		const at = new Date(d);
+		return t("footer.dateTime", { date: at.toLocaleDateString(intlLocale(), { day: "numeric", month: "long", year: "numeric" }), time: at.toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" }) });
 	};
-	const plural = (n: number, one: string, many: string) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
 	let header = $state<HTMLElement | null>(null);
 
-	// favorites, search history and theme: specific to this browser (localStorage)
-	onMount(() => { theme.init(); search.init(); return favs.init(); });
+	// favorites, search history, theme and language: specific to this browser (localStorage)
+	onMount(() => { theme.init(); lang.init(); search.init(); return favs.init(); });
 
 	// Real height of the sticky header → offset of anchors and of the skip link (never two assumed heights)
 	$effect(() => {
@@ -39,8 +41,8 @@
 
 	// Ctrl+K and "/": focus on the visible search field (the page's one when it has a large one, otherwise the header's)
 	function globalKeys(e: KeyboardEvent) {
-		const t = e.target as HTMLElement | null;
-		const typing = /^(input|textarea|select)$/i.test(t?.tagName ?? "") || t?.isContentEditable;
+		const target = e.target as HTMLElement | null;
+		const typing = /^(input|textarea|select)$/i.test(target?.tagName ?? "") || target?.isContentEditable;
 		if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey)) {
 			e.preventDefault();
 			search.focus();
@@ -50,14 +52,14 @@
 	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; });
 
 	const nav = [
-		["/search", "search", "Recherche"],
-		["/graph", "graph", "Graphe"],
-		["/tags", "tags", "Tags"],
-		["/log", "journal", "Journal"],
+		["/search", "search", "nav.search"],
+		["/graph", "graph", "nav.graph"],
+		["/tags", "tags", "nav.tags"],
+		["/log", "journal", "nav.log"],
 	] as const;
 	// active section: the route id also works at prerender (the relative URL cannot be compared)
 	const current = (route: string) => page.route.id === route || page.route.id?.startsWith(`${route}/`);
-	// "Favoris" = the search filtered on `is:fav` (same view everywhere); the shared query only exists in the browser
+	// "Favorites" = the search filtered on `is:fav` (same view everywhere); the shared query only exists in the browser
 	const onFavs = $derived(page.route.id === "/search" && /(^|\s)is:fav/i.test(search.q));
 	// the home page and /search/ carry their own large field: no second field in the header
 	const pageSearch = $derived(page.route.id === "/" || page.route.id === "/search");
@@ -65,27 +67,29 @@
 
 <svelte:window onkeydown={globalKeys} />
 
-<a href="#contenu-principal" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">Aller au contenu</a>
+{#key lang.current}
+<a href="#main-content" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">{t("layout.skip")}</a>
 
 <!-- DOM order = visual order (mark, navigation, search, theme) at all widths: tabbing follows the eye -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
 	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
 		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} animated class="text-primary" /><CortexWordmark /></a>
-		<nav aria-label="Navigation principale" class="flex items-center text-sm">
+		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}
-				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only sm:not-sr-only">{label}</span></a>
+				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only sm:not-sr-only">{t(label)}</span></a>
 			{/each}
-			<a href="{toRoute('/search')}?q=is%3Afav" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">Favoris</span></a>
+			<a href="{toRoute('/search')}?q=is%3Afav" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">{t("favs.title")}</span></a>
 		</nav>
 		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full lg:ml-auto lg:basis-auto lg:flex-1'}">
 			{#if !pageSearch}<SearchBox class="min-w-0 flex-1 lg:ml-auto lg:max-w-xl" />{/if}
 			<ThemeSwitch />
+			<LangSwitch />
 		</div>
 	</div>
 </header>
 
-<main id="contenu-principal" tabindex="-1" class="anchor-target mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8 outline-none">
+<main id="main-content" tabindex="-1" class="anchor-target mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8 outline-none">
 	{@render children()}
 </main>
 
@@ -93,20 +97,21 @@
 	<div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
 		<p>
 			<a href={toRoute("/")} class="text-foreground font-semibold tracking-tight">Cortex</a>
-			<span aria-hidden="true">&nbsp;·&nbsp;</span>généré le <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>
+			<span aria-hidden="true">&nbsp;·&nbsp;</span>{t("footer.generated")} <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>
 		</p>
-		<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label="Statistiques du wiki">
-			<li><a href="{toRoute('/search')}?q=" class="hover:text-foreground">{plural(f.pages, "page", "pages")}</a>
-				<span class="text-xs">({plural(f.concepts, "concept", "concepts")}, {plural(f.entities, "entité", "entités")}, {plural(f.syntheses, "synthèse", "synthèses")}, {plural(f.sources, "source", "sources")})</span></li>
-			<li><a href={toRoute("/graph")} class="hover:text-foreground">{plural(f.links, "lien", "liens")}</a></li>
-			<li><a href={toRoute("/tags")} class="hover:text-foreground">{plural(f.tags, "tag", "tags")}</a></li>
-			<li><a href="{toRoute('/search')}?q=-is%3Aunverified" class="hover:text-foreground">{f.verified} / {f.pages} relues</a></li>
-			<li><a href={toRoute("/log")} class="hover:text-foreground">{plural(f.log, "entrée", "entrées")} au journal</a></li>
+		<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label={t("footer.stats")}>
+			<li><a href="{toRoute('/search')}?q=" class="hover:text-foreground">{t("footer.pages", { count: f.pages })}</a>
+				<span class="text-xs">({t("footer.concepts", { count: f.concepts })}, {t("footer.entities", { count: f.entities })}, {t("footer.syntheses", { count: f.syntheses })}, {t("footer.sources", { count: f.sources })})</span></li>
+			<li><a href={toRoute("/graph")} class="hover:text-foreground">{t("footer.links", { count: f.links })}</a></li>
+			<li><a href={toRoute("/tags")} class="hover:text-foreground">{t("footer.tags", { count: f.tags })}</a></li>
+			<li><a href="{toRoute('/search')}?q=-is%3Aunverified" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>
+			<li><a href={toRoute("/log")} class="hover:text-foreground">{t("footer.log", { count: f.log })}</a></li>
 		</ul>
 	</div>
 </footer>
 
 <OfflineStatus />
+{/key}
 <style>
 	.nav-link {
 		display: inline-flex;

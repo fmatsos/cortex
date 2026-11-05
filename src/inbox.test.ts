@@ -8,7 +8,7 @@ test("inbox: files and urls.txt emptied, failures kept, idempotent", async () =>
   const { existsSync, readdirSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   await Bun.write(join(root, "cortex.json"), "{}");
-  const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante mots exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
+  const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante words exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
   const srv = Bun.serve({ port: 0, fetch: (req) => new URL(req.url).pathname === "/ok" ? new Response(page, { headers: { "content-type": "text/html" } }) : new Response("non", { status: 404 }) });
   const sources = () => (existsSync(join(root, "raw")) ? readdirSync(join(root, "raw"), { recursive: true }) : []).filter((f) => String(f).endsWith("source.md")).length;
   const urls = join(root, "inbox/urls.txt");
@@ -17,7 +17,7 @@ test("inbox: files and urls.txt emptied, failures kept, idempotent", async () =>
     const empty = await inbox(root); // inbox absent
     expect(empty.ok).toBe(true);
     expect(empty.messages.at(-1)).toMatchObject({ level: "info" });
-    expect(empty.messages.at(-1)!.text).toContain("Inbox vide.");
+    expect(empty.messages.at(-1)!.text).toContain("Empty inbox.");
 
     await Bun.write(urls, `# commentaire\n\n${ok} pourquoi je garde ça\n${ko}\n`);
     await Bun.write(join(root, "inbox/avec.md"), "# Avec note\n\nUne idée sur la fermentation lactique des légumes.\n");

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { assetName, COMPILED, compareVersions, verifySignature } from "./upgrade";
+import { assetName, compareVersions, dist, verifySignature } from "./upgrade";
 
 test("compareVersions orders numerically, v prefix ignored, pre-release before release", () => {
   expect(compareVersions("0.1.0", "0.2.0")).toBe(-1);
@@ -11,9 +11,10 @@ test("compareVersions orders numerically, v prefix ignored, pre-release before r
 });
 
 test("asset name matches the release workflow; tests run from the sources", () => {
-  expect(assetName("linux", "x64")).toBe("cortex-linux-x64");
-  expect(assetName("darwin", "arm64")).toBe("cortex-darwin-arm64");
-  expect(COMPILED).toBe(false);
+  expect(assetName("binary", "linux", "x64")).toBe("cortex-linux-x64.gz");
+  expect(assetName("binary", "darwin", "arm64")).toBe("cortex-darwin-arm64.gz");
+  expect(assetName("bundle", "linux", "x64")).toBe("cortex.js.gz"); // one bundle for every platform
+  expect(dist()).toBe("sources");
 });
 
 test("verifySignature accepts the signer's signature only, and only for the signed bytes", async () => {

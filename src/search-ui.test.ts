@@ -15,9 +15,12 @@ async function engine(docs: ReturnType<typeof doc>[]) {
 test("puces : phrases et tags gardent leurs accents, le dédoublonnage reste replié (UX48)", async () => {
 	const { chips, parseQuery } = await q();
 	const labels = (s: string) => chips(parseQuery(s)).map((c) => c.label);
-	expect(labels('"fenêtre de contexte"')).toEqual(["« fenêtre de contexte »"]);
-	expect(labels("#Mémoire -à-éviter")).toEqual(["#Mémoire", "sans à-éviter"]);
-	expect(labels('"Fenêtre" "fenetre"')).toEqual(["« Fenêtre »"]); // a single chip, two tokens
+	expect(labels('"fenêtre de contexte"')).toEqual(["“fenêtre de contexte”"]);
+	expect(labels("#Mémoire -à-éviter")).toEqual(["#Mémoire", "without à-éviter"]);
+	expect(labels('"Fenêtre" "fenetre"')).toEqual(["“Fenêtre”"]); // a single chip, two tokens
+	const { setLocale } = await import("../site/src/lib/i18n/index");
+	setLocale("fr");
+	try { expect(labels('"a b" -c')).toEqual(["« a b »", "sans c"]); } finally { setLocale("en"); }
 	expect(chips(parseQuery('"Fenêtre" "fenetre"'))[0].raws).toEqual(['"Fenêtre"', '"fenetre"']);
 	// the engine, for its part, always compares folded
 	expect(parseQuery('"Fenêtre de contexte"').phrases[0].text).toBe("fenetre de contexte");
@@ -31,7 +34,7 @@ test("facettes : type et statut à choix unique, tags et indicateurs cumulables,
 	expect(toggleFacet("x status:draft", "status", "stable")).toBe("x status:stable");
 	expect(toggleFacet("#llm", "tag", "agents")).toBe("#llm #agents");
 	expect(toggleFacet("#Mémoire x", "tag", "memoire")).toBe("x"); // folded comparison
-	expect(toggleFacet("", "tag", "deux mots")).toBe('tag:"deux mots"');
+	expect(toggleFacet("", "tag", "deux words")).toBe('tag:"deux words"');
 	expect(toggleFacet("", "is", "fav")).toBe("is:fav");
 	expect(toggleFacet("is:fav x", "is", "fav")).toBe("x");
 	expect(toggleFacet("-type:source", "type", "Source")).toBe("-type:source type:Source"); // a negated filter is not the facet
@@ -44,16 +47,16 @@ test("diagnostic : valeur inconnue, filtres exclusifs, contradiction, tag absent
 	const { diagnose, parseQuery, removeToken } = await q();
 	const d = (s: string, tags?: string[]) => diagnose(parseQuery(s), tags ? new Set(tags) : undefined);
 	expect(d("contexte type:concept status:stable is:fav")).toEqual([]); // valid, even if it finds nothing
-	expect(d("status:brouillon")[0].text).toContain("n'existe pas");
+	expect(d("status:brouillon")[0].text).toContain("does not exist");
 	expect(d("type:truc")[0].raws).toEqual(["type:truc"]);
-	expect(d("is:xyz")[0].fix).toBe("Retirer is:xyz");
+	expect(d("is:xyz")[0].fix).toBe("Remove is:xyz");
 	const two = d("type:concept type:source");
 	expect(two).toHaveLength(1);
-	expect(two[0].text).toContain("ET");
+	expect(two[0].text).toContain("AND");
 	expect(two[0].raws).toEqual(["type:source"]); // we keep the first
 	expect(removeToken("type:concept type:source x", two[0].raws[0])).toBe("type:concept x");
 	expect(d("type:concept type:synthèses")).toHaveLength(1);
-	expect(d("#llm -#llm")[0].text).toContain("se contredisent");
+	expect(d("#llm -#llm")[0].text).toContain("contradict");
 	expect(d("-type:source type:concept")).toEqual([]); // negated and positive with different values: consistent
 	expect(d("#llm #zzz", ["llm"]).map((x) => x.raws)).toEqual([["#zzz"]]);
 	expect(d("#zzz")).toEqual([]); // unknown tags: we don't know, we say nothing

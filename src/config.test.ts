@@ -9,7 +9,7 @@ test("cortex.json: absent = agnostic, unknown client = error", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   expect(await loadConfig(root)).toEqual({});
   await Bun.write(join(root, "cortex.json"), '{"client":"gpt"}');
-  expect(loadConfig(root)).rejects.toThrow("client inconnu");
+  expect(loadConfig(root)).rejects.toThrow("unknown client");
   await Bun.write(join(root, "cortex.json"), '{"client":"opencode"}');
   expect((await backendFor(root)).interactive("p")).toEqual(["opencode", "--model", "opencode/big-pickle", "--prompt", "p"]);
   // effort: translated into each CLI's vocabulary
@@ -27,11 +27,11 @@ test("cortex config: init, set, get, remove, lint", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-"));
   expect((await configCmd(root, ["init"])).ok).toBe(true);
   expect(await loadConfig(root)).toEqual({}); // all-null skeleton: agnostic
-  expect(configCmd(root, ["init"])).rejects.toThrow("existe déjà");
+  expect(configCmd(root, ["init"])).rejects.toThrow("already exists");
   await configCmd(root, ["set", "client", "codex"]);
   await configCmd(root, ["set", "effort", "low"]);
-  expect(configCmd(root, ["set", "effort", "turbo"])).rejects.toThrow("invalide pour codex");
-  expect(configCmd(root, ["set", "couleur", "x"])).rejects.toThrow("Propriété attendue");
+  expect(configCmd(root, ["set", "effort", "turbo"])).rejects.toThrow("for codex");
+  expect(configCmd(root, ["set", "couleur", "x"])).rejects.toThrow("Expected a property");
   expect(await loadConfig(root)).toEqual({ client: "codex", effort: "low" });
   await configCmd(root, ["remove", "effort"]);
   expect(await loadConfig(root)).toEqual({ client: "codex" });

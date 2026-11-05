@@ -27,5 +27,5 @@ test("schema: built-in file, written to CLAUDE.md or AGENTS.md at init, language
   await configCmd(root, ["set", "schema", "my-schema.md"]);
   expect(await schemaText(root)).toBe("Custom, in French.\n");
   await configCmd(root, ["set", "schema", "missing.md"]);
-  await expect(schemaText(root)).rejects.toThrow("schéma introuvable");
+  await expect(schemaText(root)).rejects.toThrow("schema not found");
 });

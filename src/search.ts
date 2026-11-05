@@ -13,7 +13,7 @@ export async function buildIndex(root: string): Promise<Database> {
   const ins = db.prepare("INSERT INTO docs (path, area, title, body) VALUES (?, ?, ?, ?)");
   for (const area of ["wiki", "raw"] as const) {
     const { docs, errors } = await readDocs(root, area);
-    for (const e of errors) warn(`page ignorée, frontmatter invalide : ${e.path} (${e.msg})`);
+    for (const e of errors) warn(`page skipped, invalid frontmatter: ${e.path} (${e.msg})`);
     db.transaction(() => {
       for (const d of docs) {
         if (isReservedPage(d.path)) continue;

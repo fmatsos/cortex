@@ -13,6 +13,7 @@
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { NOTES_ID, SOURCES_ID, actor, currentSection, domainOf, originalSource, relatedEntries, showToc, tocItems } from "#lib/article.js";
 	import { toPage, toTag } from "#lib/links.js";
+	import { t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const p = $derived(data.page);
@@ -47,7 +48,7 @@
 	let current = $state("");
 	$effect(() => {
 		if (!toc) return;
-		const hs = items.map((t) => document.getElementById(t.id)).filter((h) => h != null);
+		const hs = items.map((it) => document.getElementById(it.id)).filter((h) => h != null);
 		let raf = 0;
 		const on = () => {
 			raf = 0;
@@ -84,23 +85,23 @@
 				<TypeBadge type={p.type} />
 				<StatusBadge status={p.status} />
 				{#if p.partial}
-					<Badge variant="caution"><Icon name="warning" size={16} />{p.type === "Source" ? "Source partielle" : "Contenu partiel"}</Badge>
+					<Badge variant="caution"><Icon name="warning" size={16} />{p.type === "Source" ? t("page.partialSource") : t("page.partialContent")}</Badge>
 				{/if}
 				{#if !p.verified}
-					<Badge variant="outline"><Icon name="unverified" size={16} />jamais relue</Badge>
+					<Badge variant="outline"><Icon name="unverified" size={16} />{t("page.neverReviewed")}</Badge>
 				{:else if p.needsReview}
-					<Badge variant="caution"><Icon name="needs-review" size={16} />modifiée depuis la relecture · à relire</Badge>
+					<Badge variant="caution"><Icon name="needs-review" size={16} />{t("page.needsReview")}</Badge>
 				{:else}
-					<Badge variant="outline" title="Relue par {p.verified.by}"><Icon name="verified" size={16} />relue le <time datetime={p.verified.at}>{day(p.verified.at)}</time></Badge>
+					<Badge variant="outline" title={t("page.reviewedBy", { by: p.verified.by })}><Icon name="verified" size={16} />{t("page.reviewedOn")} <time datetime={p.verified.at}>{day(p.verified.at)}</time></Badge>
 				{/if}
-				{#if stale}<Badge variant="destructive"><Icon name="stale" size={16} />périmée depuis <time datetime={p.stale_after}>{day(p.stale_after)}</time></Badge>{/if}
+				{#if stale}<Badge variant="destructive"><Icon name="stale" size={16} />{t("page.staleSince")} <time datetime={p.stale_after}>{day(p.stale_after)}</time></Badge>{/if}
 			</div>
 			<h1 class="mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
 			<p class="text-muted-foreground mt-2">{p.description}</p>
 			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} /></div>
 			{#if p.tags.length}
-				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
-					{#each p.tags as t}<li><Badge href={toTag(data.slugs[t])} variant="secondary">#{t}</Badge></li>{/each}
+				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label={t("nav.tags")}>
+					{#each p.tags as tag}<li><Badge href={toTag(data.slugs[tag])} variant="secondary">#{tag}</Badge></li>{/each}
 				</ul>
 			{/if}
 		</header>
@@ -113,18 +114,18 @@
 
 		{#if p.notes.length}
 			<section class="mt-10 border-t pt-6" aria-labelledby={NOTES_ID}>
-				<h2 id={NOTES_ID} class="flex scroll-mt-(--anchor-offset) items-center gap-2 text-lg font-semibold"><Icon name="citation" size={20} />Notes</h2>
+				<h2 id={NOTES_ID} class="flex scroll-mt-(--anchor-offset) items-center gap-2 text-lg font-semibold"><Icon name="citation" size={20} />{t("page.notes")}</h2>
 				<ol class="mt-3 list-decimal space-y-2 pl-6 text-sm">
 					{#each p.notes as n (n.id)}
 						{@const s = srcOf.get(n.id)}
 						<li id="fn-{n.id}" class="note-item">
-							{#if s}<a href="#src-{s.id}" class="text-link underline underline-offset-3">{s.title}</a>{:else}<span class="text-muted-foreground">source sans entrée sources[] ({n.id})</span>{/if}
+							{#if s}<a href="#src-{s.id}" class="text-link underline underline-offset-3">{s.title}</a>{:else}<span class="text-muted-foreground">{t("page.noteWithoutSource", { id: n.id })}</span>{/if}
 							{#if n.html}<span class="text-muted-foreground"> — </span>{@html n.html}{/if}
-							<a href="#{backTo(n.id)}" aria-label="Retour au texte" class="text-link touch-target ml-1 inline-flex items-center px-1 align-middle no-underline"><Icon name="citation-return" size={16} /></a>
+							<a href="#{backTo(n.id)}" aria-label={t("page.backToText")} class="text-link touch-target ml-1 inline-flex items-center px-1 align-middle no-underline"><Icon name="citation-return" size={16} /></a>
 							{#if n.refs > 1}
-								<span class="text-muted-foreground"><span class="sr-only">Occurrences :</span>
+								<span class="text-muted-foreground"><span class="sr-only">{t("page.occurrences")}</span>
 									{#each { length: n.refs } as _, i}
-										<a href="#fnref-{n.id}-{i + 1}" aria-label="Retour à l'occurrence {i + 1} sur {n.refs}" class="text-link inline-block px-1 py-0.5 pointer-coarse:px-2 pointer-coarse:py-2 no-underline hover:underline">{letter(i)}</a>
+										<a href="#fnref-{n.id}-{i + 1}" aria-label={t("page.backToOccurrence", { n: i + 1, total: n.refs })} class="text-link inline-block px-1 py-0.5 pointer-coarse:px-2 pointer-coarse:py-2 no-underline hover:underline">{letter(i)}</a>
 									{/each}
 								</span>
 							{/if}
@@ -136,16 +137,16 @@
 
 		{#if p.sources.length}
 			<section class="mt-8 border-t pt-6" aria-labelledby={SOURCES_ID}>
-				<h2 id={SOURCES_ID} class="flex scroll-mt-(--anchor-offset) items-center gap-2 text-lg font-semibold"><Icon name="source" size={20} />Sources</h2>
+				<h2 id={SOURCES_ID} class="flex scroll-mt-(--anchor-offset) items-center gap-2 text-lg font-semibold"><Icon name="source" size={20} />{t("page.sources")}</h2>
 				<ul class="mt-3 space-y-2 text-sm">
 					{#each p.sources as s (s.id)}
 						<li id="src-{s.id}" class="anchor-target">
 							{#if s.url}
-								<a href={s.url} rel="noopener noreferrer" class="text-link inline-flex items-center gap-1 font-medium underline underline-offset-3">{s.title}<Icon name="external-link" size={16} /><span class="sr-only"> — lien externe</span></a>
+								<a href={s.url} rel="noopener noreferrer" class="text-link inline-flex items-center gap-1 font-medium underline underline-offset-3">{s.title}<Icon name="external-link" size={16} /><span class="sr-only"> — {t("common.externalLink")}</span></a>
 								{#if domainOf(s.url)}<span class="text-muted-foreground"> ({domainOf(s.url)})</span>{/if}
 							{:else}<span class="font-medium">{s.title}</span>{/if}
-							{#if s.partial}<Badge variant="caution" class="ml-1 align-middle"><Icon name="warning" size={16} />extraction partielle</Badge>{/if}
-							{#if s.page}<span class="text-muted-foreground"> · page <a href={toPage(s.page.id)} class="text-link underline underline-offset-3">{s.page.title}</a></span>{/if}
+							{#if s.partial}<Badge variant="caution" class="ml-1 align-middle"><Icon name="warning" size={16} />{t("page.partialExtraction")}</Badge>{/if}
+							{#if s.page}<span class="text-muted-foreground"> · {t("page.page")} <a href={toPage(s.page.id)} class="text-link underline underline-offset-3">{s.page.title}</a></span>{/if}
 						</li>
 					{/each}
 				</ul>
@@ -153,27 +154,27 @@
 		{/if}
 	</article>
 
-	<aside class="space-y-8 self-start text-sm" aria-label="Liens">
+	<aside class="space-y-8 self-start text-sm" aria-label={t("page.aside")}>
 		{#if toc}
 			<nav aria-labelledby="h-toc" class="hidden lg:block">
-				<h2 id="h-toc" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="toc" size={20} />Sommaire</h2>
+				<h2 id="h-toc" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="toc" size={20} />{t("page.toc")}</h2>
 				<Toc {items} {current} />
 			</nav>
 		{/if}
 		<RelatedPages backlinks={p.backlinks} {related} />
 		<section aria-labelledby="h-prov" class="bg-muted/50 rounded-lg border p-3">
-			<h2 id="h-prov" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="generated" size={20} class="text-muted-foreground" />Provenance</h2>
+			<h2 id="h-prov" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="generated" size={20} class="text-muted-foreground" />{t("page.provenance")}</h2>
 			<dl class="space-y-2">
 				{#if p.generated}
 					<div class="flex items-start gap-2">
-						<div><dt class="text-muted-foreground text-xs">Rédigée par</dt><dd><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
+						<div><dt class="text-muted-foreground text-xs">{t("page.writtenBy")}</dt><dd><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
 					</div>
 				{/if}
 				<div class="flex items-start gap-2">
 					{#if p.verified}
-						<div><dt class="text-muted-foreground text-xs">Relue par</dt><dd><span class="font-medium">{actor(p.verified.by)}</span> · <time datetime={p.verified.at}>{day(p.verified.at)}</time></dd></div>
+						<div><dt class="text-muted-foreground text-xs">{t("page.reviewer")}</dt><dd><span class="font-medium">{actor(p.verified.by)}</span> · <time datetime={p.verified.at}>{day(p.verified.at)}</time></dd></div>
 					{:else}
-						<div><dt class="sr-only">Relecture</dt><dd class="text-muted-foreground">Jamais relue</dd></div>
+						<div><dt class="sr-only">{t("page.review")}</dt><dd class="text-muted-foreground">{t("page.neverReviewedCap")}</dd></div>
 					{/if}
 				</div>
 			</dl>

@@ -1,4 +1,5 @@
 import { fold } from "./fold";
+import { t } from "./i18n/index";
 
 /**
  * Search bar query: free text (inverted index) + structured filters (metadata), all combined with AND.
@@ -88,11 +89,11 @@ export function chips(p: Parsed): Chip[] {
 	// key: folded form (deduplication); label: typed form, accents included
 	const all: [string, string, string][] = [
 		...p.ops.map((o): [string, string, string] => {
-			const pre = `${o.neg ? "sans " : ""}${o.key === "tag" ? "#" : `${o.key}:`}`;
+			const pre = `${o.neg ? `${t("query.without")} ` : ""}${o.key === "tag" ? "#" : `${o.key}:`}`;
 			return [pre + o.value, pre + (o.key === "tag" ? o.display : o.value), o.raw];
 		}),
-		...p.phrases.map((x): [string, string, string] => [`« ${x.text} »`, `« ${x.display} »`, x.raw]),
-		...p.exclude.map((x): [string, string, string] => [`sans ${x.text}`, `sans ${x.display}`, x.raw]),
+		...p.phrases.map((x): [string, string, string] => [`"${x.text}"`, t("query.quoted", { text: x.display }), x.raw]),
+		...p.exclude.map((x): [string, string, string] => [`-${x.text}`, `${t("query.without")} ${x.display}`, x.raw]),
 	];
 	for (const [key, label, raw] of all) {
 		const c = out.get(key);
@@ -141,9 +142,9 @@ export function diagnose(p: Parsed, knownTags?: Set<string>): Issue[] {
 	const out: Issue[] = [];
 	for (const o of p.ops) {
 		if (o.key === "tag") {
-			if (!o.neg && knownTags && !knownTags.has(o.value)) out.push({ text: `Aucune page n'a le tag « ${o.display} ».`, raws: [o.raw], fix: `Retirer #${o.display}` });
+			if (!o.neg && knownTags && !knownTags.has(o.value)) out.push({ text: t("query.issue.unknownTag", { tag: o.display }), raws: [o.raw], fix: t("query.fix.remove", { token: `#${o.display}` }) });
 		} else if (!VALID[o.key].includes(o.value)) {
-			out.push({ text: `« ${o.key}:${o.display} » n'existe pas : valeurs possibles ${VALID_LABEL[o.key]}.`, raws: [o.raw], fix: `Retirer ${o.key}:${o.display}` });
+			out.push({ text: t("query.issue.unknownValue", { token: `${o.key}:${o.display}`, values: VALID_LABEL[o.key] }), raws: [o.raw], fix: t("query.fix.remove", { token: `${o.key}:${o.display}` }) });
 		}
 	}
 	for (const key of ["type", "status"] as const) {
@@ -152,16 +153,16 @@ export function diagnose(p: Parsed, knownTags?: Set<string>): Issue[] {
 		if (distinct.length > 1) {
 			const first = vs[0].value;
 			out.push({
-				text: `Les filtres s'additionnent (ET) : une page n'a qu'un ${key === "type" ? "type" : "statut"}, ${distinct.map((v) => `${key}:${v}`).join(" et ")} ensemble ne donnent rien.`,
+				text: t(key === "type" ? "query.issue.exclusiveType" : "query.issue.exclusiveStatus", { tokens: distinct.map((v) => `${key}:${v}`).join(` ${t("query.and")} `) }),
 				raws: vs.filter((o) => o.value !== first).map((o) => o.raw),
-				fix: `Garder ${key}:${first} seulement`,
+				fix: t("query.fix.keepOnly", { token: `${key}:${first}` }),
 			});
 		}
 	}
 	for (const o of p.ops) {
 		if (o.neg) continue;
 		const opposite = p.ops.find((x) => x.neg && x.key === o.key && x.value === o.value);
-		if (opposite) out.push({ text: `« ${o.raw} » et « ${opposite.raw} » se contredisent.`, raws: [opposite.raw], fix: `Retirer ${opposite.raw}` });
+		if (opposite) out.push({ text: t("query.issue.contradiction", { a: o.raw, b: opposite.raw }), raws: [opposite.raw], fix: t("query.fix.remove", { token: opposite.raw }) });
 	}
 	return out;
 }

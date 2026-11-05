@@ -20,7 +20,7 @@ test("toPage: a non-conforming field is dropped and reported, the page and its o
   expect(p.fm.title).toBe("A");
   expect(p.fm.description).toBe("D.");
   expect(p.issues.map((i) => i.field).sort()).toEqual(["status", "tags", "type"]);
-  expect(toPage(doc("type: Concept")).issues).toEqual([{ field: "title", msg: "titre manquant" }]);
+  expect(toPage(doc("type: Concept")).issues).toEqual([{ field: "title", msg: "missing title" }]);
   expect(toPage(doc("type: Concept\ntitle: 2026")).fm.title).toBe("2026"); // a bare number is its text
 });
 
@@ -51,7 +51,7 @@ test("renderIndex: unknown types under « Autres », never « undefined »", asy
   const idx = await renderIndex(root);
   expect(idx).not.toContain("undefined");
   expect(idx).toContain("## Concepts\n- [Bon](/wiki/concepts/ok.md) — D.\n- [Sans description](/wiki/concepts/nodesc.md)\n");
-  expect(idx).toContain("## Entités\n- [concepts/notitle](/wiki/concepts/notitle.md) — Sans titre.\n");
+  expect(idx).toContain("## Entities\n- [concepts/notitle](/wiki/concepts/notitle.md) — Sans titre.\n");
   expect(idx).toContain("## Autres\n- [Sans type](/wiki/concepts/notype.md) — D.\n- [Typo](/wiki/concepts/typo.md) — Tapé en minuscules.\n");
   expect((await readPages(root)).pages).toHaveLength(5); // nothing dropped
 });
@@ -59,5 +59,5 @@ test("renderIndex: unknown types under « Autres », never « undefined »", asy
 test("renderIndex: no « Autres » section on a valid wiki", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-idx-"));
   await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: D.\n---\n");
-  expect(await renderIndex(root)).toBe("# Index\n\n## Concepts\n- [A](/wiki/concepts/a.md) — D.\n\n## Entités\n\n## Synthèses\n\n## Sources\n");
+  expect(await renderIndex(root)).toBe("# Index\n\n## Concepts\n- [A](/wiki/concepts/a.md) — D.\n\n## Entities\n\n## Syntheses\n\n## Sources\n");
 });

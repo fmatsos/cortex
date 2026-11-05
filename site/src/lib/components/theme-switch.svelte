@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from "#lib/components/icon.svelte";
 	import { theme, type Mode } from "#lib/theme.svelte.js";
+	import { t } from "#lib/i18n/index.js";
 
 	// Explicit theme choice (the mechanism: data-theme attribute on <html>, remembered in localStorage).
 	// The icon follows the current choice; it is decorative, the <select> keeps its label visible or hidden.
@@ -9,7 +10,7 @@
 </script>
 
 <label class="text-muted-foreground flex items-center gap-1.5 text-sm {className}">
-	<span class="sr-only sm:not-sr-only">Thème</span>
+	<span class="sr-only sm:not-sr-only">{t("theme.label")}</span>
 	<span class="relative flex items-center">
 		<Icon name={ICON[theme.mode]} size={16} class="text-muted-foreground pointer-events-none absolute left-2" />
 		<select
@@ -17,9 +18,9 @@
 			value={theme.mode}
 			onchange={(e) => theme.set(e.currentTarget.value as Mode)}
 		>
-			<option value="system">Système</option>
-			<option value="light">Clair</option>
-			<option value="dark">Sombre</option>
+			<option value="system">{t("theme.option.system")}</option>
+			<option value="light">{t("theme.option.light")}</option>
+			<option value="dark">{t("theme.option.dark")}</option>
 		</select>
 	</span>
 </label>

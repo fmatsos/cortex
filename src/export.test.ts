@@ -11,15 +11,15 @@ test("export: readable unique heading anchors, no collision with UI ids", async 
   const { anchors } = await import("./export");
   const ids = (m: string) => [...anchors(Bun.markdown.html(m)).matchAll(/<h\d id="([^"]+)"/g)].map((x) => x[1]);
   expect(ids("## Où ça ? Détail\n\n## Où ça ? Détail\n\n## Où ça ? Détail")).toEqual(["ou-ca-detail", "ou-ca-detail-1", "ou-ca-detail-2"]);
-  expect(ids("## Contenu principal\n\n## Src x\n\n## Fn y\n\n## H notes\n\n## ???\n\n### 日本語")).toEqual(["t-contenu-principal", "t-src-x", "t-fn-y", "t-h-notes", "titre", "日本語"]);
+  expect(ids("## Main content\n\n## Src x\n\n## Fn y\n\n## H notes\n\n## ???\n\n### 日本語")).toEqual(["t-main-content", "t-src-x", "t-fn-y", "t-h-notes", "section", "日本語"]);
   expect(anchors("<h2 id=\"x\">Un <em>titre</em> &amp; un autre</h2>")).toBe('<h2 id="un-titre-un-autre">Un <em>titre</em> &amp; un autre</h2>');
 });
 
 test("export: « Note personnelle » callout (Obsidian)", async () => {
   const { noteCallouts } = await import("./export");
   const html = (m: string) => noteCallouts(Bun.markdown.html(m));
-  expect(html("> [!note] Note personnelle\n> pourquoi *je* garde ça")).toBe('<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>pourquoi <em>je</em> garde ça</p>\n</aside>\n');
-  expect(html("> [!note]\n> sans titre")).toContain('<p class="note-perso-titre">Note personnelle</p><p>sans titre');
+  expect(html("> [!note] Note personnelle\n> pourquoi *je* garde ça")).toBe('<aside class="personal-note" role="note"><p class="personal-note-title">Note personnelle</p><p>pourquoi <em>je</em> garde ça</p>\n</aside>\n');
+  expect(html("> [!note]\n> sans titre")).toContain('<p class="personal-note-title">Personal note</p><p>sans titre');
   expect(html("> une citation ordinaire")).toContain("<blockquote>");
 });
 
@@ -38,14 +38,14 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   await Bun.write(join(root, "wiki/index.md"), "# Index\n");
   await Bun.write(join(root, "wiki/log.jsonl"), [
     { at: "2026-11-03", kind: "update", text: "Un [lien](/wiki/concepts/a.md) et **gras**." },
-    { at: "2026-11-04T09:30:00+01:00", kind: "ingest", text: "`01a1a5c9-5e80-7075-ae13-aab03b0a8697` compilée.", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"], pages: ["wiki/concepts/a.md", "wiki/concepts/absente.md"] },
+    { at: "2026-11-04T09:30:00+01:00", kind: "ingest", text: "`01a1a5c9-5e80-7075-ae13-aab03b0a8697` compiled.", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697"], pages: ["wiki/concepts/a.md", "wiki/concepts/absente.md"] },
     { at: "2026-11-04T11:00:00+01:00", kind: "add", text: "Ajout.", sources: ["01a1a5c9-5e80-7075-ae13-aab03b0a8697", "01a1a5c9-5e80-7075-ae13-0000000000ff"] },
   ].map((e) => JSON.stringify(e)).join("\n") + "\n");
 
-  expect(() => checkOut(root, root)).toThrow("refusé");
-  expect(() => checkOut(root, join(root, "wiki"))).toThrow("refusé");
+  expect(() => checkOut(root, root)).toThrow("refused");
+  expect(() => checkOut(root, join(root, "wiki"))).toThrow("refused");
   await Bun.write(join(root, "documents/notes.txt"), "à ne jamais vider");
-  expect(() => checkOut(root, join(root, "documents"))).toThrow("ne ressemble pas à un export"); // non-empty folder without _app/
+  expect(() => checkOut(root, join(root, "documents"))).toThrow("does not look like a previous export"); // non-empty folder without _app/
   const out = join(root, ".cortex/site");
   process.env.SOURCE_DATE_EPOCH = "1793790000"; // export time frozen: two exports stay byte-identical
   await exportSite(root, out, () => {});
@@ -56,9 +56,9 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   const a = html("wiki/concepts/a/index.html");
   expect(a).toContain('href="../b/#x"'); // link rewritten, relative
   expect(a).toContain('href="../../entities/c/"');
-  expect(a).toContain('class="lien-manquant"'); // missing page: no dead link
+  expect(a).toContain('class="missing-link"'); // missing page: no dead link
   expect(a).not.toMatch(/href="[^"]*\.md/);
-  expect(a).toContain('href="#fn-s1"'); // note [^s1] numbered, linked to sources[]
+  expect(a).toContain('href="#fn-s1"'); // footnote [^s1] numbered, linked to sources[]
   expect(a).toContain('id="fn-s1"');
   expect(a).toContain('href="#src-s1"');
   expect(a).toContain("<em>utile</em>");
@@ -68,10 +68,11 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
     expect(a).toContain(`href="#fnref-s1-${k}"`);
   }
   expect(a).not.toContain('id="fnref-s1-4"');
-  expect(a).toContain("Retour à l'occurrence 2 sur 3");
+  expect(a).toContain("Back to occurrence 2 of 3");
+  expect(a).toContain('<html lang="en">');
   expect(a).toContain('href="https://exemple.org/article"'); // source: original URL, not the raw path
   expect(a).not.toContain("/raw/");
-  expect(a).toContain("Rétroliens");
+  expect(a).toContain("Backlinks");
 
   const c = html("wiki/entities/c/index.html");
   expect(c).toContain('href="../../../"'); // /wiki/index.md → home
@@ -85,8 +86,8 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   expect(log[0].sources).toEqual([{ id: "01a1a5c9-5e80-7075-ae13-aab03b0a8697", page: { id: "sources/s", title: "Source un", type: "Source" } }, { id: "01a1a5c9-5e80-7075-ae13-0000000000ff" }]);
   expect(log[2].html).toBe('Un <a href="../wiki/concepts/a/">lien</a> et <strong>gras</strong>.');
   const logPage = html("log/index.html");
-  for (const t of ["Journal", "Ajout.", "Alpha", "Source un", "01a1a5c9-5e80-7075-ae13-0000000000ff", "3 entrées"]) expect(logPage).toContain(t);
-  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("</code></a> compilée")); // the 11:00 add before the 09:30 ingest
+  for (const t of ["Log", "Ajout.", "Alpha", "Source un", "01a1a5c9-5e80-7075-ae13-0000000000ff", "3 entries"]) expect(logPage).toContain(t);
+  expect(logPage.indexOf("Ajout.")).toBeLessThan(logPage.indexOf("</code></a> compiled")); // the 11:00 add before the 09:30 ingest
   const out2 = join(root, "site2");
   await exportSite(root, out2, () => {}); // reproducible: same wiki, same site
   const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
@@ -146,4 +147,27 @@ test("export: a wiki with no tag, then with no page at all, still exports (tags 
   await exportSite(root, join(root, ".cortex/site"), () => {});
   expect(existsSync(join(root, ".cortex/site/wiki/concepts/a/index.html"))).toBe(true);
   expect(existsSync(join(root, ".cortex/site/tags/index.html"))).toBe(true);
+}, 60_000);
+
+test("export: the UI follows `language` (French), wiki content untouched, both dictionaries shipped", async () => {
+  const { existsSync, readdirSync, readFileSync } = await import("node:fs");
+  const { exportSite } = await import("./export");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), JSON.stringify({ language: "Français" }));
+  await Bun.write(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: Alpha\ndescription: Une page.\ntags: [x]\n---\n> [!note]\n> pourquoi\n\nVoir [b](/wiki/concepts/absent.md).\n");
+  const out = join(root, ".cortex/site");
+  const { setLocale } = await import("../site/src/lib/i18n/index");
+  try { await exportSite(root, out, () => {}); } finally { setLocale("en"); } // the export sets the process-wide locale
+  const a = readFileSync(join(out, "wiki/concepts/a/index.html"), "utf8");
+  expect(a).toContain('<html lang="fr">');
+  expect(a).toContain("Copier le Markdown"); // UI label in French
+  expect(a).toContain('<p class="personal-note-title">Note personnelle</p>'); // texts the export writes into pages
+  expect(a).toContain('class="missing-link" title="page à écrire"');
+  expect(a).toContain("JavaScript est désactivé");
+  expect(JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).locale).toBe("fr");
+  // both dictionaries ship (the visitor may switch): an English label is somewhere in the client bundle
+  const js = (readdirSync(join(out, "_app"), { recursive: true }) as string[]).filter((f) => f.endsWith(".js")).map((f) => readFileSync(join(out, "_app", f), "utf8")).join("");
+  expect(js).toContain("Copy the Markdown");
+  expect(js).toContain("Copier le Markdown");
+  expect(existsSync(join(out, "404.html"))).toBe(true);
 }, 60_000);

@@ -8,9 +8,10 @@
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { toRoute, toTag } from "#lib/links.js";
 	import { filterTags, readTagsParams, sortTags, TAG_SORTS, tagsQuery, type TagSort } from "#lib/tags-view.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	let { data } = $props();
-	// Filter and sort are authoritative in the URL (?q=…&tri=alpha): the prerendered page knows none of them, they are read in the browser.
+	// Filter and sort are authoritative in the URL (?q=…&sort=alpha): the prerendered page knows none of them, they are read in the browser.
 	let q = $state("");
 	let sort = $state<TagSort>("freq");
 	let ready = $state(false);
@@ -37,16 +38,16 @@
 	});
 </script>
 
-<svelte:head><title>Tags · Cortex</title></svelte:head>
+<svelte:head><title>{tr("nav.tags")} · Cortex</title></svelte:head>
 
-<h1 class="text-3xl font-semibold tracking-tight">Tags</h1>
+<h1 class="text-3xl font-semibold tracking-tight">{tr("nav.tags")}</h1>
 <div class="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3">
 	<div class="w-full max-w-sm">
-		<label for="filtre-tags" class="mb-1 block text-sm font-medium">Filtrer les tags</label>
-		<Input id="filtre-tags" bind:ref={input} type="search" placeholder="Filtrer les tags…" autocomplete="off" bind:value={q} />
+		<label for="tags-filter" class="mb-1 block text-sm font-medium">{tr("tags.filter")}</label>
+		<Input id="tags-filter" bind:ref={input} type="search" placeholder={tr("tags.filter.placeholder")} autocomplete="off" bind:value={q} />
 	</div>
-	<div role="group" aria-labelledby="tri-tags">
-		<span id="tri-tags" class="mb-1 block text-sm font-medium">Trier par</span>
+	<div role="group" aria-labelledby="tags-sort">
+		<span id="tags-sort" class="mb-1 block text-sm font-medium">{tr("tags.sortBy")}</span>
 		<div class="touch-gap flex flex-wrap gap-2">
 			{#each TAG_SORTS as s (s.sort)}
 				<ChipButton pressed={sort === s.sort} onclick={() => (sort = s.sort)}>{s.label}</ChipButton>
@@ -54,16 +55,16 @@
 		</div>
 	</div>
 </div>
-<p class="text-muted-foreground mt-3 text-sm" role="status">{shown.length === data.tags.length ? `${data.tags.length} tags` : `${shown.length} sur ${data.tags.length} tags`}, triés {sentence}</p>
+<p class="text-muted-foreground mt-3 text-sm" role="status">{shown.length === data.tags.length ? tr("tags.count", { count: data.tags.length }) : tr("tags.countOf", { shown: shown.length, count: data.tags.length })}, {tr("tags.sorted", { how: sentence ?? "" })}</p>
 <ul class="touch-gap mt-4 flex flex-wrap gap-2">
 	{#each shown as t (t.slug)}
 		<li><Badge href={toTag(t.slug)} variant="secondary" class="h-7 px-3 text-sm">#{t.tag} <span class="text-muted-foreground">{t.count}</span></Badge></li>
 	{:else}
 		<li class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-			Aucun tag ne correspond à « {q.trim()} ».
+			{tr("tags.noMatch", { q: q.trim() })}
 			<Button variant="outline" size="sm" onclick={clear}>
 				<Icon name="clear" size={16} />
-				Effacer le filtre
+				{tr("tags.clearFilter")}
 			</Button>
 		</li>
 	{/each}

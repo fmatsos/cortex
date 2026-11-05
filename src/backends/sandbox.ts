@@ -17,6 +17,6 @@ export function confine(root: string, cmd: string[], mode: Mode): string[] {
     const profile = `(version 1)(allow default)(deny file-write* (require-all (subpath ${q(r)}) ${write}))`;
     return ["sandbox-exec", "-p", profile, ...cmd];
   }
-  if (!Bun.which("bwrap")) throw new Error("bubblewrap (bwrap) introuvable : il confine l'agent à wiki/. Installe-le (apt install bubblewrap).");
+  if (!Bun.which("bwrap")) throw new Error("bubblewrap (bwrap) not found: it confines the agent to wiki/. Install it (apt install bubblewrap).");
   return ["bwrap", "--dev-bind", "/", "/", "--ro-bind", r, r, ...(mode === "write" ? ["--bind", wiki, wiki] : []), "--die-with-parent", "--", ...cmd];
 }

@@ -6,6 +6,7 @@
 	import { dayLabel, hourOf, type LogEntry } from "#lib/log-view.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { kindColor, kindLabel, typeColor, typeIcon } from "#lib/type-meta.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	// A log entry: type, time, direct link, text (summary of a few lines then expandable detail if the text
 	// is long), references always visible. Without JavaScript, the text stays whole: the summary is only applied once mounted.
@@ -44,7 +45,7 @@
 	<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 		<KindBadge kind={entry.kind} />
 		{#if hour}<time datetime={entry.at} class="text-muted-foreground text-sm tabular-nums">{hour}</time>{/if}
-		<a href="{toRoute('/log')}#{entry.id}" class="permalink touch-target text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex size-6 items-center justify-center rounded-md focus-visible:ring-3" aria-label="Lien direct vers cette entrée : {kindLabel(entry.kind)} du {dayLabel(entry.at.slice(0, 10))}{hour ? ` à ${hour}` : ''}">
+		<a href="{toRoute('/log')}#{entry.id}" class="permalink touch-target text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex size-6 items-center justify-center rounded-md focus-visible:ring-3" aria-label={hour ? tr("log.permalinkAt", { kind: kindLabel(entry.kind), day: dayLabel(entry.at.slice(0, 10)), hour }) : tr("log.permalink", { kind: kindLabel(entry.kind), day: dayLabel(entry.at.slice(0, 10)) })}>
 			<Icon name="copy-link" size={16} />
 		</a>
 	</div>
@@ -57,12 +58,12 @@
 	><span class="sr-only">{kindLabel(entry.kind)} : </span>{@html entry.html}</div>
 	{#if overflow}
 		<Button variant="ghost" size="sm" class="-ml-2.5 mt-0.5" aria-expanded={open} aria-controls={textId} onclick={() => (open = !open)}>
-			{open ? "Réduire" : "Lire la suite"}
+			{open ? tr("common.collapse") : tr("log.readMore")}
 			<Icon name="chevron-down" size={16} class="motion-safe:transition-transform {open ? 'rotate-180' : ''}" />
 		</Button>
 	{/if}
 	{#if entry.pages.length || entry.sources.length}
-		<ul class="touch-gap mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Références de l'entrée">
+		<ul class="touch-gap mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label={tr("log.references")}>
 			{#each entry.pages as p (p.id)}
 				<li class="flex items-center gap-1.5">
 					<Icon name={typeIcon(p.type)} size={16} style="color: {typeColor(p.type)}" />
@@ -72,7 +73,7 @@
 			{#each entry.sources as s (s.id)}
 				<li class="flex items-center gap-1.5">
 					<Icon name="source" size={16} class="text-muted-foreground" />
-					<span class="text-muted-foreground">Source</span>
+					<span class="text-muted-foreground">{tr("type.Source")}</span>
 					{#if s.page}
 						<a href={toPage(s.page.id)} class="text-link underline-offset-4 hover:underline">{s.page.title}</a>
 					{:else}

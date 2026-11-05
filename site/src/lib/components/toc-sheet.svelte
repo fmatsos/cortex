@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { t as tr } from "#lib/i18n/index.js";
 	import Icon from "#lib/components/icon.svelte";
 	import Toc from "#lib/components/toc.svelte";
 	import type { TocItem } from "#lib/types.js";
@@ -22,14 +23,14 @@
 		class="bg-card text-foreground hover:bg-muted border-input fixed right-3 bottom-3 z-30 inline-flex h-11 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-md print:hidden"
 	>
 		<Icon name="toc" size={20} />
-		<span>Sommaire</span>
+		<span>{tr("page.toc")}</span>
 		{#if now}<span class="text-muted-foreground min-w-0 truncate font-normal">· {now}</span>{/if}
 	</button>
 
 	<div id="toc-sheet" popover="auto" bind:this={sheet} aria-labelledby="toc-sheet-title" class="toc-sheet bg-popover text-popover-foreground">
 		<div class="mb-2 flex items-center justify-between gap-2">
-			<h2 id="toc-sheet-title" class="text-base font-semibold">Sommaire</h2>
-			<button type="button" popovertarget="toc-sheet" popovertargetaction="hide" aria-label="Fermer le sommaire" class="touch-target hover:bg-muted inline-flex size-9 items-center justify-center rounded-md">
+			<h2 id="toc-sheet-title" class="text-base font-semibold">{tr("page.toc")}</h2>
+			<button type="button" popovertarget="toc-sheet" popovertargetaction="hide" aria-label={tr("page.toc.close")} class="touch-target hover:bg-muted inline-flex size-9 items-center justify-center rounded-md">
 				<Icon name="clear" size={20} />
 			</button>
 		</div>

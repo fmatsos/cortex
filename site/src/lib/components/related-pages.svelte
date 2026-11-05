@@ -3,12 +3,13 @@
 	import type { RelatedEntry } from "#lib/article.js";
 	import { toPage } from "#lib/links.js";
 	import type { Link } from "#lib/types.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	// Side navigation column: the pages that cite this one (backlinks), then the pages to explore next.
 	// A destination appears only once; each related page carries its reasons as short icon chips.
 	let { backlinks, related }: { backlinks: Link[]; related: RelatedEntry[] } = $props();
 
-	const SHOWN = 5; // ponytail: fixed threshold; beyond it, "Afficher tout"
+	const SHOWN = 5; // ponytail: fixed threshold; beyond it, "Show all"
 	let allBack = $state(false), allRel = $state(false);
 	const back = $derived(allBack ? backlinks : backlinks.slice(0, SHOWN));
 	const rel = $derived(allRel ? related : related.slice(0, SHOWN));
@@ -23,10 +24,10 @@
 			{#each why as w (w.label)}
 				{#if w.icon === "tags"}
 					<span class="text-muted-foreground ml-1 inline-flex translate-y-0.5" title={w.label}>
-						<Icon name="tags" size={12} /><span class="sr-only">thème commun : {w.label}</span>
+						<Icon name="tags" size={12} /><span class="sr-only">{tr("related.sharedTheme", { label: w.label })}</span>
 					</span>
 				{:else}
-					<span class="sr-only">, {w.label}{w.detail ? ` : ${w.detail}` : ""}</span>
+					<span class="sr-only">, {w.label}{w.detail ? `${tr("common.colon")}${w.detail}` : ""}</span>
 				{/if}
 			{/each}
 		</span>
@@ -36,15 +37,15 @@
 {#snippet more(n: number, all: boolean, toggle: () => void)}
 	{#if n > SHOWN}
 		<button type="button" class="text-muted-foreground hover:text-foreground mt-2 inline-flex min-h-6 items-center gap-1 text-sm" aria-expanded={all} onclick={toggle}>
-			<Icon name="chevron-down" size={16} class={all ? "rotate-180" : ""} />{all ? "Réduire" : `Afficher les ${n}`}
+			<Icon name="chevron-down" size={16} class={all ? "rotate-180" : ""} />{all ? tr("common.collapse") : tr("related.showAll", { count: n })}
 		</button>
 	{/if}
 {/snippet}
 
 {#if backlinks.length}
 	<section aria-labelledby="h-back" class="bg-muted/50 rounded-lg border p-3">
-		<h2 id="h-back" class="mb-2 flex items-center gap-2 font-semibold" title="Pages qui citent celle-ci">
-			<Icon name="backlink" size={20} class="text-muted-foreground" />Rétroliens <span class="text-muted-foreground text-sm font-normal">{backlinks.length}</span>
+		<h2 id="h-back" class="mb-2 flex items-center gap-2 font-semibold" title={tr("related.backlinks.title")}>
+			<Icon name="backlink" size={20} class="text-muted-foreground" />{tr("related.backlinks")} <span class="text-muted-foreground text-sm font-normal">{backlinks.length}</span>
 		</h2>
 		<ul class="divide-border/60 divide-y">
 			{#each back as l (l.id)}<li>{@render row(l)}</li>{/each}
@@ -55,7 +56,7 @@
 {#if related.length}
 	<section aria-labelledby="h-rel" class="bg-muted/50 rounded-lg border p-3">
 		<h2 id="h-rel" class="mb-2 flex items-center gap-2 font-semibold">
-			<Icon name="related" size={20} class="text-muted-foreground" />Pages liées <span class="text-muted-foreground text-sm font-normal">{related.length}</span>
+			<Icon name="related" size={20} class="text-muted-foreground" />{tr("related.title")} <span class="text-muted-foreground text-sm font-normal">{related.length}</span>
 		</h2>
 		<ul class="divide-border/60 divide-y">
 			{#each rel as l (l.id)}<li>{@render row(l, l.why)}</li>{/each}

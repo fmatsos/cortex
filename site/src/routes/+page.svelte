@@ -8,7 +8,8 @@
 	import { toRoute } from "#lib/links.js";
 	import { type Engine, loadEngine } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
-	import { typeColor, typeIcon } from "#lib/type-meta.js";
+	import { typeColor, typeIcon, typePlural } from "#lib/type-meta.js";
+	import { t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const FAVS_SHOWN = 6;
@@ -23,26 +24,26 @@
 <svelte:head><title>Cortex</title></svelte:head>
 
 <!-- search is the entry point: a large field, examples that give results, recent searches -->
-<section aria-labelledby="h-accueil" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-accueil" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground self-end pb-1 text-sm leading-tight font-normal tracking-normal">Mon second cerveau : lu, relié, sourcé.</span></h1>
+<section aria-labelledby="h-home" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
+	<h1 id="h-home" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground self-end pb-1 text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
 	<p class="text-muted-foreground mt-2">
-		{data.seed.total} pages et {data.seed.nbTags} tags à parcourir, ou
-		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">le graphe des liens</a>.
+		{t("home.intro", { pages: data.seed.total, tags: data.seed.nbTags })}
+		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">{t("home.intro.graph")}</a>.
 	</p>
 	<SearchBox variant="main" class="mt-5" />
 	{#if data.seed.examples.length}
-		<ul class="touch-gap mt-4 flex flex-wrap items-center gap-2" aria-label="Exemples de recherches">
-			<li class="text-muted-foreground text-sm" aria-hidden="true">Essayer :</li>
+		<ul class="touch-gap mt-4 flex flex-wrap items-center gap-2" aria-label={t("home.examples")}>
+			<li class="text-muted-foreground text-sm" aria-hidden="true">{t("home.try")}</li>
 			{#each data.seed.examples as ex (ex.q)}
-				<li><a href={urlOf(ex.q)} title={ex.hint} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-8 items-center rounded-full border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11"><code>{ex.q}</code><span class="sr-only"> : {ex.hint}</span></a></li>
+				<li><a href={urlOf(ex.q)} title={t(ex.hint)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-8 items-center rounded-full border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11"><code>{ex.q}</code><span class="sr-only">{t("common.colon")}{t(ex.hint)}</span></a></li>
 			{/each}
 		</ul>
 	{/if}
 	{#if search.recent.length}
-		<section aria-labelledby="h-recents" class="mt-5">
+		<section aria-labelledby="h-recent" class="mt-5">
 			<div class="flex items-center gap-3">
-				<h2 id="h-recents" class="text-muted-foreground flex items-center gap-1.5 text-sm font-semibold"><Icon name="recent" size={16} />Recherches récentes</h2>
-				<button type="button" class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex min-h-8 items-center gap-1 rounded-md px-2 text-sm underline underline-offset-4 focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => search.forget()}>Effacer l'historique</button>
+				<h2 id="h-recent" class="text-muted-foreground flex items-center gap-1.5 text-sm font-semibold"><Icon name="recent" size={16} />{t("home.recent")}</h2>
+				<button type="button" class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex min-h-8 items-center gap-1 rounded-md px-2 text-sm underline underline-offset-4 focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => search.forget()}>{t("home.recent.clear")}</button>
 			</div>
 			<ul class="touch-gap mt-1.5 flex flex-wrap gap-2">
 				{#each search.recent as r (r)}
@@ -54,17 +55,17 @@
 </section>
 
 {#if favs.ids.length}
-	<section id="favoris" aria-labelledby="h-favoris" class="mt-6">
-		<h2 id="h-favoris" class="anchor-target flex items-center gap-2 text-xl font-semibold"><Icon name="favorites" size={24} class="text-favorite" />Favoris <span class="text-muted-foreground text-sm font-normal">({favs.ids.length}, propres à ce navigateur)</span></h2>
+	<section id="favorites" aria-labelledby="h-favorites" class="mt-6">
+		<h2 id="h-favorites" class="anchor-target flex items-center gap-2 text-xl font-semibold"><Icon name="favorites" size={24} class="text-favorite" />{t("favs.title")} <span class="text-muted-foreground text-sm font-normal">{t("favs.count", { count: favs.ids.length })}</span></h2>
 		{#if engine}
 			<PageList pages={favDocs.slice(0, FAVS_SHOWN)} filter={false} showFav />
 			{#if favDocs.length > FAVS_SHOWN}
-				<a href={urlOf("is:fav")} class="text-link link-content mt-2 inline-flex min-h-9 items-center underline underline-offset-4">Voir tous mes favoris ({favDocs.length})</a>
+				<a href={urlOf("is:fav")} class="text-link link-content mt-2 inline-flex min-h-9 items-center underline underline-offset-4">{t("favs.seeAll", { count: favDocs.length })}</a>
 			{/if}
 		{:else}
-			<p class="text-muted-foreground mt-2 text-sm">Chargement des favoris…</p>
+			<p class="text-muted-foreground mt-2 text-sm">{t("favs.loading")}</p>
 		{/if}
-		{#if !favs.persisted}<p class="text-warning-foreground mt-2 text-sm" role="status">Favoris conservés pour cette session seulement : le navigateur refuse de les enregistrer.</p>{/if}
+		{#if !favs.persisted}<p class="text-warning-foreground mt-2 text-sm" role="status">{t("favs.notPersisted")}</p>{/if}
 	</section>
 {/if}
 
@@ -75,10 +76,10 @@
 			<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
 				<h2 id="h-{c.type}" class="anchor-target flex items-center gap-2 text-xl font-semibold">
 					<Icon name={typeIcon(c.type)} size={24} style="color: {typeColor(c.type)}" />
-					{c.plural} <span class="text-muted-foreground text-sm font-normal">({c.count})</span>
+					{typePlural(c.type)} <span class="text-muted-foreground text-sm font-normal">({c.count})</span>
 				</h2>
 				{#if c.count > c.preview.length}
-					<a href={urlOf(`type:${c.type.toLowerCase()}`)} aria-label="Voir tout : {c.plural.toLowerCase()} ({c.count})" class="text-link link-content inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline pointer-coarse:min-h-11">Voir tout<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+					<a href={urlOf(`type:${c.type.toLowerCase()}`)} aria-label={t("home.seeAll.label", { what: typePlural(c.type).toLowerCase(), count: c.count })} class="text-link link-content inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline pointer-coarse:min-h-11">{t("home.seeAll")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 				{/if}
 			</div>
 			<PageList pages={c.preview} filter={false} showType={false} />

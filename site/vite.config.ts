@@ -8,6 +8,8 @@ import { defineConfig } from "vite";
 const out = process.env.CORTEX_SITE_OUT ?? "build";
 
 export default defineConfig({
+  // UI language of the prerendered site: `language` of cortex.json, resolved by `cortex export` (en by default)
+  define: { __CORTEX_LOCALE__: JSON.stringify(process.env.CORTEX_SITE_LANG ?? "en") },
   plugins: [
     tailwindcss(),
     sveltekit({

@@ -23,11 +23,11 @@ const SourceRef = z.object({ id: Text.nullish(), resource: z.string().nullish(),
 
 /** Shape of a wiki page frontmatter (OKF subset). `type` and `title` are required, the rest is optional. */
 const pageShape = {
-  type: z.enum(PAGE_TYPES, { error: err("type manquant", (v) => `type inconnu : ${String(v)} (attendu : ${PAGE_TYPES.join(" | ")})`) }),
-  title: z.union([z.string(), z.number().transform(String)], { error: err("titre manquant", () => "titre invalide : texte attendu") }).refine((s) => s.trim() !== "", { error: "titre manquant" }),
+  type: z.enum(PAGE_TYPES, { error: err("missing type", (v) => `unknown type: ${String(v)} (expected: ${PAGE_TYPES.join(" | ")})`) }),
+  title: z.union([z.string(), z.number().transform(String)], { error: err("missing title", () => "invalid title: text expected") }).refine((s) => s.trim() !== "", { error: "missing title" }),
   description: z.string().nullish(),
-  tags: z.array(z.string({ error: "tags : liste de textes attendue" }), { error: "tags : liste de textes attendue" }).nullish(),
-  status: z.enum(PAGE_STATUSES, { error: (iss) => `status inconnu : ${String(iss.input)} (attendu : ${PAGE_STATUSES.join(" | ")})` }).nullish(),
+  tags: z.array(z.string({ error: "tags: list of texts expected" }), { error: "tags: list of texts expected" }).nullish(),
+  status: z.enum(PAGE_STATUSES, { error: (iss) => `unknown status: ${String(iss.input)} (expected: ${PAGE_STATUSES.join(" | ")})` }).nullish(),
   generated: Stamp.nullish(),
   verified: Stamp.nullish(),
   sources: z.array(SourceRef).nullish(),

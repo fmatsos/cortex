@@ -62,15 +62,15 @@ export function privateIp(ip: string): boolean {
 /** Refuses a non-http(s) URL, or a host (literal or resolved, ANY address) in a non-public range. */
 async function assertPublic(url: string): Promise<void> {
   const u = new URL(url);
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Schéma refusé : ${u.protocol} (http(s) uniquement).`);
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Scheme refused: ${u.protocol} (http(s) only).`);
   const host = u.hostname.replace(/^\[|\]$/g, "");
   const addrs = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
-  if (addrs.some(privateIp)) throw new Error(`Adresse refusée : ${host} pointe vers un réseau local ou privé (accès MCP limité aux adresses publiques).`);
+  if (addrs.some(privateIp)) throw new Error(`Address refused: ${host} points to a local or private network (MCP access is limited to public addresses).`);
 }
 
 /** Body read as a stream, aborted past `max` (a bare `res.text()` would load a multi-GB response in memory). */
 async function readCapped(res: Response, max: number): Promise<Uint8Array> {
-  const tooBig = () => new Error(`Réponse trop volumineuse (> ${Math.round(max / 1024 / 1024)} Mo) : rien n'est écrit.`);
+  const tooBig = () => new Error(`Response too large (> ${Math.round(max / 1024 / 1024)} MB): nothing written.`);
   if (Number(res.headers.get("content-length")) > max) { await res.body?.cancel(); throw tooBig(); }
   if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
@@ -99,11 +99,11 @@ async function fetchCapped(url: string, o: FetchOpts): Promise<{ res: Response; 
     const next = res.headers.get("location");
     if (o.publicOnly && res.status >= 300 && res.status < 400 && next) {
       await res.body?.cancel();
-      if (hop >= MAX_REDIRECTS) throw new Error(`Trop de redirections (> ${MAX_REDIRECTS}) sur ${url}.`);
+      if (hop >= MAX_REDIRECTS) throw new Error(`Too many redirects (> ${MAX_REDIRECTS}) on ${url}.`);
       cur = new URL(next, cur).href;
       continue;
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status} sur ${url} (paywall, blocage anti-bot ?) : rien n'est écrit.`);
+    if (!res.ok) throw new Error(`HTTP ${res.status} on ${url} (paywall, anti-bot block?): nothing written.`);
     return { res, bytes: await readCapped(res, o.maxBytes ?? MAX_BODY_BYTES), url: o.publicOnly ? cur : res.url };
   }
 }
@@ -125,7 +125,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
   const [wd, wr] = [countWords(d.content ?? ""), countWords(rb)];
   const useRb = wr > wd * LIMITS.readabilityRatio; // calibration: see LIMITS.readabilityRatio
   const content = useRb ? rb : d.content ?? "";
-  if (countWords(content) < LIMITS.minArticleWords) throw new Error(`Corps quasi vide (${countWords(content)} mots) sur ${url} : blocage anti-bot ? Rien n'est écrit.`);
+  if (countWords(content) < LIMITS.minArticleWords) throw new Error(`Almost empty body (${countWords(content)} words) on ${url}: anti-bot block? Nothing written.`);
   // verified markers: Next (« Il reste 69 % de l'article »), Substack (« This post is for paid subscribers »)
   const paywall = /Il reste \d+ ?% de l.article|This post is for paid subscribers/i.test(html);
   return {
@@ -133,16 +133,16 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
     url: canonical ? new URL(canonical, finalUrl).href : finalUrl,
     author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist: defuddle returns a numeric id */, published: d.published || undefined,
     extractor: useRb ? `readability/${depVersion("@mozilla/readability")}+turndown` : `defuddle/${depVersion("defuddle")}+linkedom`,
-    partial: paywall ? "paywall : contenu partiel" : undefined,
+    partial: paywall ? "paywall: partial content" : undefined,
   };
 }
 
 export async function extractPdf(bytes: Uint8Array, url?: string, name = "document"): Promise<Extract> {
-  if (!Bun.which("pdftotext")) throw new Error("pdftotext introuvable : il extrait le texte des PDF. Installe-le (apt install poppler-utils).");
+  if (!Bun.which("pdftotext")) throw new Error("pdftotext not found: it extracts the text of PDFs. Install it (apt install poppler-utils).");
   const p = Bun.spawn(["pdftotext", "-layout", "-", "-"], { stdin: bytes, stdout: "pipe", stderr: "pipe" });
   const out = await new Response(p.stdout).text();
-  if ((await p.exited) !== 0) throw new Error(`pdftotext a échoué : ${await new Response(p.stderr).text()}`);
-  if (countWords(out) < LIMITS.minPdfWords) throw new Error("PDF sans texte (scanné ?) : à faire décrire par l'agent, pas encore géré.");
+  if ((await p.exited) !== 0) throw new Error(`pdftotext failed: ${await new Response(p.stderr).text()}`);
+  if (countWords(out) < LIMITS.minPdfWords) throw new Error("PDF without text (scanned?): to be described by the agent, not handled yet.");
   const title = out.split("\n").map((l) => l.trim()).find(Boolean)?.slice(0, LIMITS.pdfTitleChars) ?? name;
   return { title, content: out, kind: "pdf", url, extractor: "pdftotext", blob: bytes, blobExt: "pdf" };
 }
@@ -176,11 +176,11 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)
   else {
     const f = Bun.file(input);
-    if (!(await f.exists())) throw new Error(`Fichier introuvable : ${input}`);
+    if (!(await f.exists())) throw new Error(`File not found: ${input}`);
     const name = input.split("/").at(-1)!.replace(/\.[^.]+$/, "");
     ex = /\.pdf$/i.test(input) ? await extractPdf(new Uint8Array(await f.arrayBuffer()), undefined, name)
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
-      : (() => { throw new Error(`Format non géré à l'étape 1 : ${input} (URL, .md, .txt, .pdf)`); })();
+      : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
   }
   const hash = sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url], hash);
@@ -223,13 +223,13 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
     await writeFile(tmp, serializeDoc(fm, `${ex.content.trim()}\n`), { flag: "wx" });
     await rename(tmp, join(dir, "source.md"));
   } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e; } // the folder is ours: no half-written source stays behind
-  await appendLogCtx(w, { kind: "add", text: `\`${id}\`${opts.note ? "" : " : `note` manquante"}${ex.partial ? " (partiel)" : ""}.`, sources: [id] }, now);
+  await appendLogCtx(w, { kind: "add", text: `\`${id}\`${opts.note ? "" : ": missing `note`"}${ex.partial ? " (partial)" : ""}.`, sources: [id] }, now);
   return { id, duplicate: false, ex };
 }
 export const add = (root: string, input: string, opts: AddOpts) => addCtx(openWiki(root), input, opts);
 
 /** Report line of a successful `add`, shared by `cortex add` and `cortex inbox`. */
 export function formatAdd(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
-  if (r.duplicate || !r.ex) return `${paint.dim("=")} déjà présent : ${r.id}`;
-  return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partiel" : ""}] ${r.ex.content.split(/\s+/).length} mots`;
+  if (r.duplicate || !r.ex) return `${paint.dim("=")} already present: ${r.id}`;
+  return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partial" : ""}] ${r.ex.content.split(/\s+/).length} words`;
 }

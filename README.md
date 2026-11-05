@@ -20,7 +20,7 @@ Cortex is a command-line tool for running a personal wiki that an LLM agent main
 You pick the sources, ask the questions and review the pages. Your agent does the bookkeeping: it summarizes, links, updates and flags contradictions. Claude Code, Codex and opencode are supported. Cortex itself never calls an LLM. It captures sources, runs the mechanical checks, publishes the wiki and keeps the agent confined to `wiki/`.
 
 > [!NOTE]
-> Cortex is a personal project. The CLI messages are currently in French. The agent schema is in English, and the wiki language is a setting (`language`).
+> Cortex is a personal project. The CLI messages are in English; the exported site UI is in English or French (it follows `language`). The agent schema is in English, and the wiki language is a setting (`language`).
 
 ## Features
 
@@ -40,12 +40,37 @@ You pick the sources, ask the questions and review the pages. Your agent does th
 
 ## Requirements
 
-- [Bun](https://bun.sh) 1.4 or later.
+- [Bun](https://bun.sh) 1.4.3 or later, unless you install the standalone binary (it includes Bun).
 - One agent CLI on your `PATH`: [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`), [Codex](https://github.com/openai/codex) (`codex`) or [opencode](https://opencode.ai) (`opencode`).
 - On Linux, [bubblewrap](https://github.com/containers/bubblewrap) (`apt install bubblewrap`), used to confine the agent. On macOS, `sandbox-exec` ships with the system.
 - Optionally, `pdftotext` (poppler-utils), to import PDFs.
 
 ## Installation
+
+Three ways, same features. Pick one.
+
+| | Download | Needs Bun | Updated with |
+|---|---|---|---|
+| Standalone binary | ~53 MB (~113 MB on disk) | no | `cortex upgrade` |
+| `cortex.js` | ~1.2 MB (~3.6 MB on disk) | yes | `cortex upgrade` |
+| From the sources | clone + ~175 MB of dependencies | yes | `git pull && bun install` |
+
+**Standalone binary** (Linux x64, macOS arm64). Nothing else to install:
+
+```sh
+os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/')
+curl -fsSL "https://github.com/fmatsos/cortex/releases/latest/download/cortex-$os-$arch.gz" | gunzip > ~/.local/bin/cortex
+chmod +x ~/.local/bin/cortex
+```
+
+**`cortex.js`**, if Bun is already on your machine. One JavaScript file, run by your Bun, on any platform Bun supports:
+
+```sh
+curl -fsSL https://github.com/fmatsos/cortex/releases/latest/download/cortex.js.gz | gunzip > ~/.local/bin/cortex
+chmod +x ~/.local/bin/cortex
+```
+
+**From the sources**, to hack on cortex:
 
 ```sh
 git clone https://github.com/fmatsos/cortex.git
@@ -55,6 +80,8 @@ bun link                      # puts `cortex` on your PATH
 ```
 
 `bun link` makes the `cortex` command point to your clone, so a `git pull` updates it.
+
+**Updates.** `cortex upgrade --check` compares your version with the latest release; `cortex upgrade` installs it. It only accepts a release whose checksums are signed with the cortex release key. **First export.** The binary and `cortex.js` carry the sources of the HTML site but not its dependencies: the first `cortex export` of each version installs them in `~/.cache/cortex/` (network needed once, ~165 MB; older versions are removed).
 
 ## Quick start
 
@@ -188,6 +215,8 @@ The search box (<kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>⌘</kbd>+<kbd>K</kbd> or <kb
 | `-word` | pages without that word |
 
 Favorites live in each browser's `localStorage`.
+
+The interface follows `language` in `cortex.json`: French when it says French (`French`, `Français`, `fr`), English otherwise (the default). Visitors can switch between English and Français with the selector next to the theme; that changes the labels only, never the wiki content.
 
 ## Development
 

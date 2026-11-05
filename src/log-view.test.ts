@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { archives, countBy, dayLabel, filterEntries, filterQuery, groupDays, hourOf, isUnfiltered, monthLabel, monthOf, NO_FILTER, readFilter, withIds } from "../site/src/lib/log-view";
+import { setLocale } from "../site/src/lib/i18n/index";
 import { filterTags, readTagsParams, sortTags, tagsQuery, type Tag } from "../site/src/lib/tags-view";
 import { fold } from "../site/src/lib/fold";
 import type { LogEntryData } from "../site/src/lib/types";
@@ -27,26 +28,32 @@ test("withIds : identifiants stables, uniques, indépendants de la position", ()
 });
 
 test("readFilter / filterQuery : aller-retour dans l'URL, valeurs invalides ignorées", () => {
-	const f = readFilter(new URLSearchParams("type=ingest&q=%20contexte%20rot&mois=2026-11"));
+	const f = readFilter(new URLSearchParams("type=ingest&q=%20contexte%20rot&month=2026-11"));
 	expect(f).toEqual({ kind: "ingest", q: "contexte rot", month: "2026-11", day: "" });
-	expect(filterQuery(f)).toBe("?type=ingest&q=contexte+rot&mois=2026-11");
+	expect(filterQuery(f)).toBe("?type=ingest&q=contexte+rot&month=2026-11");
 	expect(readFilter(new URLSearchParams(filterQuery(f)))).toEqual(f);
-	expect(readFilter(new URLSearchParams("type=bogus&mois=nov&jour=hier"))).toEqual(NO_FILTER);
+	expect(readFilter(new URLSearchParams("type=bogus&month=nov&day=hier"))).toEqual(NO_FILTER);
 	expect(filterQuery(NO_FILTER)).toBe("");
 	// a specific day replaces the month
-	expect(filterQuery({ ...NO_FILTER, month: "2026-11", day: "2026-11-04" })).toBe("?jour=2026-11-04");
+	expect(filterQuery({ ...NO_FILTER, month: "2026-11", day: "2026-11-04" })).toBe("?day=2026-11-04");
 	expect(isUnfiltered({ ...NO_FILTER, q: "  " })).toBe(true);
 	expect(isUnfiltered({ ...NO_FILTER, kind: "add" })).toBe(false);
 });
 
-test("filterEntries : texte en ET, sans accents ni casse, libellés français inclus", () => {
+test("filterEntries: AND text, accent- and case-insensitive, labels of the locale included", () => {
 	const log = withIds(LOG);
 	expect(filterEntries(log, { ...NO_FILTER, q: "FENETRE contexte" }).map((e) => e.kind)).toEqual(["add"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "cree chroma" }).map((e) => e.kind)).toEqual(["ingest"]);
 	expect(filterEntries(log, { ...NO_FILTER, q: "chroma absent" })).toEqual([]);
-	// « Contrôle » and « Compilation » are the displayed labels, the technical identifier stays « lint » / « ingest »
-	expect(filterEntries(log, { ...NO_FILTER, q: "controle" }).map((e) => e.kind)).toEqual(["lint"]);
-	expect(filterEntries(log, { ...NO_FILTER, q: "compilation" }).map((e) => e.kind)).toEqual(["ingest"]);
+	// "Check" and "Compiled" (fr: « Contrôle », « Compilation ») are the displayed labels, the identifier stays « lint » / « ingest »
+	expect(filterEntries(log, { ...NO_FILTER, q: "check" }).map((e) => e.kind)).toEqual(["lint"]);
+	expect(filterEntries(log, { ...NO_FILTER, q: "compiled" }).map((e) => e.kind)).toEqual(["ingest"]);
+	setLocale("fr");
+	try {
+		const fr = withIds(LOG);
+		expect(filterEntries(fr, { ...NO_FILTER, q: "controle" }).map((e) => e.kind)).toEqual(["lint"]);
+		expect(filterEntries(fr, { ...NO_FILTER, q: "compilation" }).map((e) => e.kind)).toEqual(["ingest"]);
+	} finally { setLocale("en"); }
 	expect(filterEntries(log, { ...NO_FILTER, q: "" })).toHaveLength(4);
 });
 
@@ -68,8 +75,13 @@ test("groupDays, archives et libellés de dates", () => {
 	expect(a.months).toEqual([{ month: "2026-11", n: 2 }, { month: "2026-10", n: 2 }]);
 	expect(a.days.map((d) => d.day)).toEqual(["2026-11-04", "2026-10-30", "2026-10-12"]);
 	expect(monthOf(log[0])).toBe("2026-11");
-	expect(monthLabel("2026-11")).toBe("novembre 2026");
-	expect(dayLabel("2026-11-04")).toBe("mercredi 4 novembre 2026");
+	expect(monthLabel("2026-11")).toBe("November 2026");
+	expect(dayLabel("2026-11-04")).toBe("Wednesday, November 4, 2026");
+	setLocale("fr");
+	try {
+		expect(monthLabel("2026-11")).toBe("novembre 2026");
+		expect(dayLabel("2026-11-04")).toBe("mercredi 4 novembre 2026");
+	} finally { setLocale("en"); }
 	expect(hourOf("2026-11-04T10:05:00+01:00")).toBe("10:05");
 	expect(hourOf("2026-11-04")).toBe("");
 });
@@ -97,7 +109,7 @@ test("filterTags : sans accents ni casse, # initial ignoré", () => {
 
 test("readTagsParams / tagsQuery : aller-retour, défaut sans paramètre", () => {
 	expect(tagsQuery("", "freq")).toBe("");
-	expect(tagsQuery(" ll ", "alpha")).toBe("?q=ll&tri=alpha");
-	expect(readTagsParams(new URLSearchParams("q=ll&tri=alpha"))).toEqual({ q: "ll", sort: "alpha" });
-	expect(readTagsParams(new URLSearchParams("tri=bogus"))).toEqual({ q: "", sort: "freq" });
+	expect(tagsQuery(" ll ", "alpha")).toBe("?q=ll&sort=alpha");
+	expect(readTagsParams(new URLSearchParams("q=ll&sort=alpha"))).toEqual({ q: "ll", sort: "alpha" });
+	expect(readTagsParams(new URLSearchParams("sort=bogus"))).toEqual({ q: "", sort: "freq" });
 });

@@ -1,6 +1,7 @@
 import { parseRecent, pushRecent } from "./recent";
+import { storageKey } from "./storage";
 
-const KEY = "brain:recent";
+const KEY = storageKey("recent");
 
 /**
  * Shared search state: a single query for all surfaces (header field, large field of the home page and of /search/,

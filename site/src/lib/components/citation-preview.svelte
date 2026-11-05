@@ -4,6 +4,7 @@
 	import { toPage } from "#lib/links.js";
 	import { domainOf } from "#lib/article.js";
 	import type { Note, SourceRef } from "#lib/types.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	// Citation preview (UX19): a click or Enter on a footnote call opens, in place, the note's detail, the wiki Source
 	// page and the original document, without leaving the reading. Footnotes remain the fallback
@@ -42,33 +43,33 @@
 			<div class="flex items-start justify-between gap-2">
 				<h2 id="cp-title" class="flex items-center gap-2 text-base font-semibold">
 					<Icon name="citation" size={20} />
-					<span>Note {note.n}{source ? ` · ${source.title}` : ""}</span>
+					<span>{tr("cite.note", { n: note.n })}{source ? ` · ${source.title}` : ""}</span>
 				</h2>
-				<button type="button" onclick={close} aria-label="Fermer l'aperçu de la note" class="touch-target hover:bg-muted -mt-1 -mr-1 inline-flex size-9 shrink-0 items-center justify-center rounded-md">
+				<button type="button" onclick={close} aria-label={tr("cite.close")} class="touch-target hover:bg-muted -mt-1 -mr-1 inline-flex size-9 shrink-0 items-center justify-center rounded-md">
 					<Icon name="clear" size={20} />
 				</button>
 			</div>
 			{#if note.html}
 				<div class="note mt-2 text-sm">{@html note.html}</div>
 			{:else if !source}
-				<p class="text-muted-foreground mt-2 text-sm">Source sans entrée dans sources[] ({note.id}).</p>
+				<p class="text-muted-foreground mt-2 text-sm">{tr("cite.noSource", { id: note.id })}</p>
 			{:else}
-				<p class="text-muted-foreground mt-2 text-sm">Aucune précision (section, page, repère) pour cette note.</p>
+				<p class="text-muted-foreground mt-2 text-sm">{tr("cite.noDetail")}</p>
 			{/if}
 			<ul class="mt-3 flex flex-col gap-1 text-sm">
 				{#if source?.page}
-					<li><a href={toPage(source.page.id)} class="text-link inline-flex items-center gap-1.5 underline underline-offset-3" onclick={close}><Icon name="source" size={16} />Page Source : {source.page.title}</a></li>
+					<li><a href={toPage(source.page.id)} class="text-link inline-flex items-center gap-1.5 underline underline-offset-3" onclick={close}><Icon name="source" size={16} />{tr("cite.sourcePage", { title: source.page.title })}</a></li>
 				{/if}
 				{#if source?.url}
 					<li>
 						<a href={source.url} rel="noopener noreferrer" class="text-link inline-flex items-center gap-1.5 underline underline-offset-3">
-							<Icon name="external-link" size={16} />Lire l'original{#if domainOf(source.url)}&nbsp;({domainOf(source.url)}){/if}<span class="sr-only"> — lien externe</span>
+							<Icon name="external-link" size={16} />{tr("cite.readOriginal")}{#if domainOf(source.url)}&nbsp;({domainOf(source.url)}){/if}<span class="sr-only"> — {tr("common.externalLink")}</span>
 						</a>
 					</li>
 				{/if}
 				<li>
 					<a href="#fn-{note.id}" class="text-link inline-flex items-center gap-1.5 underline underline-offset-3" onclick={close}>
-						<Icon name="backlink" size={16} />Aller à la note en bas de page
+						<Icon name="backlink" size={16} />{tr("cite.goToNote")}
 					</a>
 				</li>
 			</ul>

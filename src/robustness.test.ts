@@ -86,17 +86,17 @@ test("REL-14 : close() envoie SIGTERM puis SIGKILL si le serveur l'ignore", asyn
 
 test("REL-15 : load() : paquet absent → message propre ; toute autre erreur est relancée telle quelle", async () => {
   const err = await load("paquet-qui-nexiste-pas-xyz").catch((e: Error) => e);
-  expect((err as Error).message).toBe("SDK absent : bun add paquet-qui-nexiste-pas-xyz");
+  expect((err as Error).message).toBe("SDK missing: bun add paquet-qui-nexiste-pas-xyz");
   expect((err as Error).message).not.toContain("--cwd");
 
   const dir = tmp("cortex-load-");
   writeFileSync(join(dir, "casse.mjs"), "export const x = ;\n");
   const syntax = await load(join(dir, "casse.mjs")).catch((e: Error) => e);
-  expect((syntax as Error).message).not.toContain("SDK absent");
+  expect((syntax as Error).message).not.toContain("SDK missing");
 
   writeFileSync(join(dir, "dep.mjs"), 'import "dependance-absente-xyz";\n');
   const dep = await load(join(dir, "dep.mjs")).catch((e: Error) => e);
-  expect((dep as Error).message).not.toContain("SDK absent");
+  expect((dep as Error).message).not.toContain("SDK missing");
   expect((dep as Error).message).toContain("dependance-absente-xyz");
 });
 
@@ -152,7 +152,7 @@ test("REL-20 : cortex log add --page refuse un lien symbolique qui sort de wiki/
   writeFileSync(join(root, "wiki/concepts/ok.md"), page("Ok"));
   symlinkSync("../../cortex.json", join(root, "wiki/concepts/piege.md"));
   expect((await logAdd(root, "update", "ok", [], ["wiki/concepts/ok.md"])).pages).toEqual(["wiki/concepts/ok.md"]);
-  await expect(logAdd(root, "update", "piège", [], ["wiki/concepts/piege.md"])).rejects.toThrow("page introuvable sous wiki/");
+  await expect(logAdd(root, "update", "piège", [], ["wiki/concepts/piege.md"])).rejects.toThrow("page not found under wiki/");
 });
 
 // --- REL-21 : footnotes inside code, relative .md links ---------------------------------------------------------------
@@ -184,10 +184,10 @@ test("REL-21 : les [^id] dans un bloc de code ou du code en ligne ne sont pas r�
 test("REL-21 : lint avertit d'un lien .md qui n'est pas relatif à la racine", async () => {
   const root = tmp();
   await put(root, "wiki/concepts/a.md", page("A", "Voir [x](../concepts/x.md), [y](autre.md#frag), [ok](/wiki/concepts/a.md) et [web](https://ex.com/a.md)."));
-  const msgs = (await lint(root)).filter((i) => i.msg.startsWith("lien relatif")).map((i) => i.msg);
+  const msgs = (await lint(root)).filter((i) => i.msg.startsWith("relative link")).map((i) => i.msg);
   expect(msgs).toEqual([
-    "lien relatif vers un .md : ../concepts/x.md (utilise un lien depuis la racine : /wiki/….md)",
-    "lien relatif vers un .md : autre.md#frag (utilise un lien depuis la racine : /wiki/….md)",
+    "relative link to a .md: ../concepts/x.md (use a root-relative link: /wiki/….md)",
+    "relative link to a .md: autre.md#frag (use a root-relative link: /wiki/….md)",
   ]);
 });
 
@@ -200,5 +200,5 @@ test("REL-27 : deux titres longs au même début de 50 caractères ne sont pas �
   const p1 = await newPage(root, "Source", `${head} : première partie`);
   const p2 = await newPage(root, "Source", `${head} : seconde partie`);
   expect(p1).not.toBe(p2);
-  await expect(newPage(root, "Source", `${head} : PREMIÈRE partie`)).rejects.toThrow("une page porte déjà ce titre");
+  await expect(newPage(root, "Source", `${head} : PREMIÈRE partie`)).rejects.toThrow("a page already has this title");
 });

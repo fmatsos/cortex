@@ -16,41 +16,43 @@ import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
 import { fail, paint, warn } from "./style";
 import { LIMITS } from "./limits";
+import pkg from "../package.json";
 
-const HELP = `cortex — second cerveau
+const HELP = `cortex — second brain
 
-  cortex add <url|fichier|-> --note "pourquoi je garde ça" [--dry-run]
-  cortex inbox [--dry-run]   (add sur inbox/ : urls.txt et fichiers ; les entrées réussies en sortent)
-  cortex search "<requête>" [--in wiki|raw] [--json] [--limit N]
+  cortex add <url|file|-> --note "why I keep this" [--dry-run]
+  cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
+  cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
   cortex index
-  cortex new <Source|Concept|Entity|Synthesis> "<titre>"   (crée la page selon page_path, status: draft ; affiche son chemin)
+  cortex new <Source|Concept|Entity|Synthesis> "<title>"   (creates the page per page_path, status: draft; prints its path)
   cortex lint [--json]
-  cortex log [--limit N] [--json] [--kind k]     (le journal, du plus récent au plus ancien ; défaut 20 entrées)
-  cortex log add <add|ingest|query|lint|update> "<texte>" [--source <id raw>]… [--page <wiki/….md>]…
-  cortex compile <id…> | --pending [--batch]   (interactif par défaut ; --batch : pages en draft)
+  cortex log [--limit N] [--json] [--kind k]     (the journal, newest first; 20 entries by default)
+  cortex log add <add|ingest|query|lint|update> "<text>" [--source <raw id>]… [--page <wiki/….md>]…
+  cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
   cortex ask "<question>" [--file] [--interactive]
-  cortex export [--out <dossier>]               (le wiki en site HTML interactif ; défaut : .cortex/site)
-  cortex ls [--type T] [--json]                (les pages du wiki, par titre)
-  cortex show <chemin|id raw|titre>            (affiche une page ou une source)
-  cortex related <chemin|titre> [--limit N] [--json]
-  cortex doctor                                (outils système présents ou manquants)
-  cortex upgrade [--check]                     (binaire compilé : installe la dernière release GitHub)
-  cortex mcp                                   (serveur MCP stdio : search, get, related, lint, add, log)
-  cortex schema [--write]                      (le schéma que suit l'agent ; --write le réécrit dans CLAUDE.md ou AGENTS.md)
-  cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>
-                                               (clés : ${CONFIG_KEYS.join(", ")})
+  cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
+  cortex ls [--type T] [--json]                (the wiki pages, by title)
+  cortex show <path|raw id|title>              (prints a page or a source)
+  cortex related <path|title> [--limit N] [--json]
+  cortex doctor                                (system tools present or missing)
+  cortex --version
+  cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
+  cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
+  cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
+  cortex config init [claude|codex|opencode] | lint | get [key] | set <key> <value> | remove <key>
+                                               (keys: ${CONFIG_KEYS.join(", ")})
 
-Agent : cortex.json (client claude|codex|opencode, model, effort). Sans client :
-$CORTEX_AGENT (interactif, défaut « claude »), $CORTEX_AGENT_BATCH (défaut « claude -p »).
+Agent: cortex.json (client claude|codex|opencode, model, effort). Without a client:
+$CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "claude -p").
 
-Racine : $CORTEX_ROOT, sinon le premier dossier parent qui contient cortex.json.`;
+Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json.`;
 
 const usage = (msg: string) => new CortexError(msg, "usage");
 /** Optional integer option: undefined when absent, a usage error unless it is an integer >= min. */
 const int = (name: string, value: string | undefined, { min }: { min: number }) => {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isInteger(n) || n < min) throw usage(`${name} attend un entier >= ${min} (reçu : ${value})`);
+  if (!Number.isInteger(n) || n < min) throw usage(`${name} expects an integer >= ${min} (got: ${value})`);
   return n;
 };
 
@@ -67,13 +69,13 @@ try {
       options: {
         note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" },
       },
     });
   } catch (e) {
     const code = (e as { code?: string }).code, opt = (e as Error).message.match(/'(-[^' ]*)/)?.[1] ?? "";
-    if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") throw usage(`option inconnue : ${opt} (voir cortex --help)`);
-    if (code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") throw usage(`valeur manquante ou invalide pour ${opt} (voir cortex --help)`);
+    if (code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") throw usage(`unknown option: ${opt} (see cortex --help)`);
+    if (code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") throw usage(`missing or invalid value for ${opt} (see cortex --help)`);
     throw e;
   }
   const { values: o, positionals: [cmd, ...args], tokens } = parsed;
@@ -82,11 +84,14 @@ try {
   const isLogAdd = cmd === "log" && tokens![first + 1]?.kind === "positional" && (tokens![first + 1] as { value?: string }).value === "add";
   // config init creates cortex.json, the root marker: it runs where it is called
   // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
-  const root = cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor" ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
+  // help and version too: no command, `--help`, `--version` (the release workflow runs them outside any wiki)
+  if (o.version) { console.log(pkg.version); process.exit(0); }
+  const anywhere = !cmd || o.help || cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor";
+  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {
-      if (!args[0]) throw usage("Usage : cortex add <url|fichier|-> --note \"…\"");
+      if (!args[0]) throw usage("Usage: cortex add <url|file|-> --note \"…\"");
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
           const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
@@ -96,7 +101,7 @@ try {
           ok = false;
         }
       }
-      if (!o.note && !o["dry-run"]) warn("note manquante : à renseigner avant compilation.");
+      if (!o.note && !o["dry-run"]) warn("missing note: fill it in before compiling.");
       break;
     }
     case "inbox":
@@ -104,40 +109,40 @@ try {
       break;
     case "search": {
       const q = args.join(" ");
-      if (!q) throw usage('Usage : cortex search "<requête>"');
-      if (o.in && o.in !== "wiki" && o.in !== "raw") throw usage("--in attend wiki ou raw");
+      if (!q) throw usage('Usage: cortex search "<query>"');
+      if (o.in && o.in !== "wiki" && o.in !== "raw") throw usage("--in expects wiki or raw");
       const hits = await search(root, q, { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) });
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
-      if (!hits.length) console.log(paint.dim("Aucun résultat."));
+      if (!hits.length) console.log(paint.dim("No results."));
       for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}\n      ${h.snippet.replace(/\s+/g, " ")}`);
-      if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Trouvé seulement dans raw/ : un trou à compiler ?"));
+      if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Found only in raw/: a gap to compile?"));
       break;
     }
     case "new":
-      if (args.length !== 2) throw usage('Usage : cortex new <Source|Concept|Entity|Synthesis> "<titre>"');
+      if (args.length !== 2) throw usage('Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>"');
       console.log(await newPageCtx(wiki, args[0], args[1]));
       break;
     case "index":
       await regenerateCtx(wiki);
-      console.log(`${paint.ok("✓")} wiki/index.md et wiki/log.md régénérés.`);
+      console.log(`${paint.ok("✓")} wiki/index.md and wiki/log.md regenerated.`);
       break;
     case "log": {
       // `add` is the subcommand only right after `log`: `cortex log --json add …` must write nothing (the agent guards rely on this)
       if (isLogAdd) {
         const [, kind, ...text] = args;
-        if (!kind || !text.length) throw usage(`Usage : cortex log add <${KINDS.join("|")}> "<texte>" [--source <id>]… [--page <chemin>]…`);
+        if (!kind || !text.length) throw usage(`Usage: cortex log add <${KINDS.join("|")}> "<text>" [--source <id>]… [--page <path>]…`);
         const e = await logAddCtx(wiki, kind, text.join(" "), o.source, o.page);
-        console.log(`${paint.ok("+")} ${paint.dim(e.at)} ${paint.bold(kindLabel(e.kind))} : ${e.text}`);
+        console.log(`${paint.ok("+")} ${paint.dim(e.at)} ${paint.bold(kindLabel(e.kind))}: ${e.text}`);
         break;
       }
-      if (args.length) throw usage(`Usage : cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
-      if (o.kind && !KINDS.includes(o.kind as any)) throw usage(`--kind attend ${KINDS.join(" | ")}`);
+      if (args.length) throw usage(`Usage: cortex log [--limit N] [--json] [--kind k] | cortex log add …`);
+      if (o.kind && !KINDS.includes(o.kind as any)) throw usage(`--kind expects ${KINDS.join(" | ")}`);
       const limit = int("--limit", o.limit, { min: 1 }) ?? LIMITS.logEntries;
       const { entries, errors } = wiki.journal();
-      for (const x of errors) warn(`wiki/log.jsonl:${x.line} : ${x.msg}`);
+      for (const x of errors) warn(`wiki/log.jsonl:${x.line}: ${x.msg}`);
       const shown = newestFirst(entries.filter((e) => !o.kind || e.kind === o.kind)).slice(0, limit);
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
-      if (!shown.length) console.log(paint.dim("Journal vide."));
+      if (!shown.length) console.log(paint.dim("Empty journal."));
       for (const e of shown) console.log(`${paint.dim(e.at.slice(0, 16).replace("T", " "))}  ${paint.bold(kindLabel(e.kind).padEnd(6))}  ${e.text}`);
       break;
     }
@@ -146,26 +151,26 @@ try {
       if (o.json) console.log(JSON.stringify(issues, null, 2));
       else {
         const icon = { error: paint.error("✗"), warning: paint.warn("!"), info: "·" };
-        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${paint.dim(i.path)} : ${i.msg}`);
+        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${paint.dim(i.path)}: ${i.msg}`);
         const n = (l: string) => issues.filter((i) => i.level === l).length;
         const count = (k: string, s: string, color: (s: string) => string) => (n(k) ? color(`${n(k)} ${s}`) : `${n(k)} ${s}`);
-        console.log(`${count("error", "erreur(s)", paint.error)}, ${count("warning", "avertissement(s)", paint.warn)}, ${n("info")} page(s) jamais relue(s).`);
+        console.log(`${count("error", "error(s)", paint.error)}, ${count("warning", "warning(s)", paint.warn)}, ${n("info")} page(s) never reviewed.`);
       }
       if (issues.some((i) => i.level === "error")) ok = false;
       break;
     }
     case "compile":
-      if (!args.length && !o.pending) throw usage("Usage : cortex compile <id…> | --pending [--batch]");
+      if (!args.length && !o.pending) throw usage("Usage: cortex compile <id…> | --pending [--batch]");
       finish(await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch }, print));
       break;
     case "ask": {
       const q = args.join(" ");
-      if (!q) throw usage('Usage : cortex ask "<question>" [--file]');
+      if (!q) throw usage('Usage: cortex ask "<question>" [--file]');
       finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive }, print));
       break;
     }
     case "export": {
-      if ((await import("./upgrade")).COMPILED) { // Vite cannot run inside the binary: rerun from its embedded sources
+      if ((await import("./upgrade")).dist() !== "sources") { // Vite cannot run inside the binary or the bundle: rerun from the embedded sources
         process.exitCode = await (await import("./payload")).runFromSources(root);
         break;
       }
@@ -176,35 +181,35 @@ try {
     case "ls": {
       const rows = await (await import("./extras")).lsCtx(wiki, o.type);
       if (o.json) { console.log(JSON.stringify(rows, null, 2)); break; }
-      if (!rows.length) console.log(paint.dim("Aucune page."));
+      if (!rows.length) console.log(paint.dim("No pages."));
       for (const r of rows) console.log(`${paint.accent(String(r.type ?? "?").padEnd(9))} ${paint.dim(String(r.status ?? "").padEnd(10))} ${paint.bold(r.title)}  ${paint.dim(toResource(r.path))}`);
       break;
     }
     case "show":
-      if (args.length !== 1) throw usage("Usage : cortex show <chemin|id raw|titre>");
+      if (args.length !== 1) throw usage("Usage: cortex show <path|raw id|title>");
       process.stdout.write(await (await import("./extras")).showCtx(wiki, args[0]));
       break;
     case "related": {
-      if (args.length !== 1) throw usage("Usage : cortex related <chemin|titre> [--limit N] [--json]");
+      if (args.length !== 1) throw usage("Usage: cortex related <path|title> [--limit N] [--json]");
       const hits = await (await import("./extras")).relatedCtx(wiki, args[0], int("--limit", o.limit, { min: 1 }) ?? 10);
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
-      if (!hits.length) console.log(paint.dim("Aucune page liée."));
+      if (!hits.length) console.log(paint.dim("No related pages."));
       for (const h of hits) console.log(`${String(h.score).padStart(3)}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}
      ${paint.dim(h.reasons.join(", "))}`);
       break;
     }
     case "doctor":
-      for (const t of (await import("./extras")).doctor()) {
+      for (const t of await (await import("./extras")).doctor(root)) {
         if (t.path) console.log(`${paint.ok("✓")} ${t.name.padEnd(13)} ${paint.dim(t.path)}`);
-        else console.log(`${paint.warn("!")} ${t.name.padEnd(13)} absent : ${t.use} ; ${paint.dim(t.install)}`);
+        else console.log(`${paint.warn("!")} ${t.name.padEnd(13)} missing: ${t.use}; ${paint.dim(t.install)}`);
       }
       break;
     case "upgrade": {
       const { upgrade, compareVersions } = await import("./upgrade");
       const r = await upgrade(o.check);
       if (r.upgraded) console.log(`${paint.ok("✓")} cortex ${r.current} → ${r.latest}`);
-      else if (compareVersions(r.current, r.latest) >= 0) console.log(`cortex ${r.current} : à jour (dernière release : ${r.latest}).`);
-      else console.log(`cortex ${r.current} → ${paint.warn(r.latest)} disponible : cortex upgrade`);
+      else if (compareVersions(r.current, r.latest) >= 0) console.log(`cortex ${r.current}: up to date (latest release: ${r.latest}).`);
+      else console.log(`cortex ${r.current} → ${paint.warn(r.latest)} available: cortex upgrade`);
       break;
     }
     case "mcp":
@@ -212,7 +217,7 @@ try {
       break;
     case "schema": {
       const { schemaText, writeSchema } = await import("./schema");
-      if (o.write) console.log(`${paint.ok("✓")} ${(await writeSchema(root, true)).file} écrit.`);
+      if (o.write) console.log(`${paint.ok("✓")} ${(await writeSchema(root, true)).file} written.`);
       else process.stdout.write(await schemaText(root));
       break;
     }

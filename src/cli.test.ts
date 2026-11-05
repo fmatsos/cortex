@@ -13,11 +13,11 @@ const run = (...a: string[]) => {
 };
 const oneLine = (err: string) => { expect(err.trim().split("\n")).toHaveLength(1); expect(err).not.toMatch(/\bat \S+ \(|\bat \//); };
 
-test("option inconnue ou valeur manquante : exit 2, une ligne française, pas de stack trace", () => {
+test("unknown option ou valeur manquante : exit 2, une ligne française, pas de stack trace", () => {
   for (const a of [["--bogus"], ["add", "--notes", "x"], ["search", "x", "-z"]]) {
     const r = run(...a);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("option inconnue");
+    expect(r.err).toContain("unknown option");
     expect(r.err).toContain("cortex --help");
     oneLine(r.err);
   }
@@ -31,7 +31,7 @@ test("--limit invalide : erreur d'usage (search et log)", () => {
   for (const a of [["search", "x", "--limit", "abc"], ["search", "x", "--limit", "0"], ["log", "--limit", "abc"], ["log", "--limit=-1"]]) {
     const r = run(...a);
     expect(r.code).toBe(2);
-    expect(r.err).toContain("--limit attend un entier");
+    expect(r.err).toContain("--limit expects an integer");
     oneLine(r.err);
   }
   expect(run("log", "--limit", "5").code).toBe(0);
