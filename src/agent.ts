@@ -218,10 +218,19 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)
+    /** The prepared page must carry its summary in the body: a model may put it in the frontmatter instead, which lint accepts (OKF is extensible). */
+    const bodyless = async () => {
+      const text = prepared && await Bun.file(join(root, prepared.path)).text().catch(() => undefined);
+      if (!text) return [];
+      const prose = (() => { try { return parseDoc(prepared.path, text).body.split("\n").filter((l) => l.trim() && !l.startsWith(">")); } catch { return []; } })();
+      return prose.length ? [] : [`${prepared.path}: the body holds only the note callout. Write the summary, the key points and the links as Markdown in the body, after the callout, never as frontmatter keys.`];
+    };
     const cited: Check = async () => {
       const now = openWiki(root), res = toResource(d.path);
       if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text)
         return [`${prepared.path}: the Source page is still as the CLI created it. Add its description, tags, summary, key points and links.`];
+      const empty = await bodyless();
+      if (empty.length) return empty;
       if (await isCited(now, d.path)) return [];
       // what the agent wrote instead: a Source page with another resource, a page of another type…
       const near = (await now.pages()).filter((p) => p.path.includes(id) || JSON.stringify(p.fm.sources ?? "").includes(id))
@@ -237,7 +246,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     if (opts.batch) await stamp(root, touched, by, new Date(), inUse);
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
-    const left = await errors();
+    const left = [...await errors(), ...await bodyless()];
     if (left.length) { // the Source page may cite the source, but the wiki is not left broken under a `compiled` status
       say("fail", `${id}: errors left in the files the agent changed, status unchanged:\n${left.map((e) => `  - ${e}`).join("\n")}`);
       ok = false;

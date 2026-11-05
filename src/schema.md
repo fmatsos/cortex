@@ -134,7 +134,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 
 In your answer, do not copy the pages back: summarize in one line per file touched.
 
-**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest (description, tags, summary, key points, links). It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
+**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest: description and tags in the frontmatter, summary, key points and links in the body, after the note callout. It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
 
 ## QUERY workflow
 

@@ -355,6 +355,18 @@ mkdir -p wiki/concepts; printf -- '---\\nstatus: draft\\n---\\nx\\n' > wiki/conc
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
   });
 
+  test("compile --batch: a summary written as frontmatter keys, body left with only the callout, fails the compile", () => {
+    const root = wiki();
+    const id = addNote(root);
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && sed -i 's/^type: Source$/type: Source\\ndescription: d\\nsummary: s/' $p`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("the body holds only the note callout");
+    const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
+    expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+  });
+
   test("compile usage error: nothing to compile → 2", () => {
     const r = cortex(wiki(), ["compile"], { env: silent() });
     expect(r.code).toBe(2);
