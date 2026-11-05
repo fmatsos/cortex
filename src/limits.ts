@@ -13,6 +13,12 @@ export const LIMITS = {
   upgradeTimeoutMs: 300_000,
   /** How long `opencode serve` has to announce that it listens. */
   opencodeStartMs: 30_000,
+  /** openai client: one chat completion (local models are slow). */
+  llmRequestMs: 600_000,
+  /** openai client: model turns before the agent loop gives up. */
+  agentTurns: 100,
+  /** openai client: characters of a tool result sent back to the model (small local contexts). */
+  toolOutputChars: 20_000,
   /** A source still `pending` after this many days is reported by lint. */
   pendingDays: 7,
   /** Title taken from the first line of a PDF, cut to this many characters. */

@@ -39,10 +39,10 @@ const HELP = `cortex — second brain
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
-  cortex config init [claude|codex|opencode] | lint | get [key] | set <key> <value> | remove <key>
+  cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>
                                                (keys: ${CONFIG_KEYS.join(", ")})
 
-Agent: cortex.json (client claude|codex|opencode, model, effort). Without a client:
+Agent: cortex.json (client claude|codex|opencode|openai, model, effort). Without a client:
 $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "claude -p").
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json.`;

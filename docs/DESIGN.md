@@ -78,11 +78,11 @@ The benefit: the wiki stays readable by Obsidian, by the OKF viewer and by any a
 
 **By default, the CLI embeds no LLM SDK.** The agent is a session of your existing harness, with the schema (`CLAUDE.md` or `AGENTS.md`) as instructions and `cortex` as a tool.
 
-**The CLI does not provide the agents.** `claude`, `codex` or `opencode` must already be installed and authenticated on the machine. `cortex` drives them. It never bundles or installs them.
+**The CLI does not provide the agents.** `claude`, `codex` or `opencode` must already be installed and authenticated on the machine. `cortex` drives them. It never bundles or installs them. The exception is the `openai` client (decision of 2026-11-05): any OpenAI-compatible API (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter) has no agent around the model, so `openai.ts` runs the tool loop itself (`/chat/completions` with `tools`, at most `LIMITS.agentTurns` turns). Its tools carry Claude's names and fields (`Read`, `Glob`, `Grep`, `Write`, `Edit`, `Bash`), so the same `guard` decides every call. Base URL: `base_url` of `cortex.json`, else `$OPENAI_BASE_URL`, else `http://localhost:11434/v1`; the key only from `$OPENAI_API_KEY` (`cortex.json` is versioned). `effort none` turns model thinking off (`chat_template_kwargs.enable_thinking: false` and Ollama's `think: false`, the unknown one ignored); any other effort goes as `reasoning_effort`. Batch only: there is no interactive CLI to start, unless `$CORTEX_AGENT` is set.
 
 **SDKs are optional and loaded on demand** when `cortex.json` names a client. They only serve to make better use of the agent, first of all to block writes outside `wiki/` before they happen. In the code, this is a Bridge pattern:
 - **the abstraction** is the `compile` and `ask` commands (`agent.ts`), which only know the `Backend` interface (`interactive`, `run`);
-- **the implementations** are in `src/backends/`: `default.ts` (agnostic, subprocess), `claude.ts`, `codex.ts` and `opencode.ts`.
+- **the implementations** are in `src/backends/`: `default.ts` (agnostic, subprocess), `claude.ts`, `codex.ts`, `opencode.ts` and `openai.ts`.
 
 Guardrails verified on 2026-11-04 by trials where the agent tried to write to `raw/`:
 
@@ -92,6 +92,7 @@ Guardrails verified on 2026-11-04 by trials where the agent tried to write to `r
 | Claude (Agent SDK) | `canUseTool` on every tool call, `settingSources: []` (a settings `permissions.allow` rule or hook would run before `canUseTool`; the schema is passed through `systemPrompt`), nothing approved by default | writes and shell outside `wiki/` denied; `Read`/`Glob`/`Grep`/`LS` confined to the repository |
 | Codex (SDK) | `workspace-write` sandbox launched from `wiki/` | `raw/` and the agent file give “Read-only file system” (`/tmp` always remains writable) |
 | opencode v2 (REST API of `opencode serve`) | permission rules, the last matching rule wins | `edit` denied outside `wiki/*`, shell denied outside `cortex` |
+| openai (any OpenAI-compatible API, loop run by cortex) | the Claude `guard` on every tool call; `Bash` also runs under bubblewrap/`sandbox-exec` | same as Claude (tested with a fake server: a `Write` outside `wiki/` is refused and the reason goes back to the model) |
 
 Interactive sessions, whatever the client, also go through this confinement: a human approving too quickly cannot write outside `wiki/`. In every case, `git status` before and after the agent remains the common safety net.
 
@@ -225,7 +226,7 @@ The risk is not the language, it is **changing language** (cf. v1). We choose on
 | `prompts.ts` + `prompts.md` | The orchestration prompts (compile, ask, MCP instructions), shipped next to `schema.md`. |
 | `backends/policy.ts` | What an agent may run, as one table, rendered in each backend's dialect (`--allowedTools`, Claude regexes, opencode rules). |
 | `backends/sandbox.ts` | `confine`: bubblewrap on Linux, `sandbox-exec` on macOS. |
-| `backends/*.ts` | One adapter per client (`default`, `claude`, `codex`, `opencode`) behind the `Backend` interface of `backend.ts`. |
+| `backends/*.ts` | One adapter per client (`default`, `claude`, `codex`, `opencode`, `openai`) behind the `Backend` interface of `backend.ts`. |
 
 Tests live next to the module they cover (`<module>.test.ts`); fixtures shared by several files are in `test-helpers.ts`. Test names are in English; assertions on CLI output are in English, like the messages themselves.
 

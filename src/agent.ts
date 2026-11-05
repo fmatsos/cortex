@@ -71,6 +71,7 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
     const keep = () => {};
     process.on("SIGINT", keep);
     try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited; }
+    catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
     finally { process.off("SIGINT", keep); }
   }
   try { report({ level: "info", text: await backend.run(root, prompt, mode, report) }); return 0; }
