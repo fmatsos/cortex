@@ -9,6 +9,8 @@ export const LIMITS = {
   minPdfWords: 20,
   /** Timeout of a page or PDF fetch. */
   fetchTimeoutMs: 30_000,
+  /** `cortex upgrade`: download of a ~90 MB binary. */
+  upgradeTimeoutMs: 300_000,
   /** How long `opencode serve` has to announce that it listens. */
   opencodeStartMs: 30_000,
   /** A source still `pending` after this many days is reported by lint. */

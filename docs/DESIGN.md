@@ -154,7 +154,7 @@ The format of `raw/.../source.md` and that of the wiki pages are defined in the 
 | `cortex mcp` | 3 | stdio MCP server, which never modifies `wiki/`. Read: `search`, `get` (a `.md` under `wiki/` or `raw/`, paths resolved by `realpath`), `related` (outgoing and incoming links 3, shared raw source 2, shared tag 1), `lint`, `log` (structured entries of the last N days, 1 by default, optional `kind` filter). Write: `add` only, into `raw/` (URL or `text`, never a local file of the machine, `note` required, idempotent). Root set by `$CORTEX_ROOT`. |
 | `cortex inbox [--dry-run]` | 4 | `add` on the whole content of `inbox/`. `urls.txt`: one entry per line, `<url> [free note…]` (the rest of the line is the `note`), blank lines and `#` lines ignored and kept. Any other visible file (PDF, `.md`, `.txt`) goes through `add`, with the content of `<name>.note` as its note if it exists. **A successful entry (added or already present) leaves the inbox** (line removed, file and `.note` deleted); a failure stays there, and the exit code is 1. `urls.txt` is rewritten through a temporary file then `rename`, after re-reading. `--dry-run` writes nothing and empties nothing. Without a `note`, the `cortex add` warning is shown and `compile` will refuse the source as long as it is missing |
 | `cortex export [--out <folder>]` | 6 (done) | the wiki as an interactive HTML site (see §10 bis): navigation, instant search, link graph. Default output `.cortex/site`, **emptied at every export** (refused if it is the root, `wiki/`, `raw/`, the CLI folder, the HOME or one of their parents, or if the folder exists, is not empty and contains no `_app/`: it does not look like a previous export). SvelteKit `adapter-static` + shadcn-svelte, bundled in the CLI (`site/`), nothing more to install |
-| `cortex related`, `ls`, `show`, `doctor`, `reextract` | on demand | — |
+| `cortex ls [--type T] [--json]`, `show <path\|raw id\|title>`, `related <path\|title> [--limit N] [--json]`, `doctor` | on demand (done) | `ls` lists the pages by title; `show` prints a page or a raw source (same confinement as MCP `get`); `related` is the MCP tool on the command line; `doctor` reports the missing system tools (exit 0). `src/extras.ts`. No `reextract`: `raw/` is immutable. |
 
 **Detecting truncated extractions in `cortex add`.** Lesson from step 0: defuddle cut Google's OKF article in the middle (841 words instead of 1,577), with no error or warning. `cortex add` must compare the number of extracted words with that of the visible text of the page. Below a threshold (to be calibrated, for example 70%), it retries with Readability + Turndown, keeps the longer result, and marks `partial: true` if both extractions stay short. A paywall and a Cloudflare block (empty body) produce an explicit refusal.
 
@@ -228,6 +228,12 @@ The risk is not the language, it is **changing language** (cf. v1). We choose on
 | `backends/*.ts` | One adapter per client (`default`, `claude`, `codex`, `opencode`) behind the `Backend` interface of `backend.ts`. |
 
 Tests live next to the module they cover (`<module>.test.ts`); fixtures shared by several files are in `test-helpers.ts`. Test names are in English; assertions on CLI output stay in French.
+
+### Distribution: one binary, `cortex upgrade`
+
+A tag `v<version>` (matching `package.json`) runs `.github/workflows/release.yml`: `scripts/build.sh` compiles one binary per platform on that platform (Linux x64, macOS arm64), checks that `cortex export` works from the binary alone, then publishes the binaries, `SHA256SUMS` and `SHA256SUMS.sig` as a GitHub release. The signature is Ed25519 (`scripts/sign.ts`, private key in the `CORTEX_SIGNING_KEY` secret, public key `RELEASE_PUBLIC_KEY` built into the binary): a release altered by someone without the key, `SHA256SUMS` included, is refused. `cortex upgrade [--check]` compares the installed version with the latest release, downloads the asset of the platform, checks the signature of `SHA256SUMS` and then the SHA-256 of the binary, and replaces the binary in place; run from the sources, it only says to `git pull && bun install`.
+
+**Export from the binary.** Vite cannot run inside a compiled binary (optional imports it cannot resolve, per-platform native bindings, SvelteKit reloading `vite.config.ts` from disk). The binary (~93 MB) therefore embeds a ~200 KB tarball of `src/`, `site/`, `package.json` and `bun.lock` (`src/bin.ts`, `src/payload.ts`). The first `cortex export` of a build extracts it to `~/.cache/cortex/<version>-<hash>/`, runs `bun install --frozen-lockfile --production` there with the bun the binary embeds (`BUN_BE_BUN=1`; network needed once, ~165 MB), deletes the folders of earlier builds, then reruns itself as `bun` on those sources. `schema.md` and `prompts.md` are imported as text, so the other commands need no file on disk. *Known gap:* the service worker lists `site/static` in filesystem order, so an export is byte-identical on one machine but not always across machines.
 
 ### Known limits
 
@@ -329,7 +335,7 @@ Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`,
 - **Step 4.** `inbox` (done), with a mobile “Share → `inbox/urls.txt`” shortcut: the phone's “Share” action appends `<url>` to the end of `inbox/urls.txt`, in the synced folder. The content of `inbox/` is not versioned (`.gitignore`): syncing happens outside git, with Syncthing or an equivalent, at the human's choice; the CLI only reads the folder. A later `cortex inbox` ingests then empties.
 - **Step 5.** Images, then video and audio.
 - **Step 6 (done).** `export`: the wiki as an interactive HTML site, with an Obsidian-style link graph (see §10 bis).
-- **Step 7, only if needed.** Embeddings, `reextract`.
+- **Step 7, only if needed.** Embeddings.
 
 ## 10 bis. HTML export
 
@@ -395,7 +401,7 @@ Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`,
 
 ## 11. Non-goals
 
-- no GitHub Actions and no CI that runs an LLM;
+- no CI that runs an LLM (GitHub Actions only test and build the releases);
 - no JSON handoffs and no multi-agent pipeline;
 - no cron and no automatic periodic syntheses: syntheses are born from questions;
 - no ingestion without reading: the `note:` field is required and the human stays in the loop;
