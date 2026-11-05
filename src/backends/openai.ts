@@ -66,6 +66,13 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
   return `unknown tool ${name}`;
 }
 
+/**
+ * `effort none` turns thinking off (Qwen3, DeepSeek…): the chat-template switch (vLLM, llama.cpp, OVMS) and Ollama's
+ * `think`; servers ignore the field they do not know. Any other effort is sent as `reasoning_effort`.
+ */
+export const thinking = (effort?: string) =>
+  effort === "none" ? { chat_template_kwargs: { enable_thinking: false }, think: false } : effort ? { reasoning_effort: effort } : {};
+
 /** Base URL: `base_url` of cortex.json, else $OPENAI_BASE_URL, else a local Ollama. */
 export const baseUrl = (cfg: Config) => (cfg.base_url ?? process.env.OPENAI_BASE_URL ?? "http://localhost:11434/v1").replace(/\/+$/, "");
 
@@ -84,10 +91,10 @@ export default function openai(cfg: Config): Backend {
         const res = await fetch(`${baseUrl(cfg)}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, tools, ...(cfg.effort && { reasoning_effort: cfg.effort }) }),
-          signal: AbortSignal.timeout(LIMITS.llmRequestMs),
+          body: JSON.stringify({ model: cfg.model, messages, tools, ...thinking(cfg.effort) }),
+          signal: AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
-        if (!res.ok) throw new Error(`${baseUrl(cfg)} answered ${res.status}: ${await res.text()} (the model must support tool calling)`);
+        if (!res.ok) { const t = await res.text(); throw new Error(`${baseUrl(cfg)} answered ${res.status}: ${t}${/tool/i.test(t) ? " (the model must support tool calling)" : ""}`); }
         const body = await res.json();
         const msg = body.choices?.[0]?.message;
         if (!msg) throw new Error(`${baseUrl(cfg)}: answer without a message: ${JSON.stringify(body).slice(0, 300)}`);
@@ -97,6 +104,8 @@ export default function openai(cfg: Config): Backend {
           let content: string;
           try {
             const args = JSON.parse(c.function.arguments || "{}");
+            // the schema writes repo paths as `/raw/…`: a leading / outside the root means the repository root, not the system's
+            for (const k of ["file_path", "path"]) if (typeof args[k] === "string" && args[k].startsWith("/") && !args[k].startsWith(root)) args[k] = "." + args[k];
             const v = guard(root, c.function.name, args, mode);
             if (!v.allow) { report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" }); content = v.reason; }
             else content = await exec(root, mode, c.function.name, args);

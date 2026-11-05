@@ -64,3 +64,25 @@ test("openai: the API key is never sent to a base_url only cortex.json names", a
     for (const [k, v] of [["OPENAI_API_KEY", env.key], ["OPENAI_BASE_URL", env.base]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
   }
 });
+
+test("openai: /raw/… (schema notation) is read from the repository root", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  await Bun.write(join(root, "raw/s.md"), "hello");
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) {
+    seen.push(await req.json());
+    const msg = seen.length === 1 ? { role: "assistant", content: null, tool_calls: [{ id: "1", type: "function", function: { name: "Read", arguments: '{"file_path":"/raw/s.md"}' } }] } : { role: "assistant", content: "ok" };
+    return Response.json({ choices: [{ message: msg }] });
+  } });
+  try {
+    await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read");
+    expect(seen[1].messages.at(-1).content).toBe("hello");
+  } finally { server.stop(true); }
+});
+
+test("openai: effort none turns thinking off", async () => {
+  const { thinking } = await import("./backends/openai");
+  expect(thinking("none")).toEqual({ chat_template_kwargs: { enable_thinking: false }, think: false });
+  expect(thinking("high")).toEqual({ reasoning_effort: "high" });
+  expect(thinking()).toEqual({});
+});

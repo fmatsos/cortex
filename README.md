@@ -155,6 +155,7 @@ Local model, or any OpenAI-compatible API: client `openai`. Cortex runs the agen
 cortex config set client openai
 cortex config set model qwen3:8b                            # required
 cortex config set base_url http://localhost:11434/v1        # default: $OPENAI_BASE_URL, else Ollama on localhost
+cortex config set effort none                               # thinking off (Qwen3…): much faster; other values go as reasoning_effort
 export OPENAI_API_KEY=…                                     # if the endpoint needs one (OpenRouter…); never in cortex.json, and only sent to $OPENAI_BASE_URL (or a base_url equal to it)
 ```
 
