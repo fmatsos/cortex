@@ -3,25 +3,27 @@ import {
 	cacheKey, cacheNames, cachePrefix, estimateBytes, formatBytes, isTemporaryFailure, isContentPath, obsoleteCaches,
 	offlineFallbackHtml, oldestToEvict, percent, pool, staleImmutable, withTimeout, AVG_WIKI_FILE_BYTES,
 } from "../site/src/lib/offline";
+import { setLocale } from "../site/src/lib/i18n/index";
 
 const ROOT = "https://wiki.example/";
 const SUB = "https://example.org/brain/sous/";
 
 test("le préfixe des caches porte l'espace de noms et la portée", () => {
-	expect(cachePrefix(ROOT)).toBe("brain-wiki:/:");
-	expect(cachePrefix(SUB)).toBe("brain-wiki:/brain/sous/:");
-	expect(cacheNames(SUB, "abc")).toEqual({ prefix: "brain-wiki:/brain/sous/:", core: "brain-wiki:/brain/sous/:abc", runtime: "brain-wiki:/brain/sous/:abc:runtime" });
+	expect(cachePrefix(ROOT)).toBe("cortex-wiki:/:");
+	expect(cachePrefix(SUB)).toBe("cortex-wiki:/brain/sous/:");
+	expect(cacheNames(SUB, "abc")).toEqual({ prefix: "cortex-wiki:/brain/sous/:", core: "cortex-wiki:/brain/sous/:abc", runtime: "cortex-wiki:/brain/sous/:abc:runtime" });
 });
 
 test("seules les anciennes versions du wiki de cette portée sont supprimées", () => {
 	const existing = [
-		"brain-wiki:/:v1", "brain-wiki:/:v1:runtime", "brain-wiki:/:v2", "brain-wiki:/:v2:runtime",
-		"brain-wiki:/autre/:v1", // same wiki under another subpath
+		"cortex-wiki:/:v1", "cortex-wiki:/:v1:runtime", "cortex-wiki:/:v2", "cortex-wiki:/:v2:runtime",
+		"cortex-wiki:/autre/:v1", // same wiki under another subpath
+		"brain-wiki:/:v2", "brain-wiki:/:v2:runtime", "brain-wiki:/autre/:v1", // before the rename ("brain"): this scope only, every version
 		"autre-app-v1", "workbox-precache-v2", "brain-abcdef012345", "brain-notes", // neighboring applications, old naming of the wiki
 	];
-	expect(obsoleteCaches(existing, ROOT, "v2")).toEqual(["brain-wiki:/:v1", "brain-wiki:/:v1:runtime", "brain-abcdef012345"]);
+	expect(obsoleteCaches(existing, ROOT, "v2")).toEqual(["cortex-wiki:/:v1", "cortex-wiki:/:v1:runtime", "brain-wiki:/:v2", "brain-wiki:/:v2:runtime", "brain-abcdef012345"]);
 	// the root scope is not the prefix of a subpath
-	expect(obsoleteCaches(["brain-wiki:/brain/:v1"], ROOT, "v1")).toEqual([]);
+	expect(obsoleteCaches(["cortex-wiki:/brain/:v1", "brain-wiki:/brain/:v1"], ROOT, "v1")).toEqual([]);
 });
 
 test("la clé de cache ignore les paramètres de recherche et l'ancre", () => {
@@ -78,7 +80,12 @@ test("pool : concurrence bornée, tout est traité, première erreur relancée s
 	await pool([], 4, async () => { throw new Error("jamais"); });
 });
 
-test("tailles lisibles en français", () => {
+test("readable sizes in the site locale (en by default, fr on demand)", () => {
+	expect(formatBytes(0)).toBe("0 B");
+	expect(formatBytes(1536)).toBe("1.5 KB");
+	expect(formatBytes(1.26 * 1024 * 1024)).toBe("1.3 MB");
+	setLocale("fr");
+	try {
 	expect(formatBytes(0)).toBe("0 o");
 	expect(formatBytes(900)).toBe("900 o");
 	expect(formatBytes(1536)).toBe("1,5 Ko");
@@ -86,6 +93,7 @@ test("tailles lisibles en français", () => {
 	expect(formatBytes(3.04 * 1024 * 1024)).toBe("3 Mo");
 	expect(formatBytes(1.26 * 1024 * 1024)).toBe("1,3 Mo");
 	expect(formatBytes(2.5 * 1024 ** 3)).toBe("2,5 Go");
+	} finally { setLocale("en"); }
 	expect(estimateBytes(100)).toBe(100 * AVG_WIKI_FILE_BYTES);
 });
 
@@ -95,9 +103,11 @@ test("avancement en pourcentage borné", () => {
 	expect(percent(5, 3)).toBe(100);
 });
 
-test("la page de repli hors ligne est en français et échappe la portée", () => {
+test("the offline fallback page follows the locale and escapes the scope", () => {
 	const html = offlineFallbackHtml('https://x.example/"><script>');
-	expect(html).toContain('<html lang="fr">');
-	expect(html).toContain("Page indisponible hors ligne");
+	expect(html).toContain('<html lang="en">');
+	expect(html).toContain("Page unavailable offline");
+	setLocale("fr");
+	try { expect(offlineFallbackHtml(ROOT)).toContain("Page indisponible hors ligne"); } finally { setLocale("en"); }
 	expect(html).not.toContain("<script>");
 });

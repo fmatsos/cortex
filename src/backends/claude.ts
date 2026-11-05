@@ -10,7 +10,7 @@ export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
     async run(root, prompt, mode, report) {
-      const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk");
+      const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
       const schema = await schemaText(root);
       let out: string | undefined;
@@ -30,13 +30,13 @@ export default function claude(cfg: Config): Backend {
           canUseTool: async (tool, input) => {
             const v = guard(root, tool, input as Record<string, any>, mode);
             if (v.allow) return { behavior: "allow", updatedInput: input };
-            report?.({ level: "warn", text: `refusé : ${v.reason}`, mark: "  ⊘" });
+            report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" });
             return { behavior: "deny", message: v.reason };
           },
         },
       })) {
         if (m.type === "result") {
-          if (m.subtype !== "success") throw new Error(`agent Claude en échec (${m.subtype})`);
+          if (m.subtype !== "success") throw new Error(`Claude agent failed (${m.subtype})`);
           out = m.result;
         }
       }
@@ -91,21 +91,21 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
   if (tool === "TodoWrite") return { allow: true };
   if (READ_ONLY.has(tool)) {
     const bad = readViolation(root, tool, input);
-    return bad === undefined ? { allow: true } : { allow: false, reason: `Lecture refusée hors du dépôt du wiki : ${bad}` };
+    return bad === undefined ? { allow: true } : { allow: false, reason: `Read refused outside the wiki repository: ${bad}` };
   }
   if (tool === "Bash") {
     const raw = String(input.command ?? "").trim();
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
-    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash : pas d'enchaînement ni de redirection, texte entre guillemets sans $ ni accent grave (${raw.slice(0, 80)}). Lance cortex seul.` };
+    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone.` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limité à ${toLabel(mode)}.` };
+      : { allow: false, reason: `Bash limited to ${toLabel(mode)}.` };
   }
   if (WRITERS.has(tool)) {
-    if (mode === "read") return { allow: false, reason: "Lecture seule : relance avec --file pour écrire une synthèse." };
+    if (mode === "read") return { allow: false, reason: "Read-only: rerun with --file to write a synthesis." };
     const p = String(input.file_path ?? input.notebook_path ?? "");
-    if (!p) return { allow: false, reason: "Chemin manquant." };
+    if (!p) return { allow: false, reason: "Missing path." };
     return isUnder(root, "wiki", p) ? { allow: true }
-      : { allow: false, reason: `Écriture refusée hors de wiki/ : ${p}` };
+      : { allow: false, reason: `Write refused outside wiki/: ${p}` };
   }
-  return { allow: false, reason: `Outil non autorisé pour cortex : ${tool}` };
+  return { allow: false, reason: `Tool not allowed for cortex: ${tool}` };
 }

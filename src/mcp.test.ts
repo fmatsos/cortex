@@ -16,7 +16,7 @@ test("related: links, backlinks, sources and tags, ranked by strength", async ()
   expect(JSON.stringify(relatedForAgent(a), null, 1)).toBe(GOLDEN_MCP_RELATED);
   // no direct link: only the shared source (B and C have no common tag)
   expect(related(docs, "wiki/concepts/b.md").map((r) => [r.path, r.score])).toEqual([["wiki/concepts/a.md", 6], ["wiki/entities/c.md", 2]]);
-  expect(() => related(docs, "/wiki/concepts/nope.md")).toThrow("introuvable");
+  expect(() => related(docs, "/wiki/concepts/nope.md")).toThrow("not found");
 });
 
 test("get: refuses any path outside wiki/ and raw/", async () => {
@@ -30,7 +30,7 @@ test("get: refuses any path outside wiki/ and raw/", async () => {
   expect(await getFile(root, "raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md")).toContain("zythum");
   for (const p of ["cortex.json", "secret.md", "wiki/../secret.md", "/wiki/../secret.md", "wiki/piege.md", "/etc/passwd", "../x.md"])
     expect(getFile(root, p)).rejects.toThrow();
-  expect(getFile(root, "wiki/concepts")).rejects.toThrow("introuvable"); // a folder is not a file
+  expect(getFile(root, "wiki/concepts")).rejects.toThrow("not found"); // a folder is not a file
 });
 
 test("lastLog: structured entries of the last days, filtered by kind", async () => {
@@ -78,7 +78,7 @@ test("cortex mcp: initialize, tools/list, search, get, add without network (JSON
 
     const s = await call(3, "search", { q: "zythum" });
     expect(JSON.parse(s.content[0].text).hits[0]).toMatchObject({ area: "raw", path: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" });
-    expect(JSON.parse(s.content[0].text).hint).toContain("trou");
+    expect(JSON.parse(s.content[0].text).hint).toContain("gap");
     expect((await call(4, "get", { path: "/wiki/concepts/b.md" })).content[0].text).toContain("Beta");
     expect((await call(5, "get", { path: "wiki/../cortex.json" })).isError).toBe(true);
     expect((await call(6, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "" })).isError).toBe(true);

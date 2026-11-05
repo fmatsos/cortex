@@ -26,7 +26,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
       if (r.duplicate) known++; else { added++; noNote ||= !note; }
       if (!opts.dryRun) await onOk();
     } catch (e) {
-      say("fail", `${label} : ${(e as Error).message}`);
+      say("fail", `${label}: ${(e as Error).message}`);
       failed++;
     }
   };
@@ -35,7 +35,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
     const [url, ...rest] = line.split(/\s+/);
-    if (!/^https?:\/\//.test(url)) { say("fail", `${line} : pas une URL http(s)`); failed++; continue; }
+    if (!/^https?:\/\//.test(url)) { say("fail", `${line}: not an http(s) URL`); failed++; continue; }
     await run(url, url, rest.join(" ") || undefined, async () => done.add(raw));
   }
   for (const f of files) {
@@ -51,8 +51,8 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     await rename(`${urlsFile}.tmp`, urlsFile);
   }
 
-  if (!added && !known && !failed) say("info", paint.dim("Inbox vide."));
-  else say("info", `${opts.dryRun ? "(dry-run, inbox inchangée) " : ""}${added} ajouté(s), ${known} déjà présent(s), ${failed} échec(s).`);
-  if (noNote && !opts.dryRun) say("warn", "note manquante : à renseigner avant compilation.");
+  if (!added && !known && !failed) say("info", paint.dim("Empty inbox."));
+  else say("info", `${opts.dryRun ? "(dry-run, inbox unchanged) " : ""}${added} added, ${known} already present, ${failed} failed.`);
+  if (noNote && !opts.dryRun) say("warn", "missing note: fill it in before compiling.");
   return result(!failed);
 }

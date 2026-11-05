@@ -14,7 +14,7 @@ function relatedOld(docs: Page[], path: string): Related[] {
   const resources = (d: Page) => new Set<string>((d.fm.sources ?? []).flatMap((s) => (s.resource ? [s.resource] : [])));
   const pages = docs.filter((d) => !isReservedPage(d.path));
   const me = pages.find((d) => d.path === fromResource(path));
-  if (!me) throw new Error(`Page wiki introuvable : ${path}`);
+  if (!me) throw new Error(`Wiki page not found : ${path}`);
   const out = links(me), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
   const hits: Related[] = [];
   for (const d of pages) {
@@ -74,7 +74,7 @@ test("T10 related : liens précalculés == related d'avant, sur la fixture mcpRo
     { path: "wiki/concepts/b.md", title: "Beta", score: 6, reasons: [{ kind: "out" }, { kind: "source", value: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" }, { kind: "tag", value: "ctx" }] },
     { path: "wiki/entities/c.md", title: "Gamma", score: 6, reasons: [{ kind: "in" }, { kind: "source", value: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" }, { kind: "tag", value: "llm" }] },
   ]);
-  expect(() => related(pages, "/wiki/concepts/nope.md", graph)).toThrow("introuvable");
+  expect(() => related(pages, "/wiki/concepts/nope.md", graph)).toThrow("not found");
 });
 
 test("T10 related : même sortie que l'ancien sur un wiki dense (liens doubles, auto-liens, cibles absentes)", async () => {

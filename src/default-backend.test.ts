@@ -24,7 +24,7 @@ test.skipIf(!confined)("default backend: the prompt reaches the agent on standar
 
 test.skipIf(!confined)("default backend: a non-zero exit throws, naming the command", async () => {
   process.env.CORTEX_AGENT_BATCH = "false";
-  await expect(agnostic().run(root(), "x", "read")).rejects.toThrow("false sorti en erreur");
+  await expect(agnostic().run(root(), "x", "read")).rejects.toThrow("false exited with an error");
 });
 
 test("default backend: without bwrap in the PATH, a clear message and the agent never runs", () => {
@@ -33,5 +33,5 @@ test("default backend: without bwrap in the PATH, a clear message and the agent 
     process.env.CORTEX_AGENT_BATCH = "sh -c cat";
     try { await agnostic().run(${JSON.stringify(root())}, "x", "read"); process.stdout.write("pas d'erreur"); } catch (e) { process.stdout.write((e as Error).message); }`;
   const p = Bun.spawnSync([process.execPath, "-e", script], { env: { PATH: "/nonexistent", HOME: process.env.HOME ?? "/" } });
-  expect(p.stdout.toString()).toContain("bubblewrap (bwrap) introuvable");
+  expect(p.stdout.toString()).toContain("bubblewrap (bwrap) not found");
 });

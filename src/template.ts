@@ -20,23 +20,23 @@ export type PageType = keyof typeof TYPE_DIRS;
 export const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** Placeholders: value (at creation) and pattern (for lint). Dates in local time, like `fetched_at`. */
 const PLACEHOLDERS: Record<string, { for?: NamingKey; re: string; value: (v: Vars) => string; doc: string }> = {
-  uuid: { re: UUID_RE, value: (v) => Bun.randomUUIDv7("hex", v.at), doc: "UUID v7 (horodaté, unique)" },
-  yyyy: { re: "\\d{4}", value: (v) => localIso(v.at).slice(0, 4), doc: "année" },
-  mm: { re: "\\d{2}", value: (v) => localIso(v.at).slice(5, 7), doc: "mois" },
-  dd: { re: "\\d{2}", value: (v) => localIso(v.at).slice(8, 10), doc: "jour" },
-  hh: { re: "\\d{2}", value: (v) => localIso(v.at).slice(11, 13), doc: "heure" },
+  uuid: { re: UUID_RE, value: (v) => Bun.randomUUIDv7("hex", v.at), doc: "UUID v7 (timestamped, unique)" },
+  yyyy: { re: "\\d{4}", value: (v) => localIso(v.at).slice(0, 4), doc: "year" },
+  mm: { re: "\\d{2}", value: (v) => localIso(v.at).slice(5, 7), doc: "month" },
+  dd: { re: "\\d{2}", value: (v) => localIso(v.at).slice(8, 10), doc: "day" },
+  hh: { re: "\\d{2}", value: (v) => localIso(v.at).slice(11, 13), doc: "hour" },
   mi: { re: "\\d{2}", value: (v) => localIso(v.at).slice(14, 16), doc: "minute" },
-  ss: { re: "\\d{2}", value: (v) => localIso(v.at).slice(17, 19), doc: "seconde" },
-  slug: { re: "[a-z0-9]+(?:-[a-z0-9]+)*", value: (v) => slugify(v.title), doc: "titre en minuscules et tirets (50 caractères au plus)" },
-  rand: { re: "[a-z0-9]{4}", value: () => rand4(), doc: "4 caractères aléatoires [a-z0-9]" },
-  type: { for: "page_path", re: `(?:${Object.values(TYPE_DIRS).join("|")})`, value: (v) => TYPE_DIRS[need(v.type, "type")], doc: "dossier du type : sources, concepts, entities, syntheses" },
-  kind: { for: "raw_path", re: "[a-z]+", value: (v) => need(v.kind, "kind"), doc: "nature de la source : article, pdf, note…" },
+  ss: { re: "\\d{2}", value: (v) => localIso(v.at).slice(17, 19), doc: "second" },
+  slug: { re: "[a-z0-9]+(?:-[a-z0-9]+)*", value: (v) => slugify(v.title), doc: "title in lowercase and hyphens (50 characters at most)" },
+  rand: { re: "[a-z0-9]{4}", value: () => rand4(), doc: "4 random characters [a-z0-9]" },
+  type: { for: "page_path", re: `(?:${Object.values(TYPE_DIRS).join("|")})`, value: (v) => TYPE_DIRS[need(v.type, "type")], doc: "folder of the type: sources, concepts, entities, syntheses" },
+  kind: { for: "raw_path", re: "[a-z]+", value: (v) => need(v.kind, "kind"), doc: "kind of source: article, pdf, note…" },
 };
 export type Vars = { at: Date; title: string; type?: PageType; kind?: string };
 
 /** A placeholder whose variable the caller did not supply is a bug, not the text « undefined » in a path. */
 function need<T>(v: T | undefined, name: string): T {
-  if (v === undefined) throw new Error(`placeholder {${name}} sans valeur : le contexte d'appel ne la fournit pas.`);
+  if (v === undefined) throw new Error(`placeholder {${name}} has no value: the calling context does not provide it.`);
   return v;
 }
 
@@ -53,10 +53,10 @@ export const placeholders = (key: NamingKey) =>
 export function checkTemplate(key: NamingKey, tpl: string): string | undefined {
   const allowed = Object.keys(PLACEHOLDERS).filter((k) => !PLACEHOLDERS[k].for || PLACEHOLDERS[k].for === key);
   const segs = tpl.split("/");
-  if (segs.some((s) => !s || s === "." || s === "..")) return `${key} : segments vides, « . » et « .. » interdits (« ${tpl} »).`;
-  for (const [, name] of tpl.matchAll(/\{([^}]*)\}/g)) if (!allowed.includes(name)) return `${key} : placeholder inconnu {${name}} (permis : ${allowed.map((a) => `{${a}}`).join(", ")}).`;
-  if (/[^A-Za-z0-9._\/-]/.test(tpl.replace(/\{[a-z]+\}/g, ""))) return `${key} : hors placeholders, seuls lettres, chiffres, « . », « _ », « - » et « / » sont permis (« ${tpl} »).`;
-  if (!/\{[a-z]+\}/.test(segs.at(-1)!)) return `${key} : le dernier segment doit contenir un placeholder (« ${tpl} »), sinon tous les noms seraient identiques.`;
+  if (segs.some((s) => !s || s === "." || s === "..")) return `${key}: empty segments, "." and ".." are not allowed ("${tpl}").`;
+  for (const [, name] of tpl.matchAll(/\{([^}]*)\}/g)) if (!allowed.includes(name)) return `${key}: unknown placeholder {${name}} (allowed: ${allowed.map((a) => `{${a}}`).join(", ")}).`;
+  if (/[^A-Za-z0-9._\/-]/.test(tpl.replace(/\{[a-z]+\}/g, ""))) return `${key}: outside placeholders, only letters, digits, ".", "_", "-" and "/" are allowed ("${tpl}").`;
+  if (!/\{[a-z]+\}/.test(segs.at(-1)!)) return `${key}: the last segment must contain a placeholder ("${tpl}"), otherwise every name would be the same.`;
 }
 
 /** Applies a template. */

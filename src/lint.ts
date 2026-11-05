@@ -37,70 +37,70 @@ type RawRule = (c: Ctx, d: RawSource) => Issue[];
 
 const fieldIssues: PageRule = (_, d) => d.issues.filter((i) => REPORTED_FIELDS.has(i.field)).map((i) => issue("error", d.path, i.msg)); // type, title, status, tags
 const pageNaming: PageRule = (c, d) =>
-  c.pagePat.test(d.path.replace(/^wiki\//, "").replace(/\.md$/, "")) ? [] : [issue("warning", d.path, `nom hors du modèle page_path « ${c.tpl.page_path} » (les pages se créent par cortex new)`)];
-const noDescription: PageRule = (_, d) => (d.fm.description ? [] : [issue("error", d.path, "description manquante")]);
+  c.pagePat.test(d.path.replace(/^wiki\//, "").replace(/\.md$/, "")) ? [] : [issue("warning", d.path, `name outside the page_path template "${c.tpl.page_path}" (pages are created with cortex new)`)];
+const noDescription: PageRule = (_, d) => (d.fm.description ? [] : [issue("error", d.path, "missing description")]);
 const missingSources: PageRule = (c, d) =>
-  (d.fm.sources ?? []).filter((s) => !s.resource || !existsSync(join(c.root, s.resource))).map((s) => issue("error", d.path, `source introuvable : ${s.resource}`));
+  (d.fm.sources ?? []).filter((s) => !s.resource || !existsSync(join(c.root, s.resource))).map((s) => issue("error", d.path, `source not found: ${s.resource}`));
 const orphanFootnotes: PageRule = (_, d) => {
   const ids = new Set((d.fm.sources ?? []).map((s) => s.id));
-  return [...d.body.matchAll(/\[\^([\w-]+)\]/g)].filter(([, id]) => !ids.has(id)).map(([, id]) => issue("error", d.path, `note [^${id}] sans entrée sources[]`));
+  return [...d.body.matchAll(/\[\^([\w-]+)\]/g)].filter(([, id]) => !ids.has(id)).map(([, id]) => issue("error", d.path, `footnote [^${id}] has no sources[] entry`));
 };
 // duplicates kept: one error per broken link occurrence
-const brokenLinks: PageRule = (c, d) => wikiLinks(d.body).filter((l) => !existsSync(join(c.root, l))).map((l) => issue("error", d.path, `lien cassé : /${l}`));
+const brokenLinks: PageRule = (c, d) => wikiLinks(d.body).filter((l) => !existsSync(join(c.root, l))).map((l) => issue("error", d.path, `broken link: /${l}`));
 // a relative link to a .md is not a graph edge nor a working link on the site: only root-relative `/wiki/…md` links count
 const relativeLinks: PageRule = (_, d) =>
   [...d.body.matchAll(/\]\((?![a-z][a-z0-9+.-]*:|\/|#)([^)\s]*\.md(?:#[^)\s]*)?)\)/gi)]
-    .map(([, target]) => issue("warning", d.path, `lien relatif vers un .md : ${target} (utilise un lien depuis la racine : /wiki/….md)`));
+    .map(([, target]) => issue("warning", d.path, `relative link to a .md: ${target} (use a root-relative link: /wiki/….md)`));
 const reviewState: PageRule = (_, d) =>
-  !d.fm.verified ? [issue("info", d.path, "jamais relue")]
-  : pageState(d.fm).needsReview ? [issue("warning", d.path, "modifiée depuis la relecture (generated.at > verified.at) : à relire")] : [];
+  !d.fm.verified ? [issue("info", d.path, "never reviewed")]
+  : pageState(d.fm).needsReview ? [issue("warning", d.path, "modified since review (generated.at > verified.at): review again")] : [];
 const stalePage: PageRule = (c, d) =>
-  pageState(d.fm, c.now).stale ? [issue("warning", d.path, `périmée depuis ${String(d.fm.stale_after).slice(0, 10)} (stale_after)`)] : [];
+  pageState(d.fm, c.now).stale ? [issue("warning", d.path, `stale since ${String(d.fm.stale_after).slice(0, 10)} (stale_after)`)] : [];
 const duplicateTitle: PageRule = (c, d) => {
   const first = c.firstTitle.get(slugify(String(d.fm.title ?? "")));
-  return first !== undefined && first !== d.path ? [issue("warning", d.path, `doublon probable de ${first} (même titre)`)] : [];
+  return first !== undefined && first !== d.path ? [issue("warning", d.path, `probable duplicate of ${first} (same title)`)] : [];
 };
 const pageRules: PageRule[] = [fieldIssues, pageNaming, noDescription, missingSources, orphanFootnotes, brokenLinks, relativeLinks, reviewState, stalePage, duplicateTitle];
 
 // --- per-raw-source rules ---
 
-const rawType: RawRule = (_, d) => (d.fm.type === "RawSource" ? [] : [issue("error", d.path, "type: RawSource attendu")]);
+const rawType: RawRule = (_, d) => (d.fm.type === "RawSource" ? [] : [issue("error", d.path, "expected type: RawSource")]);
 const rawNaming: RawRule = (c, d) => {
   const dir = d.path.replace(/^raw\//, "").replace(/\/source\.md$/, ""); // the folder of the source, checked against raw_path
-  return !d.path.endsWith("/source.md") || !c.rawPat.test(dir) ? [issue("warning", d.path, `chemin hors du modèle raw_path « ${c.tpl.raw_path} » (les sources s'ajoutent par cortex add)`)] : [];
+  return !d.path.endsWith("/source.md") || !c.rawPat.test(dir) ? [issue("warning", d.path, `path outside the raw_path template "${c.tpl.raw_path}" (sources are added with cortex add)`)] : [];
 };
 const duplicateRawId: RawRule = (c, d) => {
   const id = rawId(d.path), first = c.firstRaw.get(id);
-  return first !== d.path ? [issue("error", d.path, `id raw en double : ${id} (aussi ${first}) ; le journal ne peut pas distinguer les deux`)] : [];
+  return first !== d.path ? [issue("error", d.path, `duplicate raw id: ${id} (also ${first}); the journal cannot tell them apart`)] : [];
 };
 const pendingSource: RawRule = (c, d) => {
   if (d.fm.status !== "pending") return [];
   const out: Issue[] = [];
-  if (!String(d.fm.note ?? "").trim()) out.push(issue("warning", d.path, "note manquante : à demander avant de compiler"));
+  if (!String(d.fm.note ?? "").trim()) out.push(issue("warning", d.path, "missing note: ask for it before compiling"));
   const fetched = dateMs(d.fm.fetched_at);
-  if (fetched !== undefined && c.now.getTime() - fetched > LIMITS.pendingDays * DAY) out.push(issue("warning", d.path, `en attente depuis plus de ${LIMITS.pendingDays} jours`));
+  if (fetched !== undefined && c.now.getTime() - fetched > LIMITS.pendingDays * DAY) out.push(issue("warning", d.path, `pending for more than ${LIMITS.pendingDays} days`));
   return out;
 };
 const compiledUncited: RawRule = (c, d) =>
-  d.fm.status === "compiled" && !c.cites.has(toResource(d.path)) ? [issue("warning", d.path, "compilée mais aucune page Source ne la cite")] : [];
+  d.fm.status === "compiled" && !c.cites.has(toResource(d.path)) ? [issue("warning", d.path, "compiled but no Source page cites it")] : [];
 const rawRules: RawRule[] = [rawType, rawNaming, duplicateRawId, pendingSource, compiledUncited];
 
 // --- whole-wiki rules (run in this order) ---
 
-const invalidYaml: Rule = (c) => [...c.w.errors.pages, ...c.w.errors.raws].map((e) => issue("error", e.path, `YAML invalide : ${e.msg}`));
+const invalidYaml: Rule = (c) => [...c.w.errors.pages, ...c.w.errors.raws].map((e) => issue("error", e.path, `invalid YAML: ${e.msg}`));
 const pagesRule: Rule = (c) => c.pages.flatMap((d) => pageRules.flatMap((r) => r(c, d)));
 const orphans: Rule = (c) =>
-  c.pages.filter((d) => d.fm.type !== "Source" && !c.inbound.get(d.path)).map((d) => issue("warning", d.path, "orpheline : aucun lien entrant"));
+  c.pages.filter((d) => d.fm.type !== "Source" && !c.inbound.get(d.path)).map((d) => issue("warning", d.path, "orphan: no incoming link"));
 const duplicateSources: Rule = (c) =>
   [...c.cites].filter(([res, pages]) => pages.length > 1 && existsSync(join(c.root, res)))
-    .map(([res, pages]) => issue("warning", pages[1].path, `doublon probable de ${pages[0].path} (même source raw ${res})`));
+    .map(([res, pages]) => issue("warning", pages[1].path, `probable duplicate of ${pages[0].path} (same raw source ${res})`));
 const rawsRule: Rule = (c) => c.raws.flatMap((d) => rawRules.flatMap((r) => r(c, d)));
 const tagSynonyms: Rule = (c) => {
   const out: Issue[] = [], tags = new Map<string, string>();
   for (const d of c.pages) for (const tag of d.fm.tags ?? []) {
     const k = slugify(String(tag)).replace(/s$/, "");
     const seen = tags.get(k);
-    if (seen && seen !== tag) out.push(issue("warning", d.path, `tags quasi synonymes : « ${seen} » et « ${tag} »`));
+    if (seen && seen !== tag) out.push(issue("warning", d.path, `near-synonym tags: "${seen}" and "${tag}"`));
     else tags.set(k, tag);
   }
   return out;
@@ -112,7 +112,7 @@ const journalRule: Rule = async (c) => {
   const md = join(c.root, "wiki/log.md");
   if ((existsSync(md) || journal.entries.length)
     && (!existsSync(md) || (await Bun.file(md).text()) !== renderLogMd(journal.entries, await c.w.titles())))
-    out.push(issue("warning", "wiki/log.md", "diffère de sa génération depuis wiki/log.jsonl (édité à la main ?) : cortex index le régénère"));
+    out.push(issue("warning", "wiki/log.md", "differs from its generation from wiki/log.jsonl (edited by hand?): cortex index regenerates it"));
   return out;
 };
 

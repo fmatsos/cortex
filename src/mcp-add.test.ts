@@ -9,7 +9,7 @@ const newRoot = async () => {
   await Bun.write(join(root, "cortex.json"), "{}");
   return root;
 };
-const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante mots exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
+const page = `<html><head><title>Page de test</title></head><body><article><h1>Page de test</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante words exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
 
 test("privateIp : plages locales, privées, CGNAT et formes IPv6 embarquant de l'IPv4", () => {
   for (const ip of ["127.0.0.1", "0.0.0.0", "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "100.64.0.1", "100.127.255.255",
@@ -23,7 +23,7 @@ test("add côté MCP (publicOnly) : refuse loopback, privé et hôte local, avan
   const srv = Bun.serve({ port: 0, fetch: (req) => (hits.push(req.url), new Response(page, { headers: { "content-type": "text/html" } })) });
   try {
     for (const url of [`http://127.0.0.1:${srv.port}/`, "http://10.0.0.1/", "http://[::1]:1/", "http://[::ffff:7f00:1]/", "http://localhost:1/", "http://169.254.169.254/latest/"])
-      await expect(add(root, url, { note: "x", publicOnly: true })).rejects.toThrow(/refusée/);
+      await expect(add(root, url, { note: "x", publicOnly: true })).rejects.toThrow(/refused/);
     expect(hits).toEqual([]);
     expect(existsSync(join(root, "raw"))).toBe(false);
   } finally { srv.stop(true); }
@@ -52,7 +52,7 @@ test("add : une réponse au-delà du plafond est abandonnée en cours de lecture
     }), { headers: { "content-type": "text/html" } }),
   });
   try {
-    await expect(add(root, `http://127.0.0.1:${srv.port}/`, { note: "x", maxBytes: mib })).rejects.toThrow("trop volumineuse (> 1 Mo)");
+    await expect(add(root, `http://127.0.0.1:${srv.port}/`, { note: "x", maxBytes: mib })).rejects.toThrow("too large (> 1 MB)");
     expect(sent).toBeLessThan(16 * mib); // aborted early, not drained
     expect(existsSync(join(root, "raw"))).toBe(false);
   } finally { srv.stop(true); }
@@ -63,7 +63,7 @@ test("add : content-length au-dessus du plafond refusé avant lecture ; le plafo
   const root = await newRoot();
   const srv = Bun.serve({ port: 0, fetch: () => new Response("x".repeat(2000), { headers: { "content-type": "application/pdf" } }) });
   try {
-    await expect(add(root, `http://127.0.0.1:${srv.port}/`, { note: "x", maxBytes: 1000 })).rejects.toThrow("trop volumineuse");
+    await expect(add(root, `http://127.0.0.1:${srv.port}/`, { note: "x", maxBytes: 1000 })).rejects.toThrow("too large");
   } finally { srv.stop(true); }
 });
 
@@ -91,6 +91,6 @@ test("cortex mcp : l'outil add refuse une URL loopback", async () => {
     send({ id: 2, method: "tools/call", params: { name: "add", arguments: { input: "http://127.0.0.1:9/", note: "ssrf" } } });
     const res = (await recv(2)).result;
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toContain("refusée");
+    expect(res.content[0].text).toContain("refused");
   } finally { proc.stdin.end(); proc.kill(); }
 });

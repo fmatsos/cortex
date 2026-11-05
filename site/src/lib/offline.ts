@@ -4,6 +4,8 @@
  * (`src/offline.test.ts`).
  */
 
+import { getLocale, intlLocale, t } from "./i18n/index";
+
 /** Maximum time to wait for the network when a local copy exists (then the copy is served, the network continues in the background). */
 export const NETWORK_TIMEOUT_MS = 3000;
 /** Maximum number of entries kept "on the fly" (visited pages): beyond it, the oldest are removed. */
@@ -13,7 +15,7 @@ export const AVG_WIKI_FILE_BYTES = 20 * 1024;
 
 /** Prefix of this wiki's caches: the namespace AND the scope, because CacheStorage is shared per origin (neighboring subpaths). */
 export function cachePrefix(scope: string): string {
-	return `brain-wiki:${new URL(scope).pathname}:`;
+	return `cortex-wiki:${new URL(scope).pathname}:`;
 }
 
 /** `core`: base, index and explicitly downloaded pages; `runtime`: visited pages (bounded). One version = two caches. */
@@ -25,8 +27,10 @@ export function cacheNames(scope: string, version: string) {
 /** Old versions of this scope's wiki only: never the cache of another application on the same domain. */
 export function obsoleteCaches(existing: readonly string[], scope: string, version: string): string[] {
 	const { prefix, core, runtime } = cacheNames(scope, version);
-	// brain-<12 hex>: naming from before the prefix, specific enough to be recognized without touching neighboring caches
-	return existing.filter((n) => (n.startsWith(prefix) && n !== core && n !== runtime) || /^brain-[0-9a-f]{12}$/.test(n));
+	// before the rename (the project was called "brain"): `brain-wiki:<scope>:…` caches of this scope, and `brain-<12 hex>`
+	// from before the prefix, specific enough to be recognized without touching neighboring caches
+	const legacy = `brain-wiki:${new URL(scope).pathname}:`;
+	return existing.filter((n) => (n.startsWith(prefix) && n !== core && n !== runtime) || n.startsWith(legacy) || /^brain-[0-9a-f]{12}$/.test(n));
 }
 
 /**
@@ -85,13 +89,13 @@ export async function pool<T>(items: readonly T[], n: number, fn: (item: T) => P
 	if (failure) throw failure.error;
 }
 
-/** "1,2 Mo": French units, one decimal beyond 10 KB only when it matters. */
+/** "1.2 MB" (en) or "1,2 Mo" (fr): units and decimal separator of the site language, one decimal below 10 only. */
 export function formatBytes(bytes: number): string {
-	const fmt = (n: number, unit: string) => `${(n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toString().replace(".", ",")} ${unit}`;
-	if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} o`;
-	if (bytes < 1024 * 1024) return fmt(bytes / 1024, "Ko");
-	if (bytes < 1024 ** 3) return fmt(bytes / 1024 ** 2, "Mo");
-	return fmt(bytes / 1024 ** 3, "Go");
+	const fmt = (n: number, unit: string) => `${(n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString(intlLocale())} ${unit}`;
+	if (bytes < 1024) return `${Math.max(0, Math.round(bytes))} ${t("bytes.b")}`;
+	if (bytes < 1024 * 1024) return fmt(bytes / 1024, t("bytes.kb"));
+	if (bytes < 1024 ** 3) return fmt(bytes / 1024 ** 2, t("bytes.mb"));
+	return fmt(bytes / 1024 ** 3, t("bytes.gb"));
 }
 
 /** Estimate of the full download: remaining files × average size. */
@@ -124,5 +128,5 @@ export const percent = (done: number, total: number) => (total > 0 ? Math.min(10
 /** Fallback page of an offline navigation to a never-visited page (minimal HTML: the base is not guaranteed). */
 export function offlineFallbackHtml(scope: string): string {
 	const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-	return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Page indisponible hors ligne · Cortex</title></head><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><h1>Page indisponible hors ligne</h1><p>Cette page n'a pas encore été consultée sur cet appareil et le réseau est inaccessible.</p><p><a href="${esc(scope)}">Retour à l'accueil</a></p></body></html>`;
+	return `<!doctype html><html lang="${getLocale()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>${esc(t("offline.fallback.title"))} · Cortex</title></head><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem;line-height:1.6"><h1>${esc(t("offline.fallback.title"))}</h1><p>${esc(t("offline.fallback.body"))}</p><p><a href="${esc(scope)}">${esc(t("offline.fallback.home"))}</a></p></body></html>`;
 }

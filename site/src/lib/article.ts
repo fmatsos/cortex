@@ -3,6 +3,7 @@ import { fold } from "./fold";
 import type { Parsed } from "./query";
 import type { Link, PageData, RelatedReason, SourceRef, TocItem } from "./types";
 import { TYPES } from "./type-meta";
+import { t } from "./i18n/index";
 
 /**
  * Pure logic of the article page (tested by src/article.test.ts): table of contents, current section, related pages,
@@ -60,16 +61,16 @@ export function relatedReasons(reasons: RelatedReason[], shared: string[] = []):
 	const tags = [...new Set(reasons.flatMap((r) => (r.kind === "tag" && r.value ? [r.value] : [])))];
 	const n = shared.length;
 	return [
-		...(has("out") ? [{ icon: "copy-link" as const, label: "citée ici" }] : []),
-		...(has("in") ? [{ icon: "backlink" as const, label: "cite cette page" }] : []),
+		...(has("out") ? [{ icon: "copy-link" as const, label: t("related.out") }] : []),
+		...(has("in") ? [{ icon: "backlink" as const, label: t("related.in") }] : []),
 		...(has("source") || n
-			? [{ icon: "source" as const, label: n > 1 ? `${n} sources communes` : "source commune", ...(n ? { detail: shared.join(" · ") } : {}) }]
+			? [{ icon: "source" as const, label: n > 1 ? t("related.sharedSources", { count: n }) : t("related.sharedSource"), ...(n ? { detail: shared.join(" · ") } : {}) }]
 			: []),
 		...(tags.length ? [{ icon: "tags" as const, label: tags.join(", ") }] : []),
 	];
 }
 
-/** Auteur lisible : `human:franck` → `franck`, `claude-code/opus-5.5` → `claude-code · opus-5.5`. */
+/** Readable author: `human:franck` → `franck`, `claude-code/opus-5.5` → `claude-code · opus-5.5`. */
 export const actor = (by: string) => by.replace(/^human:/, "").replace("/", " · ");
 
 /**
@@ -110,7 +111,7 @@ export const graphFocus = (id: string) => `?focus=${encodeURIComponent(id).repla
 
 /** Query for the collection of a page type (`type:concept`), or `undefined` for an unknown type. */
 export const collectionQuery = (type: string) => (TYPES.some((t) => t.type === type) ? `?q=${encodeURIComponent(`type:${type.toLowerCase()}`)}` : undefined);
-export const collectionLabel = (type: string) => TYPES.find((t) => t.type === type)?.plural ?? type;
+export const collectionLabel = (type: string) => TYPES.find((x) => x.type === type)?.plural ?? type;
 
 /** Link to copy: the page address without the search context (`?q=`) which is not part of the page. */
 export function shareUrl(href: string): string {

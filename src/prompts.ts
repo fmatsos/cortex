@@ -20,7 +20,7 @@ const fill = (t: string, vars: Record<string, string>) => t.replace(/\{\{(\w+)\}
 /** Prompt section `name`, placeholders filled. */
 export function prompt(name: string, vars: Record<string, string>): string {
   const t = sections().get(name);
-  if (t === undefined) throw new Error(`prompt introuvable : ${name}`);
+  if (t === undefined) throw new Error(`prompt not found: ${name}`);
   return fill(t, vars);
 }
 

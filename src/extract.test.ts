@@ -7,7 +7,7 @@ import { extractPdf, extractUrl } from "./add";
  */
 
 const para = (n: number) =>
-  Array.from({ length: n }, (_, i) => `<p>Phrase numéro ${i} avec suffisamment de mots pour compter dans le total attendu ici.</p>`).join("");
+  Array.from({ length: n }, (_, i) => `<p>Phrase numéro ${i} avec suffisamment de words pour compter dans le total attendu ici.</p>`).join("");
 const page = (head: string, body: string) => `<html><head><title>Page de test</title>${head}</head><body>${body}</body></html>`;
 
 /** Smallest PDF pdftotext reads: one page of Helvetica text lines. */
@@ -70,13 +70,13 @@ test("extractUrl: defuddle by default, Readability when it extracts clearly more
 });
 
 test("extractUrl: a paywall marker sets partial, a plain page does not", async () => {
-  expect((await get("/paywall")).partial).toBe("paywall : contenu partiel");
-  expect((await get("/paywall-fr")).partial).toBe("paywall : contenu partiel");
+  expect((await get("/paywall")).partial).toBe("paywall: partial content");
+  expect((await get("/paywall-fr")).partial).toBe("paywall: partial content");
   expect((await get("/plain")).partial).toBeUndefined();
 });
 
 test("extractUrl: refuses an almost empty body and an HTTP error status", async () => {
-  await expect(get("/short")).rejects.toThrow("Corps quasi vide");
+  await expect(get("/short")).rejects.toThrow("Almost empty body");
   await expect(get("/forbidden")).rejects.toThrow("HTTP 403");
 });
 
@@ -101,7 +101,7 @@ test("extractUrl: a pdf content-type goes through extractPdf", async () => {
 });
 
 test.skipIf(!Bun.which("pdftotext"))("extractPdf: a PDF under 20 words is refused as scanned, a longer one is extracted", async () => {
-  await expect(extractPdf(pdf(words(5)))).rejects.toThrow("PDF sans texte");
+  await expect(extractPdf(pdf(words(5)))).rejects.toThrow("PDF without text");
   const r = await extractPdf(pdf(words(25)), "https://exemple.org/a.pdf", "doc");
   expect(r.title).toStartWith("mot0 mot1");
   expect(r.url).toBe("https://exemple.org/a.pdf");
@@ -112,6 +112,6 @@ test("extractPdf: without pdftotext in the PATH, a clear French message", () => 
   const script = `import { extractPdf } from ${JSON.stringify(`${import.meta.dir}/add`)};
     try { await extractPdf(new Uint8Array([37, 80, 68, 70])); console.log("pas d'erreur"); } catch (e) { console.log((e as Error).message); }`;
   const p = Bun.spawnSync([process.execPath, "-e", script], { env: { PATH: "/nonexistent", HOME: process.env.HOME ?? "/" } });
-  expect(p.stdout.toString()).toContain("pdftotext introuvable");
+  expect(p.stdout.toString()).toContain("pdftotext not found");
   expect(p.stdout.toString()).toContain("poppler-utils");
 });

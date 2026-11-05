@@ -1,13 +1,14 @@
 import { fold } from "./fold";
 import { kindLabel, KINDS } from "./type-meta";
 import type { LogEntryData } from "./types";
+import { intlLocale } from "./i18n/index";
 
 /**
  * Client-side log: stable identifiers, filters synchronized in the URL, local search, archives by period.
  * Pure functions (tested by `src/log-view.test.ts`), with no DOM access.
  */
 
-/** A log entry with its anchor identifier and its search text (French label included). */
+/** A log entry with its anchor identifier and its search text (label in the site language included). */
 export type LogEntry = LogEntryData & { id: string; hay: string };
 
 /** 32-bit FNV-1a, in base 36 over 6 characters. */
@@ -35,9 +36,9 @@ export type LogFilter = { kind: string; q: string; month: string; day: string };
 export const NO_FILTER: LogFilter = { kind: "", q: "", month: "", day: "" };
 export const isUnfiltered = (f: LogFilter) => !f.kind && !f.q.trim() && !f.month && !f.day;
 
-/** Reads the filters from the URL: `type`, `q`, `mois` (YYYY-MM), `jour` (YYYY-MM-DD). An unknown or malformed value is ignored. */
+/** Reads the filters from the URL: `type`, `q`, `month` (YYYY-MM), `day` (YYYY-MM-DD). An unknown or malformed value is ignored. */
 export function readFilter(sp: URLSearchParams): LogFilter {
-	const kind = sp.get("type") ?? "", month = sp.get("mois") ?? "", day = sp.get("jour") ?? "";
+	const kind = sp.get("type") ?? "", month = sp.get("month") ?? "", day = sp.get("day") ?? "";
 	return {
 		kind: KINDS.some((k) => k.kind === kind) ? kind : "",
 		q: (sp.get("q") ?? "").trim(),
@@ -51,8 +52,8 @@ export function filterQuery(f: LogFilter): string {
 	const sp = new URLSearchParams();
 	if (f.kind) sp.set("type", f.kind);
 	if (f.q.trim()) sp.set("q", f.q.trim());
-	if (f.day) sp.set("jour", f.day);
-	else if (f.month) sp.set("mois", f.month);
+	if (f.day) sp.set("day", f.day);
+	else if (f.month) sp.set("month", f.month);
 	const s = sp.toString();
 	return s && `?${s}`;
 }
@@ -97,11 +98,15 @@ export function archives(entries: LogEntry[]) {
 }
 
 // UTC: the date written in the log, without offset depending on the reader's time zone
-const longDay = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-const shortDay = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "long", timeZone: "UTC" });
-const monthName = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
-export const dayLabel = (day: string) => longDay.format(new Date(`${day}T00:00:00Z`));
-export const dayShort = (day: string) => shortDay.format(new Date(`${day}T00:00:00Z`));
-export const monthLabel = (month: string) => monthName.format(new Date(`${month}-01T00:00:00Z`));
+// formatters built per locale on first use: the visitor may switch language
+const formats = new Map<string, Intl.DateTimeFormat>();
+const fmt = (name: string, o: Intl.DateTimeFormatOptions) => {
+	const k = `${intlLocale()}|${name}`;
+	if (!formats.has(k)) formats.set(k, new Intl.DateTimeFormat(intlLocale(), { ...o, timeZone: "UTC" }));
+	return formats.get(k)!;
+};
+export const dayLabel = (day: string) => fmt("long", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${day}T00:00:00Z`));
+export const dayShort = (day: string) => fmt("short", { weekday: "short", day: "numeric", month: "long" }).format(new Date(`${day}T00:00:00Z`));
+export const monthLabel = (month: string) => fmt("month", { month: "long", year: "numeric" }).format(new Date(`${month}-01T00:00:00Z`));
 /** Time of an entry (`HH:MM`), or `""` when the log only records the date. */
 export const hourOf = (at: string) => (at.length > 10 ? at.slice(11, 16) : "");

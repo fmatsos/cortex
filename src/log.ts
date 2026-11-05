@@ -24,16 +24,16 @@ const KEYS = new Set(["at", "kind", "text", "sources", "pages"]);
 
 /** Valid entry or error message (a single error per line: the first). */
 export function parseEntry(v: unknown): LogEntry | string {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return "l'entrée doit être un objet JSON";
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return "the entry must be a JSON object";
   const o = v as Record<string, unknown>;
-  for (const k of Object.keys(o)) if (!KEYS.has(k)) return `champ inconnu : ${k}`;
-  if (typeof o.at !== "string" || !AT.test(o.at) || Number.isNaN(Date.parse(o.at))) return "at : ISO 8601 avec décalage, ou AAAA-MM-JJ";
-  if (!KINDS.includes(o.kind as Kind)) return `kind : ${KINDS.join("|")}`;
-  if (typeof o.text !== "string" || !o.text.trim() || /[\r\n]/.test(o.text)) return "text : une ligne non vide";
+  for (const k of Object.keys(o)) if (!KEYS.has(k)) return `unknown field: ${k}`;
+  if (typeof o.at !== "string" || !AT.test(o.at) || Number.isNaN(Date.parse(o.at))) return "at: ISO 8601 with offset, or YYYY-MM-DD";
+  if (!KINDS.includes(o.kind as Kind)) return `kind: ${KINDS.join("|")}`;
+  if (typeof o.text !== "string" || !o.text.trim() || /[\r\n]/.test(o.text)) return "text: one non-empty line";
   for (const [k, ok] of [["sources", (s: string) => RAW_ID.test(s)], ["pages", (s: string) => /^wiki\/.+\.md$/.test(s)]] as const) {
     if (o[k] === undefined) continue;
     const a = o[k];
-    if (!Array.isArray(a) || !a.length || a.some((s) => typeof s !== "string" || !ok(s))) return `${k} : liste non vide ${k === "sources" ? "d'ids raw" : "de chemins wiki/….md"} (champ omis s'il est vide)`;
+    if (!Array.isArray(a) || !a.length || a.some((s) => typeof s !== "string" || !ok(s))) return `${k}: non-empty list of ${k === "sources" ? "raw ids" : "wiki/….md paths"} (omit the field when empty)`;
   }
   return o as LogEntry;
 }
@@ -46,7 +46,7 @@ export function readLog(root: string): { entries: LogEntry[]; errors: { line: nu
   readFileSync(f, "utf8").split("\n").forEach((l, i) => {
     if (!l.trim()) return;
     let v: unknown;
-    try { v = JSON.parse(l); } catch { errors.push({ line: i + 1, msg: "JSON invalide" }); return; }
+    try { v = JSON.parse(l); } catch { errors.push({ line: i + 1, msg: "invalid JSON" }); return; }
     const e = parseEntry(v);
     if (typeof e === "string") errors.push({ line: i + 1, msg: e }); else entries.push(e);
   });
@@ -78,13 +78,13 @@ const namesId = (text: string, id: string) => text.includes(`\`${id}\``);
 function renderLine(e: LogEntry, titles: Titles): string {
   const src = (e.sources ?? []).filter((s) => !namesId(e.text, s)).map((s) => `\`${s}\``);
   const pages = (e.pages ?? []).filter((p) => !namesPage(e.text, p, titles.get(p))).map((p) => `[${titles.get(p) ?? pageId(p)}](${pageLink(p)})`);
-  const refs = [src.length && `sources : ${src.join(", ")}`, pages.length && `pages : ${pages.join(", ")}`].filter(Boolean).join(" ; ");
+  const refs = [src.length && `sources: ${src.join(", ")}`, pages.length && `pages: ${pages.join(", ")}`].filter(Boolean).join("; ");
   return `- **${kindLabel(e.kind)}** ${e.text}${refs ? ` (${refs})` : ""}\n`;
 }
 
 /** wiki/log.md: the journal, sections by date (most recent first). Deterministic. */
 export function renderLogMd(entries: LogEntry[], titles: Titles = new Map()): string {
-  let out = "# Log\n\n> Généré depuis `wiki/log.jsonl` : ne pas éditer à la main (`cortex log add`, puis `cortex index`).\n";
+  let out = "# Log\n\n> Generated from `wiki/log.jsonl`: do not edit by hand (`cortex log add`, then `cortex index`).\n";
   let cur = "";
   for (const e of newestFirst(entries)) {
     if (day(e) !== cur) out += `\n## ${(cur = day(e))}\n`;
@@ -104,7 +104,7 @@ export async function appendLogCtx(w: Wiki, entry: Omit<LogEntry, "at">, d = new
   if (entry.sources?.length) e.sources = entry.sources;
   if (entry.pages?.length) e.pages = entry.pages;
   const bad = parseEntry(e);
-  if (typeof bad === "string") throw new Error(`Entrée de journal invalide : ${bad}`);
+  if (typeof bad === "string") throw new Error(`Invalid journal entry: ${bad}`);
   const f = join(w.root, "wiki/log.jsonl");
   mkdirSync(dirname(f), { recursive: true });
   // the file ends with a newline; otherwise (hand edit) the entry would stick to the previous one
@@ -120,16 +120,16 @@ export const appendLog = (root: string, entry: Omit<LogEntry, "at">, d = new Dat
 /** `cortex log add`: validates references (existing pages under wiki/, existing raw ids) before writing. */
 export async function logAddCtx(w: Wiki, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()): Promise<LogEntry> {
   const root = w.root;
-  if (!KINDS.includes(kind as Kind)) throw new Error(`kind inconnu : ${kind} (${KINDS.join(" | ")})`);
-  if (!text.trim()) throw new Error("texte vide");
+  if (!KINDS.includes(kind as Kind)) throw new Error(`unknown kind: ${kind} (${KINDS.join(" | ")})`);
+  if (!text.trim()) throw new Error("empty text");
   const pp = pages.map((p) => {
     const rel = normalize(p.trim().replace(/^\/+/, ""));
     const abs = resolve(root, rel);
-    if (!isUnder(root, "wiki", abs) || !rel.endsWith(".md") || isReservedPage(rel) || !existsSync(abs)) throw new Error(`page introuvable sous wiki/ : ${p}`);
+    if (!isUnder(root, "wiki", abs) || !rel.endsWith(".md") || isReservedPage(rel) || !existsSync(abs)) throw new Error(`page not found under wiki/: ${p}`);
     return rel.split(sep).join("/");
   });
   for (const s of sources)
-    if (!rawPath(root, s)) throw new Error(`source raw introuvable : ${s}`);
+    if (!rawPath(root, s)) throw new Error(`raw source not found: ${s}`);
   return appendLogCtx(w, { kind: kind as Kind, text, sources: [...new Set(sources)], pages: [...new Set(pp)] }, d);
 }
 export const logAdd = (root: string, kind: string, text: string, sources: string[] = [], pages: string[] = [], d = new Date()) =>

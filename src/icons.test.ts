@@ -5,6 +5,7 @@ import { compile } from "svelte/compiler";
 import { parseHTML } from "linkedom";
 import { ICON_NAMES, ICONS, iconMask, iconSvg, strokeFor, type IconName } from "../site/src/lib/icons";
 import { KINDS, TYPES, kindIcon, kindLabel, statusMeta, typeIcon } from "../site/src/lib/type-meta";
+import { setLocale } from "../site/src/lib/i18n/index";
 
 const SITE = join(import.meta.dir, "../site/src");
 
@@ -12,7 +13,7 @@ const SITE = join(import.meta.dir, "../site/src");
 const WANTED = `home search graph tags journal favorites concept entity synthesis source draft stable deprecated verified unverified needs-review stale star
 copy-link copy-markdown success error sun moon system filter operator-tag operator-type operator-status operator-phrase operator-exclude recent clear toc
 chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated kind-query kind-lint kind-update zoom-in zoom-out
-fit-view pause play close-selection list-view offline offline-ready retry new-tab`.split(/\s+/);
+fit-view pause play close-selection list-view offline offline-ready retry new-tab language`.split(/\s+/);
 
 test("le pack contient toutes les icônes demandées, et seulement elles", () => {
   expect([...(ICON_NAMES as readonly string[])].sort()).toEqual([...WANTED].sort());
@@ -158,16 +159,18 @@ test("les motifs CSS des encarts suivent les icônes du pack", () => {
   expect(iconMask("note")).not.toMatch(/[<>#]/);
 });
 
-test("type-meta : libellés français du journal, identifiants techniques inchangés", () => {
+test("type-meta: log labels follow the locale, technical identifiers unchanged", () => {
   expect(KINDS.map((k) => k.kind)).toEqual(["add", "ingest", "query", "lint", "update"]);
-  expect(KINDS.map((k) => k.label)).toEqual(["Ajout", "Compilation", "Question", "Contrôle", "Mise à jour"]);
+  expect(KINDS.map((k) => k.label)).toEqual(["Added", "Compiled", "Question", "Check", "Update"]);
+  setLocale("fr");
+  try { expect(KINDS.map((k) => k.label)).toEqual(["Ajout", "Compilation", "Question", "Contrôle", "Mise à jour"]); } finally { setLocale("en"); }
   for (const k of KINDS) {
     expect(k.description.length).toBeGreaterThan(20);
     expect(k.description.endsWith(".")).toBe(true);
     expect(ICON_NAMES).toContain(k.icon);
     expect(k.icon).toBe(`kind-${k.kind}`);
   }
-  expect(kindLabel("ingest")).toBe("Compilation");
+  expect(kindLabel("ingest")).toBe("Compiled");
   expect(kindLabel("inconnu")).toBe("inconnu"); // an unknown identifier is displayed as is
   expect(kindIcon("inconnu")).toBe("note");
   for (const t of TYPES) expect(ICON_NAMES).toContain(t.icon);

@@ -1,5 +1,6 @@
 import type Fuse from "fuse.js";
 import { fold } from "./fold";
+import { t as tr } from "./i18n/index";
 import { activeValues, hasText, isEmpty, matches, parseQuery, STATUS_VALUES, TYPE_VALUES, type Parsed } from "./query";
 import type { SearchDoc, SearchIndex } from "./types";
 
@@ -196,13 +197,13 @@ export function suggestTitles(e: Engine, p: Parsed, isFav: (id: string) => boole
 
 const count = <T>(xs: T[], f: (x: T) => boolean) => xs.filter(f).length;
 export const KEY_HINTS: FilterSuggestion[] = [
-	{ label: "#tag", insert: "#", hint: "filtrer par tag" },
+	{ label: "#tag", insert: "#", get hint() { return tr("search.hint.tag"); } },
 	{ label: "type:", insert: "type:", hint: "concept, entity, synthesis, source" },
 	{ label: "status:", insert: "status:", hint: "draft, stable, deprecated" },
-	{ label: "is:fav", insert: "is:fav ", hint: "mes favoris" },
-	{ label: "is:unverified", insert: "is:unverified ", hint: "jamais relues" },
-	{ label: "is:review", insert: "is:review ", hint: "à relire" },
-	{ label: "is:partial", insert: "is:partial ", hint: "sources partielles" },
+	{ label: "is:fav", insert: "is:fav ", get hint() { return tr("search.hint.fav"); } },
+	{ label: "is:unverified", insert: "is:unverified ", get hint() { return tr("search.hint.unverified"); } },
+	{ label: "is:review", insert: "is:review ", get hint() { return tr("search.hint.review"); } },
+	{ label: "is:partial", insert: "is:partial ", get hint() { return tr("search.hint.partial"); } },
 ];
 
 /** Pages that pass the filters, phrases and exclusions of `p` (and its free words): the context of the counters. */

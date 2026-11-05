@@ -17,7 +17,7 @@ const TAGS = new Set([
 /** Elements whose content is never text to display: removed with their content. */
 const DROP = new Set(["script", "style", "iframe", "object", "embed", "noscript", "template", "textarea", "title", "xmp", "noembed", "noframes", "svg", "math", "select", "button", "form"]);
 /** Classes the site styles; any other class is removed (no arbitrary skinning of the interface). */
-const CLASSES = new Set(["fn-ref", "note-perso", "note-perso-titre", "callout-warning", "callout-warning-titre", "lien-manquant", "task-list-item", "task-list-item-checkbox"]);
+const CLASSES = new Set(["fn-ref", "personal-note", "personal-note-title", "callout-warning", "callout-warning-title", "missing-link", "task-list-item", "task-list-item-checkbox"]);
 
 const NAMED: Record<string, string> = { colon: ":", tab: "\t", newline: "\n", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", sol: "/", lpar: "(", rpar: ")", num: "#", excl: "!", period: ".", comma: ",", semi: ";", equals: "=", quest: "?", percnt: "%", plus: "+" };
 const decode = (s: string) => s.replace(/&(?:#[xX]([0-9a-fA-F]+)|#(\d+)|([a-zA-Z]+));?/g, (all, hex?: string, dec?: string, name?: string) => {

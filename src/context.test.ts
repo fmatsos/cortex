@@ -81,10 +81,10 @@ test("cortex index on a fixture writes the same index.md and log.md as before th
 - [Alpha](/wiki/concepts/${id(3)}.md) — Autre.
 - [Zeta](/wiki/concepts/${id(2)}.md) — Un concept.
 
-## Entités
+## Entities
 - [Bob](/wiki/entities/${id(4)}.md) — Une entité.
 
-## Synthèses
+## Syntheses
 
 ## Sources
 - [Source un](/wiki/sources/${id(5)}.md) — Résumé.
@@ -94,10 +94,10 @@ test("cortex index on a fixture writes the same index.md and log.md as before th
 `);
     expect(log).toBe(`# Log
 
-> Généré depuis \`wiki/log.jsonl\` : ne pas éditer à la main (\`cortex log add\`, puis \`cortex index\`).
+> Generated from \`wiki/log.jsonl\`: do not edit by hand (\`cortex log add\`, then \`cortex index\`).
 
 ## 2026-11-04
-- **Ingest** créé Zeta. (sources : \`${id(1)}\` ; pages : [Source un](/wiki/sources/${id(5)}.md))
+- **Ingest** créé Zeta. (sources: \`${id(1)}\`; pages: [Source un](/wiki/sources/${id(5)}.md))
 - **Add** \`${id(1)}\`.
 `);
   });

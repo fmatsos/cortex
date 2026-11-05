@@ -5,11 +5,13 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { type OfflineState, estimateBytes, formatBytes, isOfflineState, percent } from "#lib/offline.js";
 	import type { IconName } from "#lib/icons.js";
+	import { storageKey } from "#lib/storage.js";
+	import { t } from "#lib/i18n/index.js";
 
 	// Offline mode status, always accessible: a discreet button (bottom left) opens a panel with the state
-	// (Préparation, Disponible, Échec + Réessayer), the kept version, the connection and the full download of the wiki.
+	// (preparing, available, failed + retry), the kept version, the connection and the full download of the wiki.
 	// Important changes are also announced for a few seconds in the `aria-live` region.
-	const KEY = "brain:offline-ready";
+	const KEY = storageKey("offline-ready");
 	const MESSAGE_MS = 6000;
 
 	let offline = $state(false);
@@ -42,11 +44,11 @@
 	const allCached = $derived(!!sw && left === 0);
 
 	const label = $derived(
-		offline ? "Hors ligne"
-		: phase === "ready" ? "Disponible hors ligne"
-		: phase === "preparing" ? "Préparation hors ligne"
-		: phase === "error" ? "Échec de la préparation hors ligne"
-		: "Mode hors ligne indisponible",
+		offline ? t("offline.offline")
+		: phase === "ready" ? t("offline.ready")
+		: phase === "preparing" ? t("offline.preparing")
+		: phase === "error" ? t("offline.failed")
+		: t("offline.unavailable"),
 	);
 	const icon = $derived<IconName>(offline ? "offline" : phase === "ready" ? "offline-ready" : phase === "preparing" ? "retry" : phase === "error" ? "error" : "offline");
 
@@ -77,9 +79,9 @@
 					if (localStorage.getItem(KEY) === e.data.version) return;
 					localStorage.setItem(KEY, e.data.version);
 				} catch { /* storage unavailable: announced on every load */ }
-				say("Disponible hors ligne");
+				say(t("offline.ready"));
 			}
-		} else if (e.data.phase === "error" && !wasFailed) say("Échec de la préparation hors ligne");
+		} else if (e.data.phase === "error" && !wasFailed) say(t("offline.failed"));
 	}
 
 	function track(worker: ServiceWorker | null | undefined, reg: ServiceWorkerRegistration) {
@@ -107,7 +109,7 @@
 
 	onMount(() => {
 		offline = !navigator.onLine;
-		const sync = (e: Event) => { offline = e.type === "offline"; say(offline ? "Hors ligne" : "De nouveau en ligne"); };
+		const sync = (e: Event) => { offline = e.type === "offline"; say(offline ? t("offline.offline") : t("offline.backOnline")); };
 		addEventListener("online", sync);
 		addEventListener("offline", sync);
 		supported = "serviceWorker" in navigator;
@@ -156,55 +158,55 @@
 		if (open && e.key === "Escape") { e.preventDefault(); close(true); }
 	}
 
-	const cachedLabel = $derived(sw ? `${sw.wiki.cached} sur ${sw.wiki.files}` : "");
+	const cachedLabel = $derived(sw ? t("offline.cachedOf", { cached: sw.wiki.cached, files: sw.wiki.files }) : "");
 </script>
 
 <svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
 
 <div bind:this={root} class="fixed bottom-3 left-3 z-30 print:hidden">
 	{#if open}
-		<div id={panelId} role="region" aria-label="Mode hors ligne" class="bg-popover text-popover-foreground absolute bottom-full left-0 mb-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-lg border p-3 text-sm shadow-lg">
+		<div id={panelId} role="region" aria-label={t("offline.title")} class="bg-popover text-popover-foreground absolute bottom-full left-0 mb-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-lg border p-3 text-sm shadow-lg">
 			<h2 class="flex items-center gap-2 font-semibold">
 				<Icon name={icon} size={16} class={phase === "error" ? "text-destructive" : phase === "preparing" ? "motion-safe:animate-spin" : ""} />
 				{label}
 			</h2>
 
 			{#if phase === "unsupported"}
-				<p class="text-muted-foreground mt-2">Ce navigateur ne permet pas le mode hors ligne (service worker indisponible ou page non sécurisée). Le site reste lisible en ligne.</p>
+				<p class="text-muted-foreground mt-2">{t("offline.unsupported")}</p>
 			{:else if phase === "inactive"}
-				<p class="text-muted-foreground mt-2">{dev ? "Le mode hors ligne n'est pas actif en développement." : "Le mode hors ligne n'a pas pu être activé sur cette page."}</p>
-				{#if !dev}<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />Réessayer</Button>{/if}
+				<p class="text-muted-foreground mt-2">{dev ? t("offline.dev") : t("offline.inactive")}</p>
+				{#if !dev}<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />{t("common.retry")}</Button>{/if}
 			{:else if phase === "error"}
-				<p class="mt-2">Les pages n'ont pas pu être préparées pour la lecture hors ligne. Le site reste lisible en ligne.</p>
-				{#if sw?.message}<p class="text-muted-foreground mt-1 text-xs break-words">Détail : {sw.message}</p>{/if}
-				<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />Réessayer</Button>
+				<p class="mt-2">{t("offline.error")}</p>
+				{#if sw?.message}<p class="text-muted-foreground mt-1 text-xs break-words">{t("common.detail", { detail: sw.message })}</p>{/if}
+				<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />{t("common.retry")}</Button>
 			{:else if phase === "preparing"}
-				<p class="text-muted-foreground mt-2">Préparation des pages de base…{sw ? ` ${percent(sw.core.done, sw.core.total)} %` : ""}</p>
-				{#if sw}<progress class="accent-primary mt-2 h-2 w-full" max={sw.core.total} value={sw.core.done} aria-label="Préparation hors ligne"></progress>{/if}
+				<p class="text-muted-foreground mt-2">{t("offline.preparingBase")}{sw ? ` ${t("common.percent", { n: percent(sw.core.done, sw.core.total) })}` : ""}</p>
+				{#if sw}<progress class="accent-primary mt-2 h-2 w-full" max={sw.core.total} value={sw.core.done} aria-label={t("offline.preparing")}></progress>{/if}
 			{:else}
-				<p class="text-muted-foreground mt-2">Le socle du site et la recherche fonctionnent sans réseau. Les pages que vous consultez sont gardées{offline ? "" : " ; vous pouvez aussi tout télécharger"}.</p>
+				<p class="text-muted-foreground mt-2">{offline ? t("offline.readyText.offline") : t("offline.readyText")}</p>
 
 				{#if sw}
 					<div class="mt-3 border-t pt-3">
 						{#if download?.state === "running"}
-							<p role="status">Téléchargement du wiki : {percent(download.done, download.total)} % ({formatBytes(download.bytes)})</p>
-							<progress class="accent-primary mt-2 h-2 w-full" max={download.total} value={download.done} aria-label="Téléchargement du wiki"></progress>
-							<Button variant="outline" size="sm" class="mt-2" onclick={() => post({ type: "cancel" })}>Annuler</Button>
+							<p role="status">{t("offline.downloading", { percent: t("common.percent", { n: percent(download.done, download.total) }), size: formatBytes(download.bytes) })}</p>
+							<progress class="accent-primary mt-2 h-2 w-full" max={download.total} value={download.done} aria-label={t("offline.download")}></progress>
+							<Button variant="outline" size="sm" class="mt-2" onclick={() => post({ type: "cancel" })}>{t("common.cancel")}</Button>
 						{:else if allCached}
-							<p class="flex items-center gap-2" role="status"><Icon name="success" size={16} />Tout le wiki est disponible hors ligne ({sw.wiki.pages} pages).</p>
+							<p class="flex items-center gap-2" role="status"><Icon name="success" size={16} />{t("offline.allCached", { count: sw.wiki.pages })}</p>
 						{:else}
 							{#if download?.state === "error"}
-								<p class="text-destructive mb-2 flex items-start gap-2" role="status"><Icon name="error" size={16} class="mt-0.5" />Téléchargement interrompu{download.message ? ` : ${download.message}` : ""}. Les pages déjà reçues sont conservées.</p>
+								<p class="text-destructive mb-2 flex items-start gap-2" role="status"><Icon name="error" size={16} class="mt-0.5" />{download.message ? t("offline.interruptedWith", { detail: download.message }) : t("offline.interrupted")}</p>
 							{:else if download?.state === "cancelled"}
-								<p class="text-muted-foreground mb-2" role="status">Téléchargement annulé. Les pages déjà reçues sont conservées.</p>
+								<p class="text-muted-foreground mb-2" role="status">{t("offline.cancelled")}</p>
 							{:else if download?.state === "done"}
-								<p class="mb-2" role="status">Téléchargement terminé.</p>
+								<p class="mb-2" role="status">{t("offline.done")}</p>
 							{/if}
 							<Button variant="outline" size="sm" disabled={offline} onclick={() => post({ type: "download-all" })}>
-								<Icon name="download" size={16} />{download?.state === "error" ? "Réessayer le téléchargement" : "Télécharger tout le wiki"}
+								<Icon name="download" size={16} />{download?.state === "error" ? t("offline.retryDownload") : t("offline.downloadAll")}
 							</Button>
 							<p class="text-muted-foreground mt-2 text-xs">
-								{offline ? "Reconnectez-vous pour télécharger." : `Environ ${formatBytes(estimateBytes(left))} (estimation), ${cachedLabel} fichiers déjà conservés.`}
+								{offline ? t("offline.reconnect") : t("offline.estimate", { size: formatBytes(estimateBytes(left)), cached: cachedLabel })}
 							</p>
 						{/if}
 					</div>
@@ -212,11 +214,11 @@
 			{/if}
 
 			<dl class="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t pt-3 text-xs">
-				<dt>Connexion</dt><dd>{offline ? "hors ligne" : "en ligne"}</dd>
-				{#if sw}<dt>Version locale</dt><dd><code>{sw.version}</code></dd>{/if}
-				{#if sw && sw.version !== version}<dt>Cette page</dt><dd><code>{version}</code></dd>{/if}
+				<dt>{t("offline.connection")}</dt><dd>{offline ? t("offline.state.offline") : t("offline.state.online")}</dd>
+				{#if sw}<dt>{t("offline.localVersion")}</dt><dd><code>{sw.version}</code></dd>{/if}
+				{#if sw && sw.version !== version}<dt>{t("offline.thisPage")}</dt><dd><code>{version}</code></dd>{/if}
 			</dl>
-			{#if waiting}<p class="text-muted-foreground mt-2 text-xs">Une nouvelle version est prête : elle prendra le relais quand tous les onglets du site seront fermés.</p>{/if}
+			{#if waiting}<p class="text-muted-foreground mt-2 text-xs">{t("offline.waiting")}</p>{/if}
 		</div>
 	{/if}
 
@@ -228,7 +230,7 @@
 			class="bg-background {phase === 'error' ? 'text-destructive' : 'text-muted-foreground'}"
 			aria-expanded={open}
 			aria-controls={open ? panelId : undefined}
-			aria-label="Mode hors ligne : {label}"
+			aria-label={t("offline.buttonLabel", { label })}
 			onclick={toggleOpen}
 		>
 			<Icon name={icon} size={18} class={phase === "preparing" && !offline ? "motion-safe:animate-spin" : ""} />
@@ -236,7 +238,7 @@
 		<!-- always in the DOM: an `aria-live` region must exist before its text changes -->
 		<div aria-live="polite" class="pointer-events-none">
 			{#if offline || announce}
-				<p class="bg-background text-muted-foreground rounded-md border px-2.5 py-1 text-xs shadow-sm">{offline && !announce ? "Hors ligne" : announce}</p>
+				<p class="bg-background text-muted-foreground rounded-md border px-2.5 py-1 text-xs shadow-sm">{offline && !announce ? t("offline.offline") : announce}</p>
 			{/if}
 		</div>
 	</div>

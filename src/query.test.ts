@@ -23,8 +23,8 @@ test("search query: filters, quotes, exclusions, accents", async () => {
   const labels = (q: string) => chips(parseQuery(q)).map((c) => c.label);
   expect(labels("#llm #llm")).toEqual(["#llm"]);
   expect(labels("#llm tag:LLM")).toEqual(["#llm"]);
-  expect(labels("-x -x type:source -type:source -#llm #llm")).toEqual(["type:Source", "sans type:Source", "sans #llm", "#llm", "sans x"]);
-  expect(labels('"a b" "a b"')).toEqual(["« a b »"]);
+  expect(labels("-x -x type:source -type:source -#llm #llm")).toEqual(["type:Source", "without type:Source", "without #llm", "#llm", "without x"]);
+  expect(labels('"a b" "a b"')).toEqual(["“a b”"]);
   expect(chips(parseQuery("#llm x #llm"))[0].raws).toEqual(["#llm", "#llm"]);
   expect(removeToken("#llm x #llm", "#llm")).toBe("x");
   expect(removeToken("#llm2 #llm", "#llm")).toBe("#llm2");

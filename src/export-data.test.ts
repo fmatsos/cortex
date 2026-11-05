@@ -76,19 +76,19 @@ test.skipIf(!ROOT)("assainissement : non-régression sur le rendu des pages rée
 test("encarts : l'avertissement de source partielle sort de la note personnelle", async () => {
   const html = noteCallouts(md("> [!note] Note personnelle\n> suivre la crise.\n>\n> ⚠️ Article partiel à cause du paywall : 30 % extrait.\n\nSuite."));
   expect(html).toBe(
-    '<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>suivre la crise.</p>\n</aside>' +
-    '<aside class="callout-warning" role="note"><p class="callout-warning-titre">Avertissement</p><p>Article partiel à cause du paywall : 30 % extrait.</p></aside>\n<p>Suite.</p>\n',
+    '<aside class="personal-note" role="note"><p class="personal-note-title">Note personnelle</p><p>suivre la crise.</p>\n</aside>' +
+    '<aside class="callout-warning" role="note"><p class="callout-warning-title">Warning</p><p>Article partiel à cause du paywall : 30 % extrait.</p></aside>\n<p>Suite.</p>\n',
   );
   expect(html).not.toContain("⚠");
   // without a blank line, in the same paragraph
   const same = noteCallouts(md("> [!note] Note personnelle\n> pourquoi\n> ⚠️ Aperçu public seulement."));
   expect(same).toContain('<p>pourquoi</p>');
-  expect(same).toContain('<p class="callout-warning-titre">Avertissement</p><p>Aperçu public seulement.</p>');
+  expect(same).toContain('<p class="callout-warning-title">Warning</p><p>Aperçu public seulement.</p>');
   // dedicated Markdown convention: > [!warning] Title
-  expect(noteCallouts(md("> [!warning]\n> Attention."))).toBe('<aside class="callout-warning" role="note"><p class="callout-warning-titre">Avertissement</p><p>Attention.</p>\n</aside>\n');
-  expect(noteCallouts(md("> [!warning] Contenu tronqué\n> ⚠️ Texte."))).toContain('<p class="callout-warning-titre">Contenu tronqué</p><p>Texte.</p>');
+  expect(noteCallouts(md("> [!warning]\n> Attention."))).toBe('<aside class="callout-warning" role="note"><p class="callout-warning-title">Warning</p><p>Attention.</p>\n</aside>\n');
+  expect(noteCallouts(md("> [!warning] Contenu tronqué\n> ⚠️ Texte."))).toContain('<p class="callout-warning-title">Contenu tronqué</p><p>Texte.</p>');
   // a note without a warning does not change; neither does an ordinary quote
-  expect(noteCallouts(md("> [!note]\n> sans titre"))).toContain('<aside class="note-perso" role="note"><p class="note-perso-titre">Note personnelle</p><p>sans titre');
+  expect(noteCallouts(md("> [!note]\n> sans titre"))).toContain('<aside class="personal-note" role="note"><p class="personal-note-title">Personal note</p><p>sans titre');
   expect(noteCallouts(md("> ⚠️ une citation ordinaire"))).toContain("<blockquote>");
 
   // on real pages (if CORTEX_ROOT is set)
@@ -97,7 +97,7 @@ test("encarts : l'avertissement de source partielle sort de la note personnelle"
   for (const d of real) {
     const r = render(d.body, `${d.path.replace(/\.md$/, "")}/`, new Set());
     expect(r.html.match(/class="callout-warning"/g)).toHaveLength(1);
-    expect(r.html).toMatch(/<aside class="note-perso"[^]*?<\/aside><aside class="callout-warning"/);
+    expect(r.html).toMatch(/<aside class="personal-note"[^]*?<\/aside><aside class="callout-warning"/);
     expect(r.html).not.toContain("⚠");
     expect(r.warnings.some(isPartialWarning)).toBe(true);
   }
@@ -159,9 +159,9 @@ test("export : partial, tri par titre (collation française), liens orientés, r
   expect(search.docs.find((d) => d.id === "concepts/avertie")!.partial).toBe(true);
   expect(search.docs.find((d) => d.id === "concepts/etude")!.partial).toBe(false);
   const avertie = by("concepts/avertie");
-  expect(avertie.html).toContain('<p class="callout-warning-titre">Avertissement</p>');
+  expect(avertie.html).toContain('<p class="callout-warning-title">Warning</p>');
   expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).toContain("Aperçu public seulement"); // the warning text is searchable…
-  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).not.toContain("Avertissement"); // …not its title
+  expect(search.docs.find((d) => d.id === "concepts/avertie")!.text).not.toContain("Warning"); // …not its title
   // author HTML sanitized in the exported data
   expect(avertie.html).not.toMatch(/onerror|javascript:/i);
   expect(avertie.html).toContain("<code>&lt;b&gt;</code>");

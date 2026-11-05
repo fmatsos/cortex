@@ -4,6 +4,7 @@
 	import { hasTerms, hitRanges, hitTerms, type HitTerms } from "#lib/article.js";
 	import { parseQuery } from "#lib/query.js";
 	import { toRoute } from "#lib/links.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	// Reading a search result (UX26): when the address carries `?q=`, the found terms are highlighted in the body
 	// (`<mark>`), "Aller au passage trouvé" leads to the first, then "Passage suivant / précédent" walks through the others;
@@ -72,7 +73,7 @@
 		m.setAttribute("data-current", "");
 		m.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 		const around = (m.parentElement?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
-		announce = `Passage ${at + 1} sur ${marks.length} : ${around}`;
+		announce = tr("hits.announce", { n: at + 1, total: marks.length, text: around });
 	};
 
 	const searchHref = $derived(`${toRoute("/search")}?q=${encodeURIComponent(q)}`);
@@ -82,23 +83,23 @@
 
 {#if active}
 	<section aria-labelledby="hits-title" class="bg-card mb-6 rounded-lg border p-3 text-sm print:hidden">
-		<h2 id="hits-title" class="flex items-center gap-2 font-semibold"><Icon name="search" size={16} />Recherche « {q.trim()} »</h2>
+		<h2 id="hits-title" class="flex items-center gap-2 font-semibold"><Icon name="search" size={16} />{tr("hits.title", { q: q.trim() })}</h2>
 		<p class="text-muted-foreground mt-1">
-			{#if marks.length}{marks.length >= MAX ? `${MAX} passages ou plus` : `${marks.length} passage${marks.length > 1 ? "s" : ""}`} surligné{marks.length > 1 ? "s" : ""} dans le texte.
-			{:else}Aucun passage du texte ne reprend ces termes à l'identique : ils figurent peut-être dans le titre, la description, ou sous une forme voisine.{/if}
+			{#if marks.length}{marks.length >= MAX ? tr("hits.countMax", { count: MAX }) : tr("hits.count", { count: marks.length })}
+			{:else}{tr("hits.none")}{/if}
 		</p>
 		<div class="mt-2 flex flex-wrap items-center gap-2">
 			{#if marks.length}
 				<Button size="sm" onclick={() => go(at < 0 ? 0 : at + 1)}>
-					<Icon name="chevron-down" size={16} />{at < 0 ? "Aller au passage trouvé" : "Passage suivant"}
+					<Icon name="chevron-down" size={16} />{at < 0 ? tr("hits.goTo") : tr("hits.next")}
 				</Button>
 				{#if at >= 0}
-					<Button variant="outline" size="sm" onclick={() => go(at - 1)}><Icon name="chevron-down" size={16} class="rotate-180" />Passage précédent</Button>
+					<Button variant="outline" size="sm" onclick={() => go(at - 1)}><Icon name="chevron-down" size={16} class="rotate-180" />{tr("hits.previous")}</Button>
 					<span class="text-muted-foreground" aria-hidden="true">{at + 1} / {marks.length}</span>
 				{/if}
 			{/if}
-			<Button variant="outline" size="sm" href={searchHref} onclick={back}><Icon name="back" size={16} />Retour aux résultats</Button>
-			<Button variant="ghost" size="sm" onclick={() => (dismissed = key)}><Icon name="clear" size={16} />Effacer le surlignage</Button>
+			<Button variant="outline" size="sm" href={searchHref} onclick={back}><Icon name="back" size={16} />{tr("hits.backToResults")}</Button>
+			<Button variant="ghost" size="sm" onclick={() => (dismissed = key)}><Icon name="clear" size={16} />{tr("hits.clear")}</Button>
 		</div>
 		<p role="status" class="sr-only">{announce}</p>
 	</section>

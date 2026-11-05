@@ -25,19 +25,22 @@ export const interactiveWith = (fallback: (prompt: string) => string[]) => (prom
  * (`bun install --omit optional` installation: ~94 MB instead of ~1.2 GB of per-platform binaries).
  */
 export function cli(name: string): string {
-  const p = Bun.which(name);
-  if (!p) throw new Error(`CLI « ${name} » introuvable dans le PATH : le SDK s'appuie sur la CLI installée.`);
+  const p = Bun.which(name, { PATH: process.env.PATH }); // the current PATH: Bun.which alone may read the startup one
+  if (!p) throw new Error(`CLI "${name}" not found in PATH: cortex drives the agent CLI already installed.`);
   return p;
 }
 
-/** Lazy loading: the SDK of an unconfigured client is never imported. */
-export async function load<T>(pkg: string): Promise<T> {
-  try { return (await import(pkg)) as T; }
+/**
+ * Lazy loading: the SDK of an unconfigured client is never imported. `importer` holds a literal `import("…")` so that
+ * `bun build --compile` bundles the SDK (its JS only: the agent CLI stays the one installed, see `cli`).
+ */
+export async function load<T>(pkg: string, importer: () => Promise<unknown> = () => import(pkg)): Promise<T> {
+  try { return (await importer()) as T; }
   catch (e) {
     // only "this very package is missing" is reported as such; any other failure (syntax error, missing peer…) keeps its own message
     const { message = "" } = e as { message?: string };
     const missing = message.match(/^Cannot find (?:module|package) ['"]([^'"]+)['"]/)?.[1]; // the specifier that failed to resolve
     if (missing !== pkg) throw e;
-    throw new Error(`SDK absent : bun add ${pkg}`);
+    throw new Error(`SDK missing: bun add ${pkg}`);
   }
 }

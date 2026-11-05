@@ -26,7 +26,7 @@ export async function changed(root: string, report?: Report): Promise<Map<string
   const out = await git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ".");
   const m = new Map<string, string>();
   if (out === undefined) {
-    if (!unversioned.has(root)) { unversioned.add(root); report?.({ level: "warn", text: "pas de dépôt git : le périmètre de l'agent n'est pas vérifié" }); }
+    if (!unversioned.has(root)) { unversioned.add(root); report?.({ level: "warn", text: "no git repository: the agent's scope is not checked" }); }
     return m;
   }
   const prefix = ((await git(root, "rev-parse", "--show-prefix")) ?? "").trim(); // "" when root is the repository top, else "sub/dir/"
@@ -62,7 +62,7 @@ export async function outOfScope(root: string, before: Map<string, string>, repo
 /** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by cortex.json. */
 async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report): Promise<number> {
   const root = w.root;
-  if (homeInside(root)) { report({ level: "fail", text: "la racine du cerveau contient ton répertoire personnel : l'agent ne pourrait plus écrire son état (~/.claude…). Utilise un dossier dédié." }); return 1; }
+  if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
   const backend = await backendFor(root, await w.config());
   prompt = scopePrefix(root, mode === "write", (await w.config()).language) + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
@@ -83,7 +83,7 @@ export async function markCompiled(root: string, path: string) {
   const txt = await readFile(file, "utf8");
   const fmEnd = txt.match(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---/)?.[0].length ?? 0;
   const head = txt.slice(0, fmEnd).replace(/^(status:[ \t]*)["']?pending["']?([ \t]*\r?)$/m, "$1compiled$2");
-  if (head === txt.slice(0, fmEnd)) throw new Error(`statut pending introuvable dans ${path}`);
+  if (head === txt.slice(0, fmEnd)) throw new Error(`pending status not found in ${path}`);
   await writeFile(`${file}.tmp`, head + txt.slice(fmEnd));
   await rename(`${file}.tmp`, file);
 }
@@ -94,8 +94,8 @@ export function resolveRawId<T extends { path: string }>(docs: T[], id: string):
   const exact = docs.find((d) => idOf(d) === id);
   if (exact) return exact;
   const hits = docs.filter((d) => id !== "" && idOf(d).startsWith(id));
-  if (hits.length > 1) throw new Error(`id ambigu : ${hits.map(idOf).join(", ")}`);
-  if (!hits.length) throw new Error(`Source introuvable : ${id}`);
+  if (hits.length > 1) throw new Error(`ambiguous id: ${hits.map(idOf).join(", ")}`);
+  if (!hits.length) throw new Error(`Source not found: ${id}`);
   return hits[0]!;
 }
 
@@ -111,28 +111,28 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
   const targets = opts.pending
     ? raw.filter((d) => d.fm.status === "pending")
     : ids.map((id) => resolveRawId(raw, id));
-  if (!targets.length) { say("info", "Rien à compiler."); return done(true); }
+  if (!targets.length) { say("info", "Nothing to compile."); return done(true); }
 
   let ok = true;
   const sink: Report = (m) => say(m.level, m.text, m.mark);
   for (const d of targets) {
     const id = rawId(d.path);
-    if (!String(d.fm.note ?? "").trim()) { say("fail", `${id} : note vide. Renseigne l'intention (champ note) avant de compiler.`); ok = false; continue; }
-    if (d.fm.status !== "pending") say("info", paint.dim(`(${id} est déjà ${d.fm.status} : recompilation)`));
+    if (!String(d.fm.note ?? "").trim()) { say("fail", `${id}: empty note. Fill in the intent (note field) before compiling.`); ok = false; continue; }
+    if (d.fm.status !== "pending") say("info", paint.dim(`(${id} is already ${d.fm.status}: recompiling)`));
     const cfg = await w.config();
     const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), batch: opts.batch, language: cfg.language });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     const code = await run(w, prompt, !!opts.batch, "write", sink);
     const stray = await outOfScope(root, before, sink);
-    if (stray.length) { say("warn", `l'agent a modifié hors de wiki/ : ${stray.join(", ")}`, "⚠"); ok = false; }
+    if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
     if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
       if (d.fm.status === "pending") {
         try { await markCompiled(root, d.path); }
-        catch (e) { say("fail", `${id} : ${(e as Error).message}`); ok = false; continue; }
+        catch (e) { say("fail", `${id}: ${(e as Error).message}`); ok = false; continue; }
       }
-      say("ok", `${id} compilée`);
-    } else { say("fail", `${id} : aucune page Source ne cite la source (agent sorti avec ${code}) ; statut inchangé.`); ok = false; }
+      say("ok", `${id} compiled`);
+    } else { say("fail", `${id}: no Source page cites the source (agent exited with ${code}); status unchanged.`); ok = false; }
   }
   await regenerateCtx(openWiki(root));
   return done(ok);
@@ -152,7 +152,7 @@ export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: 
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
   let ok = !code;
-  if (stray.length) { say("warn", `fichiers modifiés hors du périmètre autorisé : ${stray.join(", ")}`, "⚠"); ok = false; }
+  if (stray.length) { say("warn", `files modified outside the allowed scope: ${stray.join(", ")}`, "⚠"); ok = false; }
   if (opts.file) {
     await regenerateCtx(openWiki(root)); // fresh context: the agent just wrote pages
   }

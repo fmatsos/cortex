@@ -13,7 +13,7 @@ export function findRoot(from = process.cwd()): string {
   if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
   for (let d = from; ; d = dirname(d)) {
     if (existsSync(join(d, "cortex.json"))) return d;
-    if (dirname(d) === d) throw new Error("cortex.json introuvable : lance cortex dans le wiki (cortex config init le crée) ou définis CORTEX_ROOT.");
+    if (dirname(d) === d) throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it) or set CORTEX_ROOT.");
   }
 }
 
@@ -26,7 +26,7 @@ export function parseDoc(path: string, txt: string): Doc {
   const m = txt.match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---\r?\n?/);
   if (!m) return { path, fm: {}, body: txt };
   const fm = (m[1] === undefined ? null : Bun.YAML.parse(m[1])) ?? {};
-  if (typeof fm !== "object" || Array.isArray(fm)) throw new Error("frontmatter invalide : objet YAML attendu");
+  if (typeof fm !== "object" || Array.isArray(fm)) throw new Error("invalid frontmatter: YAML object expected");
   return { path, fm: fm as Fm, body: txt.slice(m[0].length) };
 }
 
@@ -142,7 +142,7 @@ export function linkGraph(docs: Page[]): LinkGraph {
 export function related(docs: Page[], path: string, graph: LinkGraph = linkGraph(docs)): Related[] {
   const pages = docs.filter((d) => !isReservedPage(d.path));
   const me = pages.find((d) => d.path === fromResource(path));
-  if (!me) throw new Error(`Page wiki introuvable : ${path}`);
+  if (!me) throw new Error(`Wiki page not found: ${path}`);
   const out = graph.links.get(me.path), inc = graph.backlinks.get(me.path), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
   const hits: Related[] = [];
   for (const d of pages) {

@@ -47,8 +47,8 @@ test("search: the valid page is still found, the invalid one warned about", asyn
 test("lint: the invalid page is an error, the valid one is still checked", async () => {
   const issues = await lint(wikiWithBadPage());
   expect(issues.find((i) => i.path === BAD)).toMatchObject({ level: "error" });
-  expect(issues.find((i) => i.path === BAD)!.msg).toContain("YAML invalide");
-  expect(issues.some((i) => i.path === GOOD && i.msg.includes("orpheline"))).toBe(true);
+  expect(issues.find((i) => i.path === BAD)!.msg).toContain("invalid YAML");
+  expect(issues.some((i) => i.path === GOOD && i.msg.includes("orphan"))).toBe(true);
 });
 
 test("isReservedPage: wiki/index.md and wiki/log.md only", () => {

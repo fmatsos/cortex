@@ -15,7 +15,7 @@ export default function agnostic(): Backend {
       const args = cmd[0] === "claude" ? [...cmd, "--allowedTools", ...tools] : cmd;
       const p = Bun.spawn(confine(root, args, mode), { cwd: root, stdin: new TextEncoder().encode(prompt), stdout: "pipe", stderr: "inherit" });
       const out = await new Response(p.stdout).text();
-      if (await p.exited) throw new Error(`${cmd[0]} sorti en erreur`);
+      if (await p.exited) throw new Error(`${cmd[0]} exited with an error`);
       return out.trim();
     },
   };

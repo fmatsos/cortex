@@ -1,11 +1,13 @@
 import { TYPES } from "#lib/type-meta.js";
+import type { Key } from "#lib/i18n/index.js";
 import { site } from "./data.js";
 
-export type Example = { q: string; hint: string };
+/** `hint`: a translation key, rendered with t() (the visitor may switch language after the prerender). */
+export type Example = { q: string; hint: Key };
 export type Seed = {
 	total: number;
 	nbTags: number;
-	types: { type: string; plural: string; count: number }[];
+	types: { type: string; count: number }[];
 	tags: { tag: string; count: number }[]; // most frequent
 	examples: Example[];
 };
@@ -19,15 +21,15 @@ export function searchSeed(): Seed {
 	const top = [...tags].sort((a, b) => b.ids.length - a.ids.length || a.tag.localeCompare(b.tag, "fr")).slice(0, 12).map((t) => ({ tag: t.tag, count: t.ids.length }));
 	const n = (f: (p: (typeof pages)[number]) => boolean) => pages.filter(f).length;
 	const examples: Example[] = [];
-	if (top[0]) examples.push({ q: `#${top[0].tag}`, hint: "les pages d'un tag" });
-	if (n((p) => p.type === "Synthesis")) examples.push({ q: "type:synthesis", hint: "uniquement les synthèses" });
-	if (n((p) => p.status === "draft")) examples.push({ q: "status:draft", hint: "les brouillons" });
-	if (n((p) => !p.verified)) examples.push({ q: "is:unverified", hint: "pages jamais relues" });
-	if (n((p) => p.partial)) examples.push({ q: "is:partial", hint: "sources à contenu partiel" });
+	if (top[0]) examples.push({ q: `#${top[0].tag}`, hint: "seed.tag" });
+	if (n((p) => p.type === "Synthesis")) examples.push({ q: "type:synthesis", hint: "seed.syntheses" });
+	if (n((p) => p.status === "draft")) examples.push({ q: "status:draft", hint: "seed.drafts" });
+	if (n((p) => !p.verified)) examples.push({ q: "is:unverified", hint: "seed.unverified" });
+	if (n((p) => p.partial)) examples.push({ q: "is:partial", hint: "seed.partial" });
 	return {
 		total: pages.length,
 		nbTags: tags.length,
-		types: TYPES.map((t) => ({ type: t.type, plural: t.plural, count: n((p) => p.type === t.type) })),
+		types: TYPES.map((t) => ({ type: t.type, count: n((p) => p.type === t.type) })),
 		tags: top,
 		examples,
 	};

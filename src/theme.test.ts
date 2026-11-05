@@ -101,7 +101,7 @@ pair("--note-foreground", "--note-background"); // « Note personnelle » title
 pair("--foreground", "--note-background"); // body
 pair("--warning-foreground", "--warning-background"); // « Avertissement » title and caution badge
 pair("--foreground", "--warning-background");
-for (const k of ["concept", "entity", "synthesis", "source", "autre"]) for (const bg of ["--background", "--card", "--muted"]) pair(`--type-${k}`, bg); // page type, even as text
+for (const k of ["concept", "entity", "synthesis", "source", "other"]) for (const bg of ["--background", "--card", "--muted"]) pair(`--type-${k}`, bg); // page type, even as text
 for (const k of ["add", "ingest", "query", "lint", "update"]) {
   for (const bg of ["--background", "--card", "--muted"]) pair(`--kind-${k}`, bg); // journal type, even as text
   text(`kind-${k} / pastille teintée 14 %`, tok(`--kind-${k}`), mix(`--kind-${k}`, 0.14, 0.14, "--card"));

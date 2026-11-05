@@ -47,7 +47,7 @@
 	--type-entity: #9a4d07;
 	--type-synthesis: #247342;
 	--type-source: #546875;
-	--type-autre: #5b6870;
+	--type-other: #5b6870;
 	/* one hue per log entry type */
 	--kind-add: #247342;
 	--kind-ingest: #315bc5;
@@ -98,7 +98,7 @@
 		--type-entity: #f4ba76;
 		--type-synthesis: #83d7a4;
 		--type-source: #aec2cd;
-		--type-autre: #b4c0c8;
+		--type-other: #b4c0c8;
 		--kind-add: #83d7a4;
 		--kind-ingest: #9cb7ff;
 		--kind-query: #d2b0f5;
@@ -140,7 +140,7 @@
 	--type-entity: #f4ba76;
 	--type-synthesis: #83d7a4;
 	--type-source: #aec2cd;
-	--type-autre: #b4c0c8;
+	--type-other: #b4c0c8;
 	--kind-add: #83d7a4;
 	--kind-ingest: #9cb7ff;
 	--kind-query: #d2b0f5;
@@ -319,7 +319,7 @@ a.link-content:visited {
 
 /* callouts: personal note (yellow) and warning (rust), two distinct functions; the title icon comes from the pack
    (CSS mask: the exported HTML carries no SVG; src/icons.test.ts checks that it follows lib/icons.ts) */
-.wiki .note-perso,
+.wiki .personal-note,
 .wiki .callout-warning {
 	margin: 1.25rem 0;
 	padding: 0.85rem 1rem;
@@ -328,7 +328,7 @@ a.link-content:visited {
 	border-left-width: 4px;
 	color: var(--foreground);
 }
-.wiki .note-perso {
+.wiki .personal-note {
 	--callout: var(--note-foreground);
 	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M5 5.5A2.5 2.5 0 0 1 7.5 3h9A2.5 2.5 0 0 1 19 5.5V14l-5 5H7.5A2.5 2.5 0 0 1 5 16.5z'/%3E%3Cpath d='M14 19v-3.5a1.5 1.5 0 0 1 1.5-1.5H19'/%3E%3C/svg%3E");
 	background: var(--note-background);
@@ -338,13 +338,13 @@ a.link-content:visited {
 	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M10.3 4.5 3.2 17a2 2 0 0 0 1.7 3h14.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9.5v4M12 17h.01'/%3E%3C/svg%3E");
 	background: var(--warning-background);
 }
-.wiki .note-perso,
+.wiki .personal-note,
 .wiki .callout-warning {
 	border-color: color-mix(in oklch, var(--callout) 35%, transparent);
 	border-left-color: var(--callout);
 }
-.wiki .note-perso-titre,
-.wiki .callout-warning-titre {
+.wiki .personal-note-title,
+.wiki .callout-warning-title {
 	display: flex;
 	align-items: center;
 	gap: 0.4rem;
@@ -354,8 +354,8 @@ a.link-content:visited {
 	line-height: 1.4;
 	color: var(--callout);
 }
-.wiki .note-perso-titre::before,
-.wiki .callout-warning-titre::before {
+.wiki .personal-note-title::before,
+.wiki .callout-warning-title::before {
 	content: "";
 	flex: none;
 	width: 1.15rem;
@@ -364,7 +364,7 @@ a.link-content:visited {
 	-webkit-mask: var(--callout-icon) center / contain no-repeat;
 	mask: var(--callout-icon) center / contain no-repeat;
 }
-.wiki .note-perso > p:last-child,
+.wiki .personal-note > p:last-child,
 .wiki .callout-warning > p:last-child {
 	margin-bottom: 0;
 }
@@ -451,7 +451,7 @@ a.link-content:visited {
 	text-decoration: none;
 	padding: 0 0.1rem;
 }
-.lien-manquant {
+.missing-link {
 	border-bottom: 1px dashed var(--muted-foreground);
 	cursor: help;
 }
@@ -551,7 +551,7 @@ mark {
 		--type-entity: #9a4d07;
 		--type-synthesis: #247342;
 		--type-source: #546875;
-		--type-autre: #5b6870;
+		--type-other: #5b6870;
 		--kind-add: #247342;
 		--kind-ingest: #315bc5;
 		--kind-query: #7844a1;
@@ -592,7 +592,7 @@ mark {
 	.wiki h4 {
 		break-after: avoid;
 	}
-	.wiki .note-perso,
+	.wiki .personal-note,
 	.wiki .callout-warning,
 	.wiki table,
 	.wiki pre,

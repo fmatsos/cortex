@@ -94,6 +94,7 @@ export const ICONS = {
 	offline: `<path d="M3 9.2a13.5 13.5 0 0 1 18 0M6.2 12.8a8.8 8.8 0 0 1 11.6 0M9.4 16.2a4.2 4.2 0 0 1 5.2 0M12 19.7h.01M4 4l16 16"/>`,
 	"offline-ready": `<path d="m8.5 7.8 2.6 2.6 4.5-5"/><rect x="3.5" y="13.5" width="17" height="7" rx="2"/><path d="M7.5 17h.01"/>`,
 	retry: `<path d="M20 12a8 8 0 1 1-2.3-5.6L20 8.6M20 3.5v5.1h-5.1"/>`,
+	language: `<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.75 5.6 3.75 9S14.5 18.4 12 21c-2.5-2.6-3.75-5.6-3.75-9S9.5 5.6 12 3z"/>`,
 	"new-tab": `<path d="M7 6.5v-1a2 2 0 0 1 2-2h5"/><rect x="3.5" y="9" width="11.5" height="11.5" rx="2"/><path d="m12 12.5 8.5-8.5M15.5 3.5h5v5"/>`,
 } as const;
 

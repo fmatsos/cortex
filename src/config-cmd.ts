@@ -1,3 +1,4 @@
+import { renameSync } from "node:fs";
 import { CONFIG_KEYS, configFile, lintConfig, readConfig, type ConfigIssue } from "./config";
 import { CortexError } from "./lib";
 import { collector, type Result } from "./print";
@@ -10,25 +11,27 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
   const save = async (c: Record<string, unknown>) => {
     const e = lintConfig(c).filter((i) => i.level === "error");
     if (e.length) throw new Error(e.map((i) => i.msg).join(" "));
-    await Bun.write(f, JSON.stringify(c, null, 2) + "\n");
+    // tmp + rename: cortex.json marks the root, a half-written one would break every command
+    await Bun.write(`${f.name}.tmp`, JSON.stringify(c, null, 2) + "\n");
+    renameSync(`${f.name}.tmp`, f.name!);
   };
   const checkKey = () => {
-    if (!(CONFIG_KEYS as readonly string[]).includes(key ?? "")) throw new CortexError(`Propriété attendue : ${CONFIG_KEYS.join(", ")}.`, "usage");
+    if (!(CONFIG_KEYS as readonly string[]).includes(key ?? "")) throw new CortexError(`Expected a property: ${CONFIG_KEYS.join(", ")}.`, "usage");
   };
   switch (sub) {
     case "init": {
       // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
-      if (await f.exists()) throw new Error("cortex.json existe déjà.");
+      if (await f.exists()) throw new Error("cortex.json already exists.");
       await save({ client: key ?? null, model: null, effort: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
-      say("ok", `cortex.json créé${key ? ` (client ${key})` : " (agnostique)"}.`);
+      say("ok", `cortex.json created${key ? ` (client ${key})` : " (agnostic)"}.`);
       const { writeSchema } = await import("./schema");
       const w = await writeSchema(root, false);
-      if (w.written) say("ok", `${w.file} créé : le schéma que suit l'agent.`);
-      else say("info", `${paint.dim("=")} ${w.file} existe déjà : inchangé (cortex schema --write le remplace).`);
+      if (w.written) say("ok", `${w.file} created: the schema the agent follows.`);
+      else say("info", `${paint.dim("=")} ${w.file} already exists: unchanged (cortex schema --write replaces it).`);
       return done(true);
     }
     case "lint": {
-      if (!(await f.exists())) { say("info", "Pas de cortex.json : mode agnostique."); return done(true); }
+      if (!(await f.exists())) { say("info", "No cortex.json: agnostic mode."); return done(true); }
       let issues: ConfigIssue[];
       try { issues = lintConfig(await readConfig(root)); } catch (e) { issues = [{ level: "error", msg: (e as Error).message }]; }
       for (const i of issues) say("info", `${i.level === "error" ? paint.error("✗") : paint.warn("!")} ${i.msg}`); // stdout, as before
@@ -44,7 +47,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     }
     case "set":
       checkKey();
-      if (!value) throw new CortexError(`Usage : cortex config set ${key} <valeur>`, "usage");
+      if (!value) throw new CortexError(`Usage: cortex config set ${key} <value>`, "usage");
       await save({ ...(await readConfig(root)), [key]: value });
       return done(true);
     case "remove": {
@@ -55,6 +58,6 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       return done(true);
     }
     default:
-      throw new CortexError("Usage : cortex config init [claude|codex|opencode] | lint | get [clé] | set <clé> <valeur> | remove <clé>", "usage");
+      throw new CortexError("Usage: cortex config init [claude|codex|opencode] | lint | get [key] | set <key> <value> | remove <key>", "usage");
   }
 }

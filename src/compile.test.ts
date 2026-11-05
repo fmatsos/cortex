@@ -27,7 +27,7 @@ describe("markCompiled", () => {
   test("no status line throws and leaves the file byte-identical", async () => {
     const src = "---\ntype: RawSource\n---\nbody\n";
     const t = setup(src);
-    await expect(markCompiled(t.root, t.path)).rejects.toThrow("statut pending introuvable");
+    await expect(markCompiled(t.root, t.path)).rejects.toThrow("pending status not found");
     expect(t.read()).toBe(src);
   });
   test("a body line `status: pending` is left untouched", async () => {
@@ -50,12 +50,12 @@ describe("resolveRawId", () => {
     expect(resolveRawId(docs, "01aa").path).toContain("/01aa-x/");
   });
   test("ambiguous prefix lists candidates", () => {
-    expect(() => resolveRawId(docs, "01a")).toThrow("id ambigu : 01aa-x, 01ab-y");
+    expect(() => resolveRawId(docs, "01a")).toThrow("ambiguous id: 01aa-x, 01ab-y");
   });
   test("unknown id", () => {
-    expect(() => resolveRawId(docs, "nope")).toThrow("Source introuvable : nope");
+    expect(() => resolveRawId(docs, "nope")).toThrow("Source not found: nope");
   });
   test("substring that is not a prefix no longer matches", () => {
-    expect(() => resolveRawId(docs, "cc-z")).toThrow("Source introuvable");
+    expect(() => resolveRawId(docs, "cc-z")).toThrow("Source not found");
   });
 });

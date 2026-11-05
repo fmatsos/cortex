@@ -13,7 +13,7 @@ import {
 // Offline (see docs/DESIGN.md, "Hors ligne"). Two levels:
 //  - the base (`_app/` resources, pages outside `wiki/`, search index, graph) is precached at installation;
 //  - wiki pages are kept as they are visited (`runtime` cache, bounded), or all at once on explicit
-//    request ("Télécharger tout le wiki", `download-all` message).
+//    request ("Download the whole wiki", `download-all` message).
 // `version` = fingerprint of the data AND of the frontend (CORTEX_SITE_VERSION): a change in either changes the caches.
 
 // Manifest paths are relative to the base path: they are resolved against the service worker's scope,
@@ -90,7 +90,7 @@ async function precache() {
 	phase = "ready";
 	phaseMessage = undefined;
 	// read-only site: the new version takes over without waiting for the tabs to close
-	// (otherwise an old service worker, which does not know the `status` message, leaves the indicator on "Préparation")
+	// (otherwise an old service worker, which does not know the `status` message, leaves the indicator on "preparing")
 	await self.skipWaiting();
 }
 
@@ -183,7 +183,7 @@ async function downloadAll() {
 	await report_throttled(true);
 	try {
 		await pool(todo, 4, async (f) => {
-			if (cancelled) throw new DOMException("annulé", "AbortError");
+			if (cancelled) throw new DOMException("cancelled", "AbortError");
 			const response = await fetch(f.href);
 			if (!response.ok) throw new Error(`${response.status} ${f.path}`);
 			const blob = await response.blob();

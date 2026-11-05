@@ -22,20 +22,21 @@ jobs:
       - name: Tag matches package.json
         run: test "v$(bun -e 'console.log(require("./package.json").version)')" = "$GITHUB_REF_NAME"
       - run: bun install --frozen-lockfile --omit optional
-      # the binary embeds the sources; cortex export installs the site's locked dependencies in the user's cache
-      - run: scripts/build.sh ${{ matrix.asset }}
-      - run: ./${{ matrix.asset }} --help >/dev/null
-      - name: Export works from the binary alone
-        run: |
-          w=$(mktemp -d) && cd "$w" && "$OLDPWD/${{ matrix.asset }}" config init >/dev/null
-          p=$(CORTEX_ROOT="$w" "$OLDPWD/${{ matrix.asset }}" new Concept "Test")
-          perl -pi -e 's/^type: Concept$/type: Concept\ntags: [test]/' "$p"
-          env -i HOME="$w/home" PATH=/usr/bin:/bin CORTEX_ROOT="$w" "$OLDPWD/${{ matrix.asset }}" export --out "$w/site"
-          test -f "$w/site/index.html"
+      # both builds embed the sources; cortex export installs the site's locked dependencies in the user's cache
+      - run: scripts/build.sh binary ${{ matrix.asset }}
+      - name: The binary alone runs every offline command
+        run: scripts/check-binary.sh "$PWD/${{ matrix.asset }}"
+      # cortex.js is platform-independent: built and checked once, on Linux
+      - if: runner.os == 'Linux'
+        run: scripts/build.sh bundle cortex.js && scripts/check-binary.sh "$PWD/cortex.js" && gzip -9 cortex.js
+      - run: gzip -9 ${{ matrix.asset }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.gz
+            cortex.js.gz
+          if-no-files-found: ignore
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -51,11 +52,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      - run: sha256sum cortex-* > SHA256SUMS
+      - run: sha256sum cortex*.gz > SHA256SUMS
       # cortex upgrade refuses a SHA256SUMS whose signature does not match the public key built into the binary
       - run: bun repo/scripts/sign.ts SHA256SUMS
         env:
           CORTEX_SIGNING_KEY: ${{ secrets.CORTEX_SIGNING_KEY }}
-      - run: gh release create "$GITHUB_REF_NAME" cortex-* SHA256SUMS SHA256SUMS.sig --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+      - run: gh release create "$GITHUB_REF_NAME" cortex*.gz SHA256SUMS SHA256SUMS.sig --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

@@ -6,6 +6,7 @@
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
+	import { t as tr } from "#lib/i18n/index.js";
 
 	/**
 	 * Page line shared by the palette, the results, the tag lists and the home page: type, title, trust information
@@ -33,11 +34,11 @@
 {#snippet trust()}
 	{#if showStatus}<StatusBadge status={doc.status!} />{/if}
 	{#if doc.needsReview}
-		<Badge variant="caution"><Icon name="needs-review" size={16} />à relire</Badge>
+		<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>
 	{:else if doc.verified === false}
-		<span class="text-muted-foreground inline-flex min-h-6 items-center gap-1 text-sm"><Icon name="unverified" size={16} />jamais relue</span>
+		<span class="text-muted-foreground inline-flex min-h-6 items-center gap-1 text-sm"><Icon name="unverified" size={16} />{tr("page.neverReviewed")}</span>
 	{/if}
-	{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />source partielle</Badge>{/if}
+	{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partialSource")}</Badge>{/if}
 {/snippet}
 
 {#if compact}
@@ -49,8 +50,8 @@
 		<span class="text-muted-foreground flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
 			<span class="sr-only">{typeLabel(doc.type)} :</span>
 			{#if showStatus}<StatusBadge status={doc.status!} />{/if}
-			{#if doc.needsReview}<Badge variant="caution"><Icon name="needs-review" size={16} />à relire</Badge>{/if}
-			{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />partielle</Badge>{/if}
+			{#if doc.needsReview}<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>{/if}
+			{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partial")}</Badge>{/if}
 		</span>
 	</div>
 	{#if snippetHtml || desc}<p class="text-muted-foreground mt-0.5 text-sm {selected ? 'line-clamp-3' : 'line-clamp-1'}">{@html snippetHtml ?? desc}</p>{/if}
@@ -69,7 +70,7 @@
 			{#if snippetHtml}<p class="mt-1.5 text-[0.9375rem] leading-relaxed">{@html snippetHtml}</p>{/if}
 		</div>
 		{#if showFav}
-			<Button variant="ghost" size="icon" aria-pressed={fav} aria-label="Favori : {doc.title}" title="Favoris propres à ce navigateur" onclick={() => favs.toggle(doc.id)}>
+			<Button variant="ghost" size="icon" aria-pressed={fav} aria-label={tr("fav.toggleLabel", { title: doc.title })} title={tr("fav.title")} onclick={() => favs.toggle(doc.id)}>
 				<Icon name="star" size={20} filled={fav} class={fav ? "text-favorite" : "text-muted-foreground"} />
 			</Button>
 		{/if}

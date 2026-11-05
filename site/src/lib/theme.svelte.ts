@@ -1,5 +1,8 @@
 // Theme: follows the system by default; the command palette can force light or dark (remembered in localStorage).
-const KEY = "brain:theme";
+import { storageKey } from "./storage";
+import { t } from "./i18n/index";
+
+const KEY = storageKey("theme");
 const MODES = ["system", "dark", "light"] as const;
 export type Mode =(typeof MODES)[number];
 let mode = $state<Mode>("system");
@@ -12,7 +15,7 @@ const apply = () => {
 
 export const theme = {
 	get mode() { return mode; },
-	get label() { return { system: "système", dark: "sombre", light: "clair" }[mode]; },
+	get label() { return { system: t("theme.system"), dark: t("theme.dark"), light: t("theme.light") }[mode]; },
 	init() { try { const v = localStorage.getItem(KEY); if (v === "dark" || v === "light") mode = v; } catch { /* ignored */ } },
 	cycle() { this.set(MODES[(MODES.indexOf(mode) + 1) % MODES.length]); },
 	/** Explicit choice (header selector); "system" removes `data-theme` and follows the system. */

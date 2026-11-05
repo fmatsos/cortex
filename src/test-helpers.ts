@@ -31,9 +31,9 @@ export const GOLDEN_MCP_RELATED = `[
   "title": "Beta",
   "score": 6,
   "reasons": [
-   "lien sortant",
-   "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
-   "tag partagé : ctx"
+   "outgoing link",
+   "shared source: /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
+   "shared tag: ctx"
   ]
  },
  {
@@ -41,9 +41,9 @@ export const GOLDEN_MCP_RELATED = `[
   "title": "Gamma",
   "score": 6,
   "reasons": [
-   "lien entrant",
-   "source partagée : /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
-   "tag partagé : llm"
+   "incoming link",
+   "shared source: /raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md",
+   "shared tag: llm"
   ]
  }
 ]`;

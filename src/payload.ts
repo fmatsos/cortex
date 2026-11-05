@@ -3,20 +3,25 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import pkg from "../package.json";
 
-declare global { var CORTEX_PAYLOAD: string | undefined }
+declare global {
+  /** Sources tarball (.tar.gz, base64), set by src/bin.ts in the distributed builds only. */
+  var CORTEX_PAYLOAD: string | undefined;
+  /** How this cortex was installed, set by src/bin.ts; undefined when run from the sources. */
+  var CORTEX_DIST: "binary" | "bundle" | undefined;
+}
 
-const asBun = { ...process.env, BUN_BE_BUN: "1" }; // the compiled binary behaves as the bun it embeds
+const asBun = { ...process.env, BUN_BE_BUN: "1" }; // the compiled binary behaves as the bun it embeds (no effect on a real bun)
 
 /**
- * In the compiled binary, runs this command from the embedded sources: Vite (cortex export) needs real files and its
+ * In a distributed build (binary or cortex.js bundle), runs this command from the embedded sources: Vite (cortex export) needs real files and its
  * native bindings on disk. Once per build, the tarball is extracted to ~/.cache/cortex/<version>-<hash>/ and the locked
- * dependencies are installed there (network needed that one time); then the binary reruns itself as `bun` on those
- * sources. Returns the exit code.
+ * dependencies are installed there (network needed that one time); then cortex reruns itself on those sources, with
+ * the bun it embeds (binary) or the one running it (bundle). Returns the exit code.
  */
 export async function runFromSources(root: string): Promise<number> {
   const payload = globalThis.CORTEX_PAYLOAD;
-  if (!payload) throw new Error("binaire sans sources embarquées : reconstruis-le avec scripts/build.sh.");
-  const bytes = await Bun.file(payload).bytes();
+  if (!payload) throw new Error("build without embedded sources: rebuild it with scripts/build.sh.");
+  const bytes = Buffer.from(payload, "base64");
   const cache = process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache");
   const dir = join(cache, "cortex", `${pkg.version}-${new Bun.CryptoHasher("sha256").update(bytes).digest("hex").slice(0, 12)}`);
   if (!existsSync(dir)) {
@@ -25,9 +30,9 @@ export async function runFromSources(root: string): Promise<number> {
     mkdirSync(tmp, { recursive: true });
     try {
       await new Bun.Archive(bytes).extract(tmp);
-      console.error("Premier export de cette version : installation des dépendances du site (une seule fois)…");
+      console.error("First export of this version: installing the site's dependencies (once)…");
       const install = Bun.spawn([process.execPath, "install", "--frozen-lockfile", "--production", "--omit", "optional"], { cwd: tmp, env: asBun, stdio: ["ignore", "inherit", "inherit"] });
-      if ((await install.exited) !== 0) throw new Error("installation des dépendances impossible (réseau ?) : relance cortex export.");
+      if ((await install.exited) !== 0) throw new Error("could not install the dependencies (network?): rerun cortex export.");
       renameSync(tmp, dir);
       // ponytail: no lock; a different build exporting at this very moment loses its folder and fails (rerun it).
       // a new build is in place: earlier versions (~170 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour

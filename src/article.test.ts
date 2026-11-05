@@ -29,14 +29,14 @@ test("section courante : dernier titre passé sous la ligne, dernière section t
 	expect(currentSection([], 100, true)).toBe("");
 });
 
-test("pages liées : motifs courts et dédupliqués, sources communes nommées", () => {
+test("related pages: motifs courts et dédupliqués, sources communes nommées", () => {
 	const labels = (r: { label: string }[]) => r.map((x) => x.label);
 	expect(labels(relatedReasons([{ kind: "source", value: "/raw/a/source.md" }, { kind: "source", value: "/raw/b/source.md" }, { kind: "tag", value: "llm" }, { kind: "tag", value: "agents" }, { kind: "tag", value: "llm" }])))
-		.toEqual(["source commune", "llm, agents"]);
+		.toEqual(["shared source", "llm, agents"]);
 	expect(relatedReasons([{ kind: "out" }, { kind: "in" }, { kind: "source", value: "/raw/a/source.md" }], ["Chroma Research", "OpenAI"]))
-		.toEqual([{ icon: "copy-link", label: "citée ici" }, { icon: "backlink", label: "cite cette page" }, { icon: "source", label: "2 sources communes", detail: "Chroma Research · OpenAI" }]);
+		.toEqual([{ icon: "copy-link", label: "cited here" }, { icon: "backlink", label: "cites this page" }, { icon: "source", label: "2 shared sources", detail: "Chroma Research · OpenAI" }]);
 	expect(relatedReasons([])).toEqual([]);
-	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "source commune", detail: "Titre" }]); // the server knows the source even without an exported reason
+	expect(relatedReasons([], ["Titre"])).toEqual([{ icon: "source", label: "shared source", detail: "Titre" }]); // the server knows the source even without an exported reason
 	expect(actor("human:franck")).toBe("franck");
 	expect(actor("claude-code/opus-5.5")).toBe("claude-code · opus-5.5");
 });
@@ -68,7 +68,7 @@ test("liens : domaine, source originale, graphe, collection, adresse à copier",
 	expect(shareUrl("https://x.test/wiki/a/")).toBe("https://x.test/wiki/a/");
 });
 
-test("lecture d'un résultat : mots (préfixes compris), phrases, accents et chevauchements", () => {
+test("lecture d'un résultat : words (préfixes compris), phrases, accents et chevauchements", () => {
 	const terms = (q: string) => hitTerms(parseQuery(q));
 	const text = "Le Contexte se dégrade : le context rot touche le contexte long.";
 	const words = (q: string) => hitRanges(text, terms(q)).map(([a, b]) => text.slice(a, b));

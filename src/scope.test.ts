@@ -39,7 +39,7 @@ test("REL-13 : hors dépôt git, un avertissement est émis une seule fois", asy
   const msgs: Message[] = [];
   await changed(root, (m) => msgs.push(m));
   await changed(root, (m) => msgs.push(m));
-  expect(msgs.filter((m) => m.level === "warn" && m.text.includes("pas de dépôt git : le périmètre de l'agent n'est pas vérifié"))).toHaveLength(1);
+  expect(msgs.filter((m) => m.level === "warn" && m.text.includes("no git repository: the agent's scope is not checked"))).toHaveLength(1);
 });
 
 test("REL-30 : racine du wiki dans un sous-dossier d'un dépôt plus grand", async () => {

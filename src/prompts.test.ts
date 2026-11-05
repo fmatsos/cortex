@@ -38,7 +38,7 @@ test("same constraints as before: scope, workflows, batch vs interactive", () =>
 
 test("placeholders are filled in one pass and an unknown prompt fails", () => {
   expect(askPrompt({ agentFile: "A.md", question: "{{language}} {{root}}", language: "French" })).toContain("« {{language}} {{root}} »");
-  expect(() => prompt("nope", {})).toThrow("prompt introuvable");
+  expect(() => prompt("nope", {})).toThrow("prompt not found");
 });
 
 test("MCP instructions are derived from language", () => {
