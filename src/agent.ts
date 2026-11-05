@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, sep } from "node:path";
-import { readFile, rename, writeFile } from "node:fs/promises";
-import { rawId, toResource } from "./doc";
+import { basename, join, sep } from "node:path";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
+import { rawId, toResource, type RawSource } from "./doc";
 import { openWiki, type Wiki } from "./context";
 import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
@@ -12,7 +12,11 @@ import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 import { LIMITS } from "./limits";
-import { sha256 } from "./lib";
+import { isReservedPage, localIso, parseDoc, serializeDoc, sha256 } from "./lib";
+import { newPageCtx } from "./naming";
+import { appendLogCtx } from "./log";
+import { split } from "./backends/backend";
+import { collator } from "./text";
 import { askPrompt, compilePrompt, scopePrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
@@ -137,6 +141,42 @@ export function resolveRawId<T extends { path: string }>(docs: T[], id: string):
   return hits[0]!;
 }
 
+/** `generated.by` of the pages an agent touched: client/model:effort, from cortex.json (agnostic: the batch command). */
+export function actor(cfg: { client?: string; model?: string; effort?: string }): string {
+  const client = cfg.client ?? basename(split(process.env.CORTEX_AGENT_BATCH ?? "claude")[0] ?? "agent");
+  return `${client}/${cfg.model ?? "default"}${cfg.effort ? `:${cfg.effort}` : ""}`;
+}
+
+/**
+ * Batch compile: the Source page is written by cortex from what it already knows (path, type, title, status, sources,
+ * generated, note and partial-extraction callouts); the agent only adds what needs reading the source. Undefined when a
+ * page with that title exists already (the agent then writes the Source page as before).
+ */
+async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promise<{ path: string; text: string } | undefined> {
+  const id = rawId(d.path), title = String(d.fm.title ?? id).trim() || id;
+  const note = String(d.fm.note).trim().split(/\r?\n/).map((l) => `> ${l}`).join("\n");
+  const partial = d.fm.partial ? `\n\n> [!warning]\n> ${d.fm.partial === true ? "Partial extraction." : String(d.fm.partial)}` : "";
+  try {
+    const path = await newPageCtx(w, "Source", title, at, {
+      fm: { generated: { by, at: localIso(at) }, sources: [{ id, resource: toResource(d.path), title }] },
+      body: `> [!note] Note personnelle\n${note}${partial}\n`,
+    });
+    return { path, text: await Bun.file(join(w.root, path)).text() };
+  } catch { return undefined; }
+}
+
+/** Sets `generated` (actor and time) on each page of `paths`, body untouched. */
+async function stamp(root: string, paths: string[], by: string, at: Date) {
+  for (const p of paths) {
+    const f = Bun.file(join(root, p));
+    if (!(await f.exists())) continue;
+    try {
+      const doc = parseDoc(p, await f.text());
+      await Bun.write(f, serializeDoc({ ...doc.fm, generated: { by, at: localIso(at) } }, doc.body));
+    } catch { /* unreadable frontmatter: lint reports it, the page is left as the agent wrote it */ }
+  }
+}
+
 /** Does a Source page cite the raw source at `path`? */
 const isCited = async (w: Wiki, path: string) => (await w.citations()).has(toResource(path));
 
@@ -158,12 +198,19 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     if (!String(d.fm.note ?? "").trim()) { say("fail", `${id}: empty note. Fill in the intent (note field) before compiling.`); ok = false; continue; }
     if (d.fm.status !== "pending") say("info", paint.dim(`(${id} is already ${d.fm.status}: recompiling)`));
     const cfg = await w.config();
-    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language });
+    const by = actor(cfg), started = new Date();
+    const pagesBefore = await pageHashes(root);
+    // batch: cortex writes the mechanical part of the Source page; interactive: the agent presents its plan first
+    const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
+    const tags = [...new Set((await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []))].sort(collator.compare);
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)
     const cited: Check = async () => {
       const now = openWiki(root), res = toResource(d.path);
+      if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text)
+        return [`${prepared.path}: the Source page is still as the CLI created it. Add its description, tags, summary, key points and links.`];
       if (await isCited(now, d.path)) return [];
       // what the agent wrote instead: a Source page with another resource, a page of another type…
       const near = (await now.pages()).filter((p) => p.path.includes(id) || JSON.stringify(p.fm.sources ?? "").includes(id))
@@ -172,12 +219,22 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
         `sources: [{ id: ${id}, resource: ${res} }]${near.length ? `. Now: ${near.join("; ")}` : ""}`];
     };
     const code = await runChecked(w, prompt, !!opts.batch, sink, cited);
+    // a prepared page the agent never filled in goes: nothing half-done stays in the wiki
+    if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text) await rm(join(root, prepared.path), { force: true });
+    const pagesAfter = await pageHashes(root);
+    const touched = [...pagesAfter].filter(([p, h]) => pagesBefore.get(p) !== h && p.endsWith(".md") && !isReservedPage(p)).map(([p]) => p);
+    if (opts.batch) await stamp(root, touched, by, new Date());
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
     if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
       if (d.fm.status === "pending") {
         try { await markCompiled(root, d.path); }
         catch (e) { say("fail", `${id}: ${(e as Error).message}`); ok = false; continue; }
+      }
+      // the Ingest entry, unless the agent wrote one for this source itself
+      if (opts.batch && !openWiki(root).journal().entries.some((e) => e.kind === "ingest" && e.sources?.includes(id) && e.at >= localIso(started))) {
+        const created = touched.filter((p) => !pagesBefore.has(p)).length;
+        await appendLogCtx(openWiki(root), { kind: "ingest", text: `compiled: ${created} page(s) created, ${touched.length - created} updated.`, sources: [id], pages: touched });
       }
       say("ok", `${id} compiled`);
     } else { say("fail", `${id}: no Source page cites the source (agent exited with ${code}); status unchanged.`); ok = false; }

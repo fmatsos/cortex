@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseDoc } from "./lib";
 
 /**
  * T11: every command that runs offline, spawned for real in a temp wiki. For each one: stdout / stderr / exit code
@@ -297,22 +298,33 @@ describe.skipIf(process.platform === "linux" && !Bun.which("bwrap"))("compile / 
   }
   const silent = () => agent("cat >/dev/null");
 
-  test("compile: errors left by the agent (lint of its pages) get it run again, with the list in the prompt", () => {
+  test("compile --batch: cortex writes the mechanical part (Source page, generated, journal), the agent the rest; its errors get it run again", () => {
     const root = wiki();
     const id = addNote(root);
     const dir = mkdtempSync(join(tmpdir(), "cortex-fix-"));
-    // 1st run: a Source page with a raw `status: pending` (lint error); 2nd run: the fixed page
+    // 1st run: a summary but no description (lint error) and a journal written by hand (invalid); 2nd run: both fixed
     const env = agent(`n=$(cat ${dir}/n 2>/dev/null || echo 0); n=$((n+1)); echo $n > ${dir}/n; cat > ${dir}/prompt$n
-r=/$(ls raw/*/*/*/source.md); s=$([ $n = 1 ] && echo pending || echo draft); mkdir -p wiki/sources
-printf -- '---\\ntype: Source\\ntitle: N\\ndescription: d\\nstatus: %s\\nsources:\\n  - id: ${id}\\n    resource: %s\\n---\\nx\\n' $s $r > wiki/sources/${id}.md
-if [ $n = 1 ]; then echo 'not json' > wiki/log.jsonl; else rm -f wiki/log.jsonl; fi`); // a journal written by hand counts too, not only pages
+[ $n = 1 ] && grep -o 'Source page wiki/[^:]*\\.md' ${dir}/prompt1 | cut -d' ' -f3 > ${dir}/page
+p=$(cat ${dir}/page)
+if [ $n = 1 ]; then echo 'Summary.' >> $p; echo 'not json' > wiki/log.jsonl
+else sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; rm -f wiki/log.jsonl; fi`);
     const r = cortex(root, ["compile", id, "--batch"], { env });
     expect(r.err).not.toContain("✗");
-    expect(r.out).toContain("agent run again to fix them (pass 1/2)");
     expect(r.out).toContain(`${id} compiled`);
-    expect(readFileSync(join(dir, "prompt2"), "utf8")).toContain(`wiki/sources/${id}.md: unknown status: pending`);
-    expect(readFileSync(join(dir, "prompt2"), "utf8")).toContain("wiki/log.jsonl:1: invalid JSON");
+    const page = readFileSync(join(dir, "page"), "utf8").trim();
+    const prompt1 = readFileSync(join(dir, "prompt1"), "utf8"), prompt2 = readFileSync(join(dir, "prompt2"), "utf8");
+    expect(prompt1).toContain(`The CLI already created the Source page ${page}`);
+    expect(prompt1).toContain("Tags already in use: none yet");
+    expect(prompt2).toContain(`${page}: missing description`);
+    expect(prompt2).toContain("wiki/log.jsonl:1: invalid JSON");
     expect(existsSync(join(dir, "prompt3"))).toBe(false);
+    // what cortex wrote: the frontmatter it knows, the note callout, the generated stamp, the Ingest entry
+    const doc = parseDoc(page, readFileSync(join(root, page), "utf8"));
+    expect(doc.fm).toMatchObject({ type: "Source", status: "draft", description: "d", generated: { by: "agent.sh/default" } });
+    expect(doc.fm.sources).toEqual([{ id, resource: expect.stringContaining(`/${id}/source.md`), title: expect.any(String) }]);
+    expect(doc.body).toStartWith("> [!note] Note personnelle\n> pourquoi\n");
+    const last = JSON.parse(readFileSync(join(root, "wiki/log.jsonl"), "utf8").trim().split("\n").at(-1)!);
+    expect(last).toMatchObject({ kind: "ingest", text: "compiled: 1 page(s) created, 0 updated.", sources: [id], pages: [page] });
   });
 
   test("compile usage error: nothing to compile → 2", () => {
@@ -345,6 +357,8 @@ if [ $n = 1 ]; then echo 'not json' > wiki/log.jsonl; else rm -f wiki/log.jsonl;
     expect(r.err).toContain(`✗ ${id}: no Source page cites the source (agent exited with 0); status unchanged.`);
     const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+    // the Source page cortex prepared and the agent never filled in is gone: nothing half-done stays
+    expect([...new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root })].filter((p) => !/^wiki\/(index|log)\.md$/.test(p))).toEqual([]);
   });
   test("ask usage error: no question → 2", () => {
     const r = cortex(wiki(), ["ask"], { env: silent() });

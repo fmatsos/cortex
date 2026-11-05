@@ -33,9 +33,9 @@ export function scopePrefix(root: string, write: boolean, language?: string): st
 }
 
 /** INGEST prompt for one raw source (`source` = its /raw/… resource path). */
-export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string }): string {
-  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language) };
-  return `${prompt("compile", vars)} ${prompt(o.batch ? "compile-batch" : "compile-interactive", vars)}`;
+export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string; page?: string; tags?: string[] }): string {
+  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language), page: o.page ?? "", tags: o.tags?.length ? o.tags.join(", ") : "none yet" };
+  return `${prompt("compile", vars)} ${prompt(o.batch ? "compile-batch" : "compile-interactive", vars)}${o.page ? ` ${prompt("compile-prepared", vars)}` : ""}`;
 }
 
 /** QUERY prompt; `file` allows storing the answer as a Synthesis page, otherwise the agent only answers. */

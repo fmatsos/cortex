@@ -134,6 +134,8 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 
 In your answer, do not copy the pages back: summarize in one line per file touched.
 
+**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest (description, tags, summary, key points, links). It also stamps `generated` on every page you touch, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
+
 ## QUERY workflow
 
 1. Read `wiki/index.md`, pick the relevant pages and read them **in full**. Do not reason on excerpts.

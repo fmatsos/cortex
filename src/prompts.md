@@ -17,6 +17,9 @@ Apply the INGEST workflow of {{agentFile}} to the source {{source}}. Its Source 
 ## compile-batch
 Non-interactive mode: nobody will approve your presentation; write directly, with every page created or modified in status: draft. Do not touch the status of the raw source: the CLI handles it.
 
+## compile-prepared
+The CLI already created the Source page {{page}}: its type, title, status, sources, generated stamp and note callout are set, keep them as they are. Add its description, 1 to 4 tags, the summary, the key points and the links. Tags already in use: {{tags}}; add a new tag only if none of them fits. The CLI runs cortex index and writes the Ingest journal entry: do neither.
+
 ## compile-interactive
 Do not touch the status of the raw source: the CLI handles it.
 
