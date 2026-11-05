@@ -327,6 +327,34 @@ else sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; rm -f wiki/log
     expect(last).toMatchObject({ kind: "ingest", text: "compiled: 1 page(s) created, 0 updated.", sources: [id], pages: [page] });
   });
 
+  test("compile --batch: a new tag near-synonym of one in use is brought back to it", () => {
+    const root = wiki();
+    mkdirSync(join(root, "wiki/concepts"), { recursive: true });
+    writeFileSync(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: d\nstatus: draft\ntags: [agent]\n---\nx\n");
+    const id = addNote(root);
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [agents, cuisine]/' $p; echo 'Summary.' >> $p`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.out).toContain(`${id} compiled`);
+    const [page] = [...new Bun.Glob("wiki/sources/*.md").scanSync({ cwd: root })];
+    expect(parseDoc(page, readFileSync(join(root, page), "utf8")).fm.tags).toEqual(["agent", "cuisine"]);
+  });
+
+  test("compile --batch: errors the agent leaves in its pages fail the compile, status unchanged", () => {
+    const root = wiki();
+    const id = addNote(root);
+    // fills the Source page, but also leaves a page without type nor title, every run
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && { sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; echo 'Summary.' >> $p; }
+mkdir -p wiki/concepts; printf -- '---\\nstatus: draft\\n---\\nx\\n' > wiki/concepts/bad.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain(`✗ ${id}: errors left in the files the agent changed, status unchanged:`);
+    expect(r.err).toContain("wiki/concepts/bad.md: missing type");
+    const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
+    expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+  });
+
   test("compile usage error: nothing to compile → 2", () => {
     const r = cortex(wiki(), ["compile"], { env: silent() });
     expect(r.code).toBe(2);

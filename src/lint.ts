@@ -95,10 +95,12 @@ const duplicateSources: Rule = (c) =>
   [...c.cites].filter(([res, pages]) => pages.length > 1 && existsSync(join(c.root, res)))
     .map(([res, pages]) => issue("warning", pages[1].path, `probable duplicate of ${pages[0].path} (same raw source ${res})`));
 const rawsRule: Rule = (c) => c.raws.flatMap((d) => rawRules.flatMap((r) => r(c, d)));
+/** Two tags with the same key are near-synonyms (case, accents, a final s). */
+export const tagKey = (tag: string) => slugify(String(tag)).replace(/s$/, "");
 const tagSynonyms: Rule = (c) => {
   const out: Issue[] = [], tags = new Map<string, string>();
   for (const d of c.pages) for (const tag of d.fm.tags ?? []) {
-    const k = slugify(String(tag)).replace(/s$/, "");
+    const k = tagKey(tag);
     const seen = tags.get(k);
     if (seen && seen !== tag) out.push(issue("warning", d.path, `near-synonym tags: "${seen}" and "${tag}"`));
     else tags.set(k, tag);

@@ -35,6 +35,25 @@ export function frontmatterError(text: string): string | undefined {
   try { parseDoc("", text); return undefined; } catch (e) { return `invalid YAML frontmatter (${(e as Error).message}): every key starts at column 0.`; }
 }
 
+/**
+ * Sets one top-level frontmatter key by line replacement, never a YAML re-serialization: the key's line and its indented
+ * continuation (a block list or mapping) become `line`; absent, `line` goes last. Comments, order and style of the other
+ * keys stay byte for byte. Text without frontmatter is returned unchanged.
+ */
+export function setFmLine(text: string, key: string, line: string): string {
+  const m = text.match(/^﻿?---\r?\n(?:[\s\S]*?\r?\n)?---/);
+  if (!m) return text;
+  const lines = m[0].split("\n"); // first "---", the keys, last "---"
+  const at = lines.findIndex((l, i) => i > 0 && i < lines.length - 1 && new RegExp(`^${key}[ \\t]*:`).test(l));
+  if (at < 0) lines.splice(lines.length - 1, 0, line);
+  else {
+    let end = at + 1;
+    while (end < lines.length - 1 && /^([ \t]+\S|[ \t]*$)/.test(lines[end]) && lines[end].trim() !== "") end++;
+    lines.splice(at, end - at, line);
+  }
+  return lines.join("\n") + text.slice(m[0].length);
+}
+
 /** Inverse of parseDoc: `---`, YAML frontmatter, `---`, then the body as is. */
 export const serializeDoc = (fm: Record<string, unknown>, body: string) => `---\n${Bun.YAML.stringify(fm, null, 2)}\n---\n${body}`;
 

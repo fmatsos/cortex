@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { localIso, normUrl, slugify } from "./lib";
+import { localIso, normUrl, setFmLine, slugify } from "./lib";
+
+test("setFmLine: only the key's lines change, comments and the rest of the frontmatter stay byte for byte", () => {
+  const page = "---\ntype: Concept\n# verified: { by: \"human:f\" }   ← to add after review\ntags:\n  - agents\n  - x\ntitle: 'A: b'\n---\nbody\n";
+  const out = setFmLine(setFmLine(page, "tags", 'tags: ["agent","x"]'), "generated", 'generated: { by: "c/m", at: 2026-11-05T10:00:00+01:00 }');
+  expect(out).toBe("---\ntype: Concept\n# verified: { by: \"human:f\" }   ← to add after review\ntags: [\"agent\",\"x\"]\ntitle: 'A: b'\ngenerated: { by: \"c/m\", at: 2026-11-05T10:00:00+01:00 }\n---\nbody\n");
+  expect(setFmLine(out, "generated", "generated: { by: x }")).toContain("title: 'A: b'\ngenerated: { by: x }\n---");
+  expect(setFmLine("no frontmatter\n", "tags", "tags: []")).toBe("no frontmatter\n");
+});
 import { ftsQuery } from "./search";
 import { newId, UUID } from "./test-helpers";
 

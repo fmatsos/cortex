@@ -12,11 +12,12 @@ import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 import { LIMITS } from "./limits";
-import { isReservedPage, localIso, parseDoc, serializeDoc, sha256 } from "./lib";
+import { frontmatterError, isReservedPage, localIso, parseDoc, setFmLine, sha256 } from "./lib";
 import { newPageCtx } from "./naming";
 import { appendLogCtx } from "./log";
 import { split } from "./backends/backend";
 import { collator } from "./text";
+import { tagKey } from "./lint";
 import { askPrompt, compilePrompt, scopePrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
@@ -97,15 +98,16 @@ async function pageHashes(root: string): Promise<Map<string, string>> {
  * Source page cites the raw source). The check goes to the backend (openai fixes in the same conversation); what is
  * still wrong afterwards gets a new agent run listing it, at most `LIMITS.lintFixPasses` times (batch only).
  */
-async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Report, extra?: Check): Promise<number> {
+async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Report, extra?: Check): Promise<{ code: number; errors: () => Promise<string[]> }> {
   const root = w.root;
   const before = await pageHashes(root);
-  const check: Check = async () => {
-    const pages = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
+  /** Lint errors of the files under wiki/ the agent changed. */
+  const errors = async () => {
+    const files = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
     const { lint } = await import("./lint");
-    const errors = pages.size ? (await lint(root)).filter((i) => i.level === "error" && pages.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [];
-    return [...errors, ...(await extra?.() ?? [])];
+    return files.size ? (await lint(root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [];
   };
+  const check: Check = async () => [...await errors(), ...(await extra?.() ?? [])];
   let code = await run(w, prompt, batch, "write", report, check);
   for (let pass = 1; batch && pass <= LIMITS.lintFixPasses; pass++) {
     const misses = await check();
@@ -113,7 +115,7 @@ async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Repor
     report({ level: "info", text: `${misses.length} error(s) left: agent run again to fix them (pass ${pass}/${LIMITS.lintFixPasses})`, mark: "  ↻" });
     code = await run(w, fixPrompt(agentFile((await w.config()).client), misses), batch, "write", report, check);
   }
-  return code;
+  return { code, errors };
 }
 
 const fixPrompt = (file: string, misses: string[]) =>
@@ -165,15 +167,23 @@ async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promi
   } catch { return undefined; }
 }
 
-/** Sets `generated` (actor and time) on each page of `paths`, body untouched. */
-async function stamp(root: string, paths: string[], by: string, at: Date) {
+/**
+ * On each page of `paths`, body untouched: sets `generated` (actor and time), and brings each tag back to the tag
+ * already in use with the same key (`agents` → `agent`): a near-synonym never enters the wiki through an agent.
+ * Only those two lines are rewritten (`setFmLine`): comments, order and style of the rest of the frontmatter stay.
+ */
+async function stamp(root: string, paths: string[], by: string, at: Date, inUse: Map<string, string>) {
   for (const p of paths) {
     const f = Bun.file(join(root, p));
     if (!(await f.exists())) continue;
-    try {
-      const doc = parseDoc(p, await f.text());
-      await Bun.write(f, serializeDoc({ ...doc.fm, generated: { by, at: localIso(at) } }, doc.body));
-    } catch { /* unreadable frontmatter: lint reports it, the page is left as the agent wrote it */ }
+    let text = await f.text();
+    let fm;
+    try { fm = parseDoc(p, text).fm; } catch { continue; } // unreadable frontmatter: lint reports it, the page stays as written
+    if (!/^﻿?---\r?\n/.test(text)) continue; // no frontmatter: nothing to stamp (lint reports the missing type)
+    const tags = Array.isArray(fm.tags) ? [...new Set(fm.tags.map((t) => inUse.get(tagKey(String(t))) ?? String(t)))] : undefined;
+    if (tags && JSON.stringify(tags) !== JSON.stringify(fm.tags)) text = setFmLine(text, "tags", `tags: ${JSON.stringify(tags)}`);
+    text = setFmLine(text, "generated", `generated: { by: ${JSON.stringify(by)}, at: ${localIso(at)} }`);
+    if (!frontmatterError(text)) await Bun.write(f, text); // a replacement that would break the YAML is dropped
   }
 }
 
@@ -203,6 +213,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     // batch: cortex writes the mechanical part of the Source page; interactive: the agent presents its plan first
     const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
     const tags = [...new Set((await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []))].sort(collator.compare);
+    const inUse = new Map(tags.map((t) => [tagKey(t), t] as const));
     const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
@@ -218,15 +229,19 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
       return [`no Source page cites ${res}. The Source page needs \`type: Source\` and exactly this in its frontmatter: ` +
         `sources: [{ id: ${id}, resource: ${res} }]${near.length ? `. Now: ${near.join("; ")}` : ""}`];
     };
-    const code = await runChecked(w, prompt, !!opts.batch, sink, cited);
+    const { code, errors } = await runChecked(w, prompt, !!opts.batch, sink, cited);
     // a prepared page the agent never filled in goes: nothing half-done stays in the wiki
     if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text) await rm(join(root, prepared.path), { force: true });
     const pagesAfter = await pageHashes(root);
     const touched = [...pagesAfter].filter(([p, h]) => pagesBefore.get(p) !== h && p.endsWith(".md") && !isReservedPage(p)).map(([p]) => p);
-    if (opts.batch) await stamp(root, touched, by, new Date());
+    if (opts.batch) await stamp(root, touched, by, new Date(), inUse);
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
-    if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
+    const left = await errors();
+    if (left.length) { // the Source page may cite the source, but the wiki is not left broken under a `compiled` status
+      say("fail", `${id}: errors left in the files the agent changed, status unchanged:\n${left.map((e) => `  - ${e}`).join("\n")}`);
+      ok = false;
+    } else if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
       if (d.fm.status === "pending") {
         try { await markCompiled(root, d.path); }
         catch (e) { say("fail", `${id}: ${(e as Error).message}`); ok = false; continue; }
@@ -252,7 +267,10 @@ export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: 
   const cfg = await w.config();
   const prompt = askPrompt({ agentFile: agentFile(cfg.client), question, file: opts.file, language: cfg.language });
   const before = await changed(root, sink);
-  const code = opts.file ? await runChecked(w, prompt, !opts.interactive, sink) : await run(w, prompt, !opts.interactive, "read", sink);
+  const checked = opts.file ? await runChecked(w, prompt, !opts.interactive, sink) : undefined;
+  const code = checked ? checked.code : await run(w, prompt, !opts.interactive, "read", sink);
+  const left = checked ? await checked.errors() : [];
+  if (left.length) say("warn", `errors left in the files the agent changed:\n${left.map((e) => `  - ${e}`).join("\n")}`, "⚠");
   const after = await changed(root, sink);
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
