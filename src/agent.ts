@@ -81,15 +81,15 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
 }
 
-/** Hash of every wiki page: what the agent changed, with or without git. */
+/** Hash of every file under wiki/ (pages, log.jsonl…): what the agent changed, with or without git. */
 async function pageHashes(root: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
-  for (const p of new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root })) m.set(p, sha256(await Bun.file(join(root, p)).bytes()));
+  for (const p of new Bun.Glob("wiki/**/*").scanSync({ cwd: root })) m.set(p, sha256(await Bun.file(join(root, p)).bytes()));
   return m;
 }
 
 /**
- * Write run checked by cortex, whatever the backend: lint errors of the wiki pages it changed, plus `extra` (compile: a
+ * Write run checked by cortex, whatever the backend: lint errors of the wiki files it changed, plus `extra` (compile: a
  * Source page cites the raw source). The check goes to the backend (openai fixes in the same conversation); what is
  * still wrong afterwards gets a new agent run listing it, at most `LIMITS.lintFixPasses` times (batch only).
  */
@@ -99,7 +99,7 @@ async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Repor
   const check: Check = async () => {
     const pages = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
     const { lint } = await import("./lint");
-    const errors = pages.size ? (await lint(root)).filter((i) => i.level === "error" && pages.has(i.path)).map((i) => `${i.path}: ${i.msg}`) : [];
+    const errors = pages.size ? (await lint(root)).filter((i) => i.level === "error" && pages.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [];
     return [...errors, ...(await extra?.() ?? [])];
   };
   let code = await run(w, prompt, batch, "write", report, check);
@@ -158,7 +158,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     if (!String(d.fm.note ?? "").trim()) { say("fail", `${id}: empty note. Fill in the intent (note field) before compiling.`); ok = false; continue; }
     if (d.fm.status !== "pending") say("info", paint.dim(`(${id} is already ${d.fm.status}: recompiling)`));
     const cfg = await w.config();
-    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), batch: opts.batch, language: cfg.language });
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)

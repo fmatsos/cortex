@@ -12,7 +12,7 @@ You only write under {{wiki}}/.
 Read-only.
 
 ## compile
-Apply the INGEST workflow of {{agentFile}} to the source {{source}}.
+Apply the INGEST workflow of {{agentFile}} to the source {{source}}. Its Source page cites it in the frontmatter with exactly `sources: [{ id: {{id}}, resource: {{source}} }]`.
 
 ## compile-batch
 Non-interactive mode: nobody will approve your presentation; write directly, with every page created or modified in status: draft. Do not touch the status of the raw source: the CLI handles it.

@@ -3,7 +3,7 @@ import { askPrompt, compilePrompt, mcpInstructions, prompt, scopePrefix } from "
 import { buildServer } from "./mcp";
 
 const compile = (language?: string, batch = false) =>
-  scopePrefix("/r", true, language) + compilePrompt({ agentFile: "CLAUDE.md", source: "/raw/x/source.md", batch, language });
+  scopePrefix("/r", true, language) + compilePrompt({ agentFile: "CLAUDE.md", source: "/raw/x/source.md", id: "x", batch, language });
 const ask = (language?: string, file = false) =>
   scopePrefix("/r", file, language) + askPrompt({ agentFile: "CLAUDE.md", question: "Q ?", file, language });
 
@@ -28,6 +28,7 @@ test("same constraints as before: scope, workflows, batch vs interactive", () =>
   expect(scopePrefix("/r", false)).not.toContain("You only write");
   expect(compile()).toContain("INGEST workflow of CLAUDE.md to the source /raw/x/source.md");
   expect(compile()).toContain("Do not touch the status of the raw source");
+  expect(compile()).toContain("sources: [{ id: x, resource: /raw/x/source.md }]");
   expect(compile()).not.toContain("Non-interactive");
   expect(compile("English", true)).toContain("status: draft");
   expect(ask()).toContain("QUERY workflow of CLAUDE.md to the question: « Q ? »");
