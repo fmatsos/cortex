@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, sep } from "node:path";
+import { existsSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { rawId, toResource, type RawSource } from "./doc";
 import { openWiki, type Wiki } from "./context";
@@ -72,6 +73,7 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
   const backend = await backendFor(root, await w.config());
+  process.env.CORTEX_IN_AGENT = "1"; // inherited by every agent process: cortex new --force stays a human-only option
   prompt = scopePrefix(root, mode === "write", (await w.config()).language) + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
   if (!batch) {
@@ -112,7 +114,7 @@ async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Repor
     for (const [p, h] of await pageHashes(root)) {
       if (!p.endsWith(".md") || before.get(p) === h) continue;
       const prev = texts.get(p), file = join(root, p);
-      const why = prev !== undefined ? identityChange(p, prev, await Bun.file(file).text()) : stemClash(p, texts.keys());
+      const why = prev !== undefined ? identityChange(p, prev, await Bun.file(file).text()) : stemClash(p, texts.keys(), root);
       if (!why) continue;
       if (prev !== undefined) await Bun.write(file, prev); else await rm(file, { force: true });
       out.push(`${why} ${prev !== undefined ? "Restored as it was." : "Removed."}`);
@@ -183,10 +185,11 @@ async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promi
 
 /**
  * On each page of `paths`, body untouched: sets `generated` (actor and time), and brings each tag back to the tag
- * already in use with the same key (`agents` → `agent`): a near-synonym never enters the wiki through an agent.
+ * already in use with the same key (`agents` → `agent`): a near-synonym never enters the wiki through an agent. A page
+ * of `fresh` (created by the agent) keeps at most `maxTags` tags (cortex.json max_tags, default LIMITS.maxTags).
  * Only those two lines are rewritten (`setFmLine`): comments, order and style of the rest of the frontmatter stay.
  */
-async function stamp(root: string, paths: string[], by: string, at: Date, inUse: Map<string, string>) {
+async function stamp(root: string, paths: string[], by: string, at: Date, inUse: Map<string, string>, fresh: Set<string>, maxTags: number) {
   for (const p of paths) {
     const f = Bun.file(join(root, p));
     if (!(await f.exists())) continue;
@@ -194,11 +197,42 @@ async function stamp(root: string, paths: string[], by: string, at: Date, inUse:
     let fm;
     try { fm = parseDoc(p, text).fm; } catch { continue; } // unreadable frontmatter: lint reports it, the page stays as written
     if (!/^﻿?---\r?\n/.test(text)) continue; // no frontmatter: nothing to stamp (lint reports the missing type)
-    const tags = Array.isArray(fm.tags) ? [...new Set(fm.tags.map((t) => inUse.get(tagKey(String(t))) ?? String(t)))] : undefined;
+    let tags = Array.isArray(fm.tags) ? [...new Set(fm.tags.map((t) => inUse.get(tagKey(String(t))) ?? String(t)))] : undefined;
+    // a page the agent created gets at most maxTags tags, those already in use first (stable sort)
+    if (tags && fresh.has(p) && tags.length > maxTags) tags = tags.map((t, i) => ({ t, k: (inUse.has(tagKey(t)) ? 0 : 1) * 1e6 + i })).sort((x, y) => x.k - y.k).slice(0, maxTags).map((x) => x.t);
     if (tags && JSON.stringify(tags) !== JSON.stringify(fm.tags)) text = setFmLine(text, "tags", `tags: ${JSON.stringify(tags)}`);
     text = setFmLine(text, "generated", `generated: { by: ${JSON.stringify(by)}, at: ${localIso(at)} }`);
     if (!frontmatterError(text)) await Bun.write(f, text); // a replacement that would break the YAML is dropped
   }
+}
+
+/**
+ * Batch, after the agent: what a small model leaves undone, done by cortex. The Source page `src` links to every page
+ * of `paths` citing the source, each of them links back to `src`, and the human note callout only stays on `src`.
+ * A link already there (any text) is kept as is.
+ */
+async function weave(root: string, src: string, resource: string, paths: string[], note: string) {
+  const read = async (p: string) => { try { const text = await Bun.file(join(root, p)).text(); return { text, doc: parseDoc(p, text) }; } catch { return undefined; } };
+  const me = await read(src);
+  if (!me) return;
+  const link = (p: string, title: unknown) => `- [${String(title ?? p).replace(/[[\]]/g, "")}](/${p})`;
+  const first = note.trim().split(/\r?\n/)[0]?.trim();
+  const add: string[] = [];
+  for (const p of paths) {
+    if (p === src) continue;
+    const page = await read(p);
+    if (!page) continue;
+    let body = page.doc.body;
+    // the note callout copied onto another page: the whole > block holding [!note] and the note goes
+    if (first) body = body.replace(/^(?:>?[ \t]*\[!note\][^\n]*\n?)(?:>[^\n]*\n?)*/gim, (m) => (m.includes(first) || /note personnelle/i.test(m) ? "" : m)).replace(/^\s*\n/, "");
+    const cites = (page.doc.fm.sources ?? [] as unknown[]) as { resource?: string }[];
+    if (Array.isArray(cites) && cites.some((c) => c?.resource === resource)) {
+      if (!me.doc.body.includes(`(/${p})`)) add.push(link(p, page.doc.fm.title));
+      if (!body.includes(`(/${src})`)) body = `${body.replace(/\s*$/, "")}\n\n${link(src, me.doc.fm.title)}\n`;
+    }
+    if (body !== page.doc.body) await Bun.write(join(root, p), page.text.slice(0, page.text.length - page.doc.body.length) + body);
+  }
+  if (add.length) await Bun.write(join(root, src), `${me.text.replace(/\s*$/, "")}\n${/\n- [^\n]*$/.test(me.text.trimEnd()) ? "" : "\n"}${add.join("\n")}\n`);
 }
 
 /** Does a Source page cite the raw source at `path`? */
@@ -228,7 +262,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
     const tags = [...new Set((await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []))].sort(collator.compare);
     const inUse = new Map(tags.map((t) => [tagKey(t), t] as const));
-    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags });
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags, maxTags: cfg.max_tags ?? LIMITS.maxTags });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)
@@ -259,7 +293,10 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text) await rm(join(root, prepared.path), { force: true });
     const pagesAfter = await pageHashes(root);
     const touched = [...pagesAfter].filter(([p, h]) => pagesBefore.get(p) !== h && p.endsWith(".md") && !isReservedPage(p)).map(([p]) => p);
-    if (opts.batch) await stamp(root, touched, by, new Date(), inUse);
+    if (opts.batch) {
+      await stamp(root, touched, by, new Date(), inUse, new Set(touched.filter((p) => !pagesBefore.has(p))), cfg.max_tags ?? LIMITS.maxTags);
+      if (prepared && existsSync(join(root, prepared.path))) await weave(root, prepared.path, toResource(d.path), touched, String(d.fm.note ?? ""));
+    }
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
     const left = [...await errors(), ...await bodyless()];

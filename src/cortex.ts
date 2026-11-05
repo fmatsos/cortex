@@ -24,7 +24,7 @@ const HELP = `cortex — second brain
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
   cortex index
-  cortex new <Source|Concept|Entity|Synthesis> "<title>"   (creates the page per page_path, status: draft; prints its path)
+  cortex new <Source|Concept|Entity|Synthesis> "<title>" [--force]   (creates the page per page_path, status: draft; prints its path; --force: a near title, by hand only)
   cortex lint [--json]
   cortex log [--limit N] [--json] [--kind k]     (the journal, newest first; 20 entries by default)
   cortex log add <add|ingest|query|lint|update> "<text>" [--source <raw id>]… [--page <wiki/….md>]…
@@ -69,7 +69,7 @@ try {
       options: {
         note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" },
       },
     });
   } catch (e) {
@@ -119,8 +119,9 @@ try {
       break;
     }
     case "new":
-      if (args.length !== 2) throw usage('Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>"');
-      console.log(await newPageCtx(wiki, args[0], args[1]));
+      if (args.length !== 2) throw usage('Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>" [--force]');
+      if (o.force && process.env.CORTEX_IN_AGENT) throw usage("cortex new --force is for a human only: update the existing page instead.");
+      console.log(await newPageCtx(wiki, args[0], args[1], new Date(), { force: o.force }));
       break;
     case "index":
       await regenerateCtx(wiki);

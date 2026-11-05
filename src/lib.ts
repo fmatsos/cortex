@@ -50,11 +50,16 @@ export function identityChange(path: string, prev: string, next: string): string
   return why && `${path} is an existing page and ${why}: another page goes in a file of its own (cortex new <Type> "<title>"), an existing one is completed with Edit.`;
 }
 
-/** Why a new page at `path` takes the file name of an existing page elsewhere under wiki/ (`known`: existing paths), or undefined. */
-export function stemClash(path: string, known: Iterable<string>): string | undefined {
-  const stem = path.split("/").pop();
-  for (const k of known) if (k !== path && k.endsWith(".md") && k.split("/").pop() === stem)
-    return `${path} reuses the file name of the existing page ${k}: a new page gets its own name from cortex new <Type> "<title>".`;
+/**
+ * Why a new page at `path` takes the name of something that exists: an existing page elsewhere under wiki/ (`known`:
+ * existing paths) or a raw source id (under `root`), or undefined. A new page gets its own name from cortex new.
+ */
+export function stemClash(path: string, known: Iterable<string>, root?: string): string | undefined {
+  const stem = path.split("/").pop()!;
+  const fix = `a new page gets its own name from cortex new <Type> "<title>".`;
+  for (const k of known) if (k !== path && k.endsWith(".md") && k.split("/").pop() === stem) return `${path} reuses the file name of the existing page ${k}: ${fix}`;
+  const id = stem.replace(/\.md$/, "");
+  if (root && rawPath(root, id)) return `${path} is named after the raw source ${id}: ${fix}`;
 }
 
 /**

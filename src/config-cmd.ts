@@ -4,6 +4,9 @@ import { CortexError } from "./lib";
 import { collector, type Result } from "./print";
 import { paint } from "./style";
 
+/** Keys whose value is a number in cortex.json: `set` writes `6`, not `"6"`. */
+const NUMBERS = new Set(["max_tags"]);
+
 /** cortex config init|lint|get|set|remove. Every write is validated before being made. Returns what to print; throws on misuse. */
 export async function configCmd(root: string, [sub, key, value]: string[]): Promise<Result> {
   const { say, done } = collector();
@@ -22,7 +25,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "init": {
       // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
       if (await f.exists()) throw new Error("cortex.json already exists.");
-      await save({ client: key ?? null, model: null, effort: null, base_url: null, language: null, schema: null, raw_path: null, page_path: null }); // null = unset: defaults
+      await save({ client: key ?? null, model: null, effort: null, base_url: null, language: null, schema: null, raw_path: null, page_path: null, max_tags: null }); // null = unset: defaults
       say("ok", `cortex.json created${key ? ` (client ${key})` : " (agnostic)"}.`);
       const { writeSchema } = await import("./schema");
       const w = await writeSchema(root, false);
@@ -48,7 +51,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "set":
       checkKey();
       if (!value) throw new CortexError(`Usage: cortex config set ${key} <value>`, "usage");
-      await save({ ...(await readConfig(root)), [key]: value });
+      await save({ ...(await readConfig(root)), [key]: NUMBERS.has(key) && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value });
       return done(true);
     case "remove": {
       checkKey();

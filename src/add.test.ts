@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { add } from "./add";
+import { add, pageTitle } from "./add";
 import { renderIndex } from "./catalog";
 import { rawPath } from "./lib";
 import { search } from "./search";
@@ -33,4 +33,12 @@ test("add → index → search, idempotent", async () => {
   const hits = await search(root, "relecture");
   expect(hits.map((h) => h.area)).toEqual(["wiki", "raw"]); // wiki first
   expect((await search(root, "hydroponie", { in: "raw" }))[0].path).toContain(a.id);
+});
+
+test("pageTitle: the page side of « Page · Site » when defuddle kept the site side, otherwise defuddle", () => {
+  expect(pageTitle("Hugging Face", "Qwen/Qwen3-4B-Instruct-2507 · Hugging Face", undefined, "u")).toBe("Qwen/Qwen3-4B-Instruct-2507");
+  expect(pageTitle("Un article", "Un article | Le Blog", undefined, "u")).toBe("Un article");
+  expect(pageTitle("Context rot - why it matters", "Context rot - why it matters", undefined, "u")).toBe("Context rot - why it matters");
+  expect(pageTitle(undefined, undefined, "Titre H1", "u")).toBe("Titre H1");
+  expect(pageTitle("", "", undefined, "https://x")).toBe("https://x");
 });

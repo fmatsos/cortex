@@ -19,6 +19,8 @@ export const LIMITS = {
   agentTurns: 100,
   /** openai client: turns where the model gets the lint errors of its pages back before cortex gives up on fixing them. */
   lintFixPasses: 2,
+  /** Tags of a page an agent creates (cortex.json max_tags overrides it): beyond, cortex keeps the tags already in use first. */
+  maxTags: 4,
   /** openai client: characters of one part of a tool result (small local contexts); the next part comes with `offset`. */
   toolOutputChars: 20_000,
   /** openai client: tokens of one model answer. A whole page fits; a model stuck repeating a line fails fast instead of filling the context. */

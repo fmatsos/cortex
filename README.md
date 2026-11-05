@@ -120,7 +120,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line. Any other file is added, with an optional note in `<name>.note`. Successful entries leave the inbox. |
 | `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search. |
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
-| `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>"` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists. |
+| `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>" [--force]` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists, and a near title of the same type (same words, or one word more): `--force` creates it anyway, by hand only (refused to an agent). |
 | `cortex lint [--json]` | Runs the mechanical checks. Exits with code 1 on errors. |
 | `cortex log [--limit N] [--json] [--kind k]` | Reads the journal, newest first. |
 | `cortex log add <kind> "<text>" [--source <id>]… [--page <path>]…` | Appends a journal entry (`add`, `ingest`, `query`, `lint` or `update`). |
@@ -167,6 +167,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 |---|---|
 | `language` | Fills the wiki language into the schema (default `English`). |
 | `schema` | Path, relative to the wiki root, of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
+| `max_tags` | Most tags on a page an agent creates (default `4`). Beyond it, `compile --batch` keeps the tags already in use first. |
 
 ```sh
 cortex schema           # prints the effective schema

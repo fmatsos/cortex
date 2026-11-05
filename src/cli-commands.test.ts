@@ -135,7 +135,7 @@ describe("new", () => {
   test("usage error: wrong arity → 2", () => {
     const r = cortex(wiki(), ["new", "Concept"]);
     expect(r.code).toBe(2);
-    expect(r.err).toBe('✗ Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>"\n');
+    expect(r.err).toBe('✗ Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>" [--force]\n');
   });
   test("domain error: unknown type → 1", () => {
     const r = cortex(wiki(), ["new", "Bogus", "x"]);
@@ -385,6 +385,39 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: Autre\\ndescript
     expect(existsSync(join(root, "wiki/concepts/e1.md"))).toBe(false);
     const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+  });
+
+  test("compile --batch: cortex caps the tags of a new page (in use first), links the Source page and the pages citing the source both ways, and takes the note callout off other pages", () => {
+    const root = wiki();
+    mkdirSync(join(root, "wiki/concepts"), { recursive: true });
+    writeFileSync(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: d\nstatus: draft\ntags: [agent]\n---\nx\n");
+    const id = addNote(root);
+    const env = agent(`in=$(cat); p=$(echo "$in" | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3); r=$(echo "$in" | grep -o 'resource: /raw/[^ }]*' | head -1 | cut -d' ' -f2)
+sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [n1, n2, n3, agents, n4, n5]/' $p; echo 'Summary.' >> $p
+printf -- '---\\ntype: Concept\\ntitle: C\\ndescription: d\\nstatus: draft\\nsources: [{ id: x, resource: %s }]\\n---\\n> [!note] pourquoi\\n> pourquoi\\n\\nTexte.\\n' "$r" > wiki/concepts/c.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.out).toContain(`${id} compiled`);
+    const [page] = [...new Bun.Glob("wiki/sources/*.md").scanSync({ cwd: root })];
+    const src = parseDoc(page, readFileSync(join(root, page), "utf8"));
+    expect(src.fm.tags).toEqual(["agent", "n1", "n2", "n3"]);
+    expect(src.body).toContain("- [C](/wiki/concepts/c.md)");
+    expect(src.body).toStartWith("> [!note] Note personnelle\n> pourquoi\n");
+    const c = readFileSync(join(root, "wiki/concepts/c.md"), "utf8");
+    expect(c).toContain(`(/${page})`);
+    expect(c).not.toContain("[!note]");
+    expect(c).toContain("Texte.");
+  });
+
+  test("compile --batch: a new page named after a raw source id is removed and fails the compile", () => {
+    const root = wiki();
+    const id = addNote(root);
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && { sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; echo 'Summary.' >> $p; }
+mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription: d\\nstatus: draft\\n---\\nx\\n' > wiki/concepts/${id}.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain(`is named after the raw source ${id}`);
+    expect(existsSync(join(root, `wiki/concepts/${id}.md`))).toBe(false);
   });
 
   test("compile usage error: nothing to compile → 2", () => {

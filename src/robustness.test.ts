@@ -202,3 +202,19 @@ test("REL-27 : deux titres longs au même début de 50 caractères ne sont pas �
   expect(p1).not.toBe(p2);
   await expect(newPage(root, "Source", `${head} : PREMIÈRE partie`)).rejects.toThrow("a page already has this title");
 });
+
+test("cortex new: a near title of the same type is refused, --force (human only) creates it anyway", async () => {
+  const root = tmp();
+  await put(root, "cortex.json", "{}");
+  await newPage(root, "Concept", "Qwen3-4B-Instruct-2507");
+  await expect(newPage(root, "Concept", "Qwen3 4B Instruct")).rejects.toThrow("a Concept page has a near title");
+  expect(await newPage(root, "Entity", "Qwen3 4B Instruct")).toContain("wiki/"); // another type: allowed
+  expect(await newPage(root, "Concept", "Qwen3 agents")).toContain("wiki/"); // different words: allowed
+  const { newPageCtx } = await import("./naming");
+  const { openWiki } = await import("./context");
+  expect(await newPageCtx(openWiki(root), "Concept", "Instruct Qwen3 4B 2507 x", new Date(), { force: true })).toContain("wiki/");
+  const cli = (env: Record<string, string>) => Bun.spawnSync(["bun", join(import.meta.dir, "cortex.ts"), "new", "Concept", "Qwen3 4B Instruct", "--force"], { cwd: root, env: { ...process.env, CORTEX_ROOT: root, ...env } });
+  expect(cli({ CORTEX_IN_AGENT: "1" }).stderr.toString()).toContain("for a human only");
+  const { CORTEX_IN_AGENT: _, ...human } = process.env;
+  expect(Bun.spawnSync(["bun", join(import.meta.dir, "cortex.ts"), "new", "Concept", "Qwen3 Instruct 2507", "--force"], { cwd: root, env: { ...human, CORTEX_ROOT: root } }).stdout.toString()).toContain("wiki/");
+});

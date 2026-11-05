@@ -40,4 +40,9 @@ test("cortex config: init, set, get, remove, lint", async () => {
   expect(lintConfig({ client: "opencode", effort: "n'importe" })).toEqual([]); // model-specific variant
   expect(lintConfig({ effort: "high" })[0].level).toBe("warning");
   expect(lintConfig([])[0].level).toBe("error");
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await configCmd(root, ["set", "max_tags", "6"]); // a CLI string, read as a number
+  expect(await loadConfig(root)).toEqual({ max_tags: 6 });
+  expect(configCmd(root, ["set", "max_tags", "0"])).rejects.toThrow("max_tags");
+  expect(lintConfig({ max_tags: 2.5 })[0].level).toBe("error");
 });

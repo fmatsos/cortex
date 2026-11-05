@@ -21,6 +21,7 @@ test("openai: a long tool result comes in parts that together give it whole", ()
 test("openai: cut answers — tool calls not run then redone in parts (Append), text continued, llama.cpp 500 retried", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
   mkdirSync(join(root, "wiki"));
+  await Bun.write(join(root, "wiki/p.md"), "---\ntype: Concept\n---\n");
   const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
   const answers: any[] = [
     { finish_reason: "length", message: { role: "assistant", content: null, tool_calls: [call("1", "Write", { file_path: "wiki/cut.md", content: "partial" })] } },
@@ -66,6 +67,7 @@ test("openai: a page with invalid YAML is never written, WritePage writes the fr
   mkdirSync(join(root, "wiki"));
   const keep = "---\ntype: Entity\ntitle: Claude Code\n---\nhuman\n";
   await Bun.write(join(root, "wiki/e.md"), keep);
+  await Bun.write(join(root, "wiki/good.md"), "---\ntype: Concept\ntitle: 'A: b'\n---\n");
   const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
   const script = [
     { role: "assistant", content: null, tool_calls: [
@@ -101,7 +103,7 @@ test("openai: a failed compile check goes back to the model, even without a page
   } finally { server.stop(true); }
 });
 
-test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML, or replacing a page, is caught before the write", async () => {
+test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML, replacing a page, or creating one outside cortex new, is caught before the write", async () => {
   const { pageError } = await import("./backends/claude");
   const root = mkdtempSync(join(tmpdir(), "cortex-claude-"));
   await Bun.write(join(root, "wiki/a.md"), "---\ntype: Concept\ntitle: A\n---\nx\n");
@@ -110,7 +112,7 @@ test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YA
   expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "x", new_string: "y" }] })).toBeUndefined();
   // another page over an existing one, or under the file name of an existing one: refused too
   expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "title: A", new_string: "title: B" }] })).toContain('its title "A" would become "B"');
-  expect(await pageError(root, "Write", { file_path: "wiki/concepts/a.md", content: "---\ntype: Concept\ntitle: C\n---\n" })).toContain("reuses the file name of the existing page wiki/a.md");
+  expect(await pageError(root, "Write", { file_path: "wiki/concepts/a.md", content: "---\ntype: Concept\ntitle: C\n---\n" })).toContain("wiki/concepts/a.md does not exist: create a page with cortex new");
   expect(await pageError(root, "Write", { file_path: "wiki/c.txt", content: " bad: : yaml" })).toBeUndefined();
 });
 
@@ -118,6 +120,7 @@ test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YA
 test("openai: tool loop, writes under wiki/ only, refusal sent back to the model", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
   mkdirSync(join(root, "wiki"));
+  await Bun.write(join(root, "wiki/a.md"), "stub\n"); // pages are created by cortex new, then written
   await Bun.write(join(root, "cortex.json"), "{}");
   const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
   const script = [

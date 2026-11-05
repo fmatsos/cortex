@@ -58,7 +58,7 @@ If the `note` field is missing, ask the human for it before compiling.
 type: Concept                       # Source | Concept | Entity | Synthesis (the only mandatory field)
 title: Context rot
 description: One sentence, used as is in the index.
-tags: [llm, context-engineering]    # 1 to 4, lowercase, reuse rather than invent
+tags: [llm, context-engineering]    # 1 to 4 (max_tags in cortex.json), lowercase, reuse rather than invent
 status: draft                       # draft | stable | deprecated
 generated: { by: claude-code/opus-5.5, at: 2026-11-04T10:00:00+01:00 }
 sources:
@@ -78,7 +78,7 @@ Prose body. A claim.[^chroma-context-rot] See [Context engineering](/wiki/concep
 - **Reviewed page, then modified:** keep the `verified` entry (it is a past event), but switch back to `status: draft`. A `generated.at` later than `verified.at` means the page needs another review.
 - **Deprecation:** a page contradicted by a more recent source is not deleted. It switches to `status: deprecated`, with a link at the top to what replaces it.
 - **`Source` page:** it holds a summary, 3 to 7 key points, the human's `note`, and links to the concepts and entities it touches.
-- **The `note` is copied into a callout** at the top of the body, with Obsidian's callout syntax and nothing else:
+- **The `note` is copied into a callout** at the top of the body of the Source page only (never on a concept, entity or synthesis), with Obsidian's callout syntax and nothing else:
   ```markdown
   > [!note] Note personnelle
   > <the note, verbatim>
@@ -134,7 +134,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 
 In your answer, do not copy the pages back: summarize in one line per file touched.
 
-**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest: description and tags in the frontmatter, summary, key points and links in the body, after the note callout. It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
+**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest: description and tags in the frontmatter, summary, key points and links in the body, after the note callout. It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, keeps at most `max_tags` tags on a page you create, links the Source page and the pages citing the source both ways, takes the note callout off any other page, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
 
 ## QUERY workflow
 

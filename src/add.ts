@@ -109,6 +109,18 @@ async function fetchCapped(url: string, o: FetchOpts): Promise<{ res: Response; 
 }
 
 /**
+ * Title of a web page. defuddle sometimes keeps the site side of « Page · Site » (« Qwen/Qwen3-4B-Instruct-2507 ·
+ * Hugging Face » gave « Hugging Face »): when its title is the part after the last « · », « | » or « – » of the full
+ * document title, the part before it is taken. Otherwise defuddle, then the full title, then the first heading, then the URL.
+ */
+export function pageTitle(defuddle: string | undefined, full: string | undefined, heading: string | undefined, url: string): string {
+  const d = defuddle?.trim(), f = full?.trim();
+  const m = f?.match(/^(.*\S)\s+[·|–—]\s+([^·|–—]+)$/);
+  if (m && d && m[2].trim().toLowerCase() === d.toLowerCase()) return m[1];
+  return d || f || heading?.trim() || url;
+}
+
+/**
  * Web page → Markdown. defuddle first; Readability + Turndown in parallel, kept if clearly longer
  * (defuddle sometimes truncates without warning, cf. OKF at step 0).
  */
@@ -129,7 +141,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
   // verified markers: Next (« Il reste 69 % de l'article »), Substack (« This post is for paid subscribers »)
   const paywall = /Il reste \d+ ?% de l.article|This post is for paid subscribers/i.test(html);
   return {
-    title: d.title || r?.title || url, content, kind: "article",
+    title: pageTitle(d.title, r?.title ?? undefined, content.match(/^#{1,3}[ \t]+(.+)$/m)?.[1], url), content, kind: "article",
     url: canonical ? new URL(canonical, finalUrl).href : finalUrl,
     author: [d.author, r?.byline].find((a) => a && !/^\d+$/.test(a)) ?? undefined /* gist: defuddle returns a numeric id */, published: d.published || undefined,
     extractor: useRb ? `readability/${depVersion("@mozilla/readability")}+turndown` : `defuddle/${depVersion("defuddle")}+linkedom`,

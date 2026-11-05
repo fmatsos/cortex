@@ -33,6 +33,8 @@ const SHAPE = {
   schema: str("schema"),
   raw_path: template("raw_path"),
   page_path: template("page_path"),
+  /** Most tags on a page an agent creates (default LIMITS.maxTags). */
+  max_tags: z.number({ error: '"max_tags" must be an integer of at least 1, or null.' }).int({ error: '"max_tags" must be an integer of at least 1, or null.' }).min(1, { error: '"max_tags" must be an integer of at least 1, or null.' }).nullish(),
 };
 export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 

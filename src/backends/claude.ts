@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isUnder } from "../paths";
-import { frontmatterError, identityChange, stemClash } from "../lib";
+import { frontmatterError, identityChange } from "../lib";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
@@ -59,7 +59,7 @@ export async function pageError(root: string, tool: string, input: Record<string
   for (const e of edits) text = e.replace_all ? text.split(String(e.old_string)).join(String(e.new_string)) : text.replace(String(e.old_string), () => String(e.new_string));
   const rel = relative(root, resolve(root, path));
   return frontmatterError(text) ?? (await file.exists() ? identityChange(rel, await file.text(), text)
-    : stemClash(rel, new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root })));
+    : `${rel} does not exist: create a page with cortex new <Type> "<title>" (it prints the path), then fill it in with Edit or Write.`);
 }
 
 // --- Permission guard (used by the Claude backend)----------------------------------------------

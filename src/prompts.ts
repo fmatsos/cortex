@@ -1,3 +1,4 @@
+import { LIMITS } from "./limits";
 import { join } from "node:path";
 import PROMPTS from "./prompts.md" with { type: "text" }; // embedded: a compiled binary has no src/ next to it
 import { DEFAULT_LANGUAGE } from "./schema";
@@ -33,8 +34,8 @@ export function scopePrefix(root: string, write: boolean, language?: string): st
 }
 
 /** INGEST prompt for one raw source (`source` = its /raw/… resource path). */
-export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string; page?: string; tags?: string[] }): string {
-  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language), page: o.page ?? "", tags: o.tags?.length ? o.tags.join(", ") : "none yet" };
+export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string; page?: string; tags?: string[]; maxTags?: number }): string {
+  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language), page: o.page ?? "", tags: o.tags?.length ? o.tags.join(", ") : "none yet", maxTags: String(o.maxTags ?? LIMITS.maxTags) };
   return `${prompt("compile", vars)} ${prompt(o.batch ? "compile-batch" : "compile-interactive", vars)}${o.page ? ` ${prompt("compile-prepared", vars)}` : ""}`;
 }
 

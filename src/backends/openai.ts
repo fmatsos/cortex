@@ -3,7 +3,7 @@ import { interactiveWith, type Backend, type Config, type Mode } from "./backend
 import { guard } from "./claude";
 import { confine } from "./sandbox";
 import { LIMITS } from "../limits";
-import { frontmatterError, identityChange, serializeDoc, stemClash } from "../lib";
+import { frontmatterError, identityChange, serializeDoc } from "../lib";
 
 // --- Any OpenAI-compatible API (Ollama, llama.cpp, LM Studio, vLLM, OpenRouter…): cortex runs the agent loop itself.
 // The tools take Claude's names and fields, so every call goes through the same `guard` as the Claude backend.
@@ -21,7 +21,7 @@ const READ_TOOLS = [
   tool("Bash", "Run one cortex command (cortex search, cortex log…), nothing else.", { command: str("e.g. cortex search \"term\""), offset }, ["command"]),
 ];
 const WRITE_TOOLS = [
-  tool("WritePage", "Create or replace a wiki page (Markdown under wiki/). Preferred for pages: cortex writes the YAML frontmatter.",
+  tool("WritePage", "Replace the content of a wiki page created by cortex new (Markdown under wiki/). Preferred for pages: cortex writes the YAML frontmatter.",
     { file_path: str("path under wiki/, ending in .md"), frontmatter: { type: "object", description: "frontmatter fields, as in the schema (type, title, description, status, sources…)" }, body: str("Markdown after the frontmatter") }),
   tool("Append", "Add text at the end of a file under wiki/: write a long page in parts (WritePage with the start, then Append).",
     { file_path: str("path under wiki/"), content: str("text to add, as is") }),
@@ -44,7 +44,7 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     if (bad) return `not written: ${bad} Or use WritePage, which writes the YAML for you.`;
     if (path.endsWith(".md")) {
       const f = Bun.file(abs(path)), rel = relative(root, abs(path));
-      const clash = await f.exists() ? identityChange(rel, await f.text(), text) : stemClash(rel, new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root }));
+      const clash = await f.exists() ? identityChange(rel, await f.text(), text) : `${rel} does not exist: create a page with cortex new <Type> "<title>" (it prints the path), then fill it in with Edit or WritePage.`;
       if (clash) return `not written: ${clash}`;
     }
     await Bun.write(abs(path), text);
