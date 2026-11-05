@@ -146,7 +146,7 @@ cortex config set client codex   # claude | codex | opencode | openai
 cortex config set effort high    # low…max for Claude, minimal…xhigh, max, ultra or persistent for Codex, a model variant for opencode
 ```
 
-Local model, or any OpenAI-compatible API: client `openai`. Cortex runs the agent loop itself, and every tool call goes through the same guard as Claude's (writes limited to `wiki/`, shell limited to `cortex`). This client runs in batch only (`compile --batch`, `ask`).
+Local model, or any OpenAI-compatible API: client `openai`. Cortex runs the agent loop itself, and every tool call goes through the same guard as Claude's (writes limited to `wiki/`, shell limited to `cortex`). When the model is done, Cortex sends back the `cortex lint` errors of its pages (and, for `compile`, a missing Source page) for up to two correction turns. This client runs in batch only (`compile --batch`, `ask`).
 
 > [!IMPORTANT]
 > The model must support tool calling. Claude, Codex and opencode read and write files on their own; an OpenAI-compatible API only provides the model, so Cortex offers it tools (read a page, write under `wiki/`, run `cortex index`…) and the model decides when to call them. Many small local models do not support tool calling, or handle it poorly: Ollama then returns an error, or the model answers in plain text and `compile` writes no page. Pick a model tagged **tools** in the [Ollama catalog](https://ollama.com/search?c=tools) (Qwen 3, Llama 3.1 and later…).

@@ -17,8 +17,14 @@ export const LIMITS = {
   llmRequestMs: 600_000,
   /** openai client: model turns before the agent loop gives up. */
   agentTurns: 100,
-  /** openai client: characters of a tool result sent back to the model (small local contexts). */
+  /** openai client: turns where the model gets the lint errors of its pages back before cortex gives up on fixing them. */
+  lintFixPasses: 2,
+  /** openai client: characters of one part of a tool result (small local contexts); the next part comes with `offset`. */
   toolOutputChars: 20_000,
+  /** openai client: tokens of one model answer. A whole page fits; a model stuck repeating a line fails fast instead of filling the context. */
+  llmMaxTokens: 8_192,
+  /** openai client: answers cut by `llmMaxTokens` the model may redo in smaller parts before cortex gives up. */
+  cutRetries: 3,
   /** A source still `pending` after this many days is reported by lint. */
   pendingDays: 7,
   /** Title taken from the first line of a PDF, cut to this many characters. */

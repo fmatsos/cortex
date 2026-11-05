@@ -4,11 +4,14 @@ import type { Report } from "../print";
 export type Mode = "write" | "read";
 export type { Config };
 
+/** What the command will check once the agent is done: one line per miss, empty when the work is complete. */
+export type Check = () => Promise<string[]>;
+
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */
   interactive(prompt: string): string[];
   /** Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool call). */
-  run(root: string, prompt: string, mode: Mode, report?: Report): Promise<string>;
+  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check): Promise<string>;
 }
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);

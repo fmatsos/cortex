@@ -1,5 +1,6 @@
 import { isAbsolute, join, resolve } from "node:path";
 import { isUnder } from "../paths";
+import { frontmatterError } from "../lib";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
@@ -28,7 +29,10 @@ export default function claude(cfg: Config): Backend {
           permissionMode: "default", // acceptEdits/bypass would skip canUseTool
           allowedTools: [], // nothing approved by default: every call goes through canUseTool
           canUseTool: async (tool, input) => {
-            const v = guard(root, tool, input as Record<string, any>, mode);
+            const g = guard(root, tool, input as Record<string, any>, mode);
+            // a page whose frontmatter would not parse is refused before the write, the agent rewrites it at once
+            const bad = g.allow && await pageError(root, tool, input as Record<string, any>);
+            const v: Verdict = bad ? { allow: false, reason: bad } : g;
             if (v.allow) return { behavior: "allow", updatedInput: input };
             report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" });
             return { behavior: "deny", message: v.reason };
@@ -43,6 +47,17 @@ export default function claude(cfg: Config): Backend {
       return out ?? "";
     },
   };
+}
+
+/** Frontmatter error of the .md page a Write, Edit or MultiEdit would leave on disk; undefined otherwise. */
+export async function pageError(root: string, tool: string, input: Record<string, any>): Promise<string | undefined> {
+  const path = String(input.file_path ?? "");
+  if (!path.endsWith(".md") || !WRITERS.has(tool)) return undefined;
+  const file = Bun.file(resolve(root, path));
+  let text: string = tool === "Write" ? String(input.content ?? "") : await file.exists() ? await file.text() : "";
+  const edits: any[] = tool === "MultiEdit" ? input.edits ?? [] : tool === "Edit" ? [input] : [];
+  for (const e of edits) text = e.replace_all ? text.split(String(e.old_string)).join(String(e.new_string)) : text.replace(String(e.old_string), () => String(e.new_string));
+  return frontmatterError(text);
 }
 
 // --- Permission guard (used by the Claude backend)----------------------------------------------
