@@ -75,3 +75,21 @@ test("inbox: a file whose add fails stays with its .note, a sub-directory is ign
   expect(await Bun.file(join(root, raws[0])).text()).toContain("note: pourquoi");
   expect(existsSync(join(root, "inbox/urls.txt"))).toBe(false); // never created by a run that had no urls
 });
+
+test("inbox: a .url file holds one link, removed once added, kept on failure", async () => {
+  const { inbox } = await import("./inbox");
+  const { readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const page = `<html><head><title>Lien partagé</title></head><body><article><h1>Lien partagé</h1>${"<p>Un paragraphe de remplissage assez long pour que l'extraction dépasse le seuil de cinquante mots exigé par cortex add, sans réseau.</p>".repeat(4)}</article></body></html>`;
+  const srv = Bun.serve({ port: 0, fetch: (req) => new URL(req.url).pathname === "/ok" ? new Response(page, { headers: { "content-type": "text/html" } }) : new Response("non", { status: 404 }) });
+  try {
+    await Bun.write(join(root, "inbox/a.url"), `${srv.url}ok ma note\n`);
+    await Bun.write(join(root, "inbox/b.url"), `${srv.url}ko\n`);
+    expect((await inbox(root)).ok).toBe(false);
+    expect(readdirSync(join(root, "inbox"))).toEqual(["b.url"]);
+    const raws = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
+    expect(raws).toHaveLength(1);
+    expect(await Bun.file(join(root, raws[0])).text()).toContain("note: ma note");
+  } finally { srv.stop(true); }
+});

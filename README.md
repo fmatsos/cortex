@@ -117,7 +117,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | Command | What it does |
 |---|---|
 | `cortex add <url\|file\|-> --note "…" [--dry-run]` | Captures a source into `raw/` with status `pending`, and logs it. Idempotent: an existing URL or content returns the existing id. |
-| `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line. Any other file is added, with an optional note in `<name>.note`. Successful entries leave the inbox. |
+| `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line, a `*.url` file holds one such line. Any other file is added, with an optional note in `<name>.note`. Successful entries leave the inbox. |
 | `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search. |
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
 | `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>" [--force]` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists, and a near title of the same type (same words, or one word more): `--force` creates it anyway, by hand only (refused to an agent). |

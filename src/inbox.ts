@@ -31,14 +31,18 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     }
   };
 
+  const link = async (line: string, onOk: () => Promise<unknown>) => {
+    const [url, ...rest] = line.split(/\s+/);
+    if (!/^https?:\/\//.test(url)) { say("fail", `${line}: not an http(s) URL`); failed++; return; }
+    await run(url, url, rest.join(" ") || undefined, onOk);
+  };
   for (const raw of lines) {
     const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const [url, ...rest] = line.split(/\s+/);
-    if (!/^https?:\/\//.test(url)) { say("fail", `${line}: not an http(s) URL`); failed++; continue; }
-    await run(url, url, rest.join(" ") || undefined, async () => done.add(raw));
+    if (line && !line.startsWith("#")) await link(line, async () => done.add(raw));
   }
   for (const f of files) {
+    // `<name>.url`: one link, like a urls.txt line, in a file of its own (one file per share, no write conflict)
+    if (f.endsWith(".url")) { await link((await Bun.file(join(dir, f)).text()).trim(), () => unlink(join(dir, f))); continue; }
     const noteFile = join(dir, `${f}.note`);
     const note = ((await Bun.file(noteFile).exists()) ? (await Bun.file(noteFile).text()).trim() : "") || undefined;
     await run(f, join(dir, f), note, async () => { await unlink(join(dir, f)); await unlink(noteFile).catch(() => {}); });
