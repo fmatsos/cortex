@@ -12,16 +12,20 @@
 const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090" } = process.env;
 if (import.meta.main && (!GITEA_TOKEN || !SHARE_REPO)) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
 
-type Share = { title?: string; text?: string; url?: string };
+type Share = { title?: string; text?: string; url?: string; note?: string };
 
-/** The inbox file of a share: [extension, content], or null when nothing was shared. */
-export function toInbox({ title = "", text = "", url = "" }: Share): [string, string] | null {
-  title = title.trim(); text = text.trim(); url = url.trim();
+/**
+ * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
+ * required by compile) goes on the `.url` line, or in `<name>.md.note` next to a text.
+ */
+export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
+  title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
   const link = url || text.match(/https?:\/\/\S+/)?.[0] || "";
   const rest = (link ? text.replace(link, "") : text).trim();
-  if (!rest) return link ? ["url", `${link}\n`] : null;
+  if (!rest) return link ? [["url", `${link}${note ? ` ${note}` : ""}\n`]] : null;
   const head = title || rest.split("\n")[0].slice(0, 80);
-  return ["md", `# ${head}\n\n${rest}\n${link ? `\nSource : <${link}>\n` : ""}`];
+  const md: [string, string] = ["md", `# ${head}\n\n${rest}\n${link ? `\nSource : <${link}>\n` : ""}`];
+  return note ? [md, ["md.note", `${note}\n`]] : [md];
 }
 
 const icon = Bun.file(new URL("../assets/logo/cortex-192.png", import.meta.url));
@@ -39,7 +43,8 @@ const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta n
 <style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea,input{width:100%;box-sizing:border-box;font:inherit;margin:.25rem 0}
 button{font:inherit;padding:.5rem 1rem}#s{white-space:pre-line}</style></head><body>
 <h1>Cortex</h1><p id="s"></p>
-<form id="f"><input id="u" placeholder="Lien (facultatif)"><textarea id="t" rows="6" placeholder="Note"></textarea><button>Envoyer à l'inbox</button></form>
+<form id="f"><input id="u" placeholder="Lien (facultatif)"><textarea id="t" rows="6" placeholder="Texte (facultatif avec un lien)"></textarea>
+<textarea id="n" rows="2" required placeholder="Pourquoi je garde ça (note, obligatoire)"></textarea><button>Envoyer à l'inbox</button></form>
 <script>
 const K = "cortex-share-queue", s = document.getElementById("s");
 const load = () => { try { return JSON.parse(localStorage.getItem(K) || "[]"); } catch { return []; } };
@@ -58,35 +63,43 @@ async function flush() {
 // sites whose pages need a login: the link alone gives nothing, so the post's text is asked for instead
 const WALLED = /(^|\\.)(facebook\\.com|fb\\.watch|reddit\\.com|redd\\.it|instagram\\.com|threads\\.net|x\\.com|twitter\\.com)$/;
 const p = new URLSearchParams(location.search);
+let title = "";
 if (p.get("title") || p.get("text") || p.get("url")) {
   const item = { title: p.get("title") || "", text: p.get("text") || "", url: p.get("url") || "" };
   history.replaceState(null, "", "/share/");
   const link = item.url || (item.text.trim().match(/^https?:\\/\\/\\S+$/) || [""])[0];
   let host = ""; try { host = new URL(link).hostname; } catch {}
+  // nothing leaves before the note is written: the share fills the form, the note is asked for
+  document.getElementById("u").value = link;
+  document.getElementById("t").value = item.text.replace(link, "").trim();
+  title = item.title;
   if (link && WALLED.test(host) && !item.text.replace(link, "").trim()) {
-    document.getElementById("u").value = link;
     document.getElementById("t").focus();
-    s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le ci-dessous, puis envoie.";
-  } else save([...load(), item]);
+    s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le dans « Texte », écris ta note, puis envoie.";
+  } else { document.getElementById("n").focus(); s.textContent = "Écris pourquoi tu gardes ça, puis envoie."; }
 }
 document.getElementById("f").onsubmit = (e) => { e.preventDefault();
-  const url = document.getElementById("u").value, text = document.getElementById("t").value;
-  if (!url.trim() && !text.trim()) return;
-  save([...load(), { url, text }]); e.target.reset(); flush(); };
+  const url = document.getElementById("u").value, text = document.getElementById("t").value, note = document.getElementById("n").value;
+  if ((!url.trim() && !text.trim()) || !note.trim()) return;
+  save([...load(), { title, url, text, note }]); title = ""; e.target.reset(); flush(); };
 flush();
 </script></body></html>`;
 
 async function put(share: Share): Promise<Response> {
-  const file = toInbox(share);
-  if (!file) return new Response("rien à envoyer", { status: 400 });
+  const files = toInbox(share);
+  if (!files) return new Response("rien à envoyer", { status: 400 });
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
-  const path = `inbox/partage-${id}.${file[0]}`;
-  const r = await fetch(`${GITEA_URL}/api/v1/repos/${SHARE_REPO}/contents/${path}`, {
+  const paths = files.map(([ext]) => `inbox/partage-${id}.${ext}`);
+  // one commit for the share and its note
+  const r = await fetch(`${GITEA_URL}/api/v1/repos/${SHARE_REPO}/contents`, {
     method: "POST",
     headers: { authorization: `token ${GITEA_TOKEN}`, "content-type": "application/json" },
-    body: JSON.stringify({ content: Buffer.from(file[1]).toString("base64"), message: `inbox: partage ${id}` }),
+    body: JSON.stringify({
+      message: `inbox: partage ${id}`,
+      files: files.map(([, content], i) => ({ operation: "create", path: paths[i], content: Buffer.from(content).toString("base64") })),
+    }),
   });
-  return r.ok ? Response.json({ path }) : new Response(`Gitea ${r.status}`, { status: 502 });
+  return r.ok ? Response.json({ paths }) : new Response(`Gitea ${r.status}`, { status: 502 });
 }
 
 if (import.meta.main) Bun.serve({
