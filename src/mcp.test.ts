@@ -93,3 +93,37 @@ test("cortex mcp: initialize, tools/list, search, get, add without network (JSON
     expect((await call(10, "related", { path: "/wiki/concepts/a.md" })).content[0].text).toBe(GOLDEN_MCP_RELATED);
   } finally { proc.stdin.end(); proc.kill(); }
 });
+
+test("cortex mcp --agent: the cortex tool pack of openai, same names per mode, guard and page checks over stdio", async () => {
+  const { toolPack } = await import("./backends/tools");
+  const root = await mcpRoot();
+  const open = (mode: string) => {
+    const proc = Bun.spawn(["bun", join(import.meta.dir, "cortex.ts"), "mcp", "--agent", mode], { env: { ...process.env, CORTEX_ROOT: root }, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = "";
+    const rpc = async (id: number, method: string, params?: object) => {
+      proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); proc.stdin.flush();
+      for (;;) {
+        const nl = buf.indexOf("\n");
+        if (nl >= 0) { const msg = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1); if (msg.id === id) return msg.result; continue; }
+        const { value, done } = await reader.read();
+        if (done) throw new Error(await new Response(proc.stderr).text());
+        buf += value;
+      }
+    };
+    return { proc, rpc, text: async (id: number, name: string, args: object) => (await rpc(id, "tools/call", { name, arguments: args })).content[0].text as string };
+  };
+  for (const mode of ["read", "write"] as const) {
+    const { proc, rpc, text } = open(mode);
+    try {
+      await rpc(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+      expect((await rpc(2, "tools/list")).tools.map((t: any) => t.name)).toEqual(toolPack(mode).map((t) => t.name));
+      if (mode === "write") {
+        expect(await text(3, "Write", { file_path: "cortex.json", content: "{}" })).toContain("Write refused outside wiki/");
+        expect(await text(4, "Write", { file_path: "wiki/concepts/zz.md", content: "---\ntype: Concept\ntitle: Z\n---\n" })).toContain("create a new page with NewPage");
+        expect(await text(5, "WritePage", { file_path: "wiki/concepts/a.md", frontmatter: { type: "Concept", title: "Autre" }, body: "x" })).toContain("is an existing page");
+        expect(await text(6, "NewPage", { type: "Concept", title: "Zeta page", body: "Texte.\n" })).toMatch(/^created wiki\/concepts\//);
+      } else expect(await text(3, "Read", { file_path: "wiki/concepts/a.md" })).toContain("---");
+    } finally { proc.stdin.end(); proc.kill(); }
+  }
+});

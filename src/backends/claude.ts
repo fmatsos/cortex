@@ -1,19 +1,23 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isUnder } from "../paths";
-import { frontmatterError, identityChange } from "../lib";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex } from "./policy";
 
-// --- Claude Agent SDK: every tool call goes through the guard, before execution------------------
+// --- Claude Agent SDK: the cortex tool pack (tools.ts) in process, every call guarded; Claude Code's own tools are off------------------
 
 export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
     async run(root, prompt, mode, report) {
-      const { query } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
+      const { query, createSdkMcpServer, tool } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
+      const { callTool, toolPack, zodShape } = await import("./tools");
       const schema = await schemaText(root);
+      const refused = (reason: string) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" });
+      // the cortex tool pack, in process: the same tools as every backend; Claude Code's own tools are off
+      const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: toolPack(mode).map((t) =>
+        tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused) }] }))) });
       let out: string | undefined;
       for await (const m of query({
         prompt,
@@ -27,15 +31,15 @@ export default function claude(cfg: Config): Backend {
           settingSources: [],
           systemPrompt: { type: "preset", preset: "claude_code", append: schema },
           permissionMode: "default", // acceptEdits/bypass would skip canUseTool
+          mcpServers: { cortex },
+          disallowedTools: BUILTINS, // not even offered: the cortex tools replace them
           allowedTools: [], // nothing approved by default: every call goes through canUseTool
-          canUseTool: async (tool, input) => {
-            const g = guard(root, tool, input as Record<string, any>, mode);
-            // a page whose frontmatter would not parse is refused before the write, the agent rewrites it at once
-            const bad = g.allow && await pageError(root, tool, input as Record<string, any>);
-            const v: Verdict = bad ? { allow: false, reason: bad } : g;
-            if (v.allow) return { behavior: "allow", updatedInput: input };
-            report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" });
-            return { behavior: "deny", message: v.reason };
+          // only the cortex tools (they guard each call themselves) and the todo list; anything else is refused
+          canUseTool: async (name, input) => {
+            if (name.startsWith("mcp__cortex__") || name === "TodoWrite") return { behavior: "allow", updatedInput: input };
+            const reason = `Tool not allowed for cortex: ${name}. Use the cortex tools (Read, Glob, Grep, Bash, NewPage, WritePage, Append, Write, Edit).`;
+            refused(reason);
+            return { behavior: "deny", message: reason };
           },
         },
       })) {
@@ -49,20 +53,10 @@ export default function claude(cfg: Config): Backend {
   };
 }
 
-/** Error of the .md page a Write, Edit or MultiEdit would leave on disk (unreadable frontmatter, another page over an existing one, a reused file name); undefined otherwise. */
-export async function pageError(root: string, tool: string, input: Record<string, any>): Promise<string | undefined> {
-  const path = String(input.file_path ?? "");
-  if (!path.endsWith(".md") || !WRITERS.has(tool)) return undefined;
-  const file = Bun.file(resolve(root, path));
-  let text: string = tool === "Write" ? String(input.content ?? "") : await file.exists() ? await file.text() : "";
-  const edits: any[] = tool === "MultiEdit" ? input.edits ?? [] : tool === "Edit" ? [input] : [];
-  for (const e of edits) text = e.replace_all ? text.split(String(e.old_string)).join(String(e.new_string)) : text.replace(String(e.old_string), () => String(e.new_string));
-  const rel = relative(root, resolve(root, path));
-  return frontmatterError(text) ?? (await file.exists() ? identityChange(rel, await file.text(), text)
-    : `${rel} does not exist: create a page with cortex new <Type> "<title>" (it prints the path), then fill it in with Edit or Write.`);
-}
+/** Claude Code's own tools, switched off: the cortex tool pack replaces them. */
+export const BUILTINS = ["Read", "Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "Task", "BashOutput", "KillShell"];
 
-// --- Permission guard (used by the Claude backend)----------------------------------------------
+// --- Permission guard (used by the cortex tool pack, tools.ts)----------------------------------------------
 
 // What Bash may run comes from the policy table (policy.ts)
 const CORTEX_CMD = { read: toRegex("read"), write: toRegex("write") };

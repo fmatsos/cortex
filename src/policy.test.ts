@@ -35,23 +35,19 @@ async function allowedToolsOf(mode: "read" | "write"): Promise<string[]> {
   await Bun.write(join(root, "wiki/.keep"), "");
   await runBackend("default", {}, bin, root, mode);
   const argv = readFileSync(out, "utf8").trim().split("\n");
-  expect(argv.slice(0, 2)).toEqual(["-p", "--allowedTools"]);
-  return argv.slice(2);
+  // the cortex tool pack over MCP, Claude Code's own tools off
+  expect(argv.slice(0, 3)).toEqual(["-p", "--strict-mcp-config", "--mcp-config"]);
+  expect(JSON.parse(argv[3]).mcpServers.cortex.args.slice(-3)).toEqual(["mcp", "--agent", mode]);
+  expect(argv.slice(4, 6)).toEqual(["--allowedTools", "mcp__cortex__*"]);
+  expect(argv[6]).toBe("--disallowedTools");
+  return argv.slice(7);
 }
 
 // Journal reading rules: the one difference the agnostic list had with the other two backends
 // (REVIEW FAC-14: it lacked `cortex log` reading). Added on purpose when the policy table was introduced.
-const LOG_READ_TOOLS = ["Bash(cortex log)", "Bash(cortex log --json:*)", "Bash(cortex log --limit:*)", "Bash(cortex log --kind:*)"];
 
-test("liste --allowedTools de l'agent agnostique, mode read", async () => {
-  expect(sorted(await allowedToolsOf("read"))).toEqual(sorted(["Read", "Glob", "Grep", "Bash(cortex search:*)", ...LOG_READ_TOOLS]));
-});
-
-test("liste --allowedTools de l'agent agnostique, mode write", async () => {
-  expect(sorted(await allowedToolsOf("write"))).toEqual(sorted([
-    "Read", "Glob", "Grep", "Bash(cortex search:*)", ...LOG_READ_TOOLS,
-    "Write", "Edit", "Bash(cortex index)", "Bash(cortex lint:*)", "Bash(cortex new:*)", "Bash(cortex log add:*)",
-  ]));
+test("agent agnostique (claude -p) : le pack d'outils cortex par MCP, ses propres outils désactivés, en read comme en write", async () => {
+  for (const mode of ["read", "write"] as const) expect(await allowedToolsOf(mode)).toContain("Write");
 });
 
 // command → [allowed in read, allowed in write]

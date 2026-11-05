@@ -223,8 +223,8 @@ async function weave(root: string, src: string, resource: string, paths: string[
     const page = await read(p);
     if (!page) continue;
     let body = page.doc.body;
-    // the note callout copied onto another page: the whole > block holding [!note] and the note goes
-    if (first) body = body.replace(/^(?:>?[ \t]*\[!note\][^\n]*\n?)(?:>[^\n]*\n?)*/gim, (m) => (m.includes(first) || /note personnelle/i.test(m) ? "" : m)).replace(/^\s*\n/, "");
+    // the note copied onto another page, intact or broken (« !note », a lone « > »): the paragraph holding it goes
+    if (first) body = body.split(/\n{2,}/).filter((b) => !b.includes(first)).join("\n\n").replace(/^\s+/, "");
     const cites = (page.doc.fm.sources ?? [] as unknown[]) as { resource?: string }[];
     if (Array.isArray(cites) && cites.some((c) => c?.resource === resource)) {
       if (!me.doc.body.includes(`(/${p})`)) add.push(link(p, page.doc.fm.title));

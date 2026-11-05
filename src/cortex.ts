@@ -69,7 +69,7 @@ try {
       options: {
         note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" },
       },
     });
   } catch (e) {
@@ -214,7 +214,10 @@ try {
       break;
     }
     case "mcp":
-      await (await import("./mcp")).serveMcp(root); // loaded on demand; stays open as long as the client reads stdin
+      if (o.agent !== undefined) { // the agent cortex runs: the cortex tool pack (agent-mcp.ts), not the human's server
+        if (o.agent !== "write" && o.agent !== "read") throw usage("Usage: cortex mcp [--agent write|read]");
+        await (await import("./agent-mcp")).serveAgentMcp(root, o.agent);
+      } else await (await import("./mcp")).serveMcp(root); // loaded on demand; stays open as long as the client reads stdin
       break;
     case "schema": {
       const { schemaText, writeSchema } = await import("./schema");

@@ -33,22 +33,7 @@ export const POLICY: Record<Mode, Rule[]> = {
   ],
 };
 
-const FILE_TOOLS: Record<Mode, string[]> = {
-  read: ["Read", "Glob", "Grep"],
-  write: ["Read", "Glob", "Grep", "Write", "Edit"],
-};
-
 const isFlags = (r: Rule): r is Extract<Rule, { flags: Flag[] }> => "flags" in r;
-
-/** Claude Code `--allowedTools` entries (agnostic backend). */
-export function toAllowedTools(mode: Mode): string[] {
-  return [
-    ...FILE_TOOLS[mode],
-    ...POLICY[mode].flatMap((r) =>
-      isFlags(r) ? [`Bash(cortex ${r.cmd})`, ...r.flags.map((f) => `Bash(cortex ${r.cmd} ${f.flag}:*)`)]
-        : [r.args === "none" ? `Bash(cortex ${r.cmd})` : `Bash(cortex ${r.cmd}:*)`]),
-  ];
-}
 
 /**
  * Regex a Claude guard applies to an already unquoted Bash command. Arguments are not constrained

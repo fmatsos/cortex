@@ -127,19 +127,6 @@ test("openai: a failed compile check goes back to the model, even without a page
   } finally { server.stop(true); }
 });
 
-test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML, replacing a page, or creating one outside cortex new, is caught before the write", async () => {
-  const { pageError } = await import("./backends/claude");
-  const root = mkdtempSync(join(tmpdir(), "cortex-claude-"));
-  await Bun.write(join(root, "wiki/a.md"), "---\ntype: Concept\ntitle: A\n---\nx\n");
-  expect(await pageError(root, "Write", { file_path: "wiki/b.md", content: "---\ntype: Concept\n title: B\n---\n" })).toContain("invalid YAML");
-  expect(await pageError(root, "Edit", { file_path: "wiki/a.md", old_string: "title: A", new_string: " title: A" })).toContain("invalid YAML");
-  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "x", new_string: "y" }] })).toBeUndefined();
-  // another page over an existing one, or under the file name of an existing one: refused too
-  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "title: A", new_string: "title: B" }] })).toContain('its title "A" would become "B"');
-  expect(await pageError(root, "Write", { file_path: "wiki/concepts/a.md", content: "---\ntype: Concept\ntitle: C\n---\n" })).toContain("wiki/concepts/a.md does not exist: create a page with cortex new");
-  expect(await pageError(root, "Write", { file_path: "wiki/c.txt", content: " bad: : yaml" })).toBeUndefined();
-});
-
 // fake OpenAI-compatible server: scripted tool calls, then a final answer
 test("openai: tool loop, writes under wiki/ only, refusal sent back to the model", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
