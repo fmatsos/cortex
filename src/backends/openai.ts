@@ -21,11 +21,13 @@ const READ_TOOLS = [
   tool("Bash", "Run one cortex command (cortex search, cortex log…), nothing else.", { command: str("e.g. cortex search \"term\""), offset }, ["command"]),
 ];
 const WRITE_TOOLS = [
-  tool("WritePage", "Replace the content of a wiki page created by cortex new (Markdown under wiki/). Preferred for pages: cortex writes the YAML frontmatter.",
+  tool("NewPage", "Create a new wiki page: cortex names the file and writes the YAML frontmatter, then returns the path. Refused when a page has the same or a near title: complete that page instead.",
+    { type: str("Source, Concept, Entity or Synthesis"), title: str("page title"), frontmatter: { type: "object", description: "other frontmatter fields, as in the schema (description, tags, sources…)" }, body: str("Markdown after the frontmatter") }, ["type", "title", "body"]),
+  tool("WritePage", "Replace the content of an existing wiki page (Markdown under wiki/). Preferred for pages: cortex writes the YAML frontmatter.",
     { file_path: str("path under wiki/, ending in .md"), frontmatter: { type: "object", description: "frontmatter fields, as in the schema (type, title, description, status, sources…)" }, body: str("Markdown after the frontmatter") }),
   tool("Append", "Add text at the end of a file under wiki/: write a long page in parts (WritePage with the start, then Append).",
     { file_path: str("path under wiki/"), content: str("text to add, as is") }),
-  tool("Write", "Create or replace a file under wiki/.", { file_path: str("path under wiki/"), content: str("whole file content") }),
+  tool("Write", "Replace a file under wiki/ (a new page: NewPage).", { file_path: str("path under wiki/"), content: str("whole file content") }),
   tool("Edit", "Replace one exact, unique string of a file under wiki/.", { file_path: str("path under wiki/"), old_string: str("exact text to replace"), new_string: str("replacement") }),
 ];
 
@@ -44,7 +46,7 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     if (bad) return `not written: ${bad} Or use WritePage, which writes the YAML for you.`;
     if (path.endsWith(".md")) {
       const f = Bun.file(abs(path)), rel = relative(root, abs(path));
-      const clash = await f.exists() ? identityChange(rel, await f.text(), text) : `${rel} does not exist: create a page with cortex new <Type> "<title>" (it prints the path), then fill it in with Edit or WritePage.`;
+      const clash = await f.exists() ? identityChange(rel, await f.text(), text) : `${rel} does not exist: create a new page with NewPage, which names the file.`;
       if (clash) return `not written: ${clash}`;
     }
     await Bun.write(abs(path), text);
@@ -61,6 +63,13 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
         (await Bun.file(p).text()).split("\n").forEach((l, i) => { if (re.test(l)) out.push(`${relative(root, p)}:${i + 1}: ${l}`); });
       }
       return part(out.join("\n") || "(no match)", a.offset);
+    }
+    case "NewPage": {
+      if (typeof a.type !== "string" || typeof a.title !== "string" || typeof a.body !== "string") return "type, title and body must be strings.";
+      const fm = a.frontmatter && typeof a.frontmatter === "object" && !Array.isArray(a.frontmatter) ? { ...a.frontmatter } : {};
+      delete fm.type; delete fm.title; // the tool arguments win
+      const [{ newPageCtx }, { openWiki }] = await Promise.all([import("../naming"), import("../context")]);
+      return `created ${await newPageCtx(openWiki(root), a.type, a.title, new Date(), { fm, body: a.body })}`;
     }
     case "WritePage":
       if (!a.frontmatter || typeof a.frontmatter !== "object" || Array.isArray(a.frontmatter) || typeof a.body !== "string") return "frontmatter must be an object and body a string.";
@@ -157,7 +166,8 @@ export default function openai(cfg: Config): Backend {
             const args = JSON.parse(c.function.arguments || "{}");
             // the schema writes repo paths as `/raw/…`: a leading / outside the root means the repository root, not the system's
             for (const k of ["file_path", "path"]) if (typeof args[k] === "string" && args[k].startsWith("/") && !args[k].startsWith(root)) args[k] = "." + args[k];
-            const v = guard(root, /^(WritePage|Append)$/.test(c.function.name) ? "Write" : c.function.name, args, mode); // same rule as Write
+            // NewPage writes one page under wiki/: the Write rule, on a stand-in path
+            const v = guard(root, /^(WritePage|Append|NewPage)$/.test(c.function.name) ? "Write" : c.function.name, c.function.name === "NewPage" ? { ...args, file_path: "wiki/new.md" } : args, mode); // same rule as Write
             if (!v.allow) { report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" }); content = v.reason; }
             else content = await exec(root, mode, c.function.name, args);
           } catch (e) { content = `error: ${(e as Error).message}`; }

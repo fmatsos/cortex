@@ -90,6 +90,30 @@ test("openai: a page with invalid YAML is never written, WritePage writes the fr
   } finally { server.stop(true); }
 });
 
+test("openai: NewPage creates a page named by cortex in one call; a near title is refused", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const script = [
+    { role: "assistant", content: null, tool_calls: [call("1", "NewPage", { type: "Concept", title: "Qwen3-4B-Instruct-2507", frontmatter: { description: "d", tags: ["llm"], title: "ignored" }, body: "Texte.\n" })] },
+    { role: "assistant", content: null, tool_calls: [call("2", "NewPage", { type: "Concept", title: "Qwen3 4B Instruct", body: "x\n" })] },
+    { role: "assistant", content: "done" },
+  ];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ message: script[seen.length - 1] }] }); } });
+  try {
+    await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "write");
+    const created = seen[1].messages.at(-1).content as string;
+    expect(created).toMatch(/^created wiki\/concepts\/[0-9a-f-]{36}\.md$/);
+    const { parseDoc } = await import("./lib");
+    const doc = parseDoc("p", await Bun.file(join(root, created.slice(8))).text());
+    expect(doc.fm).toMatchObject({ type: "Concept", title: "Qwen3-4B-Instruct-2507", status: "draft", description: "d", tags: ["llm"] });
+    expect(doc.body).toBe("Texte.\n");
+    expect(seen[2].messages.at(-1).content).toContain("near title");
+  } finally { server.stop(true); }
+});
+
 test("openai: a failed compile check goes back to the model, even without a page written", async () => {
   const replies = [{ role: "assistant", content: "done" }, { role: "assistant", content: "fixed" }];
   const seen: any[] = [];
