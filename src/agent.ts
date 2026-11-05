@@ -6,6 +6,7 @@ import { rawId, toResource } from "./doc";
 import { openWiki, type Wiki } from "./context";
 import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
+import type { Check } from "./backends/backend";
 import { confine } from "./backends/sandbox";
 import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
@@ -60,7 +61,7 @@ export async function outOfScope(root: string, before: Map<string, string>, repo
 }
 
 /** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by cortex.json. */
-async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report): Promise<number> {
+async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report, check?: Check): Promise<number> {
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
   const backend = await backendFor(root, await w.config());
@@ -74,7 +75,7 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
     catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
     finally { process.off("SIGINT", keep); }
   }
-  try { report({ level: "info", text: await backend.run(root, prompt, mode, report) }); return 0; }
+  try { report({ level: "info", text: await backend.run(root, prompt, mode, report, check) }); return 0; }
   catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
 }
 
@@ -124,7 +125,9 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), batch: opts.batch, language: cfg.language });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
-    const code = await run(w, prompt, !!opts.batch, "write", sink);
+    // the same test as below, offered to a backend that can hand a miss back to its model (openai)
+    const cited: Check = async () => await isCited(openWiki(root), d.path) ? [] : [`no Source page cites ${toResource(d.path)}: its Source page must list it under sources (id ${id}, resource ${toResource(d.path)}).`];
+    const code = await run(w, prompt, !!opts.batch, "write", sink, cited);
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
     if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages

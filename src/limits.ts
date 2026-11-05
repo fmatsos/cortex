@@ -17,6 +17,8 @@ export const LIMITS = {
   llmRequestMs: 600_000,
   /** openai client: model turns before the agent loop gives up. */
   agentTurns: 100,
+  /** openai client: turns where the model gets the lint errors of its pages back before cortex gives up on fixing them. */
+  lintFixPasses: 2,
   /** openai client: characters of a tool result sent back to the model (small local contexts). */
   toolOutputChars: 20_000,
   /** A source still `pending` after this many days is reported by lint. */

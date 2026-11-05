@@ -4,6 +4,46 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import openai from "./backends/openai";
 
+test("openai: a failed compile check goes back to the model, even without a page written", async () => {
+  const replies = [{ role: "assistant", content: "done" }, { role: "assistant", content: "fixed" }];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ message: replies[seen.length - 1] }] }); } });
+  let cited = false;
+  try {
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` })
+      .run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "compile", "write", undefined, async () => { const miss = cited ? [] : ["no Source page cites /raw/x.md"]; cited = true; return miss; });
+    expect(out).toBe("fixed");
+    expect(seen[1].messages.at(-1).content).toContain("no Source page cites /raw/x.md");
+  } finally { server.stop(true); }
+});
+
+test("openai: lint errors of the pages written go back to the model, once fixed it may finish", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const call = (name: string, args: object) => ({ role: "assistant", content: null, tool_calls: [{ id: name, type: "function", function: { name, arguments: JSON.stringify(args) } }] });
+  const page = (status: string) => `---\ntype: Concept\ntitle: A\ndescription: d\nstatus: ${status}\n---\nBody.\n`;
+  const script = [
+    call("Write", { file_path: "wiki/concepts/a.md", content: page("pending") }),
+    { role: "assistant", content: "done" },
+    call("Write", { file_path: "wiki/concepts/a.md", content: page("draft") }),
+    { role: "assistant", content: "fixed" },
+  ];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) {
+    seen.push(await req.json());
+    return Response.json({ choices: [{ message: script[seen.length - 1] }] });
+  } });
+  try {
+    const notes: string[] = [];
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "compile", "write", (r) => notes.push(r.text));
+    expect(out).toBe("fixed");
+    expect(seen[2].messages.at(-1)).toMatchObject({ role: "user" });
+    expect(seen[2].messages.at(-1).content).toContain("wiki/concepts/a.md: unknown status: pending");
+    expect(notes.some((n) => n.startsWith("1 error"))).toBe(true);
+  } finally { server.stop(true); }
+});
+
 // fake OpenAI-compatible server: scripted tool calls, then a final answer
 test("openai: tool loop, writes under wiki/ only, refusal sent back to the model", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
@@ -28,7 +68,7 @@ test("openai: tool loop, writes under wiki/ only, refusal sent back to the model
     expect(out).toBe("done");
     expect(await Bun.file(join(root, "secret.txt")).exists()).toBe(false);
     expect(await Bun.file(join(root, "wiki/a.md")).text()).toBe("# B\n");
-    expect(refused).toHaveLength(1);
+    expect(refused.filter((t) => t.startsWith("refused"))).toHaveLength(1);
     expect(seen[1].messages.find((m: any) => m.tool_call_id === "1").content).toContain("outside wiki/");
     expect(seen[0].tools.map((t: any) => t.function.name)).toContain("Write");
   } finally { server.stop(true); }

@@ -73,6 +73,12 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
 export const thinking = (effort?: string) =>
   effort === "none" ? { chat_template_kwargs: { enable_thinking: false }, think: false } : effort ? { reasoning_effort: effort } : {};
 
+/** Lint errors of the given pages (paths relative to the root), one line each. */
+async function lintErrors(root: string, pages: Set<string>): Promise<string[]> {
+  const { lint } = await import("../lint");
+  return (await lint(root)).filter((i) => i.level === "error" && pages.has(i.path)).map((i) => `${i.path}: ${i.msg}`);
+}
+
 /** Base URL: `base_url` of cortex.json, else $OPENAI_BASE_URL, else a local Ollama. */
 export const baseUrl = (cfg: Config) => (cfg.base_url ?? process.env.OPENAI_BASE_URL ?? "http://localhost:11434/v1").replace(/\/+$/, "");
 
@@ -80,13 +86,15 @@ export default function openai(cfg: Config): Backend {
   return {
     // no CLI to start: interactive only through $CORTEX_AGENT
     interactive: interactiveWith(() => { throw new Error("the openai client runs in batch only: use --batch (or set $CORTEX_AGENT)."); }),
-    async run(root, prompt, mode, report) {
+    async run(root, prompt, mode, report, check) {
       if (!cfg.model) throw new Error(`the openai client needs a model: cortex config set model <name>.`);
       const { schemaText } = await import("../schema");
       const tools = mode === "write" ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
       const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
       // secret: environment only. Never sent to a base_url that only cortex.json names: a cloned wiki could point it at any host.
       const key = !cfg.base_url || cfg.base_url === process.env.OPENAI_BASE_URL ? process.env.OPENAI_API_KEY : undefined;
+      const touched = new Set<string>(); // pages written this run: only their lint errors go back to the model
+      let fixes = 0;
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
         const res = await fetch(`${baseUrl(cfg)}/chat/completions`, {
           method: "POST",
@@ -99,7 +107,15 @@ export default function openai(cfg: Config): Backend {
         const msg = body.choices?.[0]?.message;
         if (!msg) throw new Error(`${baseUrl(cfg)}: answer without a message: ${JSON.stringify(body).slice(0, 300)}`);
         messages.push(msg);
-        if (!msg.tool_calls?.length) return msg.content ?? "";
+        if (!msg.tool_calls?.length) {
+          // small models forget a field or copy a raw `status: pending`: lint names it, one more turn fixes it
+          const errors = fixes < LIMITS.lintFixPasses ? [...(touched.size ? await lintErrors(root, touched) : []), ...(await check?.() ?? [])] : [];
+          if (!errors.length) return msg.content ?? "";
+          fixes++;
+          report?.({ level: "info", text: `${errors.length} error(s), sent back to the model (pass ${fixes}/${LIMITS.lintFixPasses})`, mark: "  ↻" });
+          messages.push({ role: "user", content: `The work is not complete (cortex lint and the compile check). Fix them with Edit or Write, then answer again:\n${errors.join("\n")}` });
+          continue;
+        }
         for (const c of msg.tool_calls) {
           let content: string;
           try {
@@ -108,7 +124,10 @@ export default function openai(cfg: Config): Backend {
             for (const k of ["file_path", "path"]) if (typeof args[k] === "string" && args[k].startsWith("/") && !args[k].startsWith(root)) args[k] = "." + args[k];
             const v = guard(root, c.function.name, args, mode);
             if (!v.allow) { report?.({ level: "warn", text: `refused: ${v.reason}`, mark: "  ⊘" }); content = v.reason; }
-            else content = await exec(root, mode, c.function.name, args);
+            else {
+              content = await exec(root, mode, c.function.name, args);
+              if (c.function.name === "Write" || c.function.name === "Edit") touched.add(relative(root, resolve(root, args.file_path)));
+            }
           } catch (e) { content = `error: ${(e as Error).message}`; }
           messages.push({ role: "tool", tool_call_id: c.id, content });
         }
