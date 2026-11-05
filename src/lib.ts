@@ -30,6 +30,11 @@ export function parseDoc(path: string, txt: string): Doc {
   return { path, fm: fm as Fm, body: txt.slice(m[0].length) };
 }
 
+/** Why a page's text has an unreadable frontmatter, or undefined when it parses. */
+export function frontmatterError(text: string): string | undefined {
+  try { parseDoc("", text); return undefined; } catch (e) { return `invalid YAML frontmatter (${(e as Error).message}): every key starts at column 0.`; }
+}
+
 /** Inverse of parseDoc: `---`, YAML frontmatter, `---`, then the body as is. */
 export const serializeDoc = (fm: Record<string, unknown>, body: string) => `---\n${Bun.YAML.stringify(fm, null, 2)}\n---\n${body}`;
 

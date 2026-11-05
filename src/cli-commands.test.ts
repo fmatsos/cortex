@@ -297,6 +297,22 @@ describe.skipIf(process.platform === "linux" && !Bun.which("bwrap"))("compile / 
   }
   const silent = () => agent("cat >/dev/null");
 
+  test("compile: errors left by the agent (lint of its pages) get it run again, with the list in the prompt", () => {
+    const root = wiki();
+    const id = addNote(root);
+    const dir = mkdtempSync(join(tmpdir(), "cortex-fix-"));
+    // 1st run: a Source page with a raw `status: pending` (lint error); 2nd run: the fixed page
+    const env = agent(`n=$(cat ${dir}/n 2>/dev/null || echo 0); n=$((n+1)); echo $n > ${dir}/n; cat > ${dir}/prompt$n
+r=/$(ls raw/*/*/*/source.md); s=$([ $n = 1 ] && echo pending || echo draft); mkdir -p wiki/sources
+printf -- '---\\ntype: Source\\ntitle: N\\ndescription: d\\nstatus: %s\\nsources:\\n  - id: ${id}\\n    resource: %s\\n---\\nx\\n' $s $r > wiki/sources/${id}.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.err).not.toContain("✗");
+    expect(r.out).toContain("agent run again to fix them (pass 1/2)");
+    expect(r.out).toContain(`${id} compiled`);
+    expect(readFileSync(join(dir, "prompt2"), "utf8")).toContain(`wiki/sources/${id}.md: unknown status: pending`);
+    expect(existsSync(join(dir, "prompt3"))).toBe(false);
+  });
+
   test("compile usage error: nothing to compile → 2", () => {
     const r = cortex(wiki(), ["compile"], { env: silent() });
     expect(r.code).toBe(2);

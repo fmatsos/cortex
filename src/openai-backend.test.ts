@@ -2,7 +2,86 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import openai from "./backends/openai";
+import openai, { part } from "./backends/openai";
+import { LIMITS } from "./limits";
+
+test("openai: a long tool result comes in parts that together give it whole", () => {
+  const s = "x".repeat(LIMITS.toolOutputChars * 2 + 5);
+  let all = "", from = 0;
+  for (;;) {
+    const p = part(s, from);
+    const next = p.match(/offset=(\d+) for the rest]$/)?.[1];
+    all += next ? p.slice(0, p.lastIndexOf("\n[part")) : p;
+    if (!next) break;
+    from = Number(next);
+  }
+  expect(all).toBe(s);
+});
+
+test("openai: cut answers — tool calls not run then redone in parts (Append), text continued, llama.cpp 500 retried", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const answers: any[] = [
+    { finish_reason: "length", message: { role: "assistant", content: null, tool_calls: [call("1", "Write", { file_path: "wiki/cut.md", content: "partial" })] } },
+    500,
+    { finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call("2", "WritePage", { file_path: "wiki/p.md", frontmatter: { type: "Concept" }, body: "start " })] } },
+    { finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call("3", "Append", { file_path: "wiki/p.md", content: "end\n" })] } },
+    { finish_reason: "length", message: { role: "assistant", content: "Hello " } },
+    { finish_reason: "stop", message: { role: "assistant", content: "world" } },
+  ];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) {
+    seen.push(await req.json());
+    const a = answers[seen.length - 1];
+    return a === 500 ? new Response('{"error":{"message":"Failed to parse tool call arguments as JSON"}}', { status: 500 }) : Response.json({ choices: [a] });
+  } });
+  try {
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "write");
+    expect(out).toBe("Hello world");
+    expect(await Bun.file(join(root, "wiki/cut.md")).exists()).toBe(false);
+    expect(seen[1].messages.at(-1).content).toContain("was cut: none of its tool calls ran");
+    expect(seen[2].messages.at(-1).content).toContain("was cut: none of its tool calls ran");
+    expect(await Bun.file(join(root, "wiki/p.md")).text()).toEndWith("start end\n");
+    expect(seen[5].messages.at(-1).content).toContain("Continue exactly where it stopped");
+  } finally { server.stop(true); }
+});
+
+test("openai: a server error is cut to 300 characters, the tool-calling hint only for a model without tools", async () => {
+  let body = "";
+  const server = Bun.serve({ port: 0, fetch: () => new Response(body, { status: 500 }) });
+  const fail = () => openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "q", "read").then(() => "", (e) => (e as Error).message);
+  try {
+    body = `Failed to parse tool call arguments: ${"> \\n".repeat(5000)}`;
+    const long = await fail();
+    expect(long.length).toBeLessThan(400);
+    expect(long).not.toContain("must support tool calling");
+    body = "registry.ollama.ai/library/gemma does not support tools";
+    expect(await fail()).toContain("(the model must support tool calling)");
+  } finally { server.stop(true); }
+});
+
+test("openai: a page with invalid YAML is never written, WritePage writes the frontmatter itself", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const script = [
+    { role: "assistant", content: null, tool_calls: [
+      call("1", "Write", { file_path: "wiki/bad.md", content: "---\ntype: Concept\n title: A\n---\nx\n" }),
+      call("2", "WritePage", { file_path: "wiki/good.md", frontmatter: { type: "Concept", title: "A: b" }, body: "x\n" }),
+    ] },
+    { role: "assistant", content: "done" },
+  ];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ message: script[Math.min(seen.length, 2) - 1] }] }); } });
+  try {
+    await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "write");
+    expect(await Bun.file(join(root, "wiki/bad.md")).exists()).toBe(false);
+    expect(seen[1].messages.find((m: any) => m.tool_call_id === "1").content).toContain("not written: invalid YAML");
+    const { parseDoc } = await import("./lib");
+    expect(parseDoc("g", await Bun.file(join(root, "wiki/good.md")).text()).fm).toEqual({ type: "Concept", title: "A: b" });
+  } finally { server.stop(true); }
+});
 
 test("openai: a failed compile check goes back to the model, even without a page written", async () => {
   const replies = [{ role: "assistant", content: "done" }, { role: "assistant", content: "fixed" }];
@@ -17,31 +96,14 @@ test("openai: a failed compile check goes back to the model, even without a page
   } finally { server.stop(true); }
 });
 
-test("openai: lint errors of the pages written go back to the model, once fixed it may finish", async () => {
-  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
-  mkdirSync(join(root, "wiki"));
-  await Bun.write(join(root, "cortex.json"), "{}");
-  const call = (name: string, args: object) => ({ role: "assistant", content: null, tool_calls: [{ id: name, type: "function", function: { name, arguments: JSON.stringify(args) } }] });
-  const page = (status: string) => `---\ntype: Concept\ntitle: A\ndescription: d\nstatus: ${status}\n---\nBody.\n`;
-  const script = [
-    call("Write", { file_path: "wiki/concepts/a.md", content: page("pending") }),
-    { role: "assistant", content: "done" },
-    call("Write", { file_path: "wiki/concepts/a.md", content: page("draft") }),
-    { role: "assistant", content: "fixed" },
-  ];
-  const seen: any[] = [];
-  const server = Bun.serve({ port: 0, async fetch(req) {
-    seen.push(await req.json());
-    return Response.json({ choices: [{ message: script[seen.length - 1] }] });
-  } });
-  try {
-    const notes: string[] = [];
-    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "compile", "write", (r) => notes.push(r.text));
-    expect(out).toBe("fixed");
-    expect(seen[2].messages.at(-1)).toMatchObject({ role: "user" });
-    expect(seen[2].messages.at(-1).content).toContain("wiki/concepts/a.md: unknown status: pending");
-    expect(notes.some((n) => n.startsWith("1 error"))).toBe(true);
-  } finally { server.stop(true); }
+test("claude guard: a Write, Edit or MultiEdit leaving a page with unreadable YAML is caught before the write", async () => {
+  const { pageError } = await import("./backends/claude");
+  const root = mkdtempSync(join(tmpdir(), "cortex-claude-"));
+  await Bun.write(join(root, "wiki/a.md"), "---\ntype: Concept\ntitle: A\n---\nx\n");
+  expect(await pageError(root, "Write", { file_path: "wiki/b.md", content: "---\ntype: Concept\n title: B\n---\n" })).toContain("invalid YAML");
+  expect(await pageError(root, "Edit", { file_path: "wiki/a.md", old_string: "title: A", new_string: " title: A" })).toContain("invalid YAML");
+  expect(await pageError(root, "MultiEdit", { file_path: "wiki/a.md", edits: [{ old_string: "title: A", new_string: "title: B" }] })).toBeUndefined();
+  expect(await pageError(root, "Write", { file_path: "wiki/c.txt", content: " bad: : yaml" })).toBeUndefined();
 });
 
 // fake OpenAI-compatible server: scripted tool calls, then a final answer

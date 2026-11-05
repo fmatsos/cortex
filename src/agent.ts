@@ -11,6 +11,8 @@ import { confine } from "./backends/sandbox";
 import { agentFile } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
+import { LIMITS } from "./limits";
+import { sha256 } from "./lib";
 import { askPrompt, compilePrompt, scopePrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
@@ -79,6 +81,40 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
 }
 
+/** Hash of every wiki page: what the agent changed, with or without git. */
+async function pageHashes(root: string): Promise<Map<string, string>> {
+  const m = new Map<string, string>();
+  for (const p of new Bun.Glob("wiki/**/*.md").scanSync({ cwd: root })) m.set(p, sha256(await Bun.file(join(root, p)).bytes()));
+  return m;
+}
+
+/**
+ * Write run checked by cortex, whatever the backend: lint errors of the wiki pages it changed, plus `extra` (compile: a
+ * Source page cites the raw source). The check goes to the backend (openai fixes in the same conversation); what is
+ * still wrong afterwards gets a new agent run listing it, at most `LIMITS.lintFixPasses` times (batch only).
+ */
+async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Report, extra?: Check): Promise<number> {
+  const root = w.root;
+  const before = await pageHashes(root);
+  const check: Check = async () => {
+    const pages = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
+    const { lint } = await import("./lint");
+    const errors = pages.size ? (await lint(root)).filter((i) => i.level === "error" && pages.has(i.path)).map((i) => `${i.path}: ${i.msg}`) : [];
+    return [...errors, ...(await extra?.() ?? [])];
+  };
+  let code = await run(w, prompt, batch, "write", report, check);
+  for (let pass = 1; batch && pass <= LIMITS.lintFixPasses; pass++) {
+    const misses = await check();
+    if (!misses.length) break;
+    report({ level: "info", text: `${misses.length} error(s) left: agent run again to fix them (pass ${pass}/${LIMITS.lintFixPasses})`, mark: "  ↻" });
+    code = await run(w, fixPrompt(agentFile((await w.config()).client), misses), batch, "write", report, check);
+  }
+  return code;
+}
+
+const fixPrompt = (file: string, misses: string[]) =>
+  `The previous run left the wiki incomplete. Read the pages concerned and fix only these points, following ${file}:\n${misses.map((m) => `- ${m}`).join("\n")}`;
+
 /** Flips pending → compiled by line replacement inside the frontmatter only: never a YAML re-serialization (raw is immutable, comments included). Atomic (tmp + rename); throws when no status line matched. */
 export async function markCompiled(root: string, path: string) {
   const file = join(root, path);
@@ -125,9 +161,17 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), batch: opts.batch, language: cfg.language });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
-    // the same test as below, offered to a backend that can hand a miss back to its model (openai)
-    const cited: Check = async () => await isCited(openWiki(root), d.path) ? [] : [`no Source page cites ${toResource(d.path)}: its Source page must list it under sources (id ${id}, resource ${toResource(d.path)}).`];
-    const code = await run(w, prompt, !!opts.batch, "write", sink, cited);
+    // the same test as below, run by cortex after the agent (and by openai inside its conversation)
+    const cited: Check = async () => {
+      const now = openWiki(root), res = toResource(d.path);
+      if (await isCited(now, d.path)) return [];
+      // what the agent wrote instead: a Source page with another resource, a page of another type…
+      const near = (await now.pages()).filter((p) => p.path.includes(id) || JSON.stringify(p.fm.sources ?? "").includes(id))
+        .map((p) => `${p.path} has type ${JSON.stringify(p.fm.type)} and sources ${JSON.stringify(p.fm.sources ?? [])}`);
+      return [`no Source page cites ${res}. The Source page needs \`type: Source\` and exactly this in its frontmatter: ` +
+        `sources: [{ id: ${id}, resource: ${res} }]${near.length ? `. Now: ${near.join("; ")}` : ""}`];
+    };
+    const code = await runChecked(w, prompt, !!opts.batch, sink, cited);
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
     if (await isCited(openWiki(root), d.path)) { // fresh context: the agent just wrote pages
@@ -151,7 +195,7 @@ export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: 
   const cfg = await w.config();
   const prompt = askPrompt({ agentFile: agentFile(cfg.client), question, file: opts.file, language: cfg.language });
   const before = await changed(root, sink);
-  const code = await run(w, prompt, !opts.interactive, opts.file ? "write" : "read", sink);
+  const code = opts.file ? await runChecked(w, prompt, !opts.interactive, sink) : await run(w, prompt, !opts.interactive, "read", sink);
   const after = await changed(root, sink);
   const touched = [...after].filter(([p, h]) => before.get(p) !== h).map(([p]) => p);
   const stray = touched.filter((p) => opts.file ? !p.startsWith("wiki/") : true);
