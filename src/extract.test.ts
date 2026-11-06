@@ -247,6 +247,8 @@ test("add: a post's linked pages become sources of their own, one level, a faili
   expect(r.linked?.map((l) => ("error" in l ? "error" : l.ex?.extractor))).toEqual([expect.stringMatching(/defuddle|readability/), "error"]); // /short: almost empty
   const raw = (await Array.fromAsync(new Bun.Glob("raw/**/source.md").scan(root))).length;
   expect(raw).toBe(2);
+  // the linked page carries the post's note as is (no "(linked from …)": linked_from says it)
+  expect(await Bun.file(join(root, (await Array.fromAsync(new Bun.Glob(`raw/**/${(r.linked![0] as { id: string }).id}/source.md`).scan(root)))[0])).text()).toContain("note: why\n");
   // tied both ways in the frontmatter
   const plain = r.linked![0] as { id: string };
   expect(await Bun.file(join(root, (await Array.fromAsync(new Bun.Glob(`raw/**/${r.id}/source.md`).scan(root)))[0])).text()).toContain(`linked: [${plain.id}]`);
@@ -287,4 +289,16 @@ test("defuddle's own error lines (broken JSON-LD) are muted; the page is still r
     console.error("other");
   } finally { console.error = error; }
   expect(seen).toEqual([["other"]]);
+});
+
+test("add: a post without a note gives its linked pages none either (compile still asks the human)", async () => {
+  const b = `http://localhost:${srv.port}`, saved = VIA.freedium;
+  VIA.freedium = [`${b}/mirror/`];
+  try {
+    const root = mkdtempSync(join(tmpdir(), "cortex-"));
+    await Bun.write(join(root, "cortex.json"), "{}");
+    const r = await add(root, `${b}/@bob/9`, {});
+    const page = (r.linked ?? []).find((l) => "id" in l) as { id: string };
+    expect(await Bun.file(join(root, (await Array.fromAsync(new Bun.Glob(`raw/**/${page.id}/source.md`).scan(root)))[0])).text()).toContain('note: ""');
+  } finally { VIA.freedium = saved; }
 });

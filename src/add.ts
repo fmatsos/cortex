@@ -264,7 +264,7 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   const links = [...new Set(r.ex?.links ?? [])].filter((l) => l !== input).slice(0, limit);
   if (r.duplicate || opts.follow === false || !links.length) return r;
   r.linked = [];
-  const note = `${opts.note ? `${opts.note} ` : ""}(linked from ${r.id})`.trim();
+  const note = opts.note; // the post's intent as is: no note on the post, none on its pages (compile asks); the tie is linked_from
   for (const url of links) {
     let got: AddResult;
     try { got = await addOne(w, url, { ...opts, mirrors: undefined, note }); }
