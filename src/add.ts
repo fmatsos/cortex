@@ -330,7 +330,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
       : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
   }
-  if (opts.url && !isUrl) ex = { ...ex, url: opts.url };
+  if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
   const hash = sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
   if (dup) return { id: dup, duplicate: true, ex };

@@ -110,7 +110,7 @@ test("inbox: a file with a .origin keeps that url as the source's url, without f
     expect(hits).toBe(0);
     expect(readdirSync(join(root, "inbox"))).toEqual([]);
     const docs = (await (await import("./lib")).readDocs(root, "raw")).docs;
-    expect(docs.map((d) => [d.fm.url, d.fm.note])).toEqual([[`${srv.url}article`, "pourquoi"]]);
+    expect(docs.map((d) => [d.fm.url, d.fm.note, d.fm.kind, d.fm.extractor])).toEqual([[`${srv.url}article`, "pourquoi", "article", "browser"]]);
 
     // the same url again (another capture): already present, the inbox is emptied
     await Bun.write(join(root, "inbox/q.md"), "# Autre capture\n\nUn texte différent pour la même adresse, déjà gardée plus haut.\n");
