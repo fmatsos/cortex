@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { extractPdf, extractUrl } from "./add";
+import { extractPdf, extractUrl, socialApi } from "./add";
 
 /**
  * `extractUrl` and `extractPdf` against a local Bun.serve (no real network): extractor choice, paywall marker,
@@ -42,6 +42,10 @@ beforeAll(() => {
         case "/down/https://medium.com/a": return new Response("bad gateway", { status: 502 });
         case "/broken/https://medium.com/a": return html(page("", `<article><p>Could not load this article</p>${para(8)}</article>`));
         case "/up/https://medium.com/a": return html(page('<meta name="author" content="Bob 8 min read">', `<article><h1>Mirrored</h1>${para(8)}</article>`));
+        case "/api/v1/statuses/7": return Response.json({ content: "<p>Hello <b>fedi</b></p>", created_at: "2026-01-02T03:04:05.000Z", account: { display_name: "Bob", acct: "bob" }, media_attachments: [{ url: "https://m/1.png" }] });
+        case "/api/v1/statuses/8": return new Response("nope", { status: 404 });
+        case "/@blog/8": return html(page("", `<article><h1>Not fedi</h1>${para(8)}</article>`));
+        case "/slow": return new Promise((r) => setTimeout(() => r(html("late")), 2000));
         case "/plain": return html(page("", `<article><h1>Plain</h1>${para(8)}</article>`));
         // a 60-word <main> next to the real story: defuddle keeps the <main>, Readability scores the story higher
         case "/trap": return html(page("", `<main><p>${"mot ".repeat(60)}.</p></main><div id="story">${para(14)}</div>`));
@@ -126,4 +130,30 @@ test("mirrors: failing ones are skipped, the source keeps the original URL", asy
   expect(ex.author).toBe("Bob");
   expect(ex.extractor).toStartWith(`localhost:${srv.port}+`);
   await expect(extractUrl("https://medium.com/a", { mirrors: [`${b}/down/`] })).rejects.toThrow(/No mirror served/);
+});
+
+test("social: X and Bluesky go to their API, the source keeps the post URL", () => {
+  const x = socialApi("https://x.com/jack/status/20")!;
+  expect(x.url).toBe("https://api.fxtwitter.com/status/20");
+  const ex = x.parse({ tweet: { text: "just setting up", created_at: "Tue Mar 21 20:50:14 +0000 2006", author: { name: "jack", screen_name: "jack" },
+    media: { all: [{ url: "https://p/1.jpg" }] }, quote: { text: "q", author: { name: "Q" } } } });
+  expect(ex).toMatchObject({ url: "https://x.com/jack/status/20", author: "jack (@jack)", published: "2006-03-21T20:50:14.000Z", extractor: "fxtwitter-api" });
+  expect(ex.content).toBe("just setting up\n\n> Q: q\n\n![](https://p/1.jpg)");
+  const b = socialApi("https://bsky.app/profile/a.bsky.social/post/3abc")!;
+  expect(b.url).toContain(encodeURIComponent("at://a.bsky.social/app.bsky.feed.post/3abc"));
+  expect(b.parse({ thread: { post: { record: { text: "hi", createdAt: "2026-01-01T00:00:00Z" }, author: { handle: "a.bsky.social" } } } }).author).toBe("a.bsky.social");
+  expect(socialApi("https://x.com/jack")).toBeUndefined();
+});
+
+test("social: Mastodon via its API, a non-Mastodon /@user/id page falls back to the page", async () => {
+  const b = `http://localhost:${srv.port}`;
+  const ex = await extractUrl(`${b}/@bob/7`);
+  expect(ex).toMatchObject({ url: `${b}/@bob/7`, author: "Bob (@bob)", extractor: "mastodon-api" });
+  expect(ex.content).toBe("Hello **fedi**\n\n![](https://m/1.png)");
+  expect((await extractUrl(`${b}/@blog/8`)).content).toContain("Not fedi");
+});
+
+test("fetch timeout is honoured", async () => {
+  const b = `http://localhost:${srv.port}`;
+  await expect(extractUrl(`${b}/slow`, { timeoutMs: 50 })).rejects.toThrow();
 });

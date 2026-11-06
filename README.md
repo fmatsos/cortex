@@ -168,6 +168,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 |---|---|
 | `language` | Fills the wiki language into the schema (default `English`). |
 | `schema` | Path, relative to the wiki root, of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
+| `fetch_timeout` | Seconds before fetching a URL gives up (default `30`). With `--via`, each mirror gets that much. |
 | `max_tags` | Most tags on a page an agent creates (default `4`). Beyond it, `compile --batch` keeps the tags already in use first. |
 
 ```sh

@@ -35,6 +35,8 @@ const SHAPE = {
   page_path: template("page_path"),
   /** Most tags on a page an agent creates (default LIMITS.maxTags). */
   max_tags: z.number({ error: '"max_tags" must be an integer of at least 1, or null.' }).int({ error: '"max_tags" must be an integer of at least 1, or null.' }).min(1, { error: '"max_tags" must be an integer of at least 1, or null.' }).nullish(),
+  /** Seconds before a URL fetch gives up (default LIMITS.fetchTimeoutMs / 1000); each --via mirror gets that much. */
+  fetch_timeout: z.number({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).positive({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).nullish(),
 };
 export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 

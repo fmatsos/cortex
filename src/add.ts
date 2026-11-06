@@ -31,7 +31,7 @@ export type Extract = {
 };
 
 /** `publicOnly`: MCP path, refuses loopback/private/link-local targets (the CLI stays permissive). `maxBytes`: body cap, injectable for tests. */
-export type FetchOpts = { publicOnly?: boolean; maxBytes?: number; mirrors?: string[] };
+export type FetchOpts = { publicOnly?: boolean; maxBytes?: number; mirrors?: string[]; timeoutMs?: number };
 
 /** `--via` → mirror bases, tried in order; the article URL is appended as is. */
 // ponytail: hardcoded, the .cfd domains move; make them a cortex.json setting once one dies
@@ -95,7 +95,7 @@ async function readCapped(res: Response, max: number): Promise<Uint8Array> {
 
 /** GET with a body cap; with `publicOnly`, redirects are followed by hand so every hop is checked. */
 async function fetchCapped(url: string, o: FetchOpts): Promise<{ res: Response; bytes: Uint8Array; url: string }> {
-  const signal = AbortSignal.timeout(LIMITS.fetchTimeoutMs);
+  const signal = AbortSignal.timeout(o.timeoutMs ?? LIMITS.fetchTimeoutMs);
   let cur = url;
   for (let hop = 0; ; hop++) {
     if (o.publicOnly) await assertPublic(cur);
@@ -149,6 +149,11 @@ export function socialPost(html: string): { body: string; author?: string; publi
  */
 export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Extract> {
   if (opts.mirrors?.length) return viaMirrors(url, opts.mirrors, opts);
+  const api = socialApi(url);
+  if (api) {
+    try { return await api.parse(JSON.parse(new TextDecoder().decode((await fetchCapped(api.url, opts)).bytes))); }
+    catch (e) { if (!api.fallback) throw new Error(`${api.name}: ${(e as Error).message}`); } // any /@user/123 path looks like Mastodon: maybe it is not
+  }
   const { res, bytes, url: finalUrl } = await fetchCapped(url, opts);
   const type = res.headers.get("content-type") ?? "";
   if (type.includes("pdf")) return extractPdf(bytes, url);
@@ -180,6 +185,41 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
     extractor: useRb ? `readability/${depVersion("@mozilla/readability")}+turndown` : `defuddle/${depVersion("defuddle")}+linkedom`,
     partial: paywall ? "paywall: partial content" : undefined,
   };
+}
+
+type SocialApi = { name: string; url: string; fallback?: boolean; parse: (j: any) => Extract };
+
+/** A post as a source: its text, then the quoted post and the media links. */
+function post(name: string, url: string, text: string, author: string | undefined, published: string | undefined, media: string[], quote?: string): Extract {
+  const body = [text.trim(), quote && quote.trim().split("\n").map((l) => `> ${l}`).join("\n"), ...media.map((m) => `![](${m})`)].filter(Boolean).join("\n\n");
+  if (!body) throw new Error(`empty post on ${url}: nothing written.`);
+  return { title: body.split("\n")[0].slice(0, LIMITS.textTitleChars), content: body, kind: "article", url, author, published, extractor: name };
+}
+
+const who = (name?: string, handle?: string) => (name && handle ? `${name} (@${handle})` : name || handle) || undefined;
+const iso = (d?: string) => (d && !isNaN(Date.parse(d)) ? new Date(d).toISOString() : undefined);
+
+/**
+ * X, Bluesky and Mastodon posts read through a public API (the pages need a login or JavaScript).
+ * X goes through fxtwitter, a third-party service: it can disappear, x.com has no login-free API.
+ */
+export function socialApi(url: string): SocialApi | undefined {
+  const u = new URL(url), host = u.hostname.replace(/^(www|mobile)\./, "");
+  let m: RegExpMatchArray | null;
+  if ((host === "x.com" || host === "twitter.com") && (m = u.pathname.match(/^\/[^/]+\/status\/(\d+)/)))
+    return { name: "fxtwitter-api", url: `https://api.fxtwitter.com/status/${m[1]}`, parse: ({ tweet: t }) =>
+      post("fxtwitter-api", url, t.text ?? "", who(t.author?.name, t.author?.screen_name), iso(t.created_at),
+        (t.media?.all ?? []).map((x: any) => x.url), t.quote && `${t.quote.author?.name ?? ""}: ${t.quote.text}`) };
+  if (host === "bsky.app" && (m = u.pathname.match(/^\/profile\/([^/]+)\/post\/([^/]+)/)))
+    return { name: "bsky-api", url: `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?depth=0&uri=${encodeURIComponent(`at://${m[1]}/app.bsky.feed.post/${m[2]}`)}`,
+      parse: ({ thread: { post: p } }) => post("bsky-api", url, p.record?.text ?? "", who(p.author?.displayName, p.author?.handle), iso(p.record?.createdAt),
+        (p.embed?.images ?? p.embed?.media?.images ?? []).map((i: any) => i.fullsize), p.embed?.record?.value?.text ?? p.embed?.record?.record?.value?.text) };
+  if ((m = u.pathname.match(/^\/@[^/]+\/(\d+)\/?$/)))
+    return { name: "mastodon-api", url: `${u.origin}/api/v1/statuses/${m[1]}`, fallback: true, parse: (s) => {
+      if (!s?.account) throw new Error("not a Mastodon status");
+      const text = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" }).turndown(s.content ?? "");
+      return post("mastodon-api", url, text, who(s.account.display_name, s.account.acct), iso(s.created_at), (s.media_attachments ?? []).map((a: any) => a.url));
+    } };
 }
 
 /** Each mirror in turn (a down mirror hangs or serves an error page); the source keeps the original URL. */
@@ -229,7 +269,8 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   if (isUrl) {
     const known = await findDuplicate(w, [input]); // before the fetch: no needless request
     if (known) return { id: known, duplicate: true };
-    ex = await extractUrl(input, opts);
+    const secs = (await w.config()).fetch_timeout;
+    ex = await extractUrl(input, { ...opts, timeoutMs: opts.timeoutMs ?? (secs ? secs * 1000 : undefined) });
   }
   else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)
   else {

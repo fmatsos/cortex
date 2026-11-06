@@ -45,4 +45,6 @@ test("cortex config: init, set, get, remove, lint", async () => {
   expect(await loadConfig(root)).toEqual({ max_tags: 6 });
   expect(configCmd(root, ["set", "max_tags", "0"])).rejects.toThrow("max_tags");
   expect(lintConfig({ max_tags: 2.5 })[0].level).toBe("error");
+  expect(lintConfig({ fetch_timeout: 0 })[0].level).toBe("error");
+  expect(lintConfig({ fetch_timeout: 7.5 })).toEqual([]);
 });
