@@ -172,12 +172,13 @@ export function actor(cfg: { client?: string; model?: string; effort?: string })
  */
 async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promise<{ path: string; text: string } | undefined> {
   const id = rawId(d.path), title = String(d.fm.title ?? id).trim() || id;
-  const note = String(d.fm.note).trim().split(/\r?\n/).map((l) => `> ${l}`).join("\n");
+  const text = String(d.fm.note ?? "").trim(); // optional: no note, no callout
+  const note = text ? `> [!note] Note personnelle\n${text.split(/\r?\n/).map((l) => `> ${l}`).join("\n")}` : "";
   const partial = d.fm.partial ? `\n\n> [!warning]\n> ${d.fm.partial === true ? "Partial extraction." : String(d.fm.partial)}` : "";
   try {
     const path = await newPageCtx(w, "Source", title, at, {
       fm: { generated: { by, at: localIso(at) }, sources: [{ id, resource: toResource(d.path), title }] },
-      body: `> [!note] Note personnelle\n${note}${partial}\n`,
+      body: `${[note, partial.trim()].filter(Boolean).join("\n\n")}\n`,
     });
     return { path, text: await Bun.file(join(w.root, path)).text() };
   } catch { return undefined; }
@@ -253,7 +254,6 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
   const sink: Report = (m) => say(m.level, m.text, m.mark);
   for (const d of targets) {
     const id = rawId(d.path);
-    if (!String(d.fm.note ?? "").trim()) { say("fail", `${id}: empty note. Fill in the intent (note field) before compiling.`); ok = false; continue; }
     if (d.fm.status !== "pending") say("info", paint.dim(`(${id} is already ${d.fm.status}: recompiling)`));
     const cfg = await w.config();
     const by = actor(cfg), started = new Date();

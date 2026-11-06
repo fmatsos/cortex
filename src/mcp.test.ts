@@ -81,7 +81,7 @@ test("cortex mcp: initialize, tools/list, search, get, add without network (JSON
     expect(JSON.parse(s.content[0].text).hint).toContain("gap");
     expect((await call(4, "get", { path: "/wiki/concepts/b.md" })).content[0].text).toContain("Beta");
     expect((await call(5, "get", { path: "wiki/../cortex.json" })).isError).toBe(true);
-    expect((await call(6, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "" })).isError).toBe(true);
+    expect((await call(6, "add", { text: "# Sans note\n\nUn autre texte, sur le malt cette fois." })).isError).toBeFalsy(); // note optional
     const added = JSON.parse((await call(7, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text);
     expect(added).toMatchObject({ duplicate: false, title: "Idée" });
     expect(JSON.parse((await call(8, "add", { text: "# Idée\n\nUn texte qui parle de houblon.", note: "test" })).content[0].text).id).toBe(added.id);

@@ -43,7 +43,7 @@ sha256: …                     # filled in by the CLI
 blob: .cortex/blobs/…         # optional binary original, outside git
 fetched_at: 2026-11-04T09:12:00+01:00
 extractor: manual             # or cortex-cli/0.1+readability, yt-dlp+whisper…
-note: "Why I keep this"       # MANDATORY: the human's intent
+note: "Why I keep this"       # optional: the human's intent, when given
 status: pending               # pending | compiled | skipped
 linked: [<id>, …]             # a social post: the sources captured from its links (filled in by the CLI)
 linked_from: [<id>, …]        # a page a post links to: the post(s) it was captured from (filled in by the CLI)
@@ -53,7 +53,7 @@ linked_from: [<id>, …]        # a page a post links to: the post(s) it was cap
 
 `linked` / `linked_from` tie a post to the pages it shares: when you compile one, link its Source page to the other's.
 
-If the `note` field is missing, ask the human for it before compiling.
+The `note` is optional. When it is there, it sets the angle of the Source page. When it is absent, don't ask for it: read the source for what it brings to the wiki as it stands.
 
 ## Wiki page format (OKF v0.2 subset)
 
@@ -81,8 +81,8 @@ Prose body. A claim.[^chroma-context-rot] See [Context engineering](/wiki/concep
 - **Links:** root-relative Markdown links (`/wiki/…md`, the path printed by `cortex new`), with the target page's title as the link text. A link always points to an existing page. For a concept still to write, create it with `cortex new` (a `status: draft` stub is enough), then link to it.
 - **Reviewed page, then modified:** keep the `verified` entry (it is a past event), but switch back to `status: draft`. A `generated.at` later than `verified.at` means the page needs another review.
 - **Deprecation:** a page contradicted by a more recent source is not deleted. It switches to `status: deprecated`, with a link at the top to what replaces it.
-- **`Source` page:** it holds a summary, 3 to 7 key points, the human's `note`, and links to the concepts and entities it touches.
-- **The `note` is copied into a callout** at the top of the body of the Source page only (never on a concept, entity or synthesis), with Obsidian's callout syntax and nothing else:
+- **`Source` page:** it holds a summary, 3 to 7 key points, the human's `note` when there is one, and links to the concepts and entities it touches.
+- **The `note`, when there is one, is copied into a callout** at the top of the body of the Source page only (never on a concept, entity or synthesis), with Obsidian's callout syntax and nothing else:
   ```markdown
   > [!note] Note personnelle
   > <the note, verbatim>
@@ -138,7 +138,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 
 In your answer, do not copy the pages back: summarize in one line per file touched.
 
-**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout, partial-extraction warning) and gives you its path: keep those parts and write the rest: description and tags in the frontmatter, summary, key points and links in the body, after the note callout. It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, keeps at most `max_tags` tags on a page you create, links the Source page and the pages citing the source both ways, takes the note callout off any other page, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
+**Started by `cortex compile --batch`:** the CLI has already created the Source page (type, title, status, `sources`, `generated`, note callout when there is a note, partial-extraction warning) and gives you its path: keep those parts and write the rest: description and tags in the frontmatter, summary, key points and links in the body, after the note callout. It also stamps `generated` on every page you touch, brings a new tag back to the tag in use it nearly duplicates, keeps at most `max_tags` tags on a page you create, links the Source page and the pages citing the source both ways, takes the note callout off any other page, runs `cortex index` and writes the Ingest journal entry: skip steps 5 and 6.
 
 ## QUERY workflow
 
@@ -151,7 +151,7 @@ In your answer, do not copy the pages back: summarize in one line per file touch
 
 Run `cortex lint --json`. It reports:
 - **errors** (exit code 1): invalid YAML, missing `type` or `description`, broken link, footnote without a `sources[]` entry, missing resource, duplicate raw id;
-- **warnings**: orphan page, page modified since its review, `stale_after` passed, source `pending` for more than 7 days or without a `note`, compiled source that no Source page cites, likely duplicates (same title, same raw source), near-synonym tags, file name outside the configured naming;
+- **warnings**: orphan page, page modified since its review, `stale_after` passed, source `pending` for more than 7 days, compiled source that no Source page cites, likely duplicates (same title, same raw source), near-synonym tags, file name outside the configured naming;
 - **info**: pages never reviewed.
 
 What the CLI cannot see is up to you: **contradictions between pages**.
@@ -161,7 +161,7 @@ Fix what is mechanical. **Propose** to the human what needs judgment (merge, dep
 ## The `cortex` CLI
 
 ```
-cortex add <url|file|-> --note "why I keep this" [--dry-run]         # → raw/, status: pending, Add entry in the journal
+cortex add <url|file|-> [--note "why I keep this"] [--dry-run]         # → raw/, status: pending, Add entry in the journal
 cortex inbox [--dry-run]                                             # add on inbox/ (urls.txt, files), then empties it
 cortex search "<terms>" [--in wiki|raw] [--json] [--limit N]         # BM25, wiki first
 cortex index                                                         # regenerates wiki/index.md and wiki/log.md
@@ -184,7 +184,7 @@ cortex export [--out <dir>]                                          # the wiki 
 - **`cortex compile`** runs one agent session **per source**, one after the other (one session per task, against context rot).
   - **By default the session is interactive**: you present your plan to the human before writing (rule 6).
   - **With `--batch`, nobody approves**: you write directly, and every page touched goes to `status: draft`, to be reviewed later.
-  - The CLI refuses a source whose `note` is empty. It switches the status to `compiled` only if a Source page cites the source, then regenerates the index. It reports any file modified outside `wiki/`.
+  - It switches the status to `compiled` only if a Source page cites the source, then regenerates the index. It reports any file modified outside `wiki/`.
 - **`cortex mcp` exposes the wiki to an external agent**: `search`, `get`, `related`, `lint`, `log` (JSON entries of the last days, `kind` filter) read-only, and `add` (URL or text, into `raw/` only, `note` mandatory). It never modifies `wiki/`: ingesting stays the job of `cortex compile`.
 - **`cortex export` publishes the wiki as a static site** (navigation, instant search, link graph) with no LLM and no server. It only reads `wiki/`: `raw/` is never published, sources point to their original URL. The output directory is emptied on every export.
 - **`cortex ask` is read-only.** `--file` allows storing the answer as a Synthesis page (in `draft`), with its journal entry; the index and `log.md` are then regenerated.

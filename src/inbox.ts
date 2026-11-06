@@ -18,12 +18,12 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
   const lines = (await Bun.file(urlsFile).exists()) ? (await Bun.file(urlsFile).text()).split("\n") : [];
 
   const done = new Set<string>(); // urls.txt lines to remove
-  let added = 0, known = 0, failed = 0, noNote = false;
+  let added = 0, known = 0, failed = 0;
   const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>) => {
     try {
       const r = await add(root, input, { note, dryRun: opts.dryRun });
       say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
-      if (r.duplicate) known++; else { added++; noNote ||= !note; }
+      if (r.duplicate) known++; else added++;
       if (!opts.dryRun) await onOk();
     } catch (e) {
       say("fail", `${label}: ${(e as Error).message}`);
@@ -57,6 +57,5 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
 
   if (!added && !known && !failed) say("info", paint.dim("Empty inbox."));
   else say("info", `${opts.dryRun ? "(dry-run, inbox unchanged) " : ""}${added} added, ${known} already present, ${failed} failed.`);
-  if (noNote && !opts.dryRun) say("warn", "missing note: fill it in before compiling.");
   return result(!failed);
 }

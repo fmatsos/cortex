@@ -20,7 +20,7 @@ import pkg from "../package.json";
 
 const HELP = `cortex — second brain
 
-  cortex add <url|file|-> --note "why I keep this" [--via freedium (then archive.ph, Wayback)] [--dry-run]
+  cortex add <url|file|-> [--note "why I keep this"] [--via freedium (then archive.ph, Wayback)] [--dry-run]
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
   cortex index
@@ -103,7 +103,6 @@ try {
           ok = false;
         }
       }
-      if (!o.note && !o["dry-run"]) warn("missing note: fill it in before compiling.");
       break;
     }
     case "inbox":

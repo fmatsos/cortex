@@ -24,7 +24,7 @@ You pick the sources, ask the questions and review the pages. Your agent does th
 
 ## Features
 
-- **Capture.** `cortex add` turns a URL, a PDF or stdin into an immutable Markdown source in `raw/`. Readable text is extracted, duplicates are detected, and every source carries a note on why you keep it.
+- **Capture.** `cortex add` turns a URL, a PDF or stdin into an immutable Markdown source in `raw/`. Readable text is extracted, duplicates are detected, and a source can carry a note on why you keep it (optional).
 - **Agent workflows.** Ingest (`cortex compile`) and query (`cortex ask`) run your agent in one session per source, interactively or in batch. Writes outside `wiki/` are blocked: through the agent SDK's controls, or through an OS sandbox (bubblewrap on Linux, `sandbox-exec` on macOS).
 - **Sourced pages.** Each claim cites its source in a footnote. Pages track who generated them and who reviewed them (`generated`, `verified`).
 - **Lint.** The mechanical checks report broken links, unsourced footnotes, orphan pages, stale or unreviewed pages, pending sources, likely duplicates and near-synonym tags.
@@ -98,6 +98,17 @@ cortex ask "What do my sources say about context rot?"
 cortex export && bunx serve .cortex/site
 ```
 
+### The note: optional, worth writing
+
+`--note` (the note field of the share app, the rest of the line in `inbox/urls.txt`, a `<name>.note` file) says **why you keep a source**. Cortex never requires it. Write it whenever you can, even in a few words, because it is the only place your intent is recorded:
+
+- **It sets the angle of the Source page.** The agent reads the note before the source and summarizes it for that reason: the same article gives a different page when kept "for the benchmark method" than "as a counterexample to X". Without a note, the agent picks the angle from the content and from what the wiki already holds.
+- **It stays visible.** It is copied verbatim into a "Note personnelle" callout at the top of the Source page, in Obsidian and on the exported site, so you see later why that page exists.
+- **It is searchable.** `cortex search` indexes it with the source: you find a source by your own words, not only by its author's.
+- **It follows the links.** The pages a social post links to, captured with it, carry the post's note.
+
+A useful note names a use, not a feeling: "compare with our retry policy" or "source for the Kubernetes cost synthesis" help the agent; "interesting" or "to read" don't.
+
 The resulting layout:
 
 ```
@@ -116,7 +127,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 
 | Command | What it does |
 |---|---|
-| `cortex add <url\|file\|-> --note "…" [--via freedium] [--dry-run]` | Captures a source into `raw/` with status `pending`, and logs it. Idempotent: an existing URL or content returns the existing id. Posts from X, Bluesky, Mastodon and LinkedIn are read through their public data, and the pages they link to are captured too, as sources tied to the post (`linked` / `linked_from`), through Freedium, then archive.ph and the Wayback Machine, when paywalled. `--via freedium` reads the URL itself through that same chain. |
+| `cortex add <url\|file\|-> [--note "…"] [--via freedium] [--dry-run]` | Captures a source into `raw/` with status `pending`, and logs it. Idempotent: an existing URL or content returns the existing id. Posts from X, Bluesky, Mastodon and LinkedIn are read through their public data, and the pages they link to are captured too, as sources tied to the post (`linked` / `linked_from`), through Freedium, then archive.ph and the Wayback Machine, when paywalled. `--via freedium` reads the URL itself through that same chain. |
 | `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line, a `*.url` file holds one such line. Any other file is added, with an optional note in `<name>.note`. Successful entries leave the inbox. |
 | `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search. |
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
@@ -205,7 +216,7 @@ cortex config set page_path "{type}/{slug}"                 # wiki/concepts/cont
 
 ### MCP server
 
-`cortex mcp` exposes the wiki to an external agent. The tools `search`, `get`, `related`, `lint` and `log` are read-only. `add` writes to `raw/` only and requires a `note`. Example with Claude Code:
+`cortex mcp` exposes the wiki to an external agent. The tools `search`, `get`, `related`, `lint` and `log` are read-only. `add` writes to `raw/` only, with an optional `note`. Example with Claude Code:
 
 ```sh
 claude mcp add cortex -e CORTEX_ROOT=/path/to/your/wiki -- cortex mcp

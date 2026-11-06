@@ -13,6 +13,6 @@ test("lint: blocking errors and warnings", async () => {
   expect(msgs).toContain("error broken link: /wiki/concepts/b.md");
   expect(msgs).toContain("error footnote [^z] has no sources[] entry");
   expect(msgs.some((m) => m.startsWith("warning modified since review"))).toBe(true);
-  expect(msgs).toContain("warning missing note: ask for it before compiling");
+  expect(msgs.some((m) => m.includes("missing note"))).toBe(false); // the note is optional
   expect(msgs).toContain("warning pending for more than 7 days");
 });

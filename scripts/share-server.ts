@@ -16,7 +16,7 @@ type Share = { title?: string; text?: string; url?: string; note?: string };
 
 /**
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
- * required by compile) goes on the `.url` line, or in `<name>.md.note` next to a text.
+ * optional) goes on the `.url` line, or in `<name>.md.note` next to a text.
  */
 export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
   title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
@@ -44,7 +44,7 @@ const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta n
 button{font:inherit;padding:.5rem 1rem}#s{white-space:pre-line}</style></head><body>
 <h1>Cortex</h1><p id="s"></p>
 <form id="f"><input id="u" placeholder="Lien (facultatif)"><textarea id="t" rows="6" placeholder="Texte (facultatif avec un lien)"></textarea>
-<textarea id="n" rows="2" required placeholder="Pourquoi je garde ça (note, obligatoire)"></textarea><button>Envoyer à l'inbox</button></form>
+<textarea id="n" rows="2" placeholder="Pourquoi je garde ça (note, facultative)"></textarea><button>Envoyer à l'inbox</button></form>
 <script>
 const K = "cortex-share-queue", s = document.getElementById("s");
 const load = () => { try { return JSON.parse(localStorage.getItem(K) || "[]"); } catch { return []; } };
@@ -69,18 +69,18 @@ if (p.get("title") || p.get("text") || p.get("url")) {
   history.replaceState(null, "", "/share/");
   const link = item.url || (item.text.trim().match(/^https?:\\/\\/\\S+$/) || [""])[0];
   let host = ""; try { host = new URL(link).hostname; } catch {}
-  // nothing leaves before the note is written: the share fills the form, the note is asked for
+  // the share fills the form: a note can be added (optional), then it is sent
   document.getElementById("u").value = link;
   document.getElementById("t").value = item.text.replace(link, "").trim();
   title = item.title;
   if (link && WALLED.test(host) && !item.text.replace(link, "").trim()) {
     document.getElementById("t").focus();
-    s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le dans « Texte », écris ta note, puis envoie.";
-  } else { document.getElementById("n").focus(); s.textContent = "Écris pourquoi tu gardes ça, puis envoie."; }
+    s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le dans « Texte », puis envoie.";
+  } else { document.getElementById("n").focus(); s.textContent = "Ajoute une note si tu veux, puis envoie."; }
 }
 document.getElementById("f").onsubmit = (e) => { e.preventDefault();
   const url = document.getElementById("u").value, text = document.getElementById("t").value, note = document.getElementById("n").value;
-  if ((!url.trim() && !text.trim()) || !note.trim()) return;
+  if (!url.trim() && !text.trim()) return;
   save([...load(), { title, url, text, note }]); title = ""; e.target.reset(); flush(); };
 flush();
 </script></body></html>`;

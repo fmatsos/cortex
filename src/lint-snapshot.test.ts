@@ -69,7 +69,6 @@ test("T9: lint snapshot on a fixture wiki exercising every rule", async () => {
   expect(issues).toEqual([
     ["warning", "raw/2025/01/zz-bad/source.md", "path outside the raw_path template \"{yyyy}/{mm}/{uuid}\" (sources are added with cortex add)"],
     ["warning", `raw/2026/11/${id(2)}/source.md`, "compiled but no Source page cites it"],
-    ["warning", `raw/2026/11/${id(3)}/source.md`, "missing note: ask for it before compiling"],
     ["warning", `raw/2026/11/${id(3)}/source.md`, "pending for more than 7 days"],
     ["error", `raw/2026/11/${id(5)}/source.md`, "expected type: RawSource"],
     ["error", `raw/2026/11/${id(6)}/source.md`, "invalid YAML: YAML Parse error: Unexpected token"],

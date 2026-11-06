@@ -99,10 +99,9 @@ export function buildServer(root: string, language?: string): McpServer {
     inputSchema: z.object({
       input: z.string().optional().describe("http(s) URL"),
       text: z.string().optional().describe("text to add, instead of input"),
-      note: z.string().describe("why the user keeps this source"),
+      note: z.string().optional().describe("why the user keeps this source (optional)"),
     }),
   }, toolResult(async ({ input, text: txt, note }) => {
-    if (!note.trim()) throw new Error("note required: say why this source is kept.");
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Give either input (URL or path) or text.");
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input must be an http(s) URL; for a local file, use cortex add or cortex inbox.");

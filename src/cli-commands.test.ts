@@ -34,7 +34,7 @@ function addNote(root: string, text = "# Une note\n\nUne idée sur la fermentati
 }
 
 describe("add", () => {
-  test("a local file and stdin text are added; the missing note is flagged", () => {
+  test("a local file and stdin text are added; a missing note is fine (optional)", () => {
     const root = wiki();
     writeFileSync(join(root, "n.md"), "# Ma note\n\nUne idée.\n");
     const file = cortex(root, ["add", "n.md", "--note", "ma note"], { cwd: root });
@@ -45,7 +45,7 @@ describe("add", () => {
     const stdin = cortex(root, ["add", "-"], { stdin: "Texte libre sans note, assez différent du premier.\n" });
     expect(stdin.code).toBe(0);
     expect(stdin.out).toStartWith("+ ");
-    expect(stdin.err).toBe("! missing note: fill it in before compiling.\n");
+    expect(stdin.err).toBe("");
 
     const again = cortex(root, ["add", "n.md", "--note", "ma note"], { cwd: root });
     expect(again.code).toBe(0); // idempotent: the existing id comes back
@@ -434,12 +434,11 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription:
     expect(r.code).toBe(1);
     expect(r.err).toBe("✗ Source not found: inconnu\n");
   });
-  test("compile domain error: empty note → 1", () => {
+  test("compile: a source without a note is not refused (the note is optional)", () => {
     const root = wiki();
     const id = cortex(root, ["add", "-"], { stdin: "Texte sans note.\n" }).out.match(/[0-9a-f-]{36}/)![0];
     const r = cortex(root, ["compile", id, "--batch"], { env: silent() });
-    expect(r.code).toBe(1);
-    expect(r.err).toContain(`✗ ${id}: empty note.`);
+    expect(r.err).not.toContain("empty note");
   });
   test("compile domain error: the agent writes no Source page → 1, status unchanged", () => {
     const root = wiki();

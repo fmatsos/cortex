@@ -76,7 +76,6 @@ const duplicateRawId: RawRule = (c, d) => {
 const pendingSource: RawRule = (c, d) => {
   if (d.fm.status !== "pending") return [];
   const out: Issue[] = [];
-  if (!String(d.fm.note ?? "").trim()) out.push(issue("warning", d.path, "missing note: ask for it before compiling"));
   const fetched = dateMs(d.fm.fetched_at);
   if (fetched !== undefined && c.now.getTime() - fetched > LIMITS.pendingDays * DAY) out.push(issue("warning", d.path, `pending for more than ${LIMITS.pendingDays} days`));
   return out;
