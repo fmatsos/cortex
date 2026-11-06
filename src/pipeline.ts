@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { changed, markCompiled, outOfScope, prepareSource, sourceCallouts, stamp, tagUsage, weave, actor } from "./agent";
+import { components, detectBridges } from "./bridges";
 import { addNoteDefs, noteDef, noteId, normalizeNotes } from "./cite";
 import { repairPage, updatePage, writePage, linkPages, type Addition, type PageRef, type Written } from "./compose";
 import type { Config } from "./config";
@@ -239,6 +240,8 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   for (const e of errors) say("warn", `${e}`, "  ⚠");
   stats.failedSteps.push(...errors);
 
+  const groups = components(await openWiki(root).pages()); // the groups of linked pages before the source (7bis, in step 9)
+
   // 7. application: only cortex writes, in the collator's order of the titles; each page created is noted in the state first
   const { paths } = st.applied, exists = (p?: string) => !!p && existsSync(join(root, p));
   let src = exists(paths.source) ? paths.source : (await openWiki(root).citations()).get(resource)?.[0]?.path;
@@ -309,7 +312,6 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   const touched = [...new Set([src, ...made, ...updated])];
   await stamp(root, touched, by, now(), inUse, new Set(st.applied.created), cfg.max_tags ?? LIMITS.maxTags);
   await weave(root, src, resource, touched, String(d.fm.note ?? ""));
-  // 7bis (bridges between groups of pages) is WP6b's: it hooks in here, before the lint
 
   // 8. lint and repair of the pages written
   const left = await settlePages(root, touched, { cfg, language, description: head.description, source: id, report });
@@ -326,6 +328,9 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   const added = await writeLinks(root, suggestLinks(await openWiki(root).pages(), lexical, { pages: new Set(touched), targets: new Set(st.applied.created) }), now());
   if (added.length) say("info", `${added.length} link(s) added by cortex links`);
   const w = openWiki(root);
+  // 7bis. the source links groups of pages that had no link: a synthesis to write (queue, no model call)
+  const bridges = await detectBridges(w, groups, [...linked.keys()], id, now());
+  if (bridges.length) say("info", `${bridges.length} synthèse(s) à écrire (la source relie des groupes de pages sans lien) : cortex queue`);
   if (stats.failedSteps.length) {
     const t = `Compile partiel : ${title}`;
     if (!queueItems(w.queue().entries).some((i) => i.status === "open" && i.title === t))

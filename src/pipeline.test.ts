@@ -385,3 +385,41 @@ test("the pipeline needs a model, and a source with a body", async () => {
   expect((await compile(root2)).messages[0]!.text).toContain("the source is empty");
   expect(s.calls).toEqual([]);
 });
+
+/** The wiki of `wiki()` with two groups of linked pages: Cache (hub) with LRU and Hashing, Memoization (hub) with DynProg and Tabulation. */
+async function twoGroups(base_url: string): Promise<string> {
+  const root = await wiki(base_url);
+  await Promise.all([["LRU", "lru", "Cache"], ["Hashing", "hashing", "Cache"], ["DynProg", "dynprog", "Memoization"], ["Tabulation", "tabulation", "Memoization"]].map(([t, f, l]) =>
+    Bun.write(join(root, `wiki/concepts/${f}.md`), page("Concept", t!, { body: `Voir [${l}](/wiki/concepts/${l!.toLowerCase()}.md) [^old].\n\n[^old]: Old, /raw/2026/10/old/source.md` }))));
+  await refresh(root);
+  return root;
+}
+
+test("a source that links two groups of pages: one synthesis entry in the queue, not duplicated by a rerun", async () => {
+  const s = fake(script());
+  const root = await twoGroups(s.base_url);
+  const r = await compile(root, { keepState: true });
+  expect(r.ok).toBe(true);
+  // touched: Cache (the subject), DynProg (connection), Hashing (link), Redis (new); the groups are Cache/LRU/Hashing and Memoization/DynProg/Tabulation
+  const q = readQueue(root).entries;
+  expect(q).toHaveLength(1);
+  expect(q[0]).toMatchObject({ kind: "synthesis", title: "Synthèse : Cache / Memoization", status: "open", sources: [ID] });
+  expect(q[0]!.pages).toEqual(["wiki/concepts/cache.md", "wiki/concepts/memoization.md", "wiki/entities/redis.md", "wiki/concepts/dynprog.md", "wiki/concepts/hashing.md"]);
+  expect(q[0]!.reason).toContain("3 et 3 pages");
+  expect(text(root, "wiki/queue.md")).toContain("Synthèse : Cache / Memoization");
+  expect(r.messages.some((m) => m.text.includes("1 synthèse(s) à écrire"))).toBe(true);
+  // a rerun of the same source: no second entry
+  expect((await compile(root, { fresh: true })).ok).toBe(true);
+  expect(readQueue(root).entries.filter((e) => e.kind === "synthesis")).toHaveLength(1);
+});
+
+test("a source that touches one group only, or groups too small: no synthesis entry", async () => {
+  const lone = await wiki(fake(script()).base_url); // three lone pages
+  expect((await compile(lone)).ok).toBe(true);
+  expect(readQueue(lone).entries).toEqual([]);
+  // the connection (page 1: Hashing) is in the group of Cache: the new page Redis and the pages of one group
+  const s = fake(script({ connect: () => ({ connections: [{ page: 1, relation: "related", facts: [], why: "Même groupe." }] }) }));
+  const root = await twoGroups(s.base_url);
+  expect((await compile(root)).ok).toBe(true);
+  expect(readQueue(root).entries).toEqual([]);
+});

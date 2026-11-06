@@ -93,4 +93,8 @@ export const LIMITS = {
   pipelineLinkablePages: 20,
   /** Pipeline: numbered facts the connections step reads (the first ones, in the order of the subjects). */
   pipelineConnectFacts: 30,
+  /** Pipeline (step 7bis): a group of linked pages (connected component) counts for a bridge only with at least this many pages. */
+  pipelineBridgeMinSize: 3,
+  /** Pipeline (step 7bis): synthesis entries one source may add to the queue (pairs of groups it links, by title). */
+  pipelineBridgeMax: 3,
 } as const;
