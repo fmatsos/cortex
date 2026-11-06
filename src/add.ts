@@ -9,7 +9,7 @@ import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { openWiki, type Wiki } from "./context";
 import { rawId } from "./doc";
-import { localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
+import { cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
 import { free } from "./naming";
 import { expand } from "./template";
 import { appendLogCtx } from "./log";
@@ -261,7 +261,7 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   const r = await addOne(w, input, opts);
   const social = (await w.config()).parser?.social; // the network's own limit, else the one for all networks; 0: links not followed
   const limit = (r.ex?.network && social?.[r.ex.network]?.external_link?.limit) ?? social?.external_link?.limit ?? LIMITS.maxLinkedSources;
-  const links = [...new Set(r.ex?.links ?? [])].filter((l) => l !== input).slice(0, limit);
+  const links = [...new Set((r.ex?.links ?? []).map(cleanUrl))].filter((l) => l !== cleanUrl(input)).slice(0, limit);
   if (r.duplicate || opts.follow === false || !links.length) return r;
   r.linked = [];
   const note = opts.note; // the post's intent as is: no note on the post, none on its pages (compile asks); the tie is linked_from
@@ -308,7 +308,8 @@ export async function addFmLink(root: string, id: string, key: string, value: st
   await rename(`${file}.tmp`, file);
 }
 
-async function addOne(w: Wiki, input: string, opts: AddOpts): Promise<AddResult> {
+async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResult> {
+  const input = /^https?:\/\//.test(rawInput) ? cleanUrl(rawInput) : rawInput; // the one point every captured URL (given or followed) passes
   const root = w.root;
   const now = opts.now ?? new Date();
   let ex: Extract;
@@ -329,7 +330,7 @@ async function addOne(w: Wiki, input: string, opts: AddOpts): Promise<AddResult>
       : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
   }
   const hash = sha256(ex.content);
-  const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url], hash);
+  const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
   if (dup) return { id: dup, duplicate: true, ex };
 
   const iso = localIso(now);
@@ -341,7 +342,7 @@ async function addOne(w: Wiki, input: string, opts: AddOpts): Promise<AddResult>
   if (opts.dryRun) return { id: rel.split("/").at(-1)!, duplicate: false, ex };
 
   const fm: Record<string, unknown> = { type: "RawSource", title: ex.title };
-  if (ex.url) fm.url = ex.url;
+  if (ex.url) fm.url = cleanUrl(ex.url);
   fm.kind = ex.kind;
   if (ex.author) fm.author = ex.author;
   if (ex.published) fm.published = ex.published;

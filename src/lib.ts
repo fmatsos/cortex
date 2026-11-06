@@ -142,12 +142,23 @@ export function rawPath(root: string, id: string): string | undefined {
 
 export const sha256 = (s: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
 
-/** Comparable URL: no fragment, no tracking parameters (utm_*, fbclid, gclid; `ref` and `source` are kept, they can name the page), sorted parameters, no trailing /, lowercase host. */
+/** Tracking query parameters, removed from every captured URL (`ref`, `source`, `id`… are kept: they can name the page). */
+const TRACKING_PARAM = /^(utm_|lmd_)|^(fbclid|gclid|mc_cid|mc_eid|igshid|ref_src|trk|trackingId)$/i;
+
+/** The URL without its tracking parameters (a trailing `?` goes with the last one); the rest, fragment included, is left as written. */
+export function cleanUrl(u: string): string {
+  const h = u.indexOf("#"), frag = h < 0 ? "" : u.slice(h), head = h < 0 ? u : u.slice(0, h), q = head.indexOf("?");
+  if (q < 0) return u;
+  const kept = head.slice(q + 1).split("&").filter((p) => p && !TRACKING_PARAM.test(p.split("=")[0]));
+  return head.slice(0, q) + (kept.length ? `?${kept.join("&")}` : "") + frag;
+}
+
+/** Comparable URL: no fragment, no tracking parameters (cleanUrl), sorted parameters, no trailing /, lowercase host. */
 export function normUrl(u: string): string {
   try {
     const x = new URL(u);
     x.hash = "";
-    for (const k of [...x.searchParams.keys()]) if (/^(utm_|fbclid$|gclid$)/.test(k)) x.searchParams.delete(k);
+    for (const k of [...x.searchParams.keys()]) if (TRACKING_PARAM.test(k)) x.searchParams.delete(k);
     x.searchParams.sort(); // ?a=1&b=2 and ?b=2&a=1 are the same page
     return (x.origin.toLowerCase() + x.pathname.replace(/\/+$/, "") + x.search);
   } catch { return u; }

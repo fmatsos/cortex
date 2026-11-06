@@ -28,7 +28,7 @@
 	<div class="flex items-end gap-3">
 		<CortexMark size={112} animated />
 		<div class="min-w-0 pb-2">
-			<h1 id="h-home" class="flex flex-wrap items-baseline gap-x-3 text-3xl font-semibold tracking-tight"><CortexWordmark /><span class="text-muted-foreground text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
+			<h1 id="h-home" class="flex flex-wrap items-baseline gap-x-3 text-3xl font-semibold tracking-tight"><CortexWordmark /><span class="text-muted-foreground relative -top-[0.1125rem] text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
 			<p class="text-muted-foreground mt-2">
 				{t("home.intro", { pages: data.seed.total, tags: data.seed.nbTags })}
 				<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">{t("home.intro.graph")}</a>.

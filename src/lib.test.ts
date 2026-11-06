@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { localIso, normUrl, setFmLine, slugify } from "./lib";
+import { cleanUrl, localIso, normUrl, setFmLine, slugify } from "./lib";
 
 test("setFmLine: only the key's lines change, comments and the rest of the frontmatter stay byte for byte", () => {
   const page = "---\ntype: Concept\n# verified: { by: \"human:f\" }   ← to add after review\ntags:\n  - agents\n  - x\ntitle: 'A: b'\n---\nbody\n";
@@ -21,4 +21,14 @@ test("utilities: local ISO date, v7 ids, slugify, normUrl, ftsQuery", () => {
   expect(slugify("Le C++26 refusé à l'ISO : une première")).toBe("le-c-26-refuse-a-l-iso-une-premiere");
   expect(normUrl("https://X.com/a/?utm_source=z&hl=en#f")).toBe(normUrl("https://x.com/a?hl=en"));
   expect(ftsQuery(`l'IA "spec"`)).toBe(`"l'IA" """spec"""`);
+});
+
+test("cleanUrl: tracking parameters out, the others and the fragment kept", () => {
+  expect(cleanUrl("https://x.com/a?utm_source=li&lmd_x=1&fbclid=z&id=42#f")).toBe("https://x.com/a?id=42#f");
+  expect(cleanUrl("https://x.com/a?utm_medium=m&trackingId=t&trk=u")).toBe("https://x.com/a");
+  expect(cleanUrl("https://x.com/a?trk=u#frag")).toBe("https://x.com/a#frag");
+  expect(cleanUrl("https://x.com/a?ref=nl&source=s&q=a%20b")).toBe("https://x.com/a?ref=nl&source=s&q=a%20b");
+  expect(cleanUrl("https://x.com/a?mc_cid=1&mc_eid=2&igshid=3&gclid=4&ref_src=5")).toBe("https://x.com/a");
+  expect(cleanUrl("https://x.com/a")).toBe("https://x.com/a");
+  expect(normUrl("https://x.com/a?lmd_x=1&id=1")).toBe(normUrl("https://x.com/a?id=1"));
 });
