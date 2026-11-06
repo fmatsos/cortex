@@ -239,3 +239,17 @@ test("openai: cache_prompt is sent, except to api.openai.com", async () => {
   expect(cache({ base_url: "http://localhost:8080/v1" })).toEqual({ cache_prompt: true });
   expect(cache({ base_url: "https://api.openai.com/v1" })).toEqual({});
 });
+
+test("elide: old page bodies in the model's own write calls go too, the last two calls stay", async () => {
+  const { elide } = await import("./backends/openai");
+  const big = "x".repeat(500);
+  const call = (i: number) => ({ role: "assistant", tool_calls: [{ id: `${i}`, function: { name: "WritePage", arguments: JSON.stringify({ file_path: `wiki/p${i}.md`, body: big }) } }] });
+  const m: any[] = [call(1), call(2), call(3)];
+  expect(elide(m)).toBe(true);
+  const args = m.map((x) => JSON.parse(x.tool_calls[0].function.arguments));
+  expect(args[0].body).toContain("written to wiki/p1.md");
+  expect(args[0].file_path).toBe("wiki/p1.md");
+  expect(args[1].body).toBe(big);
+  expect(args[2].body).toBe(big);
+  expect(elide(m)).toBe(false);
+});

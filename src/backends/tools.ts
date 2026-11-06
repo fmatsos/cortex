@@ -29,11 +29,11 @@ const READ_TOOLS = [
 const WRITE_TOOLS = [
   def("NewPage", "Create a new wiki page: cortex names the file and writes the YAML frontmatter, then returns the path. Refused when a page has the same or a near title: complete that page instead.",
     { type: str("Source, Concept, Entity or Synthesis"), title: str("page title"), frontmatter: fm("other frontmatter fields, as in the schema (description, tags, sources…)"), body: str("Markdown after the frontmatter") }, ["type", "title", "body"]),
-  def("WritePage", "Replace the content of an existing wiki page (Markdown under wiki/). Preferred for pages: cortex writes the YAML frontmatter.",
+  def("WritePage", "Replace the whole content of an existing wiki page (Markdown under wiki/); cortex writes the YAML frontmatter. To change part of a page, use Edit: much shorter to write.",
     { file_path: str("path under wiki/, ending in .md"), frontmatter: fm("frontmatter fields, as in the schema (type, title, description, status, sources…)"), body: str("Markdown after the frontmatter") }),
   def("Append", "Add text at the end of a file under wiki/: write a long page in parts (WritePage with the start, then Append).",
     { file_path: str("path under wiki/"), content: str("text to add, as is") }),
-  def("Write", "Replace a file under wiki/ (a new page: NewPage).", { file_path: str("path under wiki/"), content: str("whole file content") }),
+  def("Write", "Replace a whole file under wiki/ (a new page: NewPage). To change part of a file, use Edit.", { file_path: str("path under wiki/"), content: str("whole file content") }),
   def("Edit", "Replace one exact, unique string of a file under wiki/.", { file_path: str("path under wiki/"), old_string: str("exact text to replace"), new_string: str("replacement") }),
 ];
 

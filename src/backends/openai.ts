@@ -94,7 +94,17 @@ export default function openai(cfg: Config): Backend {
 export function elide(messages: any[]): boolean {
   const tools = messages.filter((m) => m.role === "tool").slice(0, -2).filter((m) => m.content.length > 200);
   for (const m of tools) m.content = "[elided to free the context: call the tool again if you still need this]";
-  return tools.length > 0;
+  // the model's own old writes too: a page body sits in the call arguments, and is already on disk (Read it again)
+  let writes = 0;
+  for (const m of messages.filter((m) => m.role === "assistant" && m.tool_calls?.length).slice(0, -2)) for (const c of m.tool_calls) {
+    let a: Record<string, unknown>;
+    try { a = JSON.parse(c.function.arguments || "{}"); } catch { continue; }
+    const big = Object.keys(a).filter((k) => typeof a[k] === "string" && (a[k] as string).length > 200);
+    if (!big.length) continue;
+    for (const k of big) a[k] = `[elided: written to ${a.file_path ?? a.title ?? "the wiki"}; Read the file if you need it]`;
+    c.function.arguments = JSON.stringify(a); writes++;
+  }
+  return tools.length + writes > 0;
 }
 
 /** Rough token count of the conversation (~3.5 characters per token: enough to act before the server refuses). */
