@@ -11,8 +11,8 @@ async function build(): Promise<string> {
   return r.outputs[0].text();
 }
 
-/** Percent-encodes only what a `javascript:` URL cannot carry as is (%, #, whitespace): encodeURIComponent made it ~50% longer. */
-export const jsUrl = (code: string) => `javascript:${code.replace(/[%#\s]/g, (c) => encodeURIComponent(c))}`;
+/** Percent-encodes what is not a safe URL character (%, #, blanks, < > " ` { } | \ ^, non-ASCII): Chrome Android's bookmark field cut the code at the first `<`. */
+export const jsUrl = (code: string) => `javascript:${code.replace(/[^\w\-.~!$&()*+,;=:@/?'\[\]]/g, (c) => encodeURIComponent(c))}`;
 
 /** The `javascript:` URL for a share app at `server` (origin, no trailing slash); the browser decodes it before it runs it. */
 export async function bookmarklet(server: string): Promise<string> {

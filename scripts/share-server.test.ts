@@ -52,7 +52,8 @@ test("bookmarklet: a javascript: URL with all its code inline, the server baked 
   const urls = [...code.matchAll(/https?:\/\/[^"'`\s)\\$]+/g)].map((m) => m[0]);
   expect(urls.filter((u) => !/^https:\/\/www\.linkedin\.com\/feed\/update\/$/.test(u) && u !== "http://cortex.lan:8090")).toEqual([]);
   expect(b).not.toMatch(/[\s#]/); // whitespace and # encoded, the rest as is (shorter)
-  expect(b.length).toBeLessThan(code.length * 1.15); // encodeURIComponent made it ~1.5×
+  expect(b.length).toBeLessThan(code.length * 1.25); // encodeURIComponent made it ~1.5×
+  expect(b.slice(11)).not.toMatch(/[<>"`{}|\\^]/); // Chrome Android cut the URL at the first <
 });
 
 test("share: GET /share/bookmarklet is the install page with the code for the request's own origin", async () => {
