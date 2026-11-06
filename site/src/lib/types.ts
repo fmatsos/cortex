@@ -27,11 +27,14 @@ export type PageData = {
 };
 /** A log entry: `search` = all the displayed text (type, text, page titles, ids and Source pages), folded (no accents, lowercase) for a local search by `fold(query)`; `html` = inline text; `sources` = raw ids not named in the text (with the wiki Source page that cites them, if there is one). */
 export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; search: string };
+/** A queue entry (wiki/queue.jsonl): `html` = reason as inline text; `proposal` = rendered Markdown; `closedAt` = when a done/dismissed entry was closed. */
+export type QueueEntryData = { n: number; at: string; kind: string; title: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; proposal?: string; status: "open" | "done" | "dismissed"; closedAt?: string };
 export type SiteData = {
   locale: "en" | "fr"; // UI language of the export (cortex.json `language`)
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
   log: LogEntryData[]; // most recent first
+  queue: QueueEntryData[]; // open entries first (by kind, oldest first), then the closed ones (most recent number first)
 };
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];

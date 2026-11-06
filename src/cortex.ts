@@ -124,6 +124,31 @@ try {
       for (const e of shown) console.log(`${paint.dim(e.at.slice(0, 16).replace("T", " "))}  ${paint.bold(kindLabel(e.kind).padEnd(6))}  ${e.text}`);
       break;
     }
+    case "queue": {
+      const { QUEUE_KINDS, closeCtx, openItems, queueItems, queueKindLabel } = await import("./queue");
+      const sub = args[0];
+      if (sub) {
+        if (!["done", "dismiss", "apply"].includes(sub) || args.length !== 2) throw usage("Usage: cortex queue [--kind k] [--json] | cortex queue done|dismiss|apply <n>");
+        const n = int("<n>", args[1], { min: 1 })!;
+        if (sub === "apply") {
+          const item = queueItems(wiki.queue().entries).find((i) => i.n === n);
+          if (!item || item.status !== "open") throw new CortexError(item ? `queue entry #${n} is already ${item.status}` : `queue entry not found: #${n}`, "notfound");
+          throw new CortexError("cortex queue apply is not available yet (it comes with cortex maintain); close the entry with done or dismiss once handled by hand", "refused");
+        }
+        let e;
+        try { e = await closeCtx(wiki, n, sub === "done" ? "done" : "dismissed"); } catch (x) { throw new CortexError((x as Error).message, "notfound"); }
+        console.log(`${paint.ok("✓")} #${n} ${paint.dim(e.status)}: ${e.title}`);
+        break;
+      }
+      if (o.kind && !QUEUE_KINDS.includes(o.kind as any)) throw usage(`--kind expects ${QUEUE_KINDS.join(" | ")}`);
+      const { errors } = wiki.queue();
+      for (const x of errors) warn(`wiki/queue.jsonl:${x.line}: ${x.msg}`);
+      const shown = openItems(queueItems(wiki.queue().entries), o.kind);
+      if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
+      if (!shown.length) console.log(paint.dim("Empty queue."));
+      for (const i of shown) console.log(`${paint.bold(`#${i.n}`.padEnd(4))} ${paint.accent(queueKindLabel(i.kind).padEnd(13))} ${i.title}  ${paint.dim(i.at.slice(0, 10))}\n     ${paint.dim(i.reason)}`);
+      break;
+    }
     case "links": {
       const { suggestLinks, writeLinks } = await import("./links");
       let found = suggestLinks(await wiki.pages());
@@ -139,10 +164,10 @@ try {
       if (o.json) console.log(JSON.stringify(issues, null, 2));
       else {
         const icon = { error: paint.error("✗"), warning: paint.warn("!"), info: "·" };
-        for (const i of issues.filter((i) => i.level !== "info")) console.log(`${icon[i.level]} ${paint.dim(i.path)}: ${i.msg}`);
+        for (const i of issues.filter((i) => i.level !== "info" || i.path === "wiki/queue.jsonl")) console.log(`${icon[i.level]} ${paint.dim(i.path)}: ${i.msg}`);
         const n = (l: string) => issues.filter((i) => i.level === l).length;
         const count = (k: string, s: string, color: (s: string) => string) => (n(k) ? color(`${n(k)} ${s}`) : `${n(k)} ${s}`);
-        console.log(`${count("error", "error(s)", paint.error)}, ${count("warning", "warning(s)", paint.warn)}, ${n("info")} page(s) never reviewed.`);
+        console.log(`${count("error", "error(s)", paint.error)}, ${count("warning", "warning(s)", paint.warn)}, ${issues.filter((i) => i.msg === "never reviewed").length} page(s) never reviewed.`);
       }
       if (issues.some((i) => i.level === "error")) ok = false;
       break;

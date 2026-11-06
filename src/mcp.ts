@@ -10,6 +10,7 @@ import { openWiki } from "./context";
 import { related, type Related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
+import { openItems, QUEUE_KINDS, queueItems, readQueue } from "./queue";
 import { search } from "./search";
 import type { RelatedReason } from "../site/src/lib/types";
 import { mcpInstructions } from "./prompts";
@@ -37,6 +38,12 @@ export async function getFile(root: string, path: string): Promise<string> {
 /** Entries of the last `days` days of the journal (wiki/log.jsonl), most recent first, filtered by `kind`. */
 export function lastLog(root: string, days: number, kind?: string): LogEntry[] {
   return lastDays(readLog(root).entries, days, kind);
+}
+
+/** Open entries of the queue (wiki/queue.jsonl), by kind then oldest first; `all` adds the closed ones. Pages as resources. */
+export function queueForAgent(root: string, kind?: string, all = false) {
+  const items = queueItems(readQueue(root).entries);
+  return (all ? items.filter((i) => !kind || i.kind === kind) : openItems(items, kind)).map((i) => ({ ...i, pages: i.pages.map(toResource) }));
 }
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
@@ -117,6 +124,15 @@ export function buildServer(root: string, language?: string): McpServer {
     }),
     annotations: readOnly,
   }, toolResult(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
+
+  s.registerTool("queue", {
+    description: "Read-only: what needs a human decision (wiki/queue.jsonl: synthesis to write, merge, contradiction, split, review), open entries first by kind, with their number n, pages, sources and proposal. The queue is not written through MCP: the human closes entries with cortex queue done|dismiss <n>.",
+    inputSchema: z.object({
+      kind: z.enum(QUEUE_KINDS).optional().describe("keep only this kind of entry"),
+      all: z.boolean().optional().describe("also return the closed entries (default: open only)"),
+    }),
+    annotations: readOnly,
+  }, toolResult(async ({ kind, all }) => json(queueForAgent(root, kind, all))));
 
   return s;
 }

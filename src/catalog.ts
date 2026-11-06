@@ -5,6 +5,7 @@ import { refresh } from "./embed";
 import { isReservedPage } from "./lib";
 import { warn } from "./style";
 import { writeLogMdCtx } from "./log";
+import { writeQueueMdCtx } from "./queue";
 import { collator } from "./text";
 
 const ORDER: [string, string][] = [["Concept", "Concepts"], ["Entity", "Entities"], ["Synthesis", "Syntheses"], ["Source", "Sources"]];
@@ -26,10 +27,11 @@ export async function renderIndexCtx(w: Wiki): Promise<string> {
 }
 export const renderIndex = (root: string) => renderIndexCtx(openWiki(root));
 
-/** The two generated wiki files: index.md (from the frontmatters) and log.md (from log.jsonl); then the page embeddings, when `embed` is configured. */
+/** The two generated wiki files: index.md (from the frontmatters) log.md (from log.jsonl) and queue.md (from queue.jsonl, when the wiki has a queue); then the page embeddings, when `embed` is configured. */
 export async function regenerateCtx(w: Wiki) {
   await Bun.write(join(w.root, "wiki/index.md"), await renderIndexCtx(w));
   await writeLogMdCtx(w);
+  await writeQueueMdCtx(w);
   await refresh(w.root);
 }
 export const regenerate = (root: string) => regenerateCtx(openWiki(root));

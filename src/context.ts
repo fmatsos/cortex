@@ -2,6 +2,7 @@ import { type Config, loadConfig } from "./config";
 import type { Page, RawSource } from "./doc";
 import { type DocError, type LinkGraph, linkGraph, readPages, readRawSources } from "./lib";
 import { readLog, type Titles } from "./log";
+import { readQueue } from "./queue";
 import { NAMING_DEFAULTS, type NamingKey } from "./template";
 
 /**
@@ -21,6 +22,8 @@ export type Wiki = {
   errors: { pages: DocError[]; raws: DocError[] };
   /** wiki/log.jsonl. `appendLog` pushes the entry it writes, so the memo stays current. */
   journal(): ReturnType<typeof readLog>;
+  /** wiki/queue.jsonl. `enqueue` and `closeEntry` push the entry they write, so the memo stays current. */
+  queue(): ReturnType<typeof readQueue>;
   /** Title of each titled wiki page (path → title). */
   titles(): Promise<Titles>;
   /** Raw resource → Source pages citing it (one entry per `sources[]` item, pages in path order). */
@@ -52,6 +55,7 @@ export function openWiki(root: string): Wiki {
     }),
     raws: once(async () => { const r = await readRawSources(root); errors.raws = r.errors; return r.raws; }),
     journal: once(() => readLog(root)),
+    queue: once(() => readQueue(root)),
     titles: once(async () => new Map((await pages()).filter((d) => d.fm.title).map((d) => [d.path, d.fm.title!]))),
     citations: once(async () => {
       const m = new Map<string, Page[]>();

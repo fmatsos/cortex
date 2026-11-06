@@ -78,6 +78,7 @@
 		["c:graph", "graph", t("cmd.graph"), GO(toRoute("/graph"))],
 		["c:tags", "tags", t("cmd.tags"), GO(toRoute("/tags"))],
 		["c:log", "journal", t("cmd.log"), GO(toRoute("/log"))],
+		["c:queue", "list-view", t("cmd.queue"), GO(toRoute("/queue"))],
 		["c:theme", theme.mode === "dark" ? "moon" : theme.mode === "light" ? "sun" : "system", t("cmd.theme", { current: theme.label }), () => theme.cycle()],
 		["c:lang", "language", t("cmd.lang", { current: lang.choice === "system" ? t("lang.default", { name: LOCALE_NAMES[defaultLocale] }) : LOCALE_NAMES[lang.choice] }), () => lang.cycle()],
 	] as [string, IconName, string, () => void][]).map(([key, icon, label, go]) => ({ key, kind: "command" as const, group: t("palette.commands"), icon, html: esc(label), run: () => { if (key !== "c:theme" && key !== "c:lang") open = false; go(); } })));

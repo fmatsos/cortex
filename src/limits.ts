@@ -73,6 +73,8 @@ export const LIMITS = {
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */
   snippetTokens: 12,
+  /** Queue: an entry still open after this many days is reported by lint (info). */
+  queueStaleDays: 30,
   /** Pipeline: a source above this many tokens (estimated at 4 characters per token) is cut into chunks of about this size, one extraction each. */
   pipelineChunkTokens: 6000,
   /** Pipeline: tokens of the previous chunk repeated (last paragraph, at most) at the head of the next one, so that no reasoning is cut. */

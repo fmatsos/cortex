@@ -4,9 +4,10 @@ import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
 import { buildTerms } from "../site/src/lib/search-engine";
 import { type Locale, setLocale, t } from "../site/src/lib/i18n/index";
-import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
+import type { GraphData, Link, LogEntryData, Note, QueueEntryData, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
+import { openItems, queueItems, type QueueEntry } from "./queue";
 import { type Page, type RawFm, type Stamp, isoDate, pageId, pageState, pageRoute, toRawSource, toResource } from "./doc";
 import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
 import { collator } from "./text";
@@ -142,7 +143,7 @@ export function render(body: string, from: string, pages: Set<string>) {
   const html = wrapTables(anchors(noteCallouts(md(withRefs))).replace(HTML_LINK, (_, href: string, label: string) => {
     const [path, frag = ""] = href.split("#");
     const page = path.replace(/^\//, "");
-    if (page === "wiki/index.md" || page === "wiki/log.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : "")}${frag && `#${frag}`}">${label}</a>`; // navigation pages of the site
+    if (page === "wiki/index.md" || page === "wiki/log.md" || page === "wiki/queue.md") return `<a href="${rel(from, page === "wiki/log.md" ? "log/" : page === "wiki/queue.md" ? "queue/" : "")}${frag && `#${frag}`}">${label}</a>`; // navigation pages of the site
     if (!pages.has(page)) return `<span class="missing-link" title="${page.startsWith("raw/") ? t("export.rawUnpublished") : t("export.pageToWrite")}">${label}</span>`;
     return `<a href="${rel(from, pageRoute(page))}${frag && `#${frag}`}">${label}</a>`;
   }));
@@ -212,6 +213,23 @@ function renderLog(root: string, entries: LogEntry[], paths: Set<string>, byPath
       sources: sources.filter((s) => !e.text.includes(`\`${s.id}\``)), // an id already named in the text is not repeated under the entry
       // everything the entry displays, folded like the search (no accents, lowercase): the browser only has to fold the query
       search: fold([e.kind, plain(html), ...pages.map((p) => p.title), ...sources.map((s) => `${s.id} ${s.page?.title ?? ""}`)].join(" ")),
+    };
+  });
+}
+
+/** Queue: open entries first (by kind, oldest first), then the closed ones; same links and inline rendering as the log. */
+function renderQueue(root: string, entries: QueueEntry[], paths: Set<string>, byPath: Map<string, Page>, sourcePage: Map<string, Page>, link: (d: Page) => Link): QueueEntryData[] {
+  const items = queueItems(entries);
+  return [...openItems(items), ...items.filter((i) => i.status !== "open").sort((a, b) => b.n - a.n)].map((i) => {
+    const sources = i.sources.map((id) => {
+      const raw = rawPath(root, id), page = raw && sourcePage.get(toResource(raw));
+      return { id, ...(page && { page: link(page) }) };
+    });
+    return {
+      n: i.n, at: i.at, kind: i.kind, title: i.title, html: inline(render(i.reason, "queue/", paths).html),
+      pages: i.pages.filter((p) => byPath.has(p)).map((p) => link(byPath.get(p)!)), sources,
+      ...(i.proposal && { proposal: render(i.proposal, "queue/", paths).html }),
+      status: i.status, ...(i.closedAt && { closedAt: i.closedAt }),
     };
   });
 }
@@ -288,7 +306,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
     links: edges,
   };
 
-  const data: SiteData = { locale, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
+  const data: SiteData = { locale, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link), queue: renderQueue(root, w.queue().entries, paths, byPath, resourcePage, link) };
   return { data, graph, search: buildSearch(pages) };
 }
 

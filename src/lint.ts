@@ -6,6 +6,7 @@ import { isReservedPage, slugify, wikiLinks } from "./lib";
 import { LIMITS } from "./limits";
 import { pattern } from "./template";
 import { renderLogMd } from "./log";
+import { queueItems, renderQueueMd, staleItems } from "./queue";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
@@ -117,7 +118,21 @@ const journalRule: Rule = async (c) => {
   return out;
 };
 
-export const rules: Rule[] = [invalidYaml, pagesRule, orphans, duplicateSources, rawsRule, tagSynonyms, journalRule];
+// queue: invalid lines = error; queue.md must be exactly the generation of queue.jsonl; open entries past queueStaleDays = one info
+const queueRule: Rule = async (c) => {
+  const queue = c.w.queue();
+  const out = queue.errors.map((e) => issue("error", `wiki/queue.jsonl:${e.line}`, e.msg));
+  const md = join(c.root, "wiki/queue.md");
+  if ((existsSync(md) || queue.entries.length)
+    && (!existsSync(md) || (await Bun.file(md).text()) !== renderQueueMd(queue.entries, await c.w.titles())))
+    out.push(issue("warning", "wiki/queue.md", "differs from its generation from wiki/queue.jsonl (edited by hand?): cortex index regenerates it"));
+  const stale = staleItems(queueItems(queue.entries), c.now);
+  if (stale.length)
+    out.push(issue("info", "wiki/queue.jsonl", `${stale.length} open entr${stale.length > 1 ? "ies" : "y"} older than ${LIMITS.queueStaleDays} days (${stale.map((i) => `#${i.n}`).join(", ")}): cortex queue`));
+  return out;
+};
+
+export const rules: Rule[] = [invalidYaml, pagesRule, orphans, duplicateSources, rawsRule, tagSynonyms, journalRule, queueRule];
 
 async function context(w: Wiki, now: Date): Promise<Ctx> {
   const tpl = await w.naming();

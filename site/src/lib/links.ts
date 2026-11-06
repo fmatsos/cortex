@@ -6,4 +6,4 @@ const slash = (p: string) => (p.endsWith("/") ? p : `${p}/`);
 
 export const toPage = (id: string) => slash(resolve("/wiki/[...path]", { path: id }));
 export const toTag = (slug: string) => slash(resolve("/tags/[tag]", { tag: slug }));
-export const toRoute = (r: "/" | "/graph" | "/tags" | "/log" | "/search") => slash(resolve(r));
+export const toRoute = (r: "/" | "/graph" | "/tags" | "/log" | "/queue" | "/search") => slash(resolve(r));

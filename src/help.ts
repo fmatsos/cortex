@@ -11,6 +11,8 @@ export const HELP = `cortex — second brain
   cortex lint [--json]
   cortex log [--limit N] [--json] [--kind k]     (the journal, newest first; 20 entries by default)
   cortex log add <add|ingest|query|lint|update> "<text>" [--source <raw id>]… [--page <wiki/….md>]…
+  cortex queue [--kind k] [--json]               (what needs a human decision: synthesis, merge, contradiction, split, review)
+  cortex queue done|dismiss|apply <n>            (closes entry n; apply is not available yet)
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
@@ -21,7 +23,7 @@ export const HELP = `cortex — second brain
   cortex doctor                                (system tools present or missing)
   cortex --version
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
-  cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
+  cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log, queue)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
   cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>
                                                (keys: ${CONFIG_KEYS.join(", ")})

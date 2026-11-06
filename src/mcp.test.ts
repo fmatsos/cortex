@@ -74,7 +74,7 @@ test("cortex mcp: initialize, tools/list, search, get, add without network (JSON
     send({ method: "notifications/initialized" });
 
     send({ id: 2, method: "tools/list" });
-    expect((await recv(2)).result.tools.map((t: any) => t.name).sort()).toEqual(["add", "get", "lint", "log", "related", "search"]);
+    expect((await recv(2)).result.tools.map((t: any) => t.name).sort()).toEqual(["add", "get", "lint", "log", "queue", "related", "search"]);
 
     const s = await call(3, "search", { q: "zythum" });
     expect(JSON.parse(s.content[0].text).hits[0]).toMatchObject({ area: "raw", path: "/raw/2026/11/01a1a5c9-5e80-7075-ae13-aab03b0a8697/source.md" });

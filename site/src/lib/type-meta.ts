@@ -37,6 +37,15 @@ export const KINDS = [
 	{ kind: "lint", get label() { return t("kind.lint"); }, get description() { return t("kind.lint.description"); }, color: "--kind-lint", icon: "kind-lint" },
 	{ kind: "update", get label() { return t("kind.update"); }, get description() { return t("kind.update.description"); }, color: "--kind-update", icon: "kind-update" },
 ] as const satisfies readonly { kind: string; label: string; description: string; color: string; icon: IconName }[];
+/** Queue entry kinds (wiki/queue.jsonl): colors and icons are borrowed from the log kinds and the page icons. */
+export const QUEUE_KINDS = [
+	{ kind: "synthesis", get label() { return t("queue.kind.synthesis"); }, get description() { return t("queue.kind.synthesis.description"); }, color: "--kind-query", icon: "synthesis" },
+	{ kind: "merge", get label() { return t("queue.kind.merge"); }, get description() { return t("queue.kind.merge.description"); }, color: "--kind-update", icon: "related" },
+	{ kind: "contradiction", get label() { return t("queue.kind.contradiction"); }, get description() { return t("queue.kind.contradiction.description"); }, color: "--kind-lint", icon: "warning" },
+	{ kind: "split", get label() { return t("queue.kind.split"); }, get description() { return t("queue.kind.split.description"); }, color: "--kind-ingest", icon: "list-view" },
+	{ kind: "review", get label() { return t("queue.kind.review"); }, get description() { return t("queue.kind.review.description"); }, color: "--kind-add", icon: "needs-review" },
+] as const satisfies readonly { kind: string; label: string; description: string; color: string; icon: IconName }[];
+export const queueKind = (k: string) => QUEUE_KINDS.find((x) => x.kind === k);
 export const kindLabel = (k: string) => KINDS.find((x) => x.kind === k)?.label ?? k;
 export const kindDescription = (k: string) => KINDS.find((x) => x.kind === k)?.description ?? "";
 export const kindColor = (k: string) => `var(${KINDS.find((x) => x.kind === k)?.color ?? "--type-other"})`;

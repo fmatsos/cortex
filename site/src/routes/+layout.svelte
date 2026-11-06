@@ -56,6 +56,7 @@
 		["/graph", "graph", "nav.graph"],
 		["/tags", "tags", "nav.tags"],
 		["/log", "journal", "nav.log"],
+		["/queue", "list-view", "nav.queue"],
 	] as const;
 	// active section: the route id also works at prerender (the relative URL cannot be compared)
 	const current = (route: string) => page.route.id === route || page.route.id?.startsWith(`${route}/`);
