@@ -97,6 +97,16 @@ export function unquote(cmd: string): string | undefined {
   return out;
 }
 
+/** What to use instead of a shell command the agent reached for (ls, cat, grep, rm…). */
+function hint(cmd: string): string {
+  const c = cmd.trim().split(/\s+/)[0];
+  if (/^(ls|find|tree)$/.test(c)) return " To list files, use the Glob tool (e.g. wiki/concepts/*.md).";
+  if (/^(cat|head|tail|less|more)$/.test(c)) return " To read a file, use the Read tool.";
+  if (/^(grep|rg)$/.test(c)) return " To search, use the Grep tool or cortex search.";
+  if (/^(rm|mv|unlink)$/.test(c)) return " Deleting or moving files is not allowed: fix the page with Edit or Write instead.";
+  return "";
+}
+
 /** Pure function: is a tool requested by the agent allowed? Writes limited to wiki/, Bash limited to cortex. */
 export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode): Verdict {
   if (tool === "TodoWrite") return { allow: true };
@@ -107,9 +117,9 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
   if (tool === "Bash") {
     const raw = String(input.command ?? "").trim();
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
-    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone; shorten the output with its options (--limit N), not head or grep. Allowed:\n${usage(mode)}` };
+    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone; shorten the output with its options (--limit N), not head or grep.${hint(raw)} Allowed:\n${usage(mode)}` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limited to ${toLabel(mode)} (refused: ${raw.slice(0, 80)}). Allowed:\n${usage(mode)}` };
+      : { allow: false, reason: `Bash limited to ${toLabel(mode)} (refused: ${raw.slice(0, 80)}).${hint(raw)} Allowed:\n${usage(mode)}` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Read-only: rerun with --file to write a synthesis." };
