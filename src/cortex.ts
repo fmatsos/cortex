@@ -34,6 +34,7 @@ const HELP = `cortex — second brain
   cortex ls [--type T] [--json]                (the wiki pages, by title)
   cortex show <path|raw id|title>              (prints a page or a source)
   cortex related <path|title> [--limit N] [--json]
+  cortex links [--json]                        (report only: mentions of a concept or entity that are not linked yet, with their reasons)
   cortex doctor                                (system tools present or missing)
   cortex --version
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
@@ -145,6 +146,13 @@ try {
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
       if (!shown.length) console.log(paint.dim("Empty journal."));
       for (const e of shown) console.log(`${paint.dim(e.at.slice(0, 16).replace("T", " "))}  ${paint.bold(kindLabel(e.kind).padEnd(6))}  ${e.text}`);
+      break;
+    }
+    case "links": {
+      const found = (await import("./links")).suggestLinks(await wiki.pages());
+      if (o.json) { console.log(JSON.stringify(found, null, 2)); break; }
+      for (const s of found) console.log(`${paint.dim(s.path)} → ${paint.bold(s.title)} ${paint.dim(`(${s.target})`)}\n    ${s.reasons.join(" · ")}`);
+      console.log(`${found.length} link(s) suggested; nothing written.`);
       break;
     }
     case "lint": {

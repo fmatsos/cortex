@@ -35,6 +35,18 @@ export const LIMITS = {
   textTitleChars: 80,
   /** Related pages kept per page on the site. */
   relatedPages: 8,
+  /** cortex links: a title or alias shorter than this is never matched (« IA », « Go » only as aliases of 3+). */
+  linkMinName: 3,
+  /** cortex links: mentioned on more than this share of the pages = a common word, never suggested. */
+  linkMaxSpread: 0.3,
+  /** cortex links: mentions needed before keyphraseness is judged; below, the context filter decides alone. */
+  linkMinEvidence: 3,
+  /** cortex links: least share of the mentioning pages that link to the page (Wikipedia's wikify uses ~0.06; the wiki is smaller and denser). */
+  linkMinKeyphraseness: 0.2,
+  /** cortex links: least similarity of the two pages when they share no tag and no source. Calibrated on the wiki of step 1. */
+  linkMinSimilarity: 0.1,
+  /** cortex links: suggestions kept per page, best first. */
+  linkMaxPerPage: 5,
   /** Journal entries shown by `cortex log` without `--limit`. */
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */

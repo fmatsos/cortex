@@ -122,6 +122,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
 | `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>" [--force]` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists, and a near title of the same type (same words, or one word more): `--force` creates it anyway, by hand only (refused to an agent). |
 | `cortex lint [--json]` | Runs the mechanical checks. Exits with code 1 on errors. |
+| `cortex links [--json]` | Report only: pages that mention a concept or entity (its `title` or `aliases`) without linking to it. A suggestion needs the name as whole words in the prose, a name that is not a common word in the wiki (often linked where it appears), and a shared tag, source or close vocabulary. Same wiki, same suggestions; each comes with its reasons. |
 | `cortex log [--limit N] [--json] [--kind k]` | Reads the journal, newest first. |
 | `cortex log add <kind> "<text>" [--source <id>]… [--page <path>]…` | Appends a journal entry (`add`, `ingest`, `query`, `lint` or `update`). |
 | `cortex compile <id…> \| --pending [--batch]` | Runs the ingest workflow, one agent session per source. Sessions are interactive by default. With `--batch`, no one validates and pages are written as `draft`. |
