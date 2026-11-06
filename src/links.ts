@@ -18,7 +18,7 @@ import { LIMITS } from "./limits";
 export type Similarity = { name: string; prepare(pages: Page[]): (a: Page, b: Page) => number };
 
 export type LinkSuggestion = {
-  path: string; target: string; title: string; term: string; score: number;
+  path: string; from: string; target: string; title: string; term: string; score: number;
   /** Why: the mention, the keyphraseness evidence, the context that ties both pages. */
   reasons: string[];
 };
@@ -133,7 +133,7 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
       if (srcs.length) reasons.push("shared source");
       if (s >= LIMITS.linkMinSimilarity) reasons.push(`${sim.name} ${s.toFixed(2)}`);
       if (!tags.length && !srcs.length && s < LIMITS.linkMinSimilarity) continue;
-      mine.push({ path: p.path, target: t.path, title: String(t.fm.title), term, reasons, score: (kp ?? 0.5) + s + (tags.length ? 0.25 : 0) + (srcs.length ? 0.25 : 0) });
+      mine.push({ path: p.path, from: String(p.fm.title ?? ""), target: t.path, title: String(t.fm.title), term, reasons, score: (kp ?? 0.5) + s + (tags.length ? 0.25 : 0) + (srcs.length ? 0.25 : 0) });
     }
     out.push(...mine.sort((a, b) => b.score - a.score || a.target.localeCompare(b.target)).slice(0, LIMITS.linkMaxPerPage));
   }

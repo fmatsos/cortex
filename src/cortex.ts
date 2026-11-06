@@ -151,7 +151,8 @@ try {
     case "links": {
       const found = (await import("./links")).suggestLinks(await wiki.pages());
       if (o.json) { console.log(JSON.stringify(found, null, 2)); break; }
-      for (const s of found) console.log(`${paint.dim(s.path)} → ${paint.bold(s.title)} ${paint.dim(`(${s.target})`)}\n    ${s.reasons.join(" · ")}`);
+      for (const s of found)
+        console.log(`${paint.bold(s.from || s.path)} → ${paint.bold(s.title)}\n    ${s.reasons.join(" · ")}\n    ${paint.dim(`${s.path} → ${s.target}`)}`);
       console.log(`${found.length} link(s) suggested; nothing written.`);
       break;
     }
