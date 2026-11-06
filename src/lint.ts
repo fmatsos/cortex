@@ -61,7 +61,15 @@ const duplicateTitle: PageRule = (c, d) => {
   const first = c.firstTitle.get(slugify(String(d.fm.title ?? "")));
   return first !== undefined && first !== d.path ? [issue("warning", d.path, `probable duplicate of ${first} (same title)`)] : [];
 };
-const pageRules: PageRule[] = [fieldIssues, pageNaming, noDescription, missingSources, orphanFootnotes, brokenLinks, relativeLinks, reviewState, stalePage, duplicateTitle];
+// a deprecated page says what replaces it (`superseded_by: /wiki/….md`, set by cortex maintain merge); the target must exist
+const superseded: PageRule = (c, d) => {
+  const to = typeof d.fm.superseded_by === "string" ? d.fm.superseded_by.trim() : "";
+  if (!to) return d.fm.status === "deprecated" ? [issue("warning", d.path, "deprecated without superseded_by (the page that replaces it)")] : [];
+  const path = to.replace(/^\/+/, "");
+  if (path === d.path) return [issue("error", d.path, "superseded_by points at the page itself")];
+  return c.pages.some((p) => p.path === path) ? [] : [issue("error", d.path, `superseded_by: page not found: ${to}`)];
+};
+const pageRules: PageRule[] = [fieldIssues, pageNaming, noDescription, missingSources, orphanFootnotes, brokenLinks, relativeLinks, reviewState, stalePage, duplicateTitle, superseded];
 
 // --- per-raw-source rules ---
 
@@ -90,7 +98,7 @@ const rawRules: RawRule[] = [rawType, rawNaming, duplicateRawId, pendingSource, 
 const invalidYaml: Rule = (c) => [...c.w.errors.pages, ...c.w.errors.raws].map((e) => issue("error", e.path, `invalid YAML: ${e.msg}`));
 const pagesRule: Rule = (c) => c.pages.flatMap((d) => pageRules.flatMap((r) => r(c, d)));
 const orphans: Rule = (c) =>
-  c.pages.filter((d) => d.fm.type !== "Source" && !c.inbound.get(d.path)).map((d) => issue("warning", d.path, "orphan: no incoming link"));
+  c.pages.filter((d) => d.fm.type !== "Source" && d.fm.status !== "deprecated" && !c.inbound.get(d.path)).map((d) => issue("warning", d.path, "orphan: no incoming link"));
 const duplicateSources: Rule = (c) =>
   [...c.cites].filter(([res, pages]) => pages.length > 1 && existsSync(join(c.root, res)))
     .map(([res, pages]) => issue("warning", pages[1].path, `probable duplicate of ${pages[0].path} (same raw source ${res})`));

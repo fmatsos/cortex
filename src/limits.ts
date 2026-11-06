@@ -97,4 +97,14 @@ export const LIMITS = {
   pipelineBridgeMinSize: 3,
   /** Pipeline (step 7bis): synthesis entries one source may add to the queue (pairs of groups it links, by title). */
   pipelineBridgeMax: 3,
+  /** Maintain merge: two same-type pages at least this close (cosine of the stored vectors) are candidates for a merge. Not calibrated yet. */
+  mergeCosine: 0.8,
+  /** Maintain: the judge must reach this probability for the maintenance to write on its own; below, the entry goes to the queue. */
+  maintainJudge: 0.8,
+  /** Maintain merge: tokens (4 characters each) of the two bodies given together to the model; beyond, the pair goes to the queue. */
+  mergeInputTokens: 8000,
+  /** Maintain merge: tokens of the merged page the model may write. */
+  mergeOutputTokens: 2000,
+  /** Maintain merge: share of the footnote ids of the two pages the merged page must still carry. */
+  mergeKeepNotes: 0.8,
 } as const;

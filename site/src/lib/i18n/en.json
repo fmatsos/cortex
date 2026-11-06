@@ -271,6 +271,7 @@
 	"page.reviewer": "Reviewed by",
 	"page.sources": "Sources",
 	"page.staleSince": "stale since",
+	"page.supersededBy": "This page is deprecated, replaced by",
 	"page.toc": "Contents",
 	"page.toc.close": "Close the contents",
 	"page.writtenBy": "Written by",

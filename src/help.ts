@@ -12,7 +12,8 @@ export const HELP = `cortex — second brain
   cortex log [--limit N] [--json] [--kind k]     (the journal, newest first; 20 entries by default)
   cortex log add <add|ingest|query|lint|update> "<text>" [--source <raw id>]… [--page <wiki/….md>]…
   cortex queue [--kind k] [--json]               (what needs a human decision: synthesis, merge, contradiction, split, review)
-  cortex queue done|dismiss|apply <n>            (closes entry n; apply is not available yet)
+  cortex queue done|dismiss|apply <n>            (closes entry n; apply: only for merge entries yet)
+  cortex maintain merge [--apply] [--limit N]   (two pages on the same subject become one; without --apply it only lists; judge uncertain: queue)
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
   cortex compile … --pipeline [--fresh] [--keep-state]   (client openai: cortex runs fixed steps, the model only infers; --fresh ignores the saved state in .cortex/pipeline/)
   cortex ask "<question>" [--file] [--interactive]

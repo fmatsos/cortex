@@ -15,6 +15,7 @@ export type PageData = {
   verified?: { by: string; at: string };
   generated?: { by: string; at: string };
   stale_after?: string;
+  superseded_by?: Link; // deprecated page: the page that replaces it (maintain merge)
   needsReview: boolean; // generated.at later than verified.at
   partial: boolean; // partial content: Source page whose raw source is a partial extraction, or warning callout for partial content
   html: string;

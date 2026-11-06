@@ -32,6 +32,8 @@ const pageShape = {
   verified: Stamp.nullish(),
   sources: z.array(SourceRef).nullish(),
   stale_after: Date_.nullish(),
+  /** A deprecated page: link (`/wiki/…md`) to the page that replaces it. */
+  superseded_by: z.string().nullish(),
 };
 /** What a valid page looks like. `passthrough()`: unknown keys are kept (OKF is extensible). */
 export const PageFm = z.object(pageShape).passthrough();

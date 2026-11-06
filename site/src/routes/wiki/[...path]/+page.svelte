@@ -106,6 +106,13 @@
 			{/if}
 		</header>
 
+		{#if p.superseded_by}
+			<p class="bg-muted/50 mb-6 flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm" role="note">
+				<Icon name="deprecated" size={16} />
+				<span>{t("page.supersededBy")} <a href={toPage(p.superseded_by.id)} class="text-link underline underline-offset-3">{p.superseded_by.title}</a></span>
+			</p>
+		{/if}
+
 		<ReadingHits container={body} {q} pageId={p.id} {fromSearch} />
 
 		<!-- delegation: only footnote-call links trigger `onBody` (Enter on a link also produces a click) -->

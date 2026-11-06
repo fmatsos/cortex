@@ -8,7 +8,7 @@ import type { GraphData, Link, LogEntryData, Note, QueueEntryData, PageData, Sea
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
 import { openItems, queueItems, type QueueEntry } from "./queue";
-import { type Page, type RawFm, type Stamp, isoDate, pageId, pageState, pageRoute, toRawSource, toResource } from "./doc";
+import { type Page, type RawFm, type Stamp, fromResource, isoDate, pageId, pageState, pageRoute, toRawSource, toResource } from "./doc";
 import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
 import { collator } from "./text";
 import { isUnder } from "./paths";
@@ -264,6 +264,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
   const graph0 = await w.linkGraph(), directed = new Set<string>();
   for (const [from, targets] of graph0.links) for (const t of targets) directed.add(`${pageId(from)}\t${pageId(t)}`);
   const edges = graphLinks(directed);
+  const replacement = (to: unknown) => (typeof to === "string" ? byPath.get(fromResource(to)) : undefined); // the page a deprecated page points at (none: no banner)
   const resourcePage = new Map<string, Page>(); // raw resource → wiki Source page that cites it (the last one, if several do)
   for (const [res, ps] of await w.citations()) resourcePage.set(res, ps[ps.length - 1]);
   const raw = rawReader(root);
@@ -287,6 +288,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
       status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
       stale_after: isoDate(fm.stale_after), needsReview: pageState(fm).needsReview, partial,
+      ...(replacement(fm.superseded_by) && { superseded_by: link(replacement(fm.superseded_by)!) }),
       html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
       backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
       related: related(docs, d.path, graph0).slice(0, LIMITS.relatedPages).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),

@@ -43,7 +43,7 @@ try {
       options: {
         note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" }, pipeline: { type: "boolean" }, fresh: { type: "boolean" }, "keep-state": { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" }, apply: { type: "boolean" },
       },
     });
   } catch (e) {
@@ -133,7 +133,8 @@ try {
         if (sub === "apply") {
           const item = queueItems(wiki.queue().entries).find((i) => i.n === n);
           if (!item || item.status !== "open") throw new CortexError(item ? `queue entry #${n} is already ${item.status}` : `queue entry not found: #${n}`, "notfound");
-          throw new CortexError("cortex queue apply is not available yet (it comes with cortex maintain); close the entry with done or dismiss once handled by hand", "refused");
+          finish(await (await import("./maintain")).applyQueueEntry(wiki, item, print));
+          break;
         }
         let e;
         try { e = await closeCtx(wiki, n, sub === "done" ? "done" : "dismissed"); } catch (x) { throw new CortexError((x as Error).message, "notfound"); }
@@ -147,6 +148,11 @@ try {
       if (o.json) { console.log(JSON.stringify(shown, null, 2)); break; }
       if (!shown.length) console.log(paint.dim("Empty queue."));
       for (const i of shown) console.log(`${paint.bold(`#${i.n}`.padEnd(4))} ${paint.accent(queueKindLabel(i.kind).padEnd(13))} ${i.title}  ${paint.dim(i.at.slice(0, 10))}\n     ${paint.dim(i.reason)}`);
+      break;
+    }
+    case "maintain": {
+      if (o.apply && o["dry-run"]) throw usage("--apply and --dry-run exclude each other (without --apply nothing is written)");
+      finish(await (await import("./maintain")).maintainCtx(wiki, args[0], { apply: o.apply, limit: int("--limit", o.limit, { min: 1 }) }, print));
       break;
     }
     case "links": {

@@ -41,3 +41,9 @@ Never rewrite the page: only write what the source adds.
 
 ## repair
 You fix the body of a page of a personal wiki, in {{language}}. The user gives the problems a checker found, then the body. Answer with one JSON object `{"body": "..."}` and nothing else, where `body` is the whole corrected body. Change only what the problems require; keep every fact, every footnote like `[^some-id]` and every link. No frontmatter. Never use the double-quote character inside a string value: use « » or backticks instead.
+
+## merge
+You merge two pages of a personal wiki that cover the same subject into one page, in {{language}}. The user gives the two pages (titles, descriptions, bodies) and the footnote ids that are valid. Answer with one JSON object `{"title": "...", "description": "...", "body": "..."}` and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+- `title`: the name of the merged page, short; prefer the title of the first page.
+- `description`: one sentence for an index (160 characters at most).
+- `body`: the merged page in Markdown, no title heading, no frontmatter, no footnote definition. Keep every fact of both pages, each sentence with the footnote ids it had, written exactly as given, for example `[^some-id]`; use only the ids listed. Drop what both pages say twice (keep its footnotes). Keep the structure of the first page where possible, and the Markdown links already in the pages. Never invent a fact, a footnote or a link.
