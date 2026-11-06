@@ -2,8 +2,8 @@
 Description=Weekly cortex wiki maintenance
 
 [Timer]
-# Sunday, after the nightly compilation (03:00 UTC of site.yml) is over; local time of the LXC.
-OnCalendar=Sun *-*-* 05:00:00
+# Sunday 18:00 (LXC local time): after the nightly compilation (03:00 UTC, site.yml) and outside the Plex maintenance (10:00-16:00), so the GPU is free.
+OnCalendar=Sun *-*-* 18:00:00
 RandomizedDelaySec=15min
 # A run missed because the LXC was off starts at the next boot.
 Persistent=true
