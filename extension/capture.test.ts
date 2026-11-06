@@ -114,3 +114,13 @@ test("extension: element() drops avatars, profile photos and the links they leav
   expect(r.text).toContain("[un lien](https://ex.com/a)");
   expect(r.text).toContain("chart.png");
 });
+
+test("extension: element() takes its title from the block, its author from the post, and unwraps LinkedIn's safety/go links", async () => {
+  const c = await load(`<body><div data-urn="urn:li:activity:1"><a href="/in/jane"><span aria-hidden="true">Jane Doe</span><span class="visually-hidden">Jane Doe</span></a>
+    <div id="t"><p><strong>Spotify a réduit</strong> sa facture.</p><p>Suite <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Flnkd%2Ein%2Fabc&urlhash=x&mt=long">lien</a></p></div></div></body>`,
+    "https://www.linkedin.com/feed/");
+  const r = c.element(document.getElementById("t"));
+  expect(r.title).toBe("Spotify a réduit sa facture.");
+  expect(r.text).toStartWith("Auteur : Jane Doe\n\n");
+  expect(r.text).toContain("[lien](https://lnkd.in/abc)");
+});

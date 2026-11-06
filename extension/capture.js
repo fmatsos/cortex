@@ -8,7 +8,12 @@
   // absolute links and images; inline (data:) images are dropped, they would weigh the source down
   const absolute = (root) => {
     for (const [sel, attr] of [["a[href]", "href"], ["img[src]", "src"]]) for (const e of root.querySelectorAll(sel)) {
-      try { e.setAttribute(attr, new URL(e.getAttribute(attr), document.baseURI).href); } catch {}
+      try {
+        let u = new URL(e.getAttribute(attr), document.baseURI);
+        // LinkedIn's outbound redirect (safety/go?url=…, plus a long token): the real target
+        if (/(^|\.)linkedin\.com$/.test(u.hostname) && u.pathname.startsWith("/safety/go") && u.searchParams.get("url")) u = new URL(u.searchParams.get("url"));
+        e.setAttribute(attr, u.href);
+      } catch {}
     }
     for (const e of root.querySelectorAll('img[src^="data:"]')) e.remove();
   };
@@ -58,8 +63,17 @@
       }
       for (const a of holder.querySelectorAll("a")) if (!a.textContent.trim() && !a.querySelector("img")) a.remove();
       if (el.localName === "li") holder.innerHTML = holder.firstElementChild?.innerHTML ?? ""; // a bare <li> would come out as a bullet
-      const text = toMarkdown(holder.innerHTML);
-      return text ? { ...ok(text), links } : { error: "Ce bloc n'a pas de texte." };
+      let text = toMarkdown(holder.innerHTML);
+      if (!text) return { error: "Ce bloc n'a pas de texte." };
+      // the author, looked for in the whole post even when only its text was picked
+      const post = el.closest('[data-urn],article,[role=article],[data-testid=tweet],shreddit-post,shreddit-comment') || el;
+      const author = (post.getAttribute("author") || [...post.querySelectorAll('a[href*="/in/"],a[href*="/company/"],[data-testid=User-Name] a')]
+        .map((a) => (a.querySelector('[aria-hidden="true"]') || a).textContent.trim().split("\n")[0].trim()).find(Boolean) || "").slice(0, 80);
+      if (author && !text.startsWith(author)) text = `Auteur : ${author}\n\n${text}`;
+      // the block's first line as title, rather than the tab's ("Post | LinkedIn")
+      const first = text.replace(/^Auteur : .*\n\n/, "").split("\n").map((l) => l.replace(/[#>*_`\[\]]|\(https?:[^)]*\)/g, "").trim()).find(Boolean) || "";
+      const title = first.length > 80 ? `${first.slice(0, 79)}…` : first;
+      return { ...ok(text), ...(title && { title }), links };
     },
     selection() {
       const sel = getSelection(), holder = document.createElement("div");
