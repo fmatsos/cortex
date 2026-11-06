@@ -125,3 +125,9 @@ test("extension: element() takes its title from the block, its author from the p
   expect(r.text).toStartWith("Auteur : Jane Doe\n\n");
   expect(r.text).toContain("[lien](https://lnkd.in/abc)");
 });
+
+test("extension: element() finds the author in LinkedIn's 2026 feed markup (role=listitem, no data-urn, name with its degree)", async () => {
+  const c = await load(`<body><div role="listitem"><a href="/in/erwan"></a><a href="/in/erwan"><span>Erwan Bernard</span>  • 2e</a>
+    <p id="t">Revolut a divisé sa facture, dit <a href="/in/abitbold">David Abitbol</a>.</p></div></body>`, "https://www.linkedin.com/feed/");
+  expect(c.element(document.getElementById("t")).text).toStartWith("Auteur : Erwan Bernard\n\n");
+});
