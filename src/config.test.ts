@@ -47,4 +47,12 @@ test("cortex config: init, set, get, remove, lint", async () => {
   expect(lintConfig({ max_tags: 2.5 })[0].level).toBe("error");
   expect(lintConfig({ fetch_timeout: 0 })[0].level).toBe("error");
   expect(lintConfig({ fetch_timeout: 7.5 })).toEqual([]);
+  expect(lintConfig({ parser: { social: { linkedin: { card: "a.card" } } } })).toEqual([]);
+  expect(lintConfig({ parser: { social: { linkedin: { bogus: "x" } } } })[0].level).toBe("error");
+  expect(lintConfig({ parser: { social: { linkedin: "a.card" } } })[0].level).toBe("error");
+  expect(lintConfig({ linkedin: { card: "a.card" } })[0].level).toBe("error"); // not at the root
+  expect(lintConfig({ parser: { social: { external_link: { limit: 0 }, x: { external_link: { limit: 2 } }, linkedin: { card: "a", external_link: { limit: 1 } } } } })).toEqual([]);
+  expect(lintConfig({ parser: { social: { external_link: { limit: -1 } } } })[0].level).toBe("error");
+  expect(lintConfig({ parser: { social: { tiktok: { external_link: { limit: 1 } } } } })[0].level).toBe("error");
+  expect(lintConfig({ external_link: { limit: 0 } })[0].level).toBe("error"); // not at the root
 });

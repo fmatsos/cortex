@@ -53,6 +53,9 @@ const rawShape = {
   note: Text.nullish(),
   status: z.enum(["pending", "compiled", "skipped"]).nullish(),
   partial: z.union([z.string(), z.boolean()]).nullish(),
+  /** A post's sources captured from its links / a linked page's post(s): raw ids, set by `add`. */
+  linked: z.array(Text).nullish(),
+  linked_from: z.array(Text).nullish(),
 };
 export const RawFm = z.object(rawShape).passthrough();
 const RawFmLoaded = RawFm.partial();

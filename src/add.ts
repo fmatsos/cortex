@@ -29,14 +29,22 @@ const countWords = (s: string) => s.split(/\s+/).filter(Boolean).length;
 export type Extract = {
   title: string; content: string; kind: string; extractor: string;
   url?: string; author?: string; published?: string; partial?: string; blob?: Uint8Array; blobExt?: string;
+  /** The social network it was read from (parser.social.<network> in cortex.json). */
+  network?: "x" | "bluesky" | "mastodon" | "linkedin";
+  /** Files written next to source.md (content links them by name): media whose URL expires. */
+  files?: { name: string; bytes: Uint8Array }[];
+  /** Pages the content links to (a social post's links and link card), captured as sources of their own by `add`. */
+  links?: string[];
 };
 
 /** `publicOnly`: MCP path, refuses loopback/private/link-local targets (the CLI stays permissive). `maxBytes`: body cap, injectable for tests. */
-export type FetchOpts = { publicOnly?: boolean; maxBytes?: number; mirrors?: string[]; timeoutMs?: number };
+export type FetchOpts = { publicOnly?: boolean; maxBytes?: number; mirrors?: string[]; timeoutMs?: number; linkedin?: Record<string, unknown> };
 
 /** `--via` → mirror bases, tried in order; the article URL is appended as is. */
 // ponytail: hardcoded, the .cfd domains move; make them a cortex.json setting once one dies
-export const VIA: Record<string, string[]> = { freedium: ["https://freedium-mirror.cfd/", "https://freedium.cfd/"] };
+// then the archives, for any site, when they hold a copy: archive.ph (its newest snapshot; often a captcha to non-browsers),
+// then the Wayback Machine, last (2id_: the latest copy, as archived, without archive.org's toolbar)
+export const VIA: Record<string, string[]> = { freedium: ["https://freedium-mirror.cfd/", "https://freedium.cfd/", "https://archive.ph/newest/", "https://web.archive.org/web/2id_/"] };
 
 /** IPv4 in dotted form → private/loopback/link-local/CGNAT/unspecified/multicast-reserved? */
 function privateV4(ip: string): boolean {
@@ -136,12 +144,29 @@ export function socialPost(html: string): { body: string; author?: string; publi
     const nodes = [data].flat().flatMap((n: any) => (n?.["@graph"] ? [n, ...[n["@graph"]].flat()] : [n]));
     for (const n of nodes as any[]) {
       if (!/^(SocialMediaPosting|DiscussionForumPosting)$/.test(String(n?.["@type"]))) continue;
-      const body = String(n.articleBody ?? n.text ?? "").trim();
+      let body = String(n.articleBody ?? n.text ?? "").trim();
       if (!body) continue;
       const author = [n.author].flat()[0]?.name;
+      // a repost: the original post (sharedContent) follows, quoted, so the source has both
+      const shared = n.sharedContent, sharedText = String(shared?.articleBody ?? shared?.text ?? shared?.headline ?? "").trim();
+      const sharedBy = [shared?.author].flat()[0]?.name;
+      if (sharedText) body += "\n\n" + `${sharedBy ? `${sharedBy}: ` : ""}${sharedText}`.split("\n").map((l) => (l ? `> ${l}` : ">")).join("\n");
+      // the post's images (one ImageObject, a list of them, or bare URLs)
+      for (const i of [n.image ?? []].flat()) { const src = typeof i === "string" ? i : i?.url ?? i?.contentUrl; if (src) body += `\n\n![](${src})`; }
       return { body, author: typeof author === "string" ? author : undefined, published: n.datePublished || undefined };
     }
   }
+}
+
+/**
+ * defuddle prints its recoverable errors (a broken JSON-LD block: an archived page's often is) with an unconditional
+ * console.error, stack trace included, then goes on. Those lines are muted for the call; any other error still shows.
+ */
+// ponytail: patches the global console while the await runs; a parallel caller's "Defuddle:" lines are muted too, which is harmless
+async function quietDefuddle<T>(run: () => Promise<T>): Promise<T> {
+  const error = console.error;
+  console.error = (...a: unknown[]) => { if (!(typeof a[0] === "string" && a[0].startsWith("Defuddle:"))) error(...a); };
+  try { return await run(); } finally { console.error = error; }
 }
 
 /**
@@ -152,7 +177,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
   if (opts.mirrors?.length) return viaMirrors(url, opts.mirrors, opts);
   const s = socialFor(url, opts);
   if (s) {
-    try { return await s.social.read(url, s.request); }
+    try { return { ...await s.social.read(url, s.request), network: s.social.network }; }
     catch (e) { if (!s.social.fallback) throw new Error(`${s.social.name}: ${(e as Error).message}`); }
   }
   const { res, bytes, url: finalUrl } = await fetchCapped(url, opts);
@@ -168,7 +193,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
       extractor: "json-ld",
     };
   }
-  const d = await Defuddle(parseHTML(html).document, url, { markdown: true });
+  const d = await quietDefuddle(() => Defuddle(parseHTML(html).document, url, { markdown: true }));
   const doc = parseHTML(html).document; // second DOM on purpose: Readability mutates its input (REL-26: a clone is not clearly cheaper)
   const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute("href");
   const r = new Readability(doc as any).parse(); // mutates doc: canonical read beforehand
@@ -224,10 +249,66 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
   }
 }
 
-type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string } & FetchOpts;
-type AddResult = { id: string; duplicate: boolean; ex?: Extract };
+type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean } & FetchOpts;
+type AddResult = { id: string; duplicate: boolean; ex?: Extract; linked?: (AddResult | { url: string; error: string })[] };
 
+/**
+ * One source, then the pages it links to (a post's links and link card), each a source of its own: a post often
+ * only points at what matters. One level, at most parser.social[.<network>].external_link.limit (cortex.json; default LIMITS.maxLinkedSources, 0 = none);
+ * a linked page that fails doesn't fail the post.
+ */
 export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<AddResult> {
+  const r = await addOne(w, input, opts);
+  const social = (await w.config()).parser?.social; // the network's own limit, else the one for all networks; 0: links not followed
+  const limit = (r.ex?.network && social?.[r.ex.network]?.external_link?.limit) ?? social?.external_link?.limit ?? LIMITS.maxLinkedSources;
+  const links = [...new Set(r.ex?.links ?? [])].filter((l) => l !== input).slice(0, limit);
+  if (r.duplicate || opts.follow === false || !links.length) return r;
+  r.linked = [];
+  const note = `${opts.note ? `${opts.note} ` : ""}(linked from ${r.id})`.trim();
+  for (const url of links) {
+    let got: AddResult;
+    try { got = await addOne(w, url, { ...opts, mirrors: undefined, note }); }
+    catch (e) {
+      const direct = (e as Error).message.split("\n")[0];
+      // paywall, anti-bot or truncated page: Freedium may serve it (only some publishers), then archive.ph and the Wayback Machine (a copy, if one exists)
+      if (!/HTTP 40[123]|paywall|Almost empty/i.test(direct)) { r.linked.push({ url, error: direct }); continue; }
+      try { got = await addOne(w, url, { ...opts, mirrors: VIA.freedium, note }); }
+      catch (f) { r.linked.push({ url, error: `${direct} Then via Freedium / archives: ${(f as Error).message.split("\n")[0]}` }); continue; }
+    }
+    r.linked.push(got);
+    if (!opts.dryRun) await addFmLink(w.root, got.id, "linked_from", r.id); // also on a page already there: it gets this post too
+  }
+  const ids = r.linked.flatMap((l) => ("id" in l ? [l.id] : []));
+  if (!opts.dryRun && ids.length) for (const id of ids) await addFmLink(w.root, r.id, "linked", id);
+  return r;
+}
+
+/**
+ * Adds `value` to the frontmatter list `key` of a raw source, by line edit inside the frontmatter only (raw is immutable:
+ * never a YAML re-serialization, cf. markCompiled). `key: [a, b]` gains an item, or the line is added before the closing `---`.
+ */
+export async function addFmLink(root: string, id: string, key: string, value: string): Promise<void> {
+  const rel = rawPath(root, id);
+  if (!rel) return;
+  const file = join(root, rel), txt = await Bun.file(file).text();
+  const fmEnd = txt.match(/^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---/)?.[0].length ?? 0;
+  if (!fmEnd) return;
+  const head = txt.slice(0, fmEnd), line = new RegExp(`^${key}:[ \\t]*\\[(.*)\\][ \\t]*(\\r?)$`, "m");
+  const m = head.match(line);
+  let next: string;
+  if (m) {
+    const items = m[1].split(",").map((s) => s.trim()).filter(Boolean);
+    if (items.includes(value)) return;
+    next = head.replace(line, `${key}: [${[...items, value].join(", ")}]$2`);
+  } else {
+    const close = head.lastIndexOf("---"), nl = head.includes("\r\n") ? "\r\n" : "\n";
+    next = `${head.slice(0, close)}${key}: [${value}]${nl}${head.slice(close)}`;
+  }
+  await writeFile(`${file}.tmp`, next + txt.slice(fmEnd));
+  await rename(`${file}.tmp`, file);
+}
+
+async function addOne(w: Wiki, input: string, opts: AddOpts): Promise<AddResult> {
   const root = w.root;
   const now = opts.now ?? new Date();
   let ex: Extract;
@@ -235,8 +316,8 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   if (isUrl) {
     const known = await findDuplicate(w, [input]); // before the fetch: no needless request
     if (known) return { id: known, duplicate: true };
-    const secs = (await w.config()).fetch_timeout;
-    ex = await extractUrl(input, { ...opts, timeoutMs: opts.timeoutMs ?? (secs ? secs * 1000 : undefined) });
+    const cfg = await w.config(), secs = cfg.fetch_timeout;
+    ex = await extractUrl(input, { ...opts, timeoutMs: opts.timeoutMs ?? (secs ? secs * 1000 : undefined), linkedin: opts.linkedin ?? cfg.parser?.social?.linkedin ?? undefined });
   }
   else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)
   else {
@@ -285,6 +366,7 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   const id = rel.split("/").at(-1)!;
   const tmp = join(dir, ".source.md.tmp");
   try {
+    for (const f of ex.files ?? []) await writeFile(join(dir, f.name), f.bytes, { flag: "wx" });
     await writeFile(tmp, serializeDoc(fm, `${ex.content.trim()}\n`), { flag: "wx" });
     await rename(tmp, join(dir, "source.md"));
   } catch (e) { rmSync(dir, { recursive: true, force: true }); throw e; } // the folder is ours: no half-written source stays behind
@@ -295,6 +377,11 @@ export const add = (root: string, input: string, opts: AddOpts) => addCtx(openWi
 
 /** Report line of a successful `add`, shared by `cortex add` and `cortex inbox`. */
 export function formatAdd(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean): string {
+  const linked = (r.linked ?? []).map((l) => `\n  ↳ ${"error" in l ? `${paint.warn("!")} ${l.url}: ${l.error}` : formatAdd(l, dryRun)}`).join("");
+  return formatOne(r, dryRun) + linked;
+}
+
+function formatOne(r: AddResult, dryRun?: boolean): string {
   if (r.duplicate || !r.ex) return `${paint.dim("=")} already present: ${r.id}`;
   return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partial" : ""}] ${r.ex.content.split(/\s+/).length} words`;
 }

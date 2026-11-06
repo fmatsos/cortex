@@ -9,6 +9,8 @@ export const LIMITS = {
   minPdfWords: 20,
   /** Timeout of a page or PDF fetch. */
   fetchTimeoutMs: 30_000,
+  /** Pages a social post links to that `add` also captures (one level: their own links are not followed). cortex.json parser.social[.<network>].external_link.limit overrides it. */
+  maxLinkedSources: 5,
   /** `cortex upgrade`: download of a ~90 MB binary. */
   upgradeTimeoutMs: 300_000,
   /** How long `opencode serve` has to announce that it listens. */

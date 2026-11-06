@@ -10,6 +10,11 @@ test("socialPost: the post's text from JSON-LD, without its comments; nothing on
   const html = `<html><head><script type="application/ld+json">${JSON.stringify(ld)}</script></head><body>un commentaire</body></html>`;
   expect(socialPost(html)).toEqual({ body: "Le post.\n\nSuite.", author: "Clement", published: "2026-11-04T11:29:06Z" });
   expect(socialPost(`<script type="application/ld+json">{"@type":"Article","articleBody":"x"}</script>`)).toBeUndefined();
+  const repost = { "@type": "SocialMediaPosting", articleBody: "Mon avis.", author: { name: "Sabri" },
+    sharedContent: { "@type": "WebPage", headline: "15 ans d'xp.\n\nLa suite.", author: { name: "Nicolas" } } };
+  expect(socialPost(`<script type="application/ld+json">${JSON.stringify(repost)}</script>`)?.body).toBe("Mon avis.\n\n> Nicolas: 15 ans d'xp.\n>\n> La suite.");
+  const pics = { "@type": "SocialMediaPosting", articleBody: "Avec images.", image: [{ "@type": "ImageObject", url: "https://i/1.jpg" }, "https://i/2.jpg"] };
+  expect(socialPost(`<script type="application/ld+json">${JSON.stringify(pics)}</script>`)?.body).toBe("Avec images.\n\n![](https://i/1.jpg)\n\n![](https://i/2.jpg)");
   expect(socialPost(`<script type="application/ld+json">{oops</script>`)).toBeUndefined();
 });
 import { renderIndex } from "./catalog";

@@ -25,7 +25,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "init": {
       // key = client (optional): it also picks the agent file written next to cortex.json (CLAUDE.md or AGENTS.md)
       if (await f.exists()) throw new Error("cortex.json already exists.");
-      await save({ client: key ?? null, model: null, effort: null, base_url: null, language: null, schema: null, raw_path: null, page_path: null, max_tags: null, fetch_timeout: null }); // null = unset: defaults
+      await save({ client: key ?? null, model: null, effort: null, base_url: null, language: null, schema: null, raw_path: null, page_path: null, max_tags: null, fetch_timeout: null, parser: null }); // null = unset: defaults
       say("ok", `cortex.json created${key ? ` (client ${key})` : " (agnostic)"}.`);
       const { writeSchema } = await import("./schema");
       const w = await writeSchema(root, false);
@@ -45,12 +45,13 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
       const c = await readConfig(root);
       if (!key) { say("info", JSON.stringify(c, null, 2)); return done(true); }
       checkKey();
-      if (c[key] != null) say("info", String(c[key]));
+      if (c[key] != null) say("info", typeof c[key] === "object" ? JSON.stringify(c[key], null, 2) : String(c[key]));
       return done(true);
     }
     case "set":
       checkKey();
       if (!value) throw new CortexError(`Usage: cortex config set ${key} <value>`, "usage");
+      if (key === "parser") throw new CortexError(`${key} holds nested settings: edit it in cortex.json (see the README).`, "usage");
       await save({ ...(await readConfig(root)), [key]: NUMBERS.has(key) && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value });
       return done(true);
     case "remove": {

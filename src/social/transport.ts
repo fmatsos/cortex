@@ -24,3 +24,11 @@ export class HtmlPage implements Transport {
   }
 }
 
+
+/** A file as bytes (images to keep next to the source). */
+export class Download implements Transport {
+  constructor(private opts: FetchOpts = {}) {}
+  async get(request: string): Promise<Uint8Array> {
+    return (await fetchCapped(request, this.opts)).bytes;
+  }
+}

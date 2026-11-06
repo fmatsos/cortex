@@ -24,6 +24,12 @@ const template = (k: NamingKey) => str(k).superRefine((v, ctx) => {
   const e = v && checkTemplate(k, v);
   if (e) ctx.addIssue({ code: "custom", message: e, input: v });
 });
+/** Social networks with a `parser.social.<network>` block (ids of src/social). */
+export const SOCIAL_NETWORKS = ["x", "bluesky", "mastodon", "linkedin"] as const;
+/** Pages a social post links to, captured as sources tied to it: at most `limit` per post (default LIMITS.maxLinkedSources), 0 = none. */
+const externalLink = (k: string) => z.strictObject({
+  limit: z.number({ error: `"${k}.limit" must be an integer of at least 0, or null.` }).int({ error: `"${k}.limit" must be an integer of at least 0, or null.` }).min(0, { error: `"${k}.limit" must be an integer of at least 0, or null.` }).nullish(),
+}, { error: `"${k}" must be an object (limit), or null.` }).nullish();
 const SHAPE = {
   client: z.enum(CLIENT_NAMES, { error: (i) => `unknown client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
   model: str("model"),
@@ -37,6 +43,19 @@ const SHAPE = {
   max_tags: z.number({ error: '"max_tags" must be an integer of at least 1, or null.' }).int({ error: '"max_tags" must be an integer of at least 1, or null.' }).min(1, { error: '"max_tags" must be an integer of at least 1, or null.' }).nullish(),
   /** Seconds before a URL fetch gives up (default LIMITS.fetchTimeoutMs / 1000); each --via mirror gets that much. */
   fetch_timeout: z.number({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).positive({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).nullish(),
+  /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
+  parser: z.strictObject({
+    social: z.strictObject({
+      external_link: externalLink("parser.social.external_link"),
+      linkedin: z.strictObject({
+        card: str("parser.social.linkedin.card"), activity_text: str("parser.social.linkedin.activity_text"), activity_author: str("parser.social.linkedin.activity_author"),
+        activity_images: str("parser.social.linkedin.activity_images"), shortlink: str("parser.social.linkedin.shortlink"), carousel: str("parser.social.linkedin.carousel"),
+        external_link: externalLink("parser.social.linkedin.external_link"),
+      }, { error: '"parser.social.linkedin" must be an object (card, activity_text, activity_author, activity_images, shortlink, carousel, external_link), or null.' }).nullish(),
+      ...Object.fromEntries(SOCIAL_NETWORKS.filter((n) => n !== "linkedin").map((n) => [n, z.strictObject({ external_link: externalLink(`parser.social.${n}.external_link`) },
+        { error: `"parser.social.${n}" must be an object (external_link), or null.` }).nullish()])) as Record<"x" | "bluesky" | "mastodon", z.ZodOptional<z.ZodNullable<z.ZodObject<{ external_link: ReturnType<typeof externalLink> }>>>>,
+    }, { error: `"parser.social" must be an object (external_link, ${SOCIAL_NETWORKS.join(", ")}), or null.` }).nullish(),
+  }, { error: '"parser" must be an object (social), or null.' }).nullish(),
 };
 export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 

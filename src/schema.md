@@ -45,9 +45,13 @@ fetched_at: 2026-11-04T09:12:00+01:00
 extractor: manual             # or cortex-cli/0.1+readability, yt-dlp+whisper…
 note: "Why I keep this"       # MANDATORY: the human's intent
 status: pending               # pending | compiled | skipped
+linked: [<id>, …]             # a social post: the sources captured from its links (filled in by the CLI)
+linked_from: [<id>, …]        # a page a post links to: the post(s) it was captured from (filled in by the CLI)
 ---
 <extracted content, in Markdown>
 ```
+
+`linked` / `linked_from` tie a post to the pages it shares: when you compile one, link its Source page to the other's.
 
 If the `note` field is missing, ask the human for it before compiling.
 
