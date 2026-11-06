@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { extractPdf, extractUrl, socialApi } from "./add";
+import { extractPdf, extractUrl } from "./add";
+import { socialFor } from "./social";
+import { X } from "./social/x";
+import { Bluesky } from "./social/bluesky";
+
+/** A transport that answers with a canned payload: the network side is tested without the network (the bridge's point). */
+const canned = (data: unknown) => ({ get: async () => data });
 
 /**
  * `extractUrl` and `extractPdf` against a local Bun.serve (no real network): extractor choice, paywall marker,
@@ -132,17 +138,16 @@ test("mirrors: failing ones are skipped, the source keeps the original URL", asy
   await expect(extractUrl("https://medium.com/a", { mirrors: [`${b}/down/`] })).rejects.toThrow(/No mirror served/);
 });
 
-test("social: X and Bluesky go to their API, the source keeps the post URL", () => {
-  const x = socialApi("https://x.com/jack/status/20")!;
-  expect(x.url).toBe("https://api.fxtwitter.com/status/20");
-  const ex = x.parse({ tweet: { text: "just setting up", created_at: "Tue Mar 21 20:50:14 +0000 2006", author: { name: "jack", screen_name: "jack" },
-    media: { all: [{ url: "https://p/1.jpg" }] }, quote: { text: "q", author: { name: "Q" } } } });
+test("social: X and Bluesky build their request and read the answer through any transport", async () => {
+  expect(socialFor("https://x.com/jack/status/20")?.request).toBe("https://api.fxtwitter.com/status/20");
+  const ex = await new X(canned({ tweet: { text: "just setting up", created_at: "Tue Mar 21 20:50:14 +0000 2006", author: { name: "jack", screen_name: "jack" },
+    media: { all: [{ url: "https://p/1.jpg" }] }, quote: { text: "q", author: { name: "Q" } } } })).read("https://x.com/jack/status/20", "unused");
   expect(ex).toMatchObject({ url: "https://x.com/jack/status/20", author: "jack (@jack)", published: "2006-03-21T20:50:14.000Z", extractor: "fxtwitter-api" });
   expect(ex.content).toBe("just setting up\n\n> Q: q\n\n![](https://p/1.jpg)");
-  const b = socialApi("https://bsky.app/profile/a.bsky.social/post/3abc")!;
-  expect(b.url).toContain(encodeURIComponent("at://a.bsky.social/app.bsky.feed.post/3abc"));
-  expect(b.parse({ thread: { post: { record: { text: "hi", createdAt: "2026-01-01T00:00:00Z" }, author: { handle: "a.bsky.social" } } } }).author).toBe("a.bsky.social");
-  expect(socialApi("https://x.com/jack")).toBeUndefined();
+  expect(socialFor("https://bsky.app/profile/a.bsky.social/post/3abc")?.request).toContain(encodeURIComponent("at://a.bsky.social/app.bsky.feed.post/3abc"));
+  const b = await new Bluesky(canned({ thread: { post: { record: { text: "hi", createdAt: "2026-01-01T00:00:00Z" }, author: { handle: "a.bsky.social" } } } })).read("u", "unused");
+  expect(b.author).toBe("a.bsky.social");
+  expect(socialFor("https://x.com/jack")).toBeUndefined();
 });
 
 test("social: Mastodon via its API, a non-Mastodon /@user/id page falls back to the page", async () => {
