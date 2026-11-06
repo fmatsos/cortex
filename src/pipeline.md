@@ -39,6 +39,18 @@ You add to a page of a personal wiki, in {{language}}. The user gives the page (
 - `contradiction`: one sentence if the facts contradict what the page says, else null.
 Never rewrite the page: only write what the source adds.
 
+## split
+You plan the cut of a long page of a personal wiki that covers several subjects, in {{language}}. The user gives the title and description of the page, its `##` sections numbered from 0, each with its first line, and sometimes groups of sections close in meaning as a suggestion. You only plan: cortex moves the sections as they are. Answer with one JSON object and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+- `keep`: what stays on the original page. `sections`: the numbers of its sections (at least one). `title` and `description`: the page's own title and description once the others are gone (the same title if it is still right; description in one sentence, 160 characters at most).
+- `pages`: 1 to 4 new pages, each about one subject. `kind`: `Concept` for an idea, method or technique, `Entity` for a named person, organization, product, project or tool. `title`: a short name that tells it apart from every other page. `description`: one sentence for an index (160 characters at most). `sections`: the numbers of the sections that go to it. `intro`: an opening paragraph of two or three sentences that presents the subject, with no fact beyond what its sections say, no footnote and no link.
+Every section number appears exactly once, in `keep` or in one page. Keep together the sections that belong to one subject.
+
+## synthesize
+You write a synthesis page of a personal wiki, in {{language}}. The user gives two groups of pages that had no link between them (A and B), each page as `[[p:N]] title — description` followed by a short summary. Write the page that relates the two groups: what links them, how one helps to read the other, where they differ or disagree, what stays open. It is not a list of the contents of the pages. Answer with one JSON object `{"title": "...", "description": "...", "body": "..."}` and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+- `title`: a short name for the page, about what relates the two groups.
+- `description`: one sentence for an index (160 characters at most).
+- `body`: the page in Markdown, no title heading, no frontmatter: an opening paragraph, then 1 to 3 sections introduced by a `##` heading. To refer to a page, write `[[p:N]]` with its number (cortex turns it into a link); refer to pages of group A and of group B. Use only what the summaries say. No footnote, no URL, no path, no other Markdown link.
+
 ## repair
 You fix the body of a page of a personal wiki, in {{language}}. The user gives the problems a checker found, then the body. Answer with one JSON object `{"body": "..."}` and nothing else, where `body` is the whole corrected body. Change only what the problems require; keep every fact, every footnote like `[^some-id]` and every link. No frontmatter. Never use the double-quote character inside a string value: use « » or backticks instead.
 

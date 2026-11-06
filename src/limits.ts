@@ -101,6 +101,22 @@ export const LIMITS = {
   mergeCosine: 0.8,
   /** Maintain: the judge must reach this probability for the maintenance to write on its own; below, the entry goes to the queue. */
   maintainJudge: 0.8,
+  /** Maintain split: a Concept or Entity page of more words than this is a candidate for a cut. */
+  splitWords: 2500,
+  /** Maintain split: two groups of sections with a mean cosine below this are distant enough to be two subjects (not calibrated yet). */
+  splitSectionCosine: 0.45,
+  /** Maintain split: each of the two groups must hold together: mean cosine of its sections above this. */
+  splitInnerCosine: 0.6,
+  /** Maintain split: tokens (4 characters each) of the list of sections given to the model; beyond, the page goes to the queue. */
+  splitInputTokens: 6000,
+  /** Maintain split: tokens of the plan the model may write. */
+  splitOutputTokens: 1500,
+  /** Maintain synthesize: pages (titles and summaries) of the two groups given to the model, half of them each. */
+  synthesizePages: 10,
+  /** Maintain synthesize: tokens (4 characters each) of the pages given to the model; beyond, the entry goes to the review queue. */
+  synthesizeInputTokens: 6000,
+  /** Maintain synthesize: tokens of the synthesis the model may write. */
+  synthesizeOutputTokens: 1500,
   /** Maintain merge: tokens (4 characters each) of the two bodies given together to the model; beyond, the pair goes to the queue. */
   mergeInputTokens: 8000,
   /** Maintain merge: tokens of the merged page the model may write. */

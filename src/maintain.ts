@@ -27,12 +27,16 @@ export type Task = (w: Wiki, o: MaintainOpts, say: Say) => Promise<TaskResult>;
 /** The subcommands, loaded on use. */
 export const TASKS: Record<string, () => Promise<Task>> = {
   merge: async () => (await import("./maintain-merge")).maintainMerge,
+  split: async () => (await import("./maintain-split")).maintainSplit,
+  synthesize: async () => (await import("./maintain-synthesize")).maintainSynthesize,
   contradictions: async () => (await import("./maintain-contradictions")).maintainContradictions,
 };
 
 /** Queue entries `cortex queue apply <n>` can apply, by kind: the work of the entry, run as a human decision (the judge is not asked again). */
 export const APPLY: Partial<Record<QueueKind, () => Promise<(w: Wiki, item: QueueItem, say: Say) => Promise<boolean>>>> = {
   merge: async () => (await import("./maintain-merge")).applyMergeEntry,
+  split: async () => (await import("./maintain-split")).applySplitEntry,
+  synthesis: async () => (await import("./maintain-synthesize")).applySynthesisEntry,
   contradiction: async () => (await import("./maintain-contradictions")).applyContradictionEntry,
 };
 
