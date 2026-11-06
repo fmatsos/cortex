@@ -5,7 +5,8 @@ import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 
 /**
- * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`).
+ * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`, optional
+ * origin URL in `<name>.origin`: a page captured from the browser, its text is the source and the URL is not fetched).
  * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
  * and are returned; `ok` is false when an entry failed.
  */
@@ -14,14 +15,14 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
   const dir = join(root, "inbox");
   const urlsFile = join(dir, "urls.txt");
   const names = await readdir(dir, { withFileTypes: true }).then((es) => es.filter((e) => e.isFile()).map((e) => e.name), () => []);
-  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note")).sort();
+  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note") && !n.endsWith(".origin")).sort();
   const lines = (await Bun.file(urlsFile).exists()) ? (await Bun.file(urlsFile).text()).split("\n") : [];
 
   const done = new Set<string>(); // urls.txt lines to remove
   let added = 0, known = 0, failed = 0;
-  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>) => {
+  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string) => {
     try {
-      const r = await add(root, input, { note, dryRun: opts.dryRun });
+      const r = await add(root, input, { note, url, dryRun: opts.dryRun });
       say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else added++;
       if (!opts.dryRun) await onOk();
@@ -45,7 +46,9 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     if (f.endsWith(".url")) { await link((await Bun.file(join(dir, f)).text()).trim(), () => unlink(join(dir, f))); continue; }
     const noteFile = join(dir, `${f}.note`);
     const note = ((await Bun.file(noteFile).exists()) ? (await Bun.file(noteFile).text()).trim() : "") || undefined;
-    await run(f, join(dir, f), note, async () => { await unlink(join(dir, f)); await unlink(noteFile).catch(() => {}); });
+    const originFile = join(dir, `${f}.origin`);
+    const origin = ((await Bun.file(originFile).exists()) ? (await Bun.file(originFile).text()).trim() : "") || undefined;
+    await run(f, join(dir, f), note, async () => { for (const x of [join(dir, f), noteFile, originFile]) await unlink(x).catch(() => {}); }, /^https?:\/\//.test(origin ?? "") ? origin : undefined);
   }
 
   if (done.size) {

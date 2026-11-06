@@ -249,7 +249,8 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
   }
 }
 
-type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean } & FetchOpts;
+/** `url`: origin of a text or file given as input (a page captured from the browser): kept as the source's `url`, never fetched. */
+type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean; url?: string } & FetchOpts;
 type AddResult = { id: string; duplicate: boolean; ex?: Extract; linked?: (AddResult | { url: string; error: string })[] };
 
 /**
@@ -329,6 +330,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
       : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
   }
+  if (opts.url && !isUrl) ex = { ...ex, url: opts.url };
   const hash = sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
   if (dup) return { id: dup, duplicate: true, ex };

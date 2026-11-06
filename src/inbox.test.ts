@@ -93,3 +93,30 @@ test("inbox: a .url file holds one link, removed once added, kept on failure", a
     expect(await Bun.file(join(root, raws[0])).text()).toContain("note: ma note");
   } finally { srv.stop(true); }
 });
+
+test("inbox: a file with a .origin keeps that url as the source's url, without fetching it, and leaves with its sidecars", async () => {
+  const { inbox } = await import("./inbox");
+  const { existsSync, readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  let hits = 0;
+  const srv = Bun.serve({ port: 0, fetch: () => { hits++; return new Response("paywall", { status: 403 }); } });
+  const origin = `${srv.url}article?utm_source=x`;
+  try {
+    await Bun.write(join(root, "inbox/p.md"), "# Réservé aux abonnés\n\nLe texte complet, tel que le navigateur l'affichait une fois connecté, sans réseau côté cortex.\n");
+    await Bun.write(join(root, "inbox/p.md.origin"), `${origin}\n`);
+    await Bun.write(join(root, "inbox/p.md.note"), "pourquoi\n");
+    expect((await inbox(root)).ok).toBe(true);
+    expect(hits).toBe(0);
+    expect(readdirSync(join(root, "inbox"))).toEqual([]);
+    const docs = (await (await import("./lib")).readDocs(root, "raw")).docs;
+    expect(docs.map((d) => [d.fm.url, d.fm.note])).toEqual([[`${srv.url}article`, "pourquoi"]]);
+
+    // the same url again (another capture): already present, the inbox is emptied
+    await Bun.write(join(root, "inbox/q.md"), "# Autre capture\n\nUn texte différent pour la même adresse, déjà gardée plus haut.\n");
+    await Bun.write(join(root, "inbox/q.md.origin"), `${srv.url}article\n`);
+    expect((await inbox(root)).ok).toBe(true);
+    expect(existsSync(join(root, "inbox/q.md.origin"))).toBe(false);
+    expect((await (await import("./lib")).readDocs(root, "raw")).docs.length).toBe(1);
+  } finally { srv.stop(true); }
+});

@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Cortex",
+  "version": "0.1.0",
+  "description": "Envoie la page affichée (ou la sélection) dans l'inbox de Cortex, texte rendu par le navigateur.",
+  "icons": { "32": "icons/icon-32.png", "128": "icons/icon-192.png" },
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "action": { "default_popup": "popup.html", "default_title": "Envoyer la page à Cortex" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "background": { "service_worker": "background.js", "type": "module" }
+}

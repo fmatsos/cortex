@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Cortex — options</title>
+<style>
+  body { font: 16px system-ui, sans-serif; margin: 24px; max-width: 36rem; }
+  input { width: 100%; box-sizing: border-box; font: inherit; margin: 6px 0; padding: 4px; }
+  button { font: inherit; padding: 6px 12px; }
+  #status.err { color: #c62828; }
+</style></head>
+<body>
+  <h1>Cortex</h1>
+  <form id="f">
+    <label for="server">Adresse de l'appli de partage</label>
+    <input id="server" type="url" required placeholder="http://cortex.lan:8080">
+    <button>Enregistrer</button>
+  </form>
+  <p id="status" role="status"></p>
+  <p>Sans authentification : à réserver au réseau local ou au VPN.</p>
+  <script type="module" src="options.js"></script>
+</body></html>

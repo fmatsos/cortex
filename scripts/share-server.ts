@@ -16,16 +16,22 @@ type Share = { title?: string; text?: string; url?: string; note?: string };
 
 /**
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
- * optional) goes on the `.url` line, or in `<name>.md.note` next to a text.
+ * optional) goes on the `.url` line, or in `<name>.md.note` next to a text. A text with an explicit `url` (a page captured by the
+ * browser extension: the text is what the page showed, behind its paywall or login) keeps it in `<name>.md.origin`: the source's
+ * `url`, not fetched.
  */
 export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
   title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
   const link = url || text.match(/https?:\/\/\S+/)?.[0] || "";
-  const rest = (link ? text.replace(link, "") : text).trim();
+  // a link found in the text is taken out of it; an explicit url only when it ends the text (a page's own text may quote it)
+  const rest = (link ? (url ? (text.endsWith(url) ? text.slice(0, -url.length) : text) : text.replace(link, "")) : text).trim();
   if (!rest) return link ? [["url", `${link}${note ? ` ${note}` : ""}\n`]] : null;
   const head = title || rest.split("\n")[0].slice(0, 80);
   const md: [string, string] = ["md", `# ${head}\n\n${rest}\n${link ? `\nSource : <${link}>\n` : ""}`];
-  return note ? [md, ["md.note", `${note}\n`]] : [md];
+  const extra: [string, string][] = [];
+  if (url) extra.push(["md.origin", `${url}\n`]);
+  if (note) extra.push(["md.note", `${note}\n`]);
+  return [md, ...extra];
 }
 
 const icon = Bun.file(new URL("../assets/logo/cortex-192.png", import.meta.url));
@@ -102,15 +108,24 @@ async function put(share: Share): Promise<Response> {
   return r.ok ? Response.json({ paths }) : new Response(`Gitea ${r.status}`, { status: 502 });
 }
 
-if (import.meta.main) Bun.serve({
-  hostname: "127.0.0.1", port: Number(SHARE_PORT),
-  async fetch(req) {
-    const { pathname } = new URL(req.url);
-    if (pathname === "/share/api" && req.method === "POST") return put(await req.json().catch(() => ({})));
-    if (pathname === "/share/manifest.webmanifest") return Response.json(manifest, { headers: { "content-type": "application/manifest+json" } });
-    if (pathname === "/share/icon-192.png") return new Response(icon);
-    if (pathname === "/share/icon-512.png") return new Response(icon512);
-    if (pathname === "/share/" || pathname === "/share") return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
-    return new Response("not found", { status: 404 });
-  },
-});
+/** The browser extension (chrome-extension://<id>) posts from its own origin: it is answered, other origins are not. */
+export async function route(req: Request): Promise<Response> {
+  const { pathname } = new URL(req.url);
+  const origin = req.headers.get("origin") ?? "";
+  const cors: Record<string, string> = /^chrome-extension:\/\/[a-p]{32}$/.test(origin)
+    ? { "access-control-allow-origin": origin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type", "access-control-max-age": "600", vary: "origin" }
+    : {};
+  if (pathname === "/share/api" && req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (pathname === "/share/api" && req.method === "POST") {
+    const r = await put(await req.json().catch(() => ({})));
+    for (const [k, v] of Object.entries(cors)) r.headers.set(k, v);
+    return r;
+  }
+  if (pathname === "/share/manifest.webmanifest") return Response.json(manifest, { headers: { "content-type": "application/manifest+json" } });
+  if (pathname === "/share/icon-192.png") return new Response(icon);
+  if (pathname === "/share/icon-512.png") return new Response(icon512);
+  if (pathname === "/share/" || pathname === "/share") return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
+  return new Response("not found", { status: 404 });
+}
+
+if (import.meta.main) Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: route });
