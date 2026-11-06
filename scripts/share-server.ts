@@ -11,7 +11,7 @@
  * `/share/bookmarklet` serves the Android bookmarklet (block picker); SHARE_PUBLIC_URL is the origin baked into it when the proxy
  * does not forward the public Host / X-Forwarded-Proto.
  */
-import { bookmarklet } from "./bookmarklet";
+import { bookmarklet, probes } from "./bookmarklet";
 
 const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;
 if (import.meta.main && (!GITEA_TOKEN || !SHARE_REPO)) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
@@ -120,7 +120,8 @@ async function bookmarkletPage(req: Request): Promise<Response> {
   const u = new URL(req.url), h = req.headers;
   const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() || u.protocol.replace(":", "");
   const server = (SHARE_PUBLIC_URL || `${proto}://${h.get("x-forwarded-host")?.split(",")[0].trim() || h.get("host") || u.host}`).replace(/\/+$/, "");
-  const code = await bookmarklet(server); // percent-encoded: safe in HTML
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const code = esc(await bookmarklet(server));
   return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cortex — bookmarklet</title><style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea{width:100%;box-sizing:border-box;font:12px ui-monospace,monospace}
 button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1>Cortex : capturer un bloc</h1>
@@ -132,9 +133,12 @@ button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1
 <p><button id="c">Copier le bookmarklet</button> <span id="m" role="status"></span></p>
 <textarea id="code" rows="6" readonly>${code}</textarea>
 <p>Adresse du serveur intégrée au code : <code>${server.replace(/[<&>"]/g, "")}</code>. Si elle est fausse, ouvre cette page par la bonne adresse.</p>
+<h2>Rien ne se passe ?</h2><p>Chrome Android peut refuser un favori trop long. Copie un de ces favoris de test (il encadre la page en rouge), installe-le comme ci-dessus sous le nom <b>cortextest</b>, et note la plus grande taille qui marche.</p>
+${probes().map(({ k, code: c }) => `<p><button data-p="${k}">Copier le test ${k} Ko</button></p><textarea id="p${k}" hidden>${esc(c)}</textarea>`).join("")}
 <p><a href="/share/">Retour au partage</a></p>
 <script>document.getElementById("c").onclick = async () => { const t = document.getElementById("code"), m = document.getElementById("m");
-try { await navigator.clipboard.writeText(t.value); m.textContent = "Copié ✓"; } catch { t.select(); m.textContent = document.execCommand("copy") ? "Copié ✓" : "Sélectionné : copie-le à la main."; } };</script>
+try { await navigator.clipboard.writeText(t.value); m.textContent = "Copié ✓"; } catch { t.select(); m.textContent = document.execCommand("copy") ? "Copié ✓" : "Sélectionné : copie-le à la main."; } };
+for (const b of document.querySelectorAll("[data-p]")) b.onclick = async () => { await navigator.clipboard.writeText(document.getElementById("p" + b.dataset.p).value); b.textContent += " ✓"; };</script>
 </body></html>`, { headers: { "content-type": "text/html; charset=utf-8" } });
 }
 

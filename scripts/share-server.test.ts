@@ -51,7 +51,8 @@ test("bookmarklet: a javascript: URL with all its code inline, the server baked 
   // the only absolute URLs are the server and the LinkedIn permalink it builds
   const urls = [...code.matchAll(/https?:\/\/[^"'`\s)\\$]+/g)].map((m) => m[0]);
   expect(urls.filter((u) => !/^https:\/\/www\.linkedin\.com\/feed\/update\/$/.test(u) && u !== "http://cortex.lan:8090")).toEqual([]);
-  expect(b).not.toMatch(/[\s"<>#]/); // safe to paste and to embed in HTML
+  expect(b).not.toMatch(/[\s#]/); // whitespace and # encoded, the rest as is (shorter)
+  expect(b.length).toBeLessThan(code.length * 1.15); // encodeURIComponent made it ~1.5×
 });
 
 test("share: GET /share/bookmarklet is the install page with the code for the request's own origin", async () => {
@@ -61,7 +62,7 @@ test("share: GET /share/bookmarklet is the install page with the code for the re
   expect(r.headers.get("content-type")).toContain("text/html");
   const html = await r.text();
   const code = html.match(/<textarea[^>]*>(javascript:[^<]+)<\/textarea>/)![1];
-  expect(decodeURIComponent(code)).toContain('globalThis.__cortexServer="https://cortex.example"');
+  expect(decodeURIComponent(code).replace(/&quot;/g, '"')).toContain('globalThis.__cortexServer="https://cortex.example"');
   expect(html).toContain("Copier le bookmarklet");
   expect((await (await route(new Request("http://x/share/"))).text())).toContain("/share/bookmarklet");
 });
