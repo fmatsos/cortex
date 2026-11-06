@@ -308,6 +308,12 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
         try { await markCompiled(root, d.path); }
         catch (e) { say("fail", `${id}: ${(e as Error).message}`); ok = false; continue; }
       }
+      // deterministic links (cortex links) that involve a page of this compile: its mentions of known pages, and the
+      // mentions of its new pages elsewhere in the wiki
+      const { suggestLinks, writeLinks } = await import("./links");
+      const mine = new Set(touched);
+      const linked = await writeLinks(root, suggestLinks(await openWiki(root).pages()).filter((s) => mine.has(s.path) || mine.has(s.target)));
+      if (linked.length) say("info", paint.dim(`${linked.length} link(s) added by cortex links`));
       // the Ingest entry, unless the agent wrote one for this source itself
       if (opts.batch && !openWiki(root).journal().entries.some((e) => e.kind === "ingest" && e.sources?.includes(id) && e.at >= localIso(started))) {
         const created = touched.filter((p) => !pagesBefore.has(p)).length;

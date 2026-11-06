@@ -19,6 +19,8 @@ export type Similarity = { name: string; prepare(pages: Page[]): (a: Page, b: Pa
 
 export type LinkSuggestion = {
   path: string; from: string; target: string; title: string; term: string; score: number;
+  /** Where the first mention is in the page body (UTF-16 offset and length), for --write. */
+  at: number; length: number;
   /** Why: the mention, the keyphraseness evidence, the context that ties both pages. */
   reasons: string[];
 };
@@ -26,17 +28,23 @@ export type LinkSuggestion = {
 const TARGET_TYPES = new Set(["Concept", "Entity"]);
 const WORD = /[\p{L}\p{N}]+/gu;
 
-/** The prose of a body: code, quotes and callouts, headings, footnote definitions and existing links removed. */
+/**
+ * The prose of a body: code, quotes and callouts, headings, footnote definitions, existing links and bold/italic
+ * markers blanked out. Same length as the body (blanked, not removed): an offset in the prose is an offset in the body.
+ */
 export function prose(body: string): string {
+  const blank = (m: string) => m.replace(/[^\n]/g, " ");
   return body
-    .replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, " ")
-    .replace(/`[^`\n]*`/g, " ")
-    .replace(/^\s*(>|#{1,6}\s|\[\^[^\]]+\]:).*$/gm, " ")
-    .replace(/!?\[[^\]]*\]\([^)]*\)/g, " ")
-    .replace(/\[\^[^\]]+\]/g, " ");
+    .replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, blank)
+    .replace(/`[^`\n]*`/g, blank)
+    .replace(/^\s*(>|#{1,6}\s|\[\^[^\]]+\]:|\|).*$/gm, blank)
+    .replace(/!?\[[^\]]*\]\([^)]*\)/g, blank)
+    .replace(/\[\^[^\]]+\]/g, blank)
+    .replace(/<[^>\n]*>/g, blank);
 }
 
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+/** No case, no accents, one code unit for one: offsets stay those of the input. */
+const fold = (s: string) => Array.from(s, (c) => { const f = c.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase(); return f.length === c.length ? f : c; }).join("");
 /** A short name (4 letters or less, e.g. « LLM », « Go ») is matched in its exact case only. */
 const exact = (name: string) => name.replace(/[^\p{L}\p{N}]/gu, "").length <= 4;
 
@@ -95,13 +103,15 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
   const keys = names.map(([k]) => k);
   // short names in their exact case on the prose as written, the others on the folded prose (no case, no accents)
   const [reExact, reFold] = [regex(keys.filter(exact)), regex(keys.filter((k) => !exact(k)))];
-  const mentions = new Map<string, Map<Page, string>>(); // page → target → name found
+  type Mention = { at: number; length: number };
+  const mentions = new Map<string, Map<Page, Mention>>(); // page → target → first mention
   for (const p of pages) {
-    const m = new Map<Page, string>(), text = prose(p.body);
+    const m = new Map<Page, Mention>(), text = prose(p.body);
     for (const [re, t] of [[reExact, text], [reFold, fold(text)]] as const)
       for (const hit of re ? t.matchAll(re) : []) {
-        const target = byKey.get(hit[0].replace(/\s+/g, " "))!;
-        if (target && target !== p && !m.has(target)) m.set(target, String(target.fm.title));
+        const target = byKey.get(hit[0].replace(/\s+/g, " "));
+        const prev = target && m.get(target);
+        if (target && target !== p && (!prev || hit.index! < prev.at)) m.set(target, { at: hit.index!, length: hit[0].length });
       }
     mentions.set(p.path, m);
   }
@@ -118,7 +128,8 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
   const out: LinkSuggestion[] = [];
   for (const p of pages) {
     const mine: LinkSuggestion[] = [];
-    for (const [t, term] of mentions.get(p.path)!) {
+    for (const [t, { at, length }] of mentions.get(p.path)!) {
+      const term = p.body.slice(at, at + length);
       if (linksOf.get(p.path)!.has(t.path)) continue;
       const seen = mentionedIn.get(t)!, linked = linkedIn.get(t) ?? 0;
       const evidence = seen >= LIMITS.linkMinEvidence; // too few mentions: frequencies say nothing yet, the context decides
@@ -133,9 +144,33 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
       if (srcs.length) reasons.push("shared source");
       if (s >= LIMITS.linkMinSimilarity) reasons.push(`${sim.name} ${s.toFixed(2)}`);
       if (!tags.length && !srcs.length && s < LIMITS.linkMinSimilarity) continue;
-      mine.push({ path: p.path, from: String(p.fm.title ?? ""), target: t.path, title: String(t.fm.title), term, reasons, score: (kp ?? 0.5) + s + (tags.length ? 0.25 : 0) + (srcs.length ? 0.25 : 0) });
+      mine.push({ path: p.path, from: String(p.fm.title ?? ""), target: t.path, title: String(t.fm.title), term, at, length, reasons, score: (kp ?? 0.5) + s + (tags.length ? 0.25 : 0) + (srcs.length ? 0.25 : 0) });
     }
     out.push(...mine.sort((a, b) => b.score - a.score || a.target.localeCompare(b.target)).slice(0, LIMITS.linkMaxPerPage));
   }
   return out;
+}
+
+/**
+ * Writes the suggestions as links, on the mention itself: « … Codex … » → « … [Codex](/wiki/entities/….md) … ».
+ * The body is read again and a mention that no longer sits where it was found is skipped; bodies only, the
+ * frontmatter is left as is. Returns the suggestions written.
+ */
+export async function writeLinks(root: string, found: LinkSuggestion[]): Promise<LinkSuggestion[]> {
+  const { join } = await import("node:path");
+  const { parseDoc } = await import("./lib");
+  const written: LinkSuggestion[] = [];
+  const byPage = Map.groupBy(found, (s) => s.path);
+  for (const [path, list] of byPage) {
+    const file = join(root, path), text = await Bun.file(file).text();
+    let body = parseDoc(path, text).body;
+    const head = text.slice(0, text.length - body.length);
+    for (const s of [...list].sort((a, b) => b.at - a.at)) { // from the end: earlier offsets stay valid
+      if (body.slice(s.at, s.at + s.length) !== s.term) continue;
+      body = `${body.slice(0, s.at)}[${s.term}](/${s.target})${body.slice(s.at + s.length)}`;
+      written.push(s);
+    }
+    await Bun.write(file, head + body);
+  }
+  return written;
 }

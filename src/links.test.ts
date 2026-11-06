@@ -17,8 +17,26 @@ test("links: a mention in prose is suggested once, with its reasons; an existing
   const a = page("Source", "A", "On parle d'inference LOCALE ici, et encore d'inférence locale.");
   const b = page("Source", "B", `Déjà lié : ${link(t)} inférence locale.`);
   const r = suggestLinks([t, a, b]);
-  expect(r.map((s) => [s.path, s.target, s.term])).toEqual([[a.path, t.path, "Inférence locale"]]); // accents and case folded
-  expect(r[0].reasons).toEqual(["mentions « Inférence locale »", "few mentions yet (2)", "shared tag ia"]);
+  expect(r.map((s) => [s.path, s.target, s.term])).toEqual([[a.path, t.path, "inference LOCALE"]]); // accents and case folded, first mention as written
+  expect(r[0].reasons).toEqual(["mentions « inference LOCALE »", "few mentions yet (2)", "shared tag ia"]);
+});
+
+test("writeLinks: the first mention becomes the link, text as written; code and frontmatter untouched; a moved mention is skipped", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { parseDoc } = await import("./lib");
+  const { writeLinks } = await import("./links");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  const t = page("Entity", "Codex", "L'agent d'OpenAI.", { tags: ["agents"] });
+  const text = "---\ntype: Source\ntitle: A\ntags: [agents]\n---\n`codex exec` puis **Codex** et encore Codex.\n";
+  await Bun.write(join(root, "wiki/sources/a.md"), text);
+  const a = { ...parseDoc("wiki/sources/a.md", text), issues: [] } as unknown as Page;
+  const found = suggestLinks([t, a]);
+  expect(found.map((s) => s.term)).toEqual(["Codex"]);
+  expect((await writeLinks(root, found)).length).toBe(1);
+  expect(await Bun.file(join(root, "wiki/sources/a.md")).text()).toBe(text.replace("**Codex**", `**[Codex](/${t.path})**`));
+  expect(await writeLinks(root, found)).toEqual([]); // already written: the mention is no longer there as is
 });
 
 test("links: short names only in their exact case; ambiguous names never; aliases count", () => {

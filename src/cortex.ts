@@ -34,7 +34,7 @@ const HELP = `cortex — second brain
   cortex ls [--type T] [--json]                (the wiki pages, by title)
   cortex show <path|raw id|title>              (prints a page or a source)
   cortex related <path|title> [--limit N] [--json]
-  cortex links [--json]                        (report only: mentions of a concept or entity that are not linked yet, with their reasons)
+  cortex links [--write] [--json]              (mentions of a concept or entity not linked yet, with their reasons; --write links them)
   cortex doctor                                (system tools present or missing)
   cortex --version
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
@@ -149,11 +149,13 @@ try {
       break;
     }
     case "links": {
-      const found = (await import("./links")).suggestLinks(await wiki.pages());
+      const { suggestLinks, writeLinks } = await import("./links");
+      let found = suggestLinks(await wiki.pages());
+      if (o.write) found = await writeLinks(root, found);
       if (o.json) { console.log(JSON.stringify(found, null, 2)); break; }
       for (const s of found)
         console.log(`${paint.bold(s.from || s.path)} → ${paint.bold(s.title)}\n    ${s.reasons.join(" · ")}\n    ${paint.dim(`${s.path} → ${s.target}`)}`);
-      console.log(`${found.length} link(s) suggested; nothing written.`);
+      console.log(o.write ? `${found.length} link(s) written.` : `${found.length} link(s) suggested; nothing written (--write writes them).`);
       break;
     }
     case "lint": {
