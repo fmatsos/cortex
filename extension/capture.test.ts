@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseHTML } from "linkedom";
+// @ts-ignore: plain JS module (no declaration file), also loaded by the service worker
+import { permalink } from "./lib.js";
 
 /** Runs the scripts the extension injects (vendor + capture.js) against a linkedom page, as a classic script would see it. */
 async function load(html: string, url: string, select?: (document: Document, sel: any) => void) {
@@ -10,7 +12,7 @@ async function load(html: string, url: string, select?: (document: Document, sel
   Object.defineProperty(document, "baseURI", { value: url });
   select?.(document, sel);
   delete g.__cortex;
-  for (const f of ["vendor/Readability.js", "vendor/turndown.js", "capture.js"]) (0, eval)(await Bun.file(new URL(`./${f}`, import.meta.url)).text()); // indirect eval: global scope, like a classic script
+  for (const f of ["vendor/Readability.js", "vendor/turndown.js", "capture.js", "picker.js"]) (0, eval)(await Bun.file(new URL(`./${f}`, import.meta.url)).text()); // indirect eval: global scope, like a classic script
   return g.__cortex;
 }
 
@@ -36,4 +38,64 @@ test("extension: selection() converts the selected HTML, links absolute; nothing
     sel.rangeCount = 1; sel.getRangeAt = () => ({ cloneContents: () => frag });
   });
   expect(c.selection().text).toBe("Un **extrait** avec [un lien](https://exemple.org/x).");
+});
+
+const links = (...hrefs: (string | [string, boolean])[]) => hrefs.map((h) => (typeof h === "string" ? { href: h, time: false } : { href: h[0], time: h[1] }));
+const PAGE = "https://exemple.org/page";
+
+test("extension: permalink() takes the block's own post URL, per network, else the page's", () => {
+  const li = "https://www.linkedin.com/feed/update/urn:li:activity:7123456789/?utm=x";
+  expect(permalink(links("https://www.linkedin.com/in/bob", li), "https://www.linkedin.com/feed/")).toBe("https://www.linkedin.com/feed/update/urn:li:activity:7123456789");
+  expect(permalink(links("https://x.com/bob", ["https://x.com/bob/status/99/photo/1", true]), "https://x.com/home")).toBe("https://x.com/bob/status/99");
+  expect(permalink(links("https://bsky.app/profile/bob.bsky.social/post/3kabc"), "https://bsky.app/")).toBe("https://bsky.app/profile/bob.bsky.social/post/3kabc");
+  expect(permalink(links(["https://piaille.fr/@bob/111222333", true]), "https://piaille.fr/home")).toBe("https://piaille.fr/@bob/111222333");
+  expect(permalink(links("https://www.reddit.com/r/bun/comments/abc/titre/def/"), "https://www.reddit.com/r/bun/comments/abc/titre/")).toBe("https://www.reddit.com/r/bun/comments/abc/titre/def");
+  expect(permalink(links("https://www.linkedin.com/in/bob", "https://exemple.org/autre"), PAGE)).toBe(PAGE);
+  expect(permalink([], PAGE)).toBe(PAGE);
+});
+
+test("extension: permalink() ignores a status link without a date, a link to another site, a generic /@user/123", () => {
+  expect(permalink(links("https://x.com/bob/status/99"), "https://x.com/home")).toBe("https://x.com/home");
+  expect(permalink(links(["https://x.com/bob/status/99", true]), "https://blog.exemple.org/a")).toBe("https://blog.exemple.org/a");
+  expect(permalink(links("https://medium.com/@bob/123"), "https://medium.com/feed")).toBe("https://medium.com/feed");
+});
+
+test("extension: element() gives a LinkedIn-like block as Markdown (no controls, no inline images, absolute links) and its post URL", async () => {
+  const c = await load(
+    `<body><div data-urn="urn:li:activity:7123"><a href="/in/bob">Bob</a><p>Un post avec <a href="/redir?x=1">un lien</a>.</p><img src="data:image/png;base64,AAAA"><img src="/i.png"><button>J'aime</button><svg><path/></svg></div></body>`,
+    "https://www.linkedin.com/feed/");
+  const r = c.element(document.querySelector("[data-urn]"));
+  expect(r.text).toContain("[Bob](https://www.linkedin.com/in/bob)");
+  expect(r.text).toContain("[un lien](https://www.linkedin.com/redir?x=1)");
+  expect(r.text).toContain("![](https://www.linkedin.com/i.png)");
+  expect(r.text).not.toMatch(/data:image|J'aime/);
+  expect(permalink(r.links, r.url)).toBe("https://www.linkedin.com/feed/update/urn:li:activity:7123");
+});
+
+test("extension: element() finds a tweet's permalink through its <time> link; a bare <li> is not a bullet; an empty block is an error", async () => {
+  const c = await load(
+    `<body><article data-testid="tweet"><a href="/bob"><span>Bob</span></a><a href="/bob/status/99"><time>2h</time></a><div>Bonjour</div></article><ul><li id="l">Un élément</li><li id="e"><button>x</button></li></ul></body>`,
+    "https://x.com/home");
+  const r = c.element(document.querySelector("article"));
+  expect(permalink(r.links, r.url)).toBe("https://x.com/bob/status/99");
+  expect(c.element(document.getElementById("l")).text).toBe("Un élément");
+  expect(c.element(document.getElementById("e")).error).toBeTruthy();
+});
+
+test("extension: pick.snap() goes up to the post container, a roomy li/section, else a block with some text", async () => {
+  const long = "Un texte assez long pour compter comme un vrai bloc de contenu dans la page, au moins quatre-vingts caractères.";
+  const c = await load(
+    `<body><main><article id="a"><div><span id="s">court</span></div></article>
+      <ul><li id="small"><a id="la">menu</a></li><li id="big"><div><span id="lb">${long}</span></div></li></ul>
+      <section id="sec"><p id="p">${long}</p></section>
+      <div id="blk"><p id="q">Un paragraphe de plus de quarante caractères ici.</p></div><div><div><div><div id="none"><i id="tiny">x</i></div></div></div></div></main></body>`,
+    "https://exemple.org/");
+  const id = (x: string) => document.getElementById(x)!, snap = (x: string) => c.pick.snap(id(x))?.id;
+  expect(snap("s")).toBe("a");
+  expect(snap("la")).not.toBe("small");
+  expect(snap("lb")).toBe("big");
+  expect(snap("p")).toBe("sec");
+  expect(snap("q")).toBe("q");
+  expect(snap("tiny")).toBe("tiny");
+  expect(c.pick.snap(document.body)).toBeNull();
 });

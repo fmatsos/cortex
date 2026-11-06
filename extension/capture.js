@@ -12,6 +12,19 @@
     }
     for (const e of root.querySelectorAll('img[src^="data:"]')) e.remove();
   };
+  // links of a block, in document order, for lib.js `permalink`: its anchors ({href, time}) and the post ids the page carries as attributes
+  // (LinkedIn data-urn, Reddit permalink); `time` is true when the anchor wraps a <time>
+  const LI_URN = /^urn:li:(?:activity|share|ugcPost):\d+$/;
+  const linksOf = (root) => {
+    const out = [];
+    for (const n of root.querySelectorAll("a[href],[data-urn],[permalink]")) {
+      const urn = n.getAttribute("data-urn"), perm = n.getAttribute("permalink");
+      if (urn && LI_URN.test(urn)) out.push({ href: `https://www.linkedin.com/feed/update/${urn}/`, time: false });
+      if (perm) try { out.push({ href: new URL(perm, document.baseURI).href, time: false }); } catch {}
+      if (n.matches("a[href]")) out.push({ href: n.getAttribute("href"), time: !!n.querySelector("time") });
+    }
+    return out.slice(0, 200);
+  };
   const ok = (text) => ({ title: document.title.trim(), url: location.href, text });
 
   globalThis.__cortex = {
@@ -29,6 +42,17 @@
       absolute(holder);
       const text = toMarkdown(holder.innerHTML);
       return text ? { ...ok(text), title: (title || document.title).trim() } : { error: "Rien à envoyer : la page n'a pas de texte lisible." };
+    },
+    // one block picked by the user (picker.js): Markdown without the controls, plus its links to find its permalink
+    element(el) {
+      const holder = document.createElement("div");
+      holder.append(el.cloneNode(true));
+      absolute(holder);
+      const links = linksOf(holder);
+      for (const e of holder.querySelectorAll("svg,button,input,select,textarea,[hidden]")) e.remove();
+      if (el.localName === "li") holder.innerHTML = holder.firstElementChild?.innerHTML ?? ""; // a bare <li> would come out as a bullet
+      const text = toMarkdown(holder.innerHTML);
+      return text ? { ...ok(text), links } : { error: "Ce bloc n'a pas de texte." };
     },
     selection() {
       const sel = getSelection(), holder = document.createElement("div");
