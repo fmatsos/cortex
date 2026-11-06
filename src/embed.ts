@@ -12,10 +12,10 @@ export const EMBED = {
   timeoutMs: 3000,
   /** One batch of `refresh` (pages of up to `docChars`, far slower than a query). */
   indexTimeoutMs: 30_000,
-  /** Pages per call of `refresh`. */
-  batch: 8,
-  /** Characters of a page sent to the model. */
-  docChars: 6000,
+  /** Pages per call of `refresh`: 1, the inputs of one call share the server's context (qwen3-embed: c = 2048 for all of them). */
+  batch: 1,
+  /** Characters of a page sent to the model: under 2048 tokens even for Markdown dense in links (~2.8 characters per token). */
+  docChars: 4000,
   /** `search`: candidates kept from each ranking before the fusion. */
   topK: 50,
   /** Reciprocal rank fusion constant. */
