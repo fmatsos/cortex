@@ -40,7 +40,7 @@ Les étapes 4 (candidats élargis), 4bis et 7bis compensent, pendant l'ingestion
 
 ### 1.4 Comparaison avec la boucle agentique
 
-Source courte : ~1 500 mots (~2,5k tokens). Source longue : ~12 000 mots (~18k tokens). Estimations pipeline au débit mesuré (prefill ~600 tok/s, génération 33 tok/s), à confirmer au WP0.
+Source courte : ~1 500 mots (~2,5k tokens). Source longue : ~12 000 mots (~18k tokens). Estimations pipeline au débit mesuré (prefill ~600 tok/s, génération 33 tok/s). Le WP0 confirme le prefill (~580 tok/s) mais n'a mesuré que ~22 tok/s en génération, avec un run du labo actif en parallèle : voir « Résultats du WP0 ».
 
 | | Agent (mesuré) | Pipeline (estimé) |
 |---|---|---|
@@ -64,8 +64,9 @@ Un seul helper, `structured(cfg, { name, system, user, schema, zod, maxTokens })
 
 - `POST <base_url>/chat/completions`, mêmes règles que `openai.ts` : `endpoint()` de `config.ts` pour l'URL et la clé (jamais envoyée à une URL que seul `cortex.json` nomme), `thinking()` et `cache()` réexportés.
 - `response_format: { type: "json_schema", json_schema: { name, schema, strict: true } }`. **Vérifié dans les sources de llama.cpp** (`tools/server`) : pour `type: "json_schema"`, le serveur lit `response_format.json_schema.schema`, le convertit en grammaire GBNF (`json_schema_to_grammar`) et contraint la génération ; `name` et `strict` sont ignorés par llama.cpp, exigés par OpenAI. Le README montre aussi `{type:"json_schema", schema:{…}}`, mais le parseur lit la forme imbriquée ; on envoie la forme OpenAI, qui marche sur les deux. Le champ bas niveau `json_schema` (alias `grammar`) du `/completion` natif n'est pas utilisé.
-- `temperature: 0`, `seed: 7`, `max_tokens` par étape, `cache_prompt: true`. Pensée coupée (`effort none` par défaut en pipeline : la grammaire contraint la réponse, pas la pensée, et la pensée coûte 33 tok/s pour rien). À vérifier au WP0 : que la grammaire s'applique bien après le bloc de raisonnement quand la pensée est active.
+- `temperature: 0`, `seed: 7`, `max_tokens` par étape, `cache_prompt: true`. Pensée coupée **toujours, explicitement** (`effort none` en pipeline) : sur ce serveur la pensée est active par défaut (réponse vide et `finish_reason: length` si on n'envoie rien), et elle part parfois en boucle. Vérifié au WP0 : la grammaire ne s'applique qu'après le bloc de raisonnement, mais ce bloc coûte des centaines de tokens, voire ne se termine pas ; ne jamais l'activer avec une grammaire. `seed` ne garantit pas une sortie identique d'un appel à l'autre : le déterminisme se joue côté cortex (tests au faux serveur), pas côté modèle.
 - Messages : `system` (consignes de l'étape, **constant**, en anglais) puis `user` (matière, **variable**). Jamais de `schema.md` dans le prompt.
+- Consigne commune à tous les schémas : *never use the double-quote character inside a string value (use « » or backticks)*. Sans elle, la grammaire laisse le modèle fermer la chaîne sur un `"` qu'il voulait écrire dans le texte, et le tableau se referme prématurément (WP0 : 3 `key_points` sur 7). Les `maxLength` coupent net, même au milieu d'un mot : les garder larges et les traiter comme des garde-fous, pas comme des longueurs visées.
 - Validation : `JSON.parse`, puis zod (même forme que le JSON Schema, plus les règles que la grammaire ne porte pas : tags dans la liste ou nouveaux, indices dans les bornes, citations non vides). Un échec renvoie la liste des erreurs comme message `user` supplémentaire et redemande, `LIMITS.pipelineRetries` fois (2). `finish_reason: "length"` compte comme un échec, la relance demande une sortie plus courte.
 - Mesure : `$CORTEX_METRICS=<fichier.jsonl>` fait écrire une ligne par appel `{at, source, step, model, prompt_tokens, completion_tokens, ms, retries, ok}` depuis `usage` de la réponse (aucune instrumentation n'existe aujourd'hui ; `openai.ts` l'adopte au même moment pour permettre l'A/B).
 
@@ -259,7 +260,7 @@ Ce que ni le pipeline ni la maintenance ne tranchent seuls doit rester visible p
 
 ## 5. Parallélisme et cache
 
-- Serveur de référence : `llama-server -np 4 -c 65536 -kvu` (KV unifié : les 64k sont partagés entre les 4 slots, chaque requête doit tenir dans ce qui reste). Le pipeline borne ses appels à 8k d'entrée + 1,5k de sortie : quatre en vol tiennent (< 40k).
+- Serveur de référence : `llama-server` en mode routeur, `qwen3.5-4b` lancé avec `--ctx-size 65536 --cache-ram 1024 --cache-reuse 256 --cache-type-k/v q8_0 --flash-attn on`, sans `-np` ni `-kvu` explicites : le serveur ouvre 4 slots à KV unifié par défaut (`/slots` : 4 slots de `n_ctx` 65536, partagés). Les 64k sont donc partagés entre les 4 slots, chaque requête doit tenir dans ce qui reste ; `/props?model=qwen3.5-4b` donne `total_slots`. Le pipeline borne ses appels à 8k d'entrée + 1,5k de sortie : quatre en vol tiennent (< 40k).
 - Dans une source : chunks d'extraction en parallèle, puis pages `write` et `update` en parallèle, par un pool de `pipeline.parallel` (défaut `LIMITS.pipelineParallel` = 4, à aligner sur `n_slots`). Étapes 2–4 et 7–9 séquentielles (elles sont rapides ou doivent voir les pages déjà créées).
 - Entre sources : séquentiel (`--pending`), comme aujourd'hui : le dédoublonnage d'une source doit voir les pages créées par la précédente. Un `--jobs` entre sources viendrait plus tard, avec un verrou sur l'étape 7.
 - Cache de préfixe : `cache_prompt: true` ; le `system` de chaque étape est constant et vient en premier, la matière variable ensuite. llama.cpp route une requête vers le slot au préfixe le plus proche (`--slot-prompt-similarity`), donc les quatre chunks d'une source partagent leur préfixe de consignes. Gain modeste (quelques centaines de tokens par appel) : l'essentiel vient de la petitesse des prompts, pas du cache.
@@ -359,6 +360,37 @@ Le mode agentique n'est pas une solution de repli de ce design : il reste dispon
 | WP11 — maintenance planifiée (v2) | `cortex maintain` hebdomadaire sur la machine qui héberge llama.cpp (cron ou systemd timer sur le LXC, pas GitHub Actions : la non-exigence « pas de CI qui lance un LLM » de DESIGN §11 vise l'hébergeur de code, à amender ainsi), rapport dans le journal, `git commit` sur une branche `maintain/<date>` à relire | WP8–WP10 |
 
 WP2, WP4 et (après WP1) WP5 sont indépendants et parallélisables ; le module file de WP6b aussi. Chaque lot livre ses tests ; aucun lot ne touche au mode agentique hors des métriques du WP1.
+
+## Résultats du WP0
+
+Mesures sur `http://192.168.1.96:8080/v1`, `qwen3.5-4b` (llama.cpp b1188, mode routeur), du 2026-11-06. **Biais : un run du labo (`cortex-lab` run 50) occupait en continu le slot 3 pendant toute la session** (`/slots` : `is_processing` constant), donc les débits de génération sont probablement pénalisés. Peu de requêtes, toutes courtes ; les scripts sont restés hors du dépôt. Source de test : les 1 500 premiers mots (~4,3k tokens avec les consignes, 12,6k caractères) d'une spécification technique française (`djlib`), avec le schéma d'extraction de §2.2 et trois candidats factices.
+
+| Question | Résultat |
+|---|---|
+| `json_schema` imbriqué (`response_format.json_schema.schema`) | Accepté, grammaire appliquée (enum, `pattern`, `minItems`/`maxItems`, `maxLength` respectés). `name` et `strict` ignorés. |
+| Pensée par défaut | **Active** : sans paramètre, `content` vide, `reasoning_content` plein, `finish_reason: length`. |
+| Couper la pensée | `chat_template_kwargs: {enable_thinking: false}` et `reasoning_effort: "none"` marchent, séparément. La sortie de `thinking("none")` de `openai.ts` (les deux champs plus `think: false`) est acceptée sans erreur. Plus de `reasoning_content` dans la réponse. |
+| Grammaire avec pensée active | Elle ne s'applique **qu'après** le bloc de raisonnement (schéma forçant `title: "ZETA"` alors que la pensée prévoyait un autre titre : la sortie finale est `ZETA`). Mais la pensée consomme 500 à 700 tokens pour un prompt trivial, et sur deux essais plus ouverts elle n'a pas fini en 2 500 tokens (`content` vide). Conclusion : pensée coupée, toujours. |
+| `seed` à `temperature: 0` | **Non déterministe** : deux requêtes identiques, avec `cache_prompt` coupé ou non, divergent au bout de 150 à 300 caractères (aussi à `temperature: 0.7` avec le même `seed`). Cause probable : numérique des lots GPU avec un autre slot actif ; non isolé. Le test d'octets identiques de §7.2 reste valable car il s'exécute contre un faux serveur. `seed: 7` reste utile (reproductibilité approximative), à ne pas promettre. |
+| Quatre appels en vol | Quatre requêtes de 1,6k tokens d'entrée et 200 de sortie, simultanées : aucune erreur, 27,8 s au total. Débit de génération ~11,4 tok/s par requête, soit ~45 tok/s cumulés contre ~22 tok/s seul : le parallélisme à 4 double environ le débit. |
+| Débits | Prefill à froid ~580 tok/s (4,3k tokens en 7,5 s) ; ~490 tok/s sur 900 tokens. Génération ~22 tok/s seul (spec : 33, non reproduit, cf. biais). Une extraction complète (4,3k en entrée, 1,1 à 1,4k en sortie) : 59 à 70 s, dont 50 à 60 s de génération. |
+| Cache de prompt | `cache_prompt: true` : 902 tokens sur 906 relus du cache à la requête suivante ; `timings.cache_n` et `usage.prompt_tokens_details.cached_tokens` l'indiquent. `usage.prompt_tokens` compte les tokens du cache : pour le prefill réel, lire `timings.prompt_n`. |
+
+**Qualité de l'extraction, avec et sans grammaire** (pensée coupée, même prompt, `max_tokens` 1 500) :
+
+| | Avec grammaire | Sans (JSON demandé dans la consigne) |
+|---|---|---|
+| JSON valide au premier essai | oui | oui |
+| `key_points` | 3 (voir ci-dessous) | 7 |
+| Sujets / faits | 3 / 11 | 3 / 6 |
+| Citations retrouvées dans la source (normalisées) | 8 sur 11 | 4 sur 6 |
+| Résumé | 860 caractères | 949 caractères |
+
+- La prose n'est pas dégradée par la grammaire, mais la grammaire a une panne caractéristique : le modèle voulait écrire un `"` dans un `key_point`, le `"` a fermé la chaîne (« …une structure `{ »), puis le tableau s'est refermé à 3 éléments. Avec la consigne ajoutée à §2.1 (pas de guillemet droit dans les valeurs) : 7 `key_points`, 12 faits, plus de coupure. Le sans-grammaire n'a pas eu ce défaut mais n'offre aucune garantie de forme (il faut alors réparer) ; l'avantage de la grammaire est la forme, à protéger par cette consigne.
+- **Citations** : sans normalisation, 4 citations sur 11 seulement étaient trouvées, car la source utilise l'apostrophe typographique `’` et le modèle écrit `'`. Après normalisation (`’` → `'`, retrait des marques Markdown `` ` `` et `*`, espaces repliés, minuscules), 8 sur 11. `cite.ts` (WP2) doit normaliser ainsi des deux côtés. Les 3 restantes visent des listes, tableaux ou schémas de la source dont le modèle a recollé les lignes : elles sont rejetées à juste titre, le fait est ignoré sans perte grave (d'autres faits du même sujet restent).
+- Les sujets sont corrects et le routage vers les candidats aussi (`Format JSON` → 0, `djlib` → 1, `Dry-run` → 2) ; le modèle n'a pas inventé de sujet hors des trois candidats. Un seul article, un seul essai par mode : indicatif, pas statistique.
+
+**Spec amendée** : §1.4 (débit de génération), §2.1 (pensée toujours coupée explicitement, `seed` non déterministe, consigne sur les guillemets, `maxLength` qui coupent net), §5 (arguments réels du serveur, 4 slots à KV unifié par défaut). Conséquences pour les lots : WP1 envoie toujours `thinking("none")` et ne compte pas sur `seed` ; WP2 normalise les citations comme ci-dessus ; WP7 compare les temps avec un GPU libre.
 
 ## 8. Maintenance différée : `cortex maintain` (v2)
 
