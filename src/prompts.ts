@@ -1,18 +1,21 @@
 import { LIMITS } from "./limits";
 import { join } from "node:path";
 import PROMPTS from "./prompts.md" with { type: "text" }; // embedded: a compiled binary has no src/ next to it
+import PIPELINE from "./pipeline.md" with { type: "text" };
 import { DEFAULT_LANGUAGE } from "./schema";
 
-let cache: Map<string, string> | undefined;
-/** `## name` sections of prompts.md, trimmed (text before the first heading is ignored). */
-function sections(): Map<string, string> {
-  if (cache) return cache;
+const cached = new Map<string, Map<string, string>>();
+/** `## name` sections of a prompts file (prompts.md, pipeline.md), trimmed (text before the first heading is ignored). */
+function sections(text = PROMPTS): Map<string, string> {
+  const hit = cached.get(text);
+  if (hit) return hit;
   const m = new Map<string, string>();
-  for (const part of PROMPTS.split(/^## /m).slice(1)) {
+  for (const part of text.split(/^## /m).slice(1)) {
     const nl = part.indexOf("\n");
     m.set(part.slice(0, nl).trim(), part.slice(nl + 1).trim());
   }
-  return (cache = m);
+  cached.set(text, m);
+  return m;
 }
 
 /** Fills `{{key}}` in one pass (values are never re-expanded: a question may contain "{{language}}"); unknown keys stay as is. */
@@ -22,6 +25,13 @@ const fill = (t: string, vars: Record<string, string>) => t.replace(/\{\{(\w+)\}
 export function prompt(name: string, vars: Record<string, string>): string {
   const t = sections().get(name);
   if (t === undefined) throw new Error(`prompt not found: ${name}`);
+  return fill(t, vars);
+}
+
+/** Instructions of a pipeline step (src/pipeline.md, `## name`), placeholders filled: the `system` message of the call. */
+export function pipelinePrompt(name: string, vars: Record<string, string>): string {
+  const t = sections(PIPELINE).get(name);
+  if (t === undefined) throw new Error(`pipeline prompt not found: ${name}`);
   return fill(t, vars);
 }
 

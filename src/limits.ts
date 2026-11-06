@@ -83,4 +83,8 @@ export const LIMITS = {
   pipelineQuoteChars: 200,
   /** Pipeline: times a structured call is asked again when its answer is not valid JSON, fails the schema or is cut by the output limit. */
   pipelineRetries: 2,
+  /** Pipeline: model calls in flight at once inside a source (llama.cpp opens 4 slots by default; align it on /props total_slots). */
+  pipelineParallel: 4,
+  /** Pipeline: subjects (concepts and entities) kept per source, the ones with the most verified facts first. */
+  pipelineMaxSubjects: 8,
 } as const;
