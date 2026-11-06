@@ -408,9 +408,9 @@ Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`,
 
 ## 11. Non-goals
 
-- no CI that runs an LLM (GitHub Actions only test and build the releases);
+- no CI that runs an LLM on the code host (GitHub Actions only test and build the releases). Amended 2026-11-06: this targets the code host and its secrets; the wiki's own runner and a systemd timer on the LXC may run the local stack (nightly compilation, weekly maintenance), see PIPELINE §8.6;
 - no JSON handoffs and no multi-agent pipeline;
-- no cron and no automatic periodic syntheses: syntheses are born from questions;
+- no cron and no automatic periodic syntheses: syntheses are born from questions. Amended 2026-11-06 (docs/PIPELINE.md §8.6): one scheduled job is allowed, the weekly `cortex maintain` (merge, contradictions, split, synthesize) run by a systemd timer on the machine that hosts the wiki, with the local model stack. It writes only to a `maintain/<date>` branch of a dedicated clone, for a human to review before any merge; the queue-born syntheses stay the only ones it writes;
 - no ingestion without reading: the human stays in the loop (review of the generated pages). The `note:` field, required until 2026-11-06, is optional: capture goes mostly through the inbox, the share app and, later, a browser extension, where a mandatory note only blocked sources or got filled with filler. When given, it sets the angle of the Source page;
 - no a priori tag taxonomy: tags emerge and lint proposes merges;
 - no mandatory LLM SDK: the CLI stays agnostic by default, the SDKs are optional;

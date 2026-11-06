@@ -1,0 +1,20 @@
+[Unit]
+Description=Weekly maintenance of the cortex wiki (cortex maintain, review branch)
+Documentation=https://github.com/fmatsos/cortex/blob/main/docs/PIPELINE.md
+# The model server (llama.cpp) is on another machine: reached through OPENAI_BASE_URL (see the env file).
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=runner
+# Dedicated clone of the wiki, never the runner's workspace. Settings: see cortex-maintain.env.example.
+WorkingDirectory=/var/lib/cortex-maintain/thoughts
+EnvironmentFile=-/etc/cortex/maintain.env
+Environment=CORTEX_BIN=/usr/local/bin/cortex
+ExecStart=/opt/cortex/scripts/maintain-weekly.sh /var/lib/cortex-maintain/thoughts
+# Long runs on a local 4B model are expected; stop a stuck one rather than overlap the next week.
+TimeoutStartSec=6h
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes

@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly cortex wiki maintenance
+
+[Timer]
+# Sunday, after the nightly compilation (03:00 UTC of site.yml) is over; local time of the LXC.
+OnCalendar=Sun *-*-* 05:00:00
+RandomizedDelaySec=15min
+# A run missed because the LXC was off starts at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

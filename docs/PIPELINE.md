@@ -436,3 +436,24 @@ Prend les entrées `synthesis` ouvertes (§4.8). Appel `synthesize` : entrée = 
 ### 8.5 Ce qui reste à l'humain
 
 La file `review` (juge incertain, entrée trop longue, titre refusé) et la relecture des `draft` : `cortex queue` et `/queue/` sur le site les montrent, `cortex queue done|dismiss|apply` les ferme. Aucune de ces tâches ne suppose un autre modèle que la pile locale ; quand le juge ne tranche pas, le design choisit de ne rien écrire plutôt que d'écrire faux.
+
+### 8.6 Maintenance planifiée (WP11)
+
+`scripts/maintain-weekly.sh [--dry-run] [--push] [<clone du wiki>]` lance chaque semaine les quatre sous-commandes avec `--apply`, dans l'ordre `merge`, `contradictions`, `split`, `synthesize` (les doublons d'abord : moins de pages à juger ensuite ; les synthèses en dernier : elles lisent la file). Il n'y a pas de `cortex maintain all` : la liste vit dans le script, et chaque sous-commande reste utilisable seule.
+
+1. **Refus** : clone non propre (le dossier `.cortex/` est ignoré), pas de dépôt git. Une branche `maintain/*` d'une semaine précédente non fusionnée dans la base bloque le run (sortie 0, message) : un deuxième run empilerait ses pages et ses entrées de file sur celles qu'on n'a pas relues ; fusionner ou supprimer la branche le débloque.
+2. **Préparation** : base = la branche courante (`MAINTAIN_BASE`), mise à jour par `fetch` et `merge --ff-only` si le dépôt a un `origin` (`MAINTAIN_NO_SYNC=1` l'évite), puis branche `maintain/AAAA-MM-JJ`.
+3. **Exécution** : une sous-commande en échec n'arrête pas les autres ; les pages qu'elles touchent restent en `draft` (§8) et chacune écrit déjà ses lignes `update` du journal. Le script y ajoute une ligne de bilan (`cortex log add update`, sous-tâches terminées ou en échec, nombre de fichiers, branche).
+4. **Clôture** : s'il n'y a rien à relire, la branche est supprimée ; sinon un commit unique (`maintain: AAAA-MM-JJ`, hors `.cortex/`) et retour sur la base. Le push de la branche n'a lieu que sur demande (`--push` ou `MAINTAIN_PUSH=1`, jamais forcé). Sortie 1 si une sous-commande a échoué, 2 si le script a refusé ou si le push a échoué (le commit reste local).
+
+La relecture est celle d'une branche ordinaire : `git diff main...maintain/AAAA-MM-JJ`, `cortex queue` pour les entrées à trancher, puis fusion (ou suppression) de la branche.
+
+**Installation sur le LXC** (là où vivent le dépôt du wiki et le runner ; llama.cpp, lui, est ailleurs et se joint par `OPENAI_BASE_URL`) :
+
+1. Un clone dédié du wiki, propriétaire `runner`, jamais le workspace de l'`act_runner` : `su - runner -c 'git clone <url du dépôt du wiki> /var/lib/cortex-maintain/thoughts'` (dossier créé avant, propriétaire `runner`). Pour `--push`, l'URL doit permettre l'écriture (clé de déploiement ou jeton du compte `runner`).
+2. `cortex.json` du wiki (client `openai`, `base_url`, serveurs `embed` et `judge`) comme pour la compilation de nuit ; `cortex doctor` en `runner` doit passer.
+3. Réglages : `install -m 640 -o root -g runner /opt/cortex/scripts/systemd/cortex-maintain.env.example /etc/cortex/maintain.env`, puis éditer `OPENAI_BASE_URL` (et `PATH` si `bun` n'est pas trouvé par le service).
+4. Unités : `cp /opt/cortex/scripts/systemd/cortex-maintain.{service,timer} /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now cortex-maintain.timer`. Le timer part le dimanche à 05:00 (heure du LXC, après la compilation de 03:00 UTC), `Persistent=true`.
+5. Essai : en `runner`, `/opt/cortex/scripts/maintain-weekly.sh --dry-run /var/lib/cortex-maintain/thoughts` (liste, n'écrit rien), puis `systemctl start cortex-maintain.service` et `journalctl -u cortex-maintain` ; `systemctl list-timers cortex-maintain.timer` donne la prochaine échéance.
+
+À vérifier avant d'activer `--push` : que le workflow `site.yml` du wiki ne se déclenche pas sur un push de branche (sinon l'export publierait la branche de maintenance) ; sans `--push`, la branche reste dans le clone dédié et se relit là.
