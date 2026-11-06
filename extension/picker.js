@@ -109,7 +109,7 @@
           say("Envoyé ✓");
           setTimeout(close, 1500);
         } catch (e) {
-          say(/context invalidated/i.test(e.message) ? "Extension rechargée : recharge la page." : e.message, true);
+          say(/context invalidated|receiving end/i.test(e.message) ? "L’extension ne répond pas (rechargée depuis l’ouverture de la page ?) : recharge la page et réessaie." : e.message, true);
           send.disabled = false;
         }
       };
