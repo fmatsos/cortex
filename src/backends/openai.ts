@@ -44,6 +44,8 @@ export default function openai(cfg: Config): Backend {
           const t = await res.text();
           // llama.cpp answers 500 when a cut answer leaves the tool arguments unreadable: same as finish_reason "length"
           if (res.status === 500 && /parse tool call arguments/i.test(t) && cuts++ < LIMITS.cutRetries) { messages.push({ role: "user", content: CUT }); continue; }
+          // context full (llama.cpp's n_ctx): the old tool results go, the model can read them again; then retry
+          if (res.status === 400 && /context/i.test(t) && elide(messages)) { report?.({ level: "info", text: "context full: old tool results elided", mark: "  ↻" }); continue; }
           // "does not support tools" (Ollama…): the model is the problem; any other body is cut, a runaway answer can be huge
           const hint = /(not|n't) support.{0,20}tool/i.test(t) ? " (the model must support tool calling)" : "";
           throw new Error(`${baseUrl(cfg)} answered ${res.status}: ${t.length > 300 ? `${t.slice(0, 300)}…` : t}${hint}`);
@@ -79,4 +81,12 @@ export default function openai(cfg: Config): Backend {
       throw new Error(`openai agent stopped after ${LIMITS.agentTurns} turns.`);
     },
   };
+}
+
+/** Empties the tool results but the last two (read again if needed); false when nothing is left to elide. */
+// ponytail: elides on the server's refusal, no token count; count tokens if a backend cuts silently instead
+export function elide(messages: any[]): boolean {
+  const tools = messages.filter((m) => m.role === "tool").slice(0, -2).filter((m) => m.content.length > 200);
+  for (const m of tools) m.content = "[elided to free the context: call the tool again if you still need this]";
+  return tools.length > 0;
 }

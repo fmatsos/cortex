@@ -210,3 +210,12 @@ test("openai: effort none turns thinking off", async () => {
   expect(thinking("high")).toEqual({ reasoning_effort: "high" });
   expect(thinking()).toEqual({});
 });
+
+test("elide: old tool results go, the last two stay; nothing left → false", async () => {
+  const { elide } = await import("./backends/openai");
+  const big = "x".repeat(500);
+  const m = [{ role: "user", content: big }, ...[1, 2, 3].map((i) => ({ role: "tool", tool_call_id: `${i}`, content: big }))];
+  expect(elide(m)).toBe(true);
+  expect(m.map((x) => x.content.length > 200)).toEqual([true, false, true, true]);
+  expect(elide(m)).toBe(false);
+});
