@@ -71,4 +71,10 @@ export const LIMITS = {
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */
   snippetTokens: 12,
+  /** Pipeline: a source above this many tokens (estimated at 4 characters per token) is cut into chunks of about this size, one extraction each. */
+  pipelineChunkTokens: 6000,
+  /** Pipeline: tokens of the previous chunk repeated (last paragraph, at most) at the head of the next one, so that no reasoning is cut. */
+  pipelineChunkOverlap: 300,
+  /** Pipeline: characters of a fact's quote (the proof that the source says it); cortex does not copy it to the page. */
+  pipelineQuoteChars: 200,
 } as const;
