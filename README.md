@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/cortex-mark-dark.svg">
-    <img src="assets/logo/cortex-mark-light.svg" alt="Cortex logo" width="96">
-  </picture>
+  <img src="site/src/lib/assets/cortex-mascot.svg" alt="Cortex mascot" width="128">
 </p>
 
 <h1 align="center">Cortex</h1>

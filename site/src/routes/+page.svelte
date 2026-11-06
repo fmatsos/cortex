@@ -25,11 +25,16 @@
 
 <!-- search is the entry point: a large field, examples that give results, recent searches -->
 <section aria-labelledby="h-home" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
-	<h1 id="h-home" class="flex flex-wrap items-center gap-3 text-3xl font-semibold tracking-tight"><CortexMark size={44} animated class="text-primary" /><CortexWordmark /><span class="text-muted-foreground self-end pb-1 text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
-	<p class="text-muted-foreground mt-2">
-		{t("home.intro", { pages: data.seed.total, tags: data.seed.nbTags })}
-		<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">{t("home.intro.graph")}</a>.
-	</p>
+	<div class="flex items-end gap-3">
+		<CortexMark size={112} animated />
+		<div class="min-w-0 pb-2">
+			<h1 id="h-home" class="flex flex-wrap items-baseline gap-x-3 text-3xl font-semibold tracking-tight"><CortexWordmark /><span class="text-muted-foreground text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
+			<p class="text-muted-foreground mt-2">
+				{t("home.intro", { pages: data.seed.total, tags: data.seed.nbTags })}
+				<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">{t("home.intro.graph")}</a>.
+			</p>
+		</div>
+	</div>
 	<SearchBox variant="main" class="mt-5" />
 	{#if data.seed.examples.length}
 		<ul class="touch-gap mt-4 flex flex-wrap items-center gap-2" aria-label={t("home.examples")}>
