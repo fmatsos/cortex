@@ -38,3 +38,30 @@ test("share: the extension origin gets CORS headers (preflight and POST), anothe
   const other = await route(new Request("http://x/share/api", { method: "OPTIONS", headers: { origin: "https://evil.example" } }));
   expect(other.headers.get("access-control-allow-origin")).toBeNull();
 });
+
+test("bookmarklet: a javascript: URL with all its code inline, the server baked in, no load of anything else", async () => {
+  const { bookmarklet } = await import("./bookmarklet");
+  const b = await bookmarklet("http://cortex.lan:8090");
+  expect(b.startsWith("javascript:")).toBe(true);
+  const code = decodeURIComponent(b.slice("javascript:".length));
+  expect(code).toContain('globalThis.__cortexServer="http://cortex.lan:8090"');
+  expect(code).toContain("/share/#"); // the PWA is reached through the fragment
+  expect(code).toContain("TurndownService"); // Turndown is inside, not loaded
+  expect(code).not.toMatch(/fetch\(|XMLHttpRequest|importScripts|import\(|createElement\("script"\)|\.src\s*=/);
+  // the only absolute URLs are the server and the LinkedIn permalink it builds
+  const urls = [...code.matchAll(/https?:\/\/[^"'`\s)\\$]+/g)].map((m) => m[0]);
+  expect(urls.filter((u) => !/^https:\/\/www\.linkedin\.com\/feed\/update\/$/.test(u) && u !== "http://cortex.lan:8090")).toEqual([]);
+  expect(b).not.toMatch(/[\s"<>#]/); // safe to paste and to embed in HTML
+});
+
+test("share: GET /share/bookmarklet is the install page with the code for the request's own origin", async () => {
+  const { route } = await import("./share-server");
+  const r = await route(new Request("http://127.0.0.1:8090/share/bookmarklet", { headers: { host: "cortex.example", "x-forwarded-proto": "https" } }));
+  expect(r.status).toBe(200);
+  expect(r.headers.get("content-type")).toContain("text/html");
+  const html = await r.text();
+  const code = html.match(/<textarea[^>]*>(javascript:[^<]+)<\/textarea>/)![1];
+  expect(decodeURIComponent(code)).toContain('globalThis.__cortexServer="https://cortex.example"');
+  expect(html).toContain("Copier le bookmarklet");
+  expect((await (await route(new Request("http://x/share/"))).text())).toContain("/share/bookmarklet");
+});

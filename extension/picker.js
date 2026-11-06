@@ -123,5 +123,5 @@
     for (const t of ["keydown", "keyup", "keypress"]) host.addEventListener(t, (e) => e.stopPropagation());
   }
 
-  (globalThis.__cortex ??= {}).pick = { start, snap };
+  (globalThis.__cortex ??= {}).pick = { start, snap, up, parent }; // snap, up and parent are also used by the mobile bookmarklet (mobile.js)
 })();

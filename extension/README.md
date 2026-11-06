@@ -18,6 +18,16 @@ Envoie dans l'inbox du wiki ce que le navigateur affiche : un article derrière 
 
 Ensuite `cortex inbox` (ou la CI du dépôt de notes) ingère le fichier.
 
+## Bookmarklet (Chrome Android, sans appli)
+
+Même capture fine d'un bloc que l'extension, depuis le téléphone, sans rien installer : un favori `javascript:` qui porte tout son code (Turndown, `capture.js`, les motifs de permalien de `lib.js`, `snap` de `picker.js`, plus `mobile.js` pour l'interface tactile). Rien n'est chargé depuis le serveur : une page https comme LinkedIn ne peut pas joindre un serveur http du LAN (contenu mixte, CSP).
+
+1. Ouvrir `<serveur de partage>/share/bookmarklet` sur le téléphone (lien depuis la page de partage) : la page donne le code, avec l'adresse du serveur déduite de la requête (`Host`, `X-Forwarded-Proto`, ou `SHARE_PUBLIC_URL` pour la forcer derrière un proxy).
+2. **Copier le bookmarklet**, créer un favori quelconque, le modifier : nom **cortex**, URL = le code collé.
+3. Sur la page à capturer : taper **cortex** dans la barre d'adresse, toucher la suggestion du favori. Toucher un bloc (les liens ne sont plus suivis), **Agrandir** / **Réduire** pour ajuster, **Envoyer** : un nouvel onglet ouvre l'appli de partage avec texte, titre et URL (permalien du post) préremplis ; ajouter la note, envoyer.
+
+Le bloc voyage dans le fragment (`#`) de l'URL de l'appli de partage, qui n'arrive jamais au serveur (pas de limite de longueur de requête côté proxy). Au-delà de 60 000 caractères, le texte est tronqué avec une mention visible. Le bundle est construit au premier appel du serveur (`scripts/bookmarklet.ts`, `Bun.build` depuis `node_modules`), sans étape de build.
+
 ## Limites
 
 - **Pas d'authentification** : le serveur accepte toute requête, l'extension doit rester limitée au LAN ou au VPN. Le serveur répond aux origines `chrome-extension://…` (CORS), à aucune autre.

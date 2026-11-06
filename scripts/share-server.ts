@@ -8,8 +8,12 @@
  * Serve it under /share/ behind the same SSO as the site (HTTPS is required for the install). A pure link becomes
  * `<id>.url` (cortex fetches the page); text (a LinkedIn post, a note) becomes `<id>.md`, its link kept inside, so
  * nothing depends on a page that needs a login. The page keeps unsent shares on the phone and retries them.
+ * `/share/bookmarklet` serves the Android bookmarklet (block picker); SHARE_PUBLIC_URL is the origin baked into it when the proxy
+ * does not forward the public Host / X-Forwarded-Proto.
  */
-const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090" } = process.env;
+import { bookmarklet } from "./bookmarklet";
+
+const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;
 if (import.meta.main && (!GITEA_TOKEN || !SHARE_REPO)) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
 
 type Share = { title?: string; text?: string; url?: string; note?: string };
@@ -48,7 +52,7 @@ const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta n
 <title>Cortex — partage</title><link rel="manifest" href="/share/manifest.webmanifest" crossorigin="use-credentials">
 <style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea,input{width:100%;box-sizing:border-box;font:inherit;margin:.25rem 0}
 button{font:inherit;padding:.5rem 1rem}#s{white-space:pre-line}</style></head><body>
-<h1>Cortex</h1><p id="s"></p>
+<h1>Cortex</h1><p id="s"></p><p><a href="/share/bookmarklet">Capturer un bloc d'une page sur Android (bookmarklet)</a></p>
 <form id="f"><input id="u" placeholder="Lien (facultatif)"><textarea id="t" rows="6" placeholder="Texte (facultatif avec un lien)"></textarea>
 <textarea id="n" rows="2" placeholder="Pourquoi je garde ça (note, facultative)"></textarea><button>Envoyer à l'inbox</button></form>
 <script>
@@ -68,18 +72,21 @@ async function flush() {
 }
 // sites whose pages need a login: the link alone gives nothing, so the post's text is asked for instead
 const WALLED = /(^|\\.)(facebook\\.com|fb\\.watch|reddit\\.com|redd\\.it|instagram\\.com|threads\\.net|x\\.com|twitter\\.com)$/;
-const p = new URLSearchParams(location.search);
+// the bookmarklet carries a long text in the fragment (never sent to the server), a share from Android in the query
+const p = new URLSearchParams(location.hash.slice(1) || location.search);
 let title = "";
 if (p.get("title") || p.get("text") || p.get("url")) {
   const item = { title: p.get("title") || "", text: p.get("text") || "", url: p.get("url") || "" };
   history.replaceState(null, "", "/share/");
   const link = item.url || (item.text.trim().match(/^https?:\\/\\/\\S+$/) || [""])[0];
+  // the link repeated at the end of the text is taken out of it (an Android share); a link inside a captured text stays
+  const rest = (link && item.text.trim().endsWith(link) ? item.text.trim().slice(0, -link.length) : item.text).trim();
   let host = ""; try { host = new URL(link).hostname; } catch {}
   // the share fills the form: a note can be added (optional), then it is sent
   document.getElementById("u").value = link;
-  document.getElementById("t").value = item.text.replace(link, "").trim();
+  document.getElementById("t").value = rest;
   title = item.title;
-  if (link && WALLED.test(host) && !item.text.replace(link, "").trim()) {
+  if (link && WALLED.test(host) && !rest) {
     document.getElementById("t").focus();
     s.textContent = host + " exige une connexion : cortex ne pourra pas lire la page. Copie le texte du post dans l'appli d'origine, colle-le dans « Texte », puis envoie.";
   } else { document.getElementById("n").focus(); s.textContent = "Ajoute une note si tu veux, puis envoie."; }
@@ -108,6 +115,29 @@ async function put(share: Share): Promise<Response> {
   return r.ok ? Response.json({ paths }) : new Response(`Gitea ${r.status}`, { status: 502 });
 }
 
+/** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */
+async function bookmarkletPage(req: Request): Promise<Response> {
+  const u = new URL(req.url), h = req.headers;
+  const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() || u.protocol.replace(":", "");
+  const server = (SHARE_PUBLIC_URL || `${proto}://${h.get("x-forwarded-host")?.split(",")[0].trim() || h.get("host") || u.host}`).replace(/\/+$/, "");
+  const code = await bookmarklet(server); // percent-encoded: safe in HTML
+  return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cortex — bookmarklet</title><style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea{width:100%;box-sizing:border-box;font:12px ui-monospace,monospace}
+button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1>Cortex : capturer un bloc</h1>
+<p>Un bookmarklet pour Chrome Android : sur une page (fil LinkedIn, X, Reddit…), il te laisse toucher un post, l'élargir ou le réduire, puis l'envoie ici, où tu ajoutes une note avant de valider. Aucune appli à installer.</p>
+<h2>Installer</h2><ol><li>Touche <b>Copier le bookmarklet</b> ci-dessous.</li>
+<li>Dans Chrome, ajoute un favori quelconque (⋮ → ☆), puis ouvre-le pour le modifier (⋮ → Favoris → ⋮ sur le favori → Modifier).</li>
+<li>Nomme-le <b>cortex</b> et colle le code dans le champ <b>URL</b>. Enregistre.</li></ol>
+<h2>Utiliser</h2><p>Sur la page à capturer, tape <b>cortex</b> dans la barre d'adresse (sans valider) et touche la suggestion avec l'étoile. Touche un bloc, ajuste avec <b>Agrandir</b> / <b>Réduire</b>, puis <b>Envoyer</b> : la page de partage s'ouvre avec le texte, ajoute ta note et envoie. Les liens de la page ne sont pas suivis tant que le mode est actif ; <b>Annuler</b> le quitte.</p>
+<p><button id="c">Copier le bookmarklet</button> <span id="m" role="status"></span></p>
+<textarea id="code" rows="6" readonly>${code}</textarea>
+<p>Adresse du serveur intégrée au code : <code>${server.replace(/[<&>"]/g, "")}</code>. Si elle est fausse, ouvre cette page par la bonne adresse.</p>
+<p><a href="/share/">Retour au partage</a></p>
+<script>document.getElementById("c").onclick = async () => { const t = document.getElementById("code"), m = document.getElementById("m");
+try { await navigator.clipboard.writeText(t.value); m.textContent = "Copié ✓"; } catch { t.select(); m.textContent = document.execCommand("copy") ? "Copié ✓" : "Sélectionné : copie-le à la main."; } };</script>
+</body></html>`, { headers: { "content-type": "text/html; charset=utf-8" } });
+}
+
 /** The browser extension (chrome-extension://<id>) posts from its own origin: it is answered, other origins are not. */
 export async function route(req: Request): Promise<Response> {
   const { pathname } = new URL(req.url);
@@ -122,6 +152,7 @@ export async function route(req: Request): Promise<Response> {
     return r;
   }
   if (pathname === "/share/manifest.webmanifest") return Response.json(manifest, { headers: { "content-type": "application/manifest+json" } });
+  if (pathname === "/share/bookmarklet" && req.method === "GET") return bookmarkletPage(req);
   if (pathname === "/share/icon-192.png") return new Response(icon);
   if (pathname === "/share/icon-512.png") return new Response(icon512);
   if (pathname === "/share/" || pathname === "/share") return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
