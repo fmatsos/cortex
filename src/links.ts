@@ -178,9 +178,10 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical, scope?: { p
  * The body is read again and a mention that no longer sits where it was found is skipped. A page that changes gets
  * `generated: { by: cortex-links, at: now }`; a reviewed page that was up to date keeps its review (`verified.at` moves
  * along, `verified.by` stays): adding links is not a change of content to review again. A page already waiting for a
- * review still waits. Returns the suggestions written.
+ * review still waits. The pages of `keep` (written by the compile that calls this) keep their stamp. Returns the
+ * suggestions written.
  */
-export async function writeLinks(root: string, found: LinkSuggestion[], now = new Date()): Promise<LinkSuggestion[]> {
+export async function writeLinks(root: string, found: LinkSuggestion[], now = new Date(), keep = new Set<string>()): Promise<LinkSuggestion[]> {
   const written: LinkSuggestion[] = [];
   const byPage = Map.groupBy(found, (s) => s.path);
   for (const [path, list] of byPage) {
@@ -194,7 +195,7 @@ export async function writeLinks(root: string, found: LinkSuggestion[], now = ne
       written.push(s);
     }
     if (written.length === before) continue;
-    await Bun.write(file, stampLinked(path, text, head + body, now));
+    await Bun.write(file, keep.has(path) ? head + body : stampLinked(path, text, head + body, now));
   }
   return written;
 }

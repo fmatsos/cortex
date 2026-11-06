@@ -222,6 +222,7 @@ async function stamp(root: string, paths: string[], by: string, at: Date, inUse:
     if (tags && fresh.has(p) && tags.length > maxTags) tags = tags.map((t, i) => ({ t, k: (inUse.has(tagKey(t)) ? 0 : 1) * 1e6 + i })).sort((x, y) => x.k - y.k).slice(0, maxTags).map((x) => x.t);
     if (tags && JSON.stringify(tags) !== JSON.stringify(fm.tags)) text = setFmLine(text, "tags", `tags: ${JSON.stringify(tags)}`);
     text = setFmLine(text, "generated", `generated: { by: ${JSON.stringify(by)}, at: ${localIso(at)} }`);
+    if (!text.endsWith("\n")) text += "\n";
     if (!frontmatterError(text)) await Bun.write(f, text); // a replacement that would break the YAML is dropped
   }
 }
@@ -312,7 +313,28 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
       return [`no Source page cites ${res}. The Source page needs \`type: Source\` and exactly this in its frontmatter: ` +
         `sources: [{ id: ${id}, resource: ${res} }]${near.length ? `. Now: ${near.join("; ")}` : ""}`];
     };
-    const { code, errors } = await runChecked(w, prompt, !!opts.batch, sink, cited);
+    /**
+     * Every page the agent wrote or changed for this source carries it: an entry in sources[] and at least one [^id]
+     * footnote (schema rule 3; lint only checks that a footnote has an entry). And no literal "\n" in prose: a model that
+     * escapes its newlines writes them as text.
+     */
+    const sourced: Check = async () => {
+      const out: string[] = [];
+      for (const [p, h] of await pageHashes(root)) {
+        if (pagesBefore.get(p) === h || !p.endsWith(".md") || isReservedPage(p)) continue;
+        let doc;
+        try { doc = parseDoc(p, await Bun.file(join(root, p)).text()); } catch { continue; } // lint reports it
+        const why: string[] = [], res = toResource(d.path);
+        // the entry may have another id than the raw one (lint ties footnotes to ids): matched by id or by resource
+        const entry = ((doc.fm.sources ?? []) as { id?: string; resource?: string }[]).find((s) => s.id === id || s.resource === res);
+        if (!entry) why.push(`no sources[] entry for this source: add { id: ${id}, resource: ${res} } to its sources`);
+        if (!doc.body.includes(`[^${entry?.id ?? id}]`)) why.push(`no footnote cites this source: end each claim taken from it with [^${entry?.id ?? id}] and define [^${entry?.id ?? id}]: at the end of the body`);
+        if (/\\n/.test(doc.body.replace(/```[\s\S]*?```|`[^`\n]*`/g, ""))) why.push(`literal "\\n" in the body: write real line breaks`);
+        if (why.length) out.push(`${p}: ${why.join("; ")}.`);
+      }
+      return out;
+    };
+    const { code, errors } = await runChecked(w, prompt, !!opts.batch, sink, async () => [...await cited(), ...await sourced()]);
     // a prepared page the agent never filled in goes: nothing half-done stays in the wiki
     if (prepared && await Bun.file(join(root, prepared.path)).text().catch(() => "") === prepared.text) await rm(join(root, prepared.path), { force: true });
     const pagesAfter = await pageHashes(root);
@@ -323,7 +345,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     }
     const stray = await outOfScope(root, before, sink);
     if (stray.length) { say("warn", `the agent modified files outside wiki/: ${stray.join(", ")}`, "⚠"); ok = false; }
-    const left = [...await errors(), ...await bodyless()];
+    const left = [...await errors(), ...await bodyless(), ...await sourced()];
     if (left.length) { // the Source page may cite the source, but the wiki is not left broken under a `compiled` status
       say("fail", `${id}: errors left in the files the agent changed, status unchanged:\n${left.map((e) => `  - ${e}`).join("\n")}`);
       ok = false;
@@ -336,7 +358,8 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
       // and the mentions of its new pages elsewhere in the wiki (two targeted passes, not the whole wiki against itself)
       const { lexical, suggestLinks, writeLinks } = await import("./links");
       const created = touched.filter((p) => !pagesBefore.has(p));
-      const linked = await writeLinks(root, suggestLinks(await openWiki(root).pages(), lexical, { pages: new Set(touched), targets: new Set(created) }));
+      // the pages this compile wrote keep its stamp: the links are part of the same compile, not a later cortex-links pass
+      const linked = await writeLinks(root, suggestLinks(await openWiki(root).pages(), lexical, { pages: new Set(touched), targets: new Set(created) }), new Date(), new Set(touched));
       if (linked.length) say("info", paint.dim(`${linked.length} link(s) added by cortex links`));
       // the Ingest entry, unless the agent wrote one for this source itself
       if (opts.batch && !openWiki(root).journal().entries.some((e) => e.kind === "ingest" && e.sources?.includes(id) && e.at >= localIso(started))) {

@@ -40,6 +40,12 @@ test("writeLinks: the first mention becomes the link, text as written; code and 
   expect(after).toBe(text.replace("tags: [agents]\n", `tags: [agents]\ngenerated: { by: "cortex-links", at: ${at} }\n`).replace("**Codex**", `**[Codex](/${t.path})**`));
   expect(await writeLinks(root, found)).toEqual([]); // already written: the mention is no longer there as is
   expect(await Bun.file(join(root, "wiki/sources/a.md")).text()).toBe(after); // nothing written: no new stamp
+  // a page of `keep` (just written by a compile) gets its links but keeps the compile's stamp
+  const mine = "---\ntype: Source\ntitle: B\ntags: [agents]\ngenerated: { by: codex/luna, at: 2026-11-06T09:00:00+01:00 }\n---\nAvec Codex.\n";
+  await Bun.write(join(root, "wiki/sources/b.md"), mine);
+  const b = { ...parseDoc("wiki/sources/b.md", mine), issues: [] } as unknown as Page;
+  expect((await writeLinks(root, suggestLinks([t, b]), new Date(), new Set([b.path]))).length).toBe(1);
+  expect(await Bun.file(join(root, b.path)).text()).toBe(mine.replace("Avec Codex.", `Avec [Codex](/${t.path}).`));
 });
 
 test("writeLinks: a reviewed page that was up to date stays reviewed; one already waiting for a review still waits", async () => {

@@ -306,7 +306,7 @@ describe.skipIf(process.platform === "linux" && !Bun.which("bwrap"))("compile / 
     const env = agent(`n=$(cat ${dir}/n 2>/dev/null || echo 0); n=$((n+1)); echo $n > ${dir}/n; cat > ${dir}/prompt$n
 [ $n = 1 ] && grep -o 'Source page wiki/[^:]*\\.md' ${dir}/prompt1 | cut -d' ' -f3 > ${dir}/page
 p=$(cat ${dir}/page)
-if [ $n = 1 ]; then echo 'Summary.' >> $p; echo 'not json' > wiki/log.jsonl
+if [ $n = 1 ]; then echo 'Summary.[^${id}]' >> $p; echo 'not json' > wiki/log.jsonl
 else sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; rm -f wiki/log.jsonl; fi`);
     const r = cortex(root, ["compile", id, "--batch"], { env });
     expect(r.err).not.toContain("✗");
@@ -333,7 +333,7 @@ else sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; rm -f wiki/log
     writeFileSync(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: d\nstatus: draft\ntags: [agent]\n---\nx\n");
     const id = addNote(root);
     const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
-sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [agents, cuisine]/' $p; echo 'Summary.' >> $p`);
+sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [agents, cuisine]/' $p; echo 'Summary.[^${id}]' >> $p`);
     const r = cortex(root, ["compile", id, "--batch"], { env });
     expect(r.out).toContain(`${id} compiled`);
     const [page] = [...new Bun.Glob("wiki/sources/*.md").scanSync({ cwd: root })];
@@ -351,6 +351,22 @@ mkdir -p wiki/concepts; printf -- '---\\nstatus: draft\\n---\\nx\\n' > wiki/conc
     expect(r.code).toBe(1);
     expect(r.err).toContain(`✗ ${id}: errors left in the files the agent changed, status unchanged:`);
     expect(r.err).toContain("wiki/concepts/bad.md: missing type");
+    const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
+    expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
+  });
+
+  test("compile --batch: a page written for the source without its sources[] entry, its footnote, or with a literal \\n fails the compile", () => {
+    const root = wiki();
+    const id = addNote(root);
+    // a good Source page, but a concept that never cites the source and escapes its newlines, every run
+    const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && { sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; echo 'Summary.[^${id}]' >> $p; }
+mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription: d\\nstatus: draft\\n---\\nUn.\\\\\\\\n\\\\\\\\nDeux.\\n' > wiki/concepts/c.md`);
+    const r = cortex(root, ["compile", id, "--batch"], { env });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("wiki/concepts/c.md: no sources[] entry for this source");
+    expect(r.err).toContain(`no footnote cites this source: end each claim taken from it with [^${id}]`);
+    expect(r.err).toContain('literal "\\n" in the body');
     const [source] = [...new Bun.Glob("raw/**/source.md").scanSync({ cwd: root })];
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
   });
@@ -393,8 +409,8 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: Autre\\ndescript
     writeFileSync(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: d\nstatus: draft\ntags: [agent]\n---\nx\n");
     const id = addNote(root);
     const env = agent(`in=$(cat); p=$(echo "$in" | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3); r=$(echo "$in" | grep -o 'resource: /raw/[^ }]*' | head -1 | cut -d' ' -f2)
-sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [n1, n2, n3, agents, n4, n5]/' $p; echo 'Summary.' >> $p
-printf -- '---\\ntype: Concept\\ntitle: C\\ndescription: d\\nstatus: draft\\nsources: [{ id: x, resource: %s }]\\n---\\n> [!note] pourquoi\\n> pourquoi\\n\\nTexte.\\n' "$r" > wiki/concepts/c.md`);
+sed -i 's/^type: Source$/type: Source\\ndescription: d\\ntags: [n1, n2, n3, agents, n4, n5]/' $p; echo 'Summary.[^${id}]' >> $p
+printf -- '---\\ntype: Concept\\ntitle: C\\ndescription: d\\nstatus: draft\\nsources: [{ id: x, resource: %s }]\\n---\\n> [!note] pourquoi\\n> pourquoi\\n\\nTexte.[^x]\\n' "$r" > wiki/concepts/c.md`);
     const r = cortex(root, ["compile", id, "--batch"], { env });
     expect(r.out).toContain(`${id} compiled`);
     const [page] = [...new Bun.Glob("wiki/sources/*.md").scanSync({ cwd: root })];
