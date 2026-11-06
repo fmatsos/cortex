@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { search } from "./search";
@@ -47,4 +47,26 @@ test("search: --in raw on a wiki with no raw source finds nothing, even when wik
   const root = await fixture();
   expect(await search(root, "near", { in: "raw" })).toEqual([]);
   expect((await search(root, "near", { in: "wiki" })).every((h) => h.area === "wiki")).toBe(true);
+});
+
+test("search: the persistent index follows added, changed and removed files, and survives a corrupt or unusable cache", async () => {
+  const root = await fixture();
+  const paths = async (q: string, o = {}) => (await search(root, q, o)).map((h) => h.path).sort();
+  expect(await paths("alpha")).toEqual(["wiki/concepts/a.md"]);
+  expect(await Bun.file(join(root, ".cortex/search.db")).exists()).toBe(true);
+  await Bun.write(join(root, "wiki/concepts/a.md"), page("Alpha", "Texte remplacé, avec zebra."));
+  await Bun.write(join(root, "wiki/concepts/d.md"), page("Delta", "Nouvelle page zebra."));
+  await Bun.write(join(root, "raw/s/source.md"), `---\ntitle: Brut\n---\nzebra aussi.\n`);
+  expect(await paths("zebra")).toEqual(["raw/s/source.md", "wiki/concepts/a.md", "wiki/concepts/d.md"]);
+  expect(await paths("near")).toEqual(["wiki/concepts/b.md", "wiki/concepts/c.md"]); // the old text of a.md is gone
+  rmSync(join(root, "wiki/concepts/d.md"));
+  expect(await paths("zebra", { in: "wiki" })).toEqual(["wiki/concepts/a.md"]);
+  expect(await paths("delta", { titles: true })).toEqual([]);
+  expect(await paths("beta", { titles: true })).toEqual(["wiki/concepts/b.md"]);
+  expect(await paths("autre", { titles: true })).toEqual([]); // body only: not a title match
+  await Bun.write(join(root, ".cortex/search.db"), "not a database at all, ".repeat(500));
+  expect(await paths("beta")).toEqual(["wiki/concepts/b.md"]); // rebuilt
+  rmSync(join(root, ".cortex"), { recursive: true });
+  await Bun.write(join(root, ".cortex"), "a file where the cache folder should be");
+  expect(await paths("beta")).toEqual(["wiki/concepts/b.md"]); // memory fallback
 });

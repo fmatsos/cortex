@@ -181,10 +181,10 @@ If an external tool is missing, the CLI prints a clear message.
 
 ## 8. Search (no RAG)
 
-1. **Progressive disclosure**: the agent reads `wiki/index.md`, chooses the pages and reads them in full. The retrieval unit is **the compiled page**, never a chunk.
+1. **Progressive disclosure**: the agent searches (`cortex search`), chooses the pages and reads them in full (`wiki/index.md` stays a generated catalog for humans and Obsidian; an agent that loaded it would pay for the whole wiki on every turn). The retrieval unit is **the compiled page**, never a chunk.
 2. **FTS5 BM25** for precise terms, on `wiki/` then `raw/`. A result found only in `raw/` flags a gap to compile.
 3. **Graph**: links, tags and shared sources.
-4. **Embeddings** (`sqlite-vec` + multilingual model, RRF fusion) only if recall degrades measurably. Field experience: grep + reading remain reliable under 50 to 100K tokens of wiki.
+4. **Embeddings** (done, optional: `embed` in `cortex.json`). Qwen3-Embedding behind an OpenAI-compatible `/embeddings` server; vectors in `.cortex/embeddings.json` (no `sqlite-vec`: a few thousand pages are a scan), refreshed by `cortex index`; `search` fuses BM25 and cosine top 50 with RRF and falls back to BM25 alone when the server or the store is missing. The BM25 index itself is persisted in `.cortex/search.db`, keyed by path, mtime and size.
 
 ## 9. CLI language: Bun
 
@@ -338,7 +338,7 @@ Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`,
 - **Step 4.** `inbox` (done), with a mobile “Share → `inbox/urls.txt`” shortcut: the phone's “Share” action appends `<url>` to the end of `inbox/urls.txt`, in the synced folder. The content of `inbox/` is not versioned (`.gitignore`): syncing happens outside git, with Syncthing or an equivalent, at the human's choice; the CLI only reads the folder. A later `cortex inbox` ingests then empties.
 - **Step 5.** Images, then video and audio.
 - **Step 6 (done).** `export`: the wiki as an interactive HTML site, with an Obsidian-style link graph (see §10 bis).
-- **Step 7, only if needed.** Embeddings.
+- **Step 7 (done).** Embeddings: hybrid search (BM25 + vectors, RRF), `related` by meaning, `nearest` for duplicate detection; persistent BM25 index.
 
 ## 10 bis. HTML export
 

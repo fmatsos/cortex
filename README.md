@@ -25,7 +25,7 @@ You pick the sources, ask the questions and review the pages. Your agent does th
 - **Agent workflows.** Ingest (`cortex compile`) and query (`cortex ask`) run your agent in one session per source, interactively or in batch. Writes outside `wiki/` are blocked: through the agent SDK's controls, or through an OS sandbox (bubblewrap on Linux, `sandbox-exec` on macOS).
 - **Sourced pages.** Each claim cites its source in a footnote. Pages track who generated them and who reviewed them (`generated`, `verified`).
 - **Lint.** The mechanical checks report broken links, unsourced footnotes, orphan pages, stale or unreviewed pages, pending sources, likely duplicates and near-synonym tags.
-- **Search.** `cortex search` uses BM25, searching the wiki first and then the raw sources.
+- **Search.** `cortex search` uses BM25 (index kept in `.cortex/`, only changed files are read again), searching the wiki first and then the raw sources. With an [`embed`](#the-agent-schema) server configured, it fuses BM25 with semantic similarity.
 - **MCP server.** External agents can search and read the wiki, and add sources, without ever writing to `wiki/`.
 - **Static site.** `cortex export` publishes the wiki as an interactive site:
   - instant search with operators;
@@ -126,7 +126,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 |---|---|
 | `cortex add <url\|file\|-> [--note "…"] [--via freedium] [--dry-run]` | Captures a source into `raw/` with status `pending`, and logs it. Idempotent: an existing URL or content returns the existing id. Posts from X, Bluesky, Mastodon and LinkedIn are read through their public data, and the pages they link to are captured too, as sources tied to the post (`linked` / `linked_from`), through Freedium, then archive.ph and the Wayback Machine, when paywalled. `--via freedium` reads the URL itself through that same chain. |
 | `cortex inbox [--dry-run]` | Runs `add` on everything in `inbox/`. `urls.txt` holds one `<url> [note…]` per line, a `*.url` file holds one such line. Any other file is added, with an optional note in `<name>.note` and an optional origin URL in `<name>.origin` (the file is the content, the URL is kept as the source's `url` and not fetched). Successful entries leave the inbox. The [Chrome extension](extension/README.md) sends the page you are looking at (paywalled or login-walled content included) to the share app this way. |
-| `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search. |
+| `cortex search "<query>" [--in wiki\|raw] [--json] [--limit N]` | BM25 search (plus semantic similarity if `embed` is set). |
 | `cortex index` | Regenerates `wiki/index.md` and `wiki/log.md`. |
 | `cortex new <Source\|Concept\|Entity\|Synthesis> "<title>" [--force]` | Creates `wiki/<type>/<uuid>.md` as a `draft` and prints its path. Refuses a title that already exists, and a near title of the same type (same words, or one word more): `--force` creates it anyway, by hand only (refused to an agent). |
 | `cortex lint [--json]` | Runs the mechanical checks. Exits with code 1 on errors. |
@@ -179,6 +179,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 | `fetch_timeout` | Seconds before fetching a URL gives up (default `30`). With `--via`, each mirror gets that much. |
 | `parser.social.external_link.limit` | Pages a social post links to that `cortex add` also captures, as sources tied to the post (default `5`, `0` = links not followed). Each one is compiled in its own agent session. `parser.social.<network>.external_link.limit` (`x`, `bluesky`, `mastodon`, `linkedin`) overrides it for one network. Example: `{ "parser": { "social": { "external_link": { "limit": 2 }, "linkedin": { "external_link": { "limit": 0 } } } } }`. |
 | `parser.social.linkedin` | Selectors LinkedIn is read with outside its JSON-LD, to update when LinkedIn changes its page: `card` (link card), `activity_text`, `activity_author`, `activity_images` (activity page), `shortlink` (destination link on the lnkd.in interstitial), `carousel` (attribute holding the carousel's JSON). Each key is optional, defaults in `src/social/linkedin.ts`. Example: `{ "parser": { "social": { "linkedin": { "card": "a.card" } } } }`. |
+| `embed` | Semantic search through an OpenAI-compatible `/embeddings` server (llama.cpp with Qwen3-Embedding-0.6B…); absent = off. `{ "base_url": …, "model": "qwen3-embed", "dims": 256 }`, every key optional: `base_url` follows the openai client (`base_url`, else `$OPENAI_BASE_URL`, else Ollama; `$OPENAI_API_KEY` only goes to a URL the environment names). `cortex index` (so every compile) embeds the new and changed pages into `.cortex/embeddings.json`; `search` then fuses BM25 and cosine top 50 (RRF), and `related` adds pages close in meaning. Server down or not indexed yet: plain BM25, one warning. |
 | `max_tags` | Most tags on a page an agent creates (default `4`). Beyond it, `compile --batch` keeps the tags already in use first. |
 
 ```sh

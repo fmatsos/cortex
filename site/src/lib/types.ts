@@ -3,7 +3,7 @@ export type Link = { id: string; title: string; type: string };
 export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true }; // partial: partial extraction of the raw source (paywall)
 export type Note = { n: number; id: string; refs: number; html: string }; // refs: occurrences of the note in the text
 /** Why a page is related to another: outgoing link, incoming link, shared raw source (`value` = its resource path), shared tag (`value` = the tag). */
-export type RelatedReason = { kind: "out" | "in" | "source" | "tag"; value?: string };
+export type RelatedReason = { kind: "out" | "in" | "source" | "tag" | "semantic"; value?: string };
 export type TocItem = { level: 2 | 3; id: string; text: string };
 export type PageData = {
   id: string; // "concepts/context-rot"

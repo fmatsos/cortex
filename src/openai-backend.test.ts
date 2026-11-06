@@ -219,3 +219,23 @@ test("elide: old tool results go, the last two stay; nothing left → false", as
   expect(m.map((x) => x.content.length > 200)).toEqual([true, false, true, true]);
   expect(elide(m)).toBe(false);
 });
+
+test("elide: preventive decision — estimate above 80% of the budget elides the old results in one block, below leaves them", async () => {
+  const { elide, estimateTokens, nearFull } = await import("./backends/openai");
+  const big = "x".repeat(3500); // ~1000 tokens
+  const m: any[] = [{ role: "system", content: "s" }, ...[1, 2, 3, 4, 5].map((i) => ({ role: "tool", tool_call_id: `${i}`, content: big }))];
+  expect(estimateTokens(m)).toBeGreaterThan(5000);
+  expect(estimateTokens(m)).toBeLessThan(5400);
+  expect(nearFull(m, 10_000)).toBe(false); // ~5k of 8k allowed
+  expect(nearFull(m, 6_000)).toBe(true); // ~5k > 4.8k
+  if (nearFull(m, 6_000)) elide(m);
+  expect(m.map((x) => x.content.length > 200)).toEqual([false, false, false, false, true, true]);
+  expect(nearFull(m, 6_000)).toBe(false); // the rewrite happened once; the next turns do not elide again
+  expect(elide(m)).toBe(false);
+});
+
+test("openai: cache_prompt is sent, except to api.openai.com", async () => {
+  const { cache } = await import("./backends/openai");
+  expect(cache({ base_url: "http://localhost:8080/v1" })).toEqual({ cache_prompt: true });
+  expect(cache({ base_url: "https://api.openai.com/v1" })).toEqual({});
+});

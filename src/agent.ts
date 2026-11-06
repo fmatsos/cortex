@@ -260,9 +260,14 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const pagesBefore = await pageHashes(root);
     // batch: cortex writes the mechanical part of the Source page; interactive: the agent presents its plan first
     const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
-    const tags = [...new Set((await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []))].sort(collator.compare);
+    const all = (await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []);
+    const tags = [...new Set(all)].sort(collator.compare);
     const inUse = new Map(tags.map((t) => [tagKey(t), t] as const));
-    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags, maxTags: cfg.max_tags ?? LIMITS.maxTags });
+    // the prompt lists at most the 50 most used tags (by page count): a wiki with hundreds of tags would fill a small context
+    const count = new Map<string, number>();
+    for (const t of all) count.set(t, (count.get(t) ?? 0) + 1);
+    const topTags = [...tags].sort((a, b) => count.get(b)! - count.get(a)! || collator.compare(a, b)).slice(0, 50).sort(collator.compare);
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags: topTags, maxTags: cfg.max_tags ?? LIMITS.maxTags });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)

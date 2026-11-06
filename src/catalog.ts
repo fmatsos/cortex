@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { type Page, pageId, pageLink } from "./doc";
 import { openWiki, type Wiki } from "./context";
+import { refresh } from "./embed";
 import { isReservedPage } from "./lib";
 import { warn } from "./style";
 import { writeLogMdCtx } from "./log";
@@ -25,9 +26,10 @@ export async function renderIndexCtx(w: Wiki): Promise<string> {
 }
 export const renderIndex = (root: string) => renderIndexCtx(openWiki(root));
 
-/** The two generated wiki files: index.md (from the frontmatters) and log.md (from log.jsonl). */
+/** The two generated wiki files: index.md (from the frontmatters) and log.md (from log.jsonl); then the page embeddings, when `embed` is configured. */
 export async function regenerateCtx(w: Wiki) {
   await Bun.write(join(w.root, "wiki/index.md"), await renderIndexCtx(w));
   await writeLogMdCtx(w);
+  await refresh(w.root);
 }
 export const regenerate = (root: string) => regenerateCtx(openWiki(root));

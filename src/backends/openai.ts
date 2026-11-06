@@ -14,6 +14,9 @@ export { part } from "./tools";
 export const thinking = (effort?: string) =>
   effort === "none" ? { chat_template_kwargs: { enable_thinking: false }, think: false } : effort ? { reasoning_effort: effort } : {};
 
+/** llama.cpp reuses the KV cache of the prompt prefix (`cache_prompt`). OpenAI rejects unknown parameters, the other servers ignore this one. */
+export const cache = (cfg: Config) => (new URL(baseUrl(cfg)).hostname === "api.openai.com" ? {} : { cache_prompt: true });
+
 /** What the model is told when its tool calls were cut by the output limit: nothing ran, write in smaller parts. */
 const CUT = `Your last answer exceeded the output limit (${LIMITS.llmMaxTokens} tokens) and was cut: none of its tool calls ran. ` +
   "Send fewer calls at once, and write a long page in parts: WritePage with the start, then Append for the rest.";
@@ -34,10 +37,13 @@ export default function openai(cfg: Config): Backend {
       const key = !cfg.base_url || cfg.base_url === process.env.OPENAI_BASE_URL ? process.env.OPENAI_API_KEY : undefined;
       let fixes = 0, cuts = 0, text = ""; // text: the parts of a final answer cut by the output limit
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
+        // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
+        // server's prompt cache keeps the prefix on the turns in between
+        if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
         const res = await fetch(`${baseUrl(cfg)}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...thinking(cfg.effort) }),
+          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...cache(cfg), ...thinking(cfg.effort) }),
           signal: AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {
@@ -90,3 +96,9 @@ export function elide(messages: any[]): boolean {
   for (const m of tools) m.content = "[elided to free the context: call the tool again if you still need this]";
   return tools.length > 0;
 }
+
+/** Rough token count of the conversation (~3.5 characters per token: enough to act before the server refuses). */
+export const estimateTokens = (messages: any[]) => Math.ceil(JSON.stringify(messages).length / 3.5);
+
+/** Is the conversation above 80% of the context budget (LIMITS.llmContextTokens by default)? */
+export const nearFull = (messages: any[], budget: number = LIMITS.llmContextTokens) => estimateTokens(messages) > budget * 0.8;

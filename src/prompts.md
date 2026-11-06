@@ -12,7 +12,7 @@ You only write under {{wiki}}/.
 Read-only.
 
 ## compile
-Apply the INGEST workflow of {{agentFile}} to the source {{source}}. Its Source page cites it in the frontmatter with exactly `sources: [{ id: {{id}}, resource: {{source}} }]`.
+Apply the INGEST workflow of {{agentFile}} to the source {{source}} ({{agentFile}} is already in your context: do not read it). Its Source page cites it in the frontmatter with exactly `sources: [{ id: {{id}}, resource: {{source}} }]`.
 
 ## compile-batch
 Non-interactive mode: nobody will approve your presentation; write directly, with every page created or modified in status: draft. Do not touch the status of the raw source: the CLI handles it.
@@ -24,7 +24,7 @@ The CLI already created the Source page {{page}}: its type, title, status, sourc
 Do not touch the status of the raw source: the CLI handles it.
 
 ## ask
-Apply the QUERY workflow of {{agentFile}} to the question: « {{question}} ».
+Apply the QUERY workflow of {{agentFile}} to the question: « {{question}} » ({{agentFile}} is already in your context: do not read it).
 
 ## ask-file
 Store the answer in a page created by cortex new Synthesis "<title>" (status: draft), add the Query entry to the journal (cortex log add query "…" --page wiki/syntheses/….md) and run cortex index.

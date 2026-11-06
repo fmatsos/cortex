@@ -51,7 +51,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "set":
       checkKey();
       if (!value) throw new CortexError(`Usage: cortex config set ${key} <value>`, "usage");
-      if (key === "parser") throw new CortexError(`${key} holds nested settings: edit it in cortex.json (see the README).`, "usage");
+      if (key === "parser" || key === "embed") throw new CortexError(`${key} holds nested settings: edit it in cortex.json (see the README).`, "usage");
       await save({ ...(await readConfig(root)), [key]: NUMBERS.has(key) && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value });
       return done(true);
     case "remove": {

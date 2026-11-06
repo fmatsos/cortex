@@ -127,7 +127,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 ## INGEST workflow
 
 1. Read the raw source in full, `note` field included. For an image, describe it with your vision. For a transcript, ignore the spoken noise.
-2. Read `wiki/index.md`, then look for related pages: `cortex search "<terms>" --limit 20` (no pipe, `head` or `grep`: the commands run alone, `--limit` shortens the output).
+2. Look for related pages: start with 2 or 3 searches, `cortex search "<terms>" --limit 20`, on the source's title and its key terms, then read the pages found (no pipe, `head` or `grep`: the commands run alone, `--limit` shortens the output). Do not read `wiki/index.md`: it is a catalog for humans, too long to load.
 3. **Present to the human**, in 5 to 10 lines, what the source brings, what contradicts existing pages, and the list of pages to create or modify. Wait for their approval or corrections.
 4. Write:
    - the Source page, created by `cortex new Source "<title>"` (the CLI prints its path, then you fill in the file);
@@ -142,7 +142,7 @@ In your answer, do not copy the pages back: summarize in one line per file touch
 
 ## QUERY workflow
 
-1. Read `wiki/index.md`, pick the relevant pages and read them **in full**. Do not reason on excerpts.
+1. Search the wiki with `cortex search "<terms>" --limit 20` (2 or 3 queries on the key terms of the question), pick the relevant pages and read them **in full**. Do not reason on excerpts. Do not read `wiki/index.md`: it is a catalog for humans.
 2. If the wiki is not enough, search `raw/` (`cortex search "<terms>" --in raw`). An answer found only in `raw/` reveals a **gap**: suggest compiling that source.
 3. Answer by citing the wiki pages, with their links. Tell apart what the wiki says from what you infer.
 4. If the answer has lasting value (comparison, synthesis, decision), suggest storing it as a Synthesis page (`cortex new Synthesis "<title>"`), then the journal (`cortex log add query "…" --page wiki/….md`) and the index.

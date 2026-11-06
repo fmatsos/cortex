@@ -1,6 +1,7 @@
 import type { Wiki } from "./context";
 import { loadConfig } from "./config";
 import { fromResource, PAGE_TYPES } from "./doc";
+import { EMBED, similar } from "./embed";
 import { CortexError, isReservedPage, rawPath, related } from "./lib";
 import { getFile, reasonText } from "./mcp";
 import { collator } from "./text";
@@ -28,11 +29,17 @@ export async function resolveRef(w: Wiki, ref: string): Promise<string> {
 /** `cortex show`: the file, with the same confinement as MCP `get` (a .md under wiki/ or raw/). */
 export const showCtx = async (w: Wiki, ref: string) => getFile(w.root, await resolveRef(w, ref));
 
-/** `cortex related`: the pages related to one page, strongest first. */
+/** `cortex related`: the pages related to one page, strongest first. With embeddings, a page close in meaning gains 1, like a shared tag. */
 export async function relatedCtx(w: Wiki, ref: string, limit: number) {
-  const path = await resolveRef(w, ref);
-  return related(await w.pages(), path, await w.linkGraph()).slice(0, limit)
-    .map((r) => ({ path: r.path, title: r.title, score: r.score, reasons: r.reasons.map(reasonText) }));
+  const path = await resolveRef(w, ref), pages = await w.pages();
+  const hits = related(pages, path, await w.linkGraph());
+  for (const n of (await similar(w.root, path, 5))?.filter((n) => n.score >= EMBED.minSimilar) ?? []) {
+    const h = hits.find((r) => r.path === n.path), p = pages.find((d) => d.path === n.path);
+    if (h) { h.score++; h.reasons.push({ kind: "semantic" }); }
+    else if (p) hits.push({ path: p.path, title: String(p.fm.title ?? ""), score: 1, reasons: [{ kind: "semantic" }] });
+  }
+  hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  return hits.slice(0, limit).map((r) => ({ path: r.path, title: r.title, score: r.score, reasons: r.reasons.map(reasonText) }));
 }
 
 /** System tools `cortex doctor` looks for: name, what needs it, how to install it. */

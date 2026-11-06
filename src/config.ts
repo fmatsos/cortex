@@ -43,6 +43,11 @@ const SHAPE = {
   max_tags: z.number({ error: '"max_tags" must be an integer of at least 1, or null.' }).int({ error: '"max_tags" must be an integer of at least 1, or null.' }).min(1, { error: '"max_tags" must be an integer of at least 1, or null.' }).nullish(),
   /** Seconds before a URL fetch gives up (default LIMITS.fetchTimeoutMs / 1000); each --via mirror gets that much. */
   fetch_timeout: z.number({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).positive({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).nullish(),
+  /** Semantic search (`cortex index` embeds the pages, `search` fuses it with BM25). Absent = off. base_url: default as the openai client's; model: default `qwen3-embed`; dims: default 256. */
+  embed: z.strictObject({
+    base_url: str("embed.base_url"), model: str("embed.model"),
+    dims: z.number({ error: '"embed.dims" must be an integer of at least 1, or null.' }).int({ error: '"embed.dims" must be an integer of at least 1, or null.' }).min(1, { error: '"embed.dims" must be an integer of at least 1, or null.' }).nullish(),
+  }, { error: '"embed" must be an object (base_url, model, dims), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({

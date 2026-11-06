@@ -18,7 +18,7 @@ import pkg from "../package.json";
 
 /** A structured related reason as the external agent reads it: the French text the CLI used to emit as data. */
 export const reasonText = (r: RelatedReason): string =>
-  r.kind === "out" ? "outgoing link" : r.kind === "in" ? "incoming link" : r.kind === "source" ? `shared source: ${r.value}` : `shared tag: ${r.value}`;
+  r.kind === "out" ? "outgoing link" : r.kind === "in" ? "incoming link" : r.kind === "source" ? `shared source: ${r.value}` : r.kind === "semantic" ? "close in meaning" : `shared tag: ${r.value}`;
 
 /** What the MCP `related` tool returns: the first `limit` related pages, root-relative paths as resources, reasons in French. */
 export const relatedForAgent = (hits: Related[], limit = 10) =>

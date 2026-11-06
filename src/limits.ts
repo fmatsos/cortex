@@ -27,6 +27,8 @@ export const LIMITS = {
   toolOutputChars: 20_000,
   /** openai client: tokens of one model answer. A whole page fits; a model stuck repeating a line fails fast instead of filling the context. */
   llmMaxTokens: 16_384,
+  /** openai client: context window of the server (llama.cpp n_ctx); above 80% of it the old tool results are elided before the request. */
+  llmContextTokens: 65_536,
   /** openai client: answers cut by `llmMaxTokens` the model may redo in smaller parts before cortex gives up. */
   cutRetries: 3,
   /** A source still `pending` after this many days is reported by lint. */
