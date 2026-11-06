@@ -1,5 +1,7 @@
+import { join } from "node:path";
 import type { Page } from "./doc";
-import { isReservedPage, wikiLinks } from "./lib";
+import { dateMs } from "./doc";
+import { frontmatterError, isReservedPage, localIso, parseDoc, setFmLine, wikiLinks } from "./lib";
 import { LIMITS } from "./limits";
 
 /**
@@ -153,24 +155,39 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
 
 /**
  * Writes the suggestions as links, on the mention itself: « … Codex … » → « … [Codex](/wiki/entities/….md) … ».
- * The body is read again and a mention that no longer sits where it was found is skipped; bodies only, the
- * frontmatter is left as is. Returns the suggestions written.
+ * The body is read again and a mention that no longer sits where it was found is skipped. A page that changes gets
+ * `generated: { by: cortex-links, at: now }`; a reviewed page that was up to date keeps its review (`verified.at` moves
+ * along, `verified.by` stays): adding links is not a change of content to review again. A page already waiting for a
+ * review still waits. Returns the suggestions written.
  */
-export async function writeLinks(root: string, found: LinkSuggestion[]): Promise<LinkSuggestion[]> {
-  const { join } = await import("node:path");
-  const { parseDoc } = await import("./lib");
+export async function writeLinks(root: string, found: LinkSuggestion[], now = new Date()): Promise<LinkSuggestion[]> {
   const written: LinkSuggestion[] = [];
   const byPage = Map.groupBy(found, (s) => s.path);
   for (const [path, list] of byPage) {
     const file = join(root, path), text = await Bun.file(file).text();
     let body = parseDoc(path, text).body;
     const head = text.slice(0, text.length - body.length);
+    const before = written.length;
     for (const s of [...list].sort((a, b) => b.at - a.at)) { // from the end: earlier offsets stay valid
       if (body.slice(s.at, s.at + s.length) !== s.term) continue;
       body = `${body.slice(0, s.at)}[${s.term}](/${s.target})${body.slice(s.at + s.length)}`;
       written.push(s);
     }
-    await Bun.write(file, head + body);
+    if (written.length === before) continue;
+    await Bun.write(file, stampLinked(path, text, head + body, now));
   }
   return written;
+}
+
+/**
+ * The page `next` (links added to `prev`) stamped: `generated: { by: cortex-links, at: now }`, and `verified.at`
+ * moved to now when `prev` was reviewed and up to date. A stamp that would break the YAML is dropped, the links stay.
+ */
+export function stampLinked(path: string, prev: string, next: string, now = new Date()): string {
+  const fm = parseDoc(path, prev).fm as { generated?: { at?: unknown }; verified?: { by?: unknown; at?: unknown } };
+  const [gen, ver] = [dateMs(fm.generated?.at), dateMs(fm.verified?.at)];
+  const upToDate = fm.verified && ver !== undefined && (gen === undefined || gen <= ver);
+  let out = setFmLine(next, "generated", `generated: { by: "cortex-links", at: ${localIso(now)} }`);
+  if (upToDate) out = setFmLine(out, "verified", `verified: { by: ${JSON.stringify(fm.verified!.by ?? null)}, at: ${localIso(now)} }`);
+  return frontmatterError(out) ? next : out;
 }

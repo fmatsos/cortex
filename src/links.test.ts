@@ -34,9 +34,33 @@ test("writeLinks: the first mention becomes the link, text as written; code and 
   const a = { ...parseDoc("wiki/sources/a.md", text), issues: [] } as unknown as Page;
   const found = suggestLinks([t, a]);
   expect(found.map((s) => s.term)).toEqual(["Codex"]);
-  expect((await writeLinks(root, found)).length).toBe(1);
-  expect(await Bun.file(join(root, "wiki/sources/a.md")).text()).toBe(text.replace("**Codex**", `**[Codex](/${t.path})**`));
+  expect((await writeLinks(root, found, new Date("2026-11-06T10:00:00+01:00"))).length).toBe(1);
+  const after = await Bun.file(join(root, "wiki/sources/a.md")).text();
+  const at = (await import("./lib")).localIso(new Date("2026-11-06T10:00:00+01:00"));
+  expect(after).toBe(text.replace("tags: [agents]\n", `tags: [agents]\ngenerated: { by: "cortex-links", at: ${at} }\n`).replace("**Codex**", `**[Codex](/${t.path})**`));
   expect(await writeLinks(root, found)).toEqual([]); // already written: the mention is no longer there as is
+  expect(await Bun.file(join(root, "wiki/sources/a.md")).text()).toBe(after); // nothing written: no new stamp
+});
+
+test("writeLinks: a reviewed page that was up to date stays reviewed; one already waiting for a review still waits", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { parseDoc } = await import("./lib");
+  const { writeLinks } = await import("./links");
+  const { pageState } = await import("./doc");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  const t = page("Entity", "Codex", "L'agent d'OpenAI.", { tags: ["agents"] });
+  const fm = (gen: string, ver: string) => `---\ntype: Source\ntitle: A\ntags: [agents]\ngenerated: { by: model, at: ${gen} }\nverified: { by: "human:franck", at: ${ver} }\n---\nAvec Codex.\n`;
+  const state = async (name: string, text: string) => {
+    await Bun.write(join(root, `wiki/sources/${name}.md`), text);
+    const p = { ...parseDoc(`wiki/sources/${name}.md`, text), issues: [] } as unknown as Page;
+    await writeLinks(root, suggestLinks([t, p]), new Date("2026-11-06T10:00:00+01:00"));
+    const out = parseDoc(p.path, await Bun.file(join(root, p.path)).text());
+    return { review: pageState(out.fm as never).needsReview, by: (out.fm.verified as { by: string }).by, linked: out.body.includes("[Codex](") };
+  };
+  expect(await state("ok", fm("2026-11-01T10:00:00+01:00", "2026-11-02T10:00:00+01:00"))).toEqual({ review: false, by: "human:franck", linked: true });
+  expect(await state("todo", fm("2026-11-03T10:00:00+01:00", "2026-11-02T10:00:00+01:00"))).toEqual({ review: true, by: "human:franck", linked: true });
 });
 
 test("links: short names only in their exact case; ambiguous names never; aliases count", () => {
