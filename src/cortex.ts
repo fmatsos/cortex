@@ -92,11 +92,14 @@ try {
       if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Found only in raw/: a gap to compile?"));
       break;
     }
-    case "new":
+    case "new": {
       if (args.length !== 2) throw usage('Usage: cortex new <Source|Concept|Entity|Synthesis> "<title>" [--force]');
       if (o.force && process.env.CORTEX_IN_AGENT) throw usage("cortex new --force is for a human only: update the existing page instead.");
-      console.log(await newPageCtx(wiki, args[0], args[1], new Date(), { force: o.force }));
+      const notes: string[] = [];
+      console.log(await newPageCtx(wiki, args[0], args[1], new Date(), { force: o.force, notes }));
+      for (const n of notes) warn(n);
       break;
+    }
     case "index":
       await regenerateCtx(wiki);
       console.log(`${paint.ok("✓")} wiki/index.md and wiki/log.md regenerated.`);

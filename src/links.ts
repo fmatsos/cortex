@@ -80,7 +80,14 @@ export const lexical: Similarity = {
   },
 };
 
-export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSuggestion[] {
+/**
+ * `scope` (compile): only the suggestions found in the pages of `scope.pages`, or aiming at the pages of `scope.targets`,
+ * the same as the whole-wiki run would give for them, without matching every name in every page: the names are matched in
+ * the scoped pages first, then only the names found there plus those of the scoped targets are matched in the whole wiki
+ * (their keyphraseness counts every page; names sharing a word with them are matched too, as the longest match wins). One difference: in a page outside `scope.pages` the cap of `linkMaxPerPage`
+ * counts only the suggestions aiming at `scope.targets`.
+ */
+export function suggestLinks(all: Page[], sim: Similarity = lexical, scope?: { pages: Set<string>; targets: Set<string> }): LinkSuggestion[] {
   const pages = all.filter((d) => !isReservedPage(d.path));
   const targets = pages.filter((d) => TARGET_TYPES.has(String(d.fm.type)) && d.fm.title);
 
@@ -102,40 +109,53 @@ export function suggestLinks(all: Page[], sim: Similarity = lexical): LinkSugges
   const regex = (keys: string[]) =>
     keys.length ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${keys.sort((a, b) => b.length - a.length).map(esc).join("|")})(?![\\p{L}\\p{N}])`, "gu") : undefined;
   const byKey = new Map(names);
-  const keys = names.map(([k]) => k);
-  // short names in their exact case on the prose as written, the others on the folded prose (no case, no accents)
-  const [reExact, reFold] = [regex(keys.filter(exact)), regex(keys.filter((k) => !exact(k)))];
   type Mention = { at: number; length: number };
-  const mentions = new Map<string, Map<Page, Mention>>(); // page → target → first mention
-  for (const p of pages) {
-    const m = new Map<Page, Mention>(), text = prose(p.body);
-    for (const [re, t] of [[reExact, text], [reFold, fold(text)]] as const)
-      for (const hit of re ? t.matchAll(re) : []) {
-        const target = byKey.get(hit[0].replace(/\s+/g, " "));
-        const prev = target && m.get(target);
-        if (target && target !== p && (!prev || hit.index! < prev.at)) m.set(target, { at: hit.index!, length: hit[0].length });
-      }
-    mentions.set(p.path, m);
-  }
+  /** page → target → first mention of the `keys` names, in the pages `list`. */
+  const scan = (list: Page[], keys: string[]) => {
+    // short names in their exact case on the prose as written, the others on the folded prose (no case, no accents)
+    const [reExact, reFold] = [regex(keys.filter(exact)), regex(keys.filter((k) => !exact(k)))];
+    const out = new Map<string, Map<Page, Mention>>();
+    for (const p of list) {
+      const m = new Map<Page, Mention>(), text = prose(p.body);
+      for (const [re, t] of [[reExact, text], [reFold, fold(text)]] as const)
+        for (const hit of re ? t.matchAll(re) : []) {
+          const target = byKey.get(hit[0].replace(/\s+/g, " "));
+          const prev = target && m.get(target);
+          if (target && target !== p && (!prev || hit.index! < prev.at)) m.set(target, { at: hit.index!, length: hit[0].length });
+        }
+      out.set(p.path, m);
+    }
+    return out;
+  };
+  let mentions: Map<string, Map<Page, Mention>>;
+  if (scope) {
+    const wanted = new Set(targets.filter((t) => scope.targets.has(t.path)));
+    for (const m of scan(pages.filter((p) => scope.pages.has(p.path)), names.map(([k]) => k)).values()) for (const t of m.keys()) wanted.add(t);
+    // plus the names sharing a word with them: a longer name that overlaps one would take the match away from it (« Qwen3 4B » / « Qwen3 »)
+    const words = (k: string) => fold(k).match(WORD) ?? [], near = new Set(names.filter(([, t]) => wanted.has(t)).flatMap(([k]) => words(k)));
+    mentions = scan(pages, names.filter(([k, t]) => wanted.has(t) || words(k).some((w) => near.has(w))).map(([k]) => k));
+  } else mentions = scan(pages, names.map(([k]) => k));
 
   // filter 2: keyphraseness of each target's names = pages linking to it / pages mentioning it
-  const linksOf = new Map(pages.map((p) => [p.path, new Set(wikiLinks(p.body))]));
+  const linksOf = new Map(pages.filter((p) => mentions.get(p.path)?.size).map((p) => [p.path, new Set(wikiLinks(p.body))]));
   const mentionedIn = new Map<Page, number>(), linkedIn = new Map<Page, number>();
   for (const p of pages) for (const t of mentions.get(p.path)!.keys()) {
     mentionedIn.set(t, (mentionedIn.get(t) ?? 0) + 1);
     if (linksOf.get(p.path)!.has(t.path)) linkedIn.set(t, (linkedIn.get(t) ?? 0) + 1);
   }
 
-  const similar = sim.prepare(pages);
+  let prepared: ReturnType<Similarity["prepare"]> | undefined; // built (the whole wiki's TF-IDF) only when a mention gets that far
+  const similar = (a: Page, b: Page) => (prepared ??= sim.prepare(pages))(a, b);
   const out: LinkSuggestion[] = [];
   for (const p of pages) {
     const mine: LinkSuggestion[] = [];
     for (const [t, { at, length }] of mentions.get(p.path)!) {
+      if (scope && !scope.pages.has(p.path) && !scope.targets.has(t.path)) continue;
       const term = p.body.slice(at, at + length);
       if (linksOf.get(p.path)!.has(t.path)) continue;
       const seen = mentionedIn.get(t)!, linked = linkedIn.get(t) ?? 0;
       const evidence = seen >= LIMITS.linkMinEvidence; // too few mentions: frequencies say nothing yet, the context decides
-      if (evidence && seen / pages.length > LIMITS.linkMaxSpread) continue; // everywhere: a common word
+      if (evidence && seen > Math.min(LIMITS.linkMaxSpread * pages.length, LIMITS.linkMaxSpreadPages)) continue; // everywhere: a common word
       const kp = evidence ? linked / seen : undefined;
       if (kp !== undefined && kp < LIMITS.linkMinKeyphraseness) continue;
       const reasons = [`mentions « ${term} »`, kp === undefined ? `few mentions yet (${seen})` : `linked on ${linked} of the ${seen} pages that mention it`];

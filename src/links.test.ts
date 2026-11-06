@@ -92,3 +92,44 @@ test("links: without a shared tag or source, the similarity decides — and it i
   const always: Similarity = { name: "test", prepare: () => () => 0.9 };
   expect(suggestLinks([t, a], always)[0].reasons).toContain("test 0.90");
 });
+
+test("links: on a large wiki the spread cap is absolute (50 pages), on a small one still 30 %", () => {
+  const t = page("Concept", "Contexte", "x");
+  const mentions = (n: number) => Array.from({ length: n }, (_, i) => page("Source", `U${i}`, i < n / 4 ? `le contexte ${link(t)}` : "le contexte"));
+  const filler = (n: number) => Array.from({ length: n }, (_, i) => page("Source", `F${i}`, "rien"));
+  const big = [t, ...filler(400), ...mentions(60)]; // 60 of 461 pages = 13 %, linked on 15 of them: kept by the 30 % rule alone
+  expect(pairs(big)).toEqual([]);
+  expect(pairs([t, ...filler(150), ...mentions(48)])).toHaveLength(36); // under both: 48 mentions, 12 links (25 %)
+});
+
+test("links: scoped to a compile = the whole-wiki run restricted to its pages and its new targets", () => {
+  const scoped = (pages: Page[], mine: Page[], created: Page[]) =>
+    suggestLinks(pages, undefined, { pages: new Set(mine.map((p) => p.path)), targets: new Set(created.map((p) => p.path)) });
+  const whole = (pages: Page[], mine: Page[], created: Page[]) => {
+    const [m, c] = [new Set(mine.map((p) => p.path)), new Set(created.map((p) => p.path))];
+    return suggestLinks(pages).filter((s) => m.has(s.path) || c.has(s.target));
+  };
+  const inf = page("Concept", "Inférence locale", "Faire tourner un modèle chez soi.");
+  const codex = page("Entity", "Codex", "L'agent d'OpenAI.", { aliases: ["Codex CLI"] });
+  const qwen = page("Entity", "Qwen3", "La famille.");
+  const qwen4 = page("Entity", "Qwen3 4B", "Le petit modèle."); // created by the compile; « Qwen3 » is inside its name
+  const touched = page("Source", "T", "Avec l'inférence locale, Codex CLI et Qwen3 4B ; et Qwen3 seul ; Codex aussi.");
+  const others = [
+    page("Source", "B", "On teste Qwen3 4B en local."), page("Source", "C", "Qwen3 4B encore, et Qwen3."), // a longer name wins over « Qwen3 »
+    page("Source", "D", `Qwen3 4B ${link(qwen4)} déjà lié.`), page("Source", "E", "Qwen3 sans le reste ; Codex en passant."),
+    page("Source", "F", `Voir ${link(qwen)} : Qwen3.`), page("Source", "G", "Inférence locale, ici aussi."),
+  ];
+  const filler = Array.from({ length: 12 }, (_, i) => page("Source", `F${i}`, i % 4 ? "autre chose" : "codex partout"));
+  const pages = [inf, codex, qwen, qwen4, touched, ...others, ...filler];
+  const got = scoped(pages, [touched], [qwen4]);
+  expect(got.length).toBeGreaterThan(2);
+  expect(got).toEqual(whole(pages, [touched], [qwen4]));
+  expect(got.some((s) => s.path === others[0].path && s.target === qwen4.path)).toBe(true); // elsewhere in the wiki, for the new page
+  expect(got.some((s) => s.path === others[3].path && s.target === qwen.path)).toBe(false); // not scoped: neither the page nor the target
+  // the other way round: the new page is the short name, « Qwen3 4B » (not scoped) must still win where both could match
+  const short = scoped(pages, [], [qwen]);
+  expect(short).toEqual(whole(pages, [], [qwen]));
+  expect(short.map((s) => s.from)).toEqual(["T", "C", "E"]); // never « Qwen3 » inside « Qwen3 4B » (B)
+  expect(scoped(pages, [], [])).toEqual([]);
+  expect(scoped(pages, [others[1]], [])).toEqual(whole(pages, [others[1]], []));
+});

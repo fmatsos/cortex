@@ -48,6 +48,8 @@ const SHAPE = {
     base_url: str("embed.base_url"), model: str("embed.model"),
     dims: z.number({ error: '"embed.dims" must be an integer of at least 1, or null.' }).int({ error: '"embed.dims" must be an integer of at least 1, or null.' }).min(1, { error: '"embed.dims" must be an integer of at least 1, or null.' }).nullish(),
   }, { error: '"embed" must be an object (base_url, model, dims), or null.' }).nullish(),
+  /** Judge: a small System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url as `embed`; model: default `d3-mini`. */
+  judge: z.strictObject({ base_url: str("judge.base_url"), model: str("judge.model") }, { error: '"judge" must be an object (base_url, model), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({
@@ -89,6 +91,19 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
   return !r.data.client && (r.data.model || r.data.effort || r.data.base_url)
     ? [{ level: "warning", msg: "model/effort/base_url without a client: ignored by the agnostic mode ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
+}
+
+/**
+ * Server of an optional feature (`embed`, `judge`): its own `base_url`, else the global one, else $OPENAI_BASE_URL, else a
+ * local Ollama, as the openai client (backends/openai.ts). The $OPENAI_API_KEY only goes to a URL that the environment
+ * names (a cloned wiki must not send it to another host).
+ */
+export function endpoint(c: Config, own?: string): { url: string; key?: string } {
+  const named = own ?? c.base_url;
+  return {
+    url: (named ?? process.env.OPENAI_BASE_URL ?? "http://localhost:11434/v1").replace(/\/+$/, ""),
+    key: !named || named === process.env.OPENAI_BASE_URL ? process.env.OPENAI_API_KEY : undefined,
+  };
 }
 
 export const configFile = (root: string) => Bun.file(join(root, "cortex.json"));

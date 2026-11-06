@@ -112,7 +112,8 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
       const extra = a.frontmatter && typeof a.frontmatter === "object" && !Array.isArray(a.frontmatter) ? { ...a.frontmatter } : {};
       delete extra.type; delete extra.title; // the tool arguments win
       const [{ newPageCtx }, { openWiki }] = await Promise.all([import("../naming"), import("../context")]);
-      return `created ${await newPageCtx(openWiki(root), a.type, a.title, new Date(), { fm: extra, body: a.body })}`;
+      const notes: string[] = [];
+      return [`created ${await newPageCtx(openWiki(root), a.type, a.title, new Date(), { fm: extra, body: a.body, notes })}`, ...notes].join("\n");
     }
     case "WritePage":
       if (!a.frontmatter || typeof a.frontmatter !== "object" || Array.isArray(a.frontmatter) || typeof a.body !== "string") return "frontmatter must be an object and body a string.";

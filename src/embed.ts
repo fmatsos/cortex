@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig } from "./config";
+import { endpoint, loadConfig } from "./config";
 import { isReservedPage, readDocs, sha256 } from "./lib";
 import { warn } from "./style";
 
@@ -40,12 +40,7 @@ export type Near = { path: string; score: number };
 export async function embedConfig(root: string): Promise<EmbedConfig | undefined> {
   const c = await loadConfig(root).catch(() => undefined);
   if (!c?.embed) return;
-  const named = c.embed.base_url ?? c.base_url;
-  return {
-    url: (named ?? process.env.OPENAI_BASE_URL ?? "http://localhost:11434/v1").replace(/\/+$/, ""),
-    key: !named || named === process.env.OPENAI_BASE_URL ? process.env.OPENAI_API_KEY : undefined,
-    model: c.embed.model ?? "qwen3-embed", dims: c.embed.dims ?? 256,
-  };
+  return { ...endpoint(c, c.embed.base_url ?? undefined), model: c.embed.model ?? "qwen3-embed", dims: c.embed.dims ?? 256 };
 }
 
 const unit = (fm: Record<string, unknown>, body: string) => `${fm.title ?? ""}\n${fm.description ?? ""}\n${body}`.slice(0, EMBED.docChars);

@@ -34,8 +34,9 @@ export function scopePrefix(root: string, write: boolean, language?: string): st
 }
 
 /** INGEST prompt for one raw source (`source` = its /raw/… resource path). */
-export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string; page?: string; tags?: string[]; maxTags?: number }): string {
-  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language), page: o.page ?? "", tags: o.tags?.length ? o.tags.join(", ") : "none yet", maxTags: String(o.maxTags ?? LIMITS.maxTags) };
+export function compilePrompt(o: { agentFile: string; source: string; id: string; batch?: boolean; language?: string; page?: string; tags?: string[]; maxTags?: number; candidates?: string[] }): string {
+  const vars = { agentFile: o.agentFile, source: o.source, id: o.id, language: lang(o.language), page: o.page ?? "", tags: o.tags?.length ? o.tags.join(", ") : "none yet", maxTags: String(o.maxTags ?? LIMITS.maxTags),
+    candidates: o.candidates?.length ? ` Pages the source probably updates (judged by meaning; look at them before creating any page): ${o.candidates.join("; ")}.` : "" };
   return `${prompt("compile", vars)} ${prompt(o.batch ? "compile-batch" : "compile-interactive", vars)}${o.page ? ` ${prompt("compile-prepared", vars)}` : ""}`;
 }
 

@@ -3,7 +3,9 @@ import { homedir } from "node:os";
 import { basename, join, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
-import { rawId, toResource, type RawSource } from "./doc";
+import { rawId, toResource, type Page, type RawSource } from "./doc";
+import { nearest } from "./embed";
+import { clip, judge, JUDGE } from "./judge";
 import { openWiki, type Wiki } from "./context";
 import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
@@ -111,7 +113,8 @@ async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Repor
    */
   const errors = async () => {
     const out: string[] = [];
-    for (const [p, h] of await pageHashes(root)) {
+    let now = await pageHashes(root);
+    for (const [p, h] of now) {
       if (!p.endsWith(".md") || before.get(p) === h) continue;
       const prev = texts.get(p), file = join(root, p);
       const why = prev !== undefined ? identityChange(p, prev, await Bun.file(file).text()) : stemClash(p, texts.keys(), root);
@@ -119,7 +122,8 @@ async function runChecked(w: Wiki, prompt: string, batch: boolean, report: Repor
       if (prev !== undefined) await Bun.write(file, prev); else await rm(file, { force: true });
       out.push(`${why} ${prev !== undefined ? "Restored as it was." : "Removed."}`);
     }
-    const files = new Set([...await pageHashes(root)].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
+    if (out.length) now = await pageHashes(root); // pages put back or removed above
+    const files = new Set([...now].filter(([p, h]) => before.get(p) !== h).map(([p]) => p));
     const { lint } = await import("./lint");
     return [...out, ...(files.size ? (await lint(root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, ""))).map((i) => `${i.path}: ${i.msg}`) : [])];
   };
@@ -182,6 +186,21 @@ async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promi
     });
     return { path, text: await Bun.file(join(w.root, path)).text() };
   } catch { return undefined; }
+}
+
+/**
+ * Ingest routing: the Concept and Entity pages closest in meaning to the raw source (embeddings) that the judge says the
+ * source brings something to, as `/path « title »` for the compile prompt. Empty when embeddings or the judge are off or down.
+ */
+export async function routeCandidates(w: Wiki, d: RawSource): Promise<string[]> {
+  const text = clip(`${d.fm.title ?? ""}\n${d.body}`.trim(), LIMITS.routeChars);
+  const hits = await nearest(w.root, text, LIMITS.routeCandidates * 3, false);
+  if (!hits) return [];
+  const byPath = new Map((await w.pages()).map((p) => [p.path, p]));
+  const near = hits.map((h) => byPath.get(h.path)).filter((p) => p && (p.fm.type === "Concept" || p.fm.type === "Entity")).slice(0, LIMITS.routeCandidates) as Page[];
+  const noul = (i: number) => ({ type: "noul" as const, instructions: `Does \`source\` bring information that belongs on the page \`pages[${i}]\` (a new fact, figure, example or nuance for it)?` });
+  const a = await judge(w.root, { source: text, pages: near.map((p) => ({ title: p.fm.title, description: clip(String(p.fm.description ?? ""), 200) })) }, Object.fromEntries(near.map((_, i) => [`p${i}`, noul(i)])), JUDGE.longTimeoutMs);
+  return near.filter((_, i) => { const x = a?.[`p${i}`]; return x?.type === "noul" && x.noul >= LIMITS.routeYes; }).map((p) => `/${p.path} « ${p.fm.title} »`);
 }
 
 /**
@@ -267,7 +286,7 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const count = new Map<string, number>();
     for (const t of all) count.set(t, (count.get(t) ?? 0) + 1);
     const topTags = [...tags].sort((a, b) => count.get(b)! - count.get(a)! || collator.compare(a, b)).slice(0, 50).sort(collator.compare);
-    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags: topTags, maxTags: cfg.max_tags ?? LIMITS.maxTags });
+    const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags: topTags, maxTags: cfg.max_tags ?? LIMITS.maxTags, candidates: await routeCandidates(w, d) });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);
     // the same test as below, run by cortex after the agent (and by openai inside its conversation)
@@ -313,16 +332,15 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
         try { await markCompiled(root, d.path); }
         catch (e) { say("fail", `${id}: ${(e as Error).message}`); ok = false; continue; }
       }
-      // deterministic links (cortex links) that involve a page of this compile: its mentions of known pages, and the
-      // mentions of its new pages elsewhere in the wiki
-      const { suggestLinks, writeLinks } = await import("./links");
-      const mine = new Set(touched);
-      const linked = await writeLinks(root, suggestLinks(await openWiki(root).pages()).filter((s) => mine.has(s.path) || mine.has(s.target)));
+      // deterministic links (cortex links) that involve this compile: the mentions of known pages in the pages it touched,
+      // and the mentions of its new pages elsewhere in the wiki (two targeted passes, not the whole wiki against itself)
+      const { lexical, suggestLinks, writeLinks } = await import("./links");
+      const created = touched.filter((p) => !pagesBefore.has(p));
+      const linked = await writeLinks(root, suggestLinks(await openWiki(root).pages(), lexical, { pages: new Set(touched), targets: new Set(created) }));
       if (linked.length) say("info", paint.dim(`${linked.length} link(s) added by cortex links`));
       // the Ingest entry, unless the agent wrote one for this source itself
       if (opts.batch && !openWiki(root).journal().entries.some((e) => e.kind === "ingest" && e.sources?.includes(id) && e.at >= localIso(started))) {
-        const created = touched.filter((p) => !pagesBefore.has(p)).length;
-        await appendLogCtx(openWiki(root), { kind: "ingest", text: `compiled: ${created} page(s) created, ${touched.length - created} updated.`, sources: [id], pages: touched });
+        await appendLogCtx(openWiki(root), { kind: "ingest", text: `compiled: ${created.length} page(s) created, ${touched.length - created.length} updated.`, sources: [id], pages: touched });
       }
       say("ok", `${id} compiled`);
     } else { say("fail", `${id}: no Source page cites the source (agent exited with ${code}); status unchanged.`); ok = false; }

@@ -41,8 +41,10 @@ export const LIMITS = {
   relatedPages: 8,
   /** cortex links: a title or alias shorter than this is never matched (« IA », « Go » only as aliases of 3+). */
   linkMinName: 3,
-  /** cortex links: mentioned on more than this share of the pages = a common word, never suggested. */
+  /** cortex links: mentioned on more than this share of the pages = a common word, never suggested… */
   linkMaxSpread: 0.3,
+  /** …and on large wikis, more than this many pages (30 % of 5000 pages would be 1500). */
+  linkMaxSpreadPages: 50,
   /** cortex links: mentions needed before keyphraseness is judged; below, the context filter decides alone. */
   linkMinEvidence: 3,
   /** cortex links: least share of the mentioning pages that link to the page (Wikipedia's wikify uses ~0.06; the wiki is smaller and denser). */
@@ -51,6 +53,20 @@ export const LIMITS = {
   linkMinSimilarity: 0.1,
   /** cortex links: suggestions kept per page, best first. */
   linkMaxPerPage: 5,
+  /** New page: same-type pages compared with it by meaning (embeddings) before it is created. */
+  dupCandidates: 5,
+  /** New page: the judge picks a candidate with at least this probability → creation refused. */
+  dupJudge: 0.7,
+  /** New page, no judge: a candidate at least this close (cosine) → creation refused. Not calibrated yet. */
+  dupCosine: 0.85,
+  /** New page: candidates at least this close (cosine) are listed as a warning when the page is created. Not calibrated yet. */
+  dupWarn: 0.6,
+  /** Ingest: pages close in meaning to the source offered to the judge (those it says the source updates go in the compile prompt). */
+  routeCandidates: 10,
+  /** Ingest: characters of the raw source the judge reads (it reads them once per candidate page). */
+  routeChars: 1500,
+  /** Ingest: the judge answers « yes » to « does the source bring something to this page? » at or above this (a hint to the agent: cheaper to be wrong than for a new-page check). */
+  routeYes: 0.5,
   /** Journal entries shown by `cortex log` without `--limit`. */
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */
