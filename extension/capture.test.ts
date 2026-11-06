@@ -99,3 +99,18 @@ test("extension: pick.snap() goes up to the post container, a roomy li/section, 
   expect(snap("tiny")).toBe("tiny");
   expect(c.pick.snap(document.body)).toBeNull();
 });
+
+test("extension: element() drops avatars, profile photos and the links they leave empty", async () => {
+  const c = await load(`<body><article id="p">
+    <a href="/in/jane"><img src="/a.jpg" alt="Voir le profil de Jane"></a>
+    <a href="/in/bob"><img src="/b.jpg" class="EntityPhoto-circle-3" alt=""></a>
+    <img src="/r.png" width="24" height="24" alt="">
+    <span class="visually-hidden">Jane</span>
+    <p>Le texte du post, avec <a href="https://ex.com/a">un lien</a>.</p>
+    <img src="/chart.png" alt="Graphique">
+  </article></body>`, "https://www.linkedin.com/feed/");
+  const r = c.element(document.getElementById("p"));
+  expect(r.text).not.toMatch(/profil|a\.jpg|b\.jpg|r\.png|Jane/);
+  expect(r.text).toContain("[un lien](https://ex.com/a)");
+  expect(r.text).toContain("chart.png");
+});

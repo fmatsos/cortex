@@ -49,7 +49,14 @@
       holder.append(el.cloneNode(true));
       absolute(holder);
       const links = linksOf(holder);
-      for (const e of holder.querySelectorAll("svg,button,input,select,textarea,[hidden]")) e.remove();
+      for (const e of holder.querySelectorAll("svg,button,input,select,textarea,[hidden],.visually-hidden")) e.remove();
+      // avatars and profile photos (author, commenters, reactions): noise in the source; then links left without text
+      const AVATAR = /avatar|profil|profile|photo de|entityphoto|actor/i;
+      for (const e of holder.querySelectorAll("img")) {
+        const small = Math.max(+e.getAttribute("width") || 0, +e.getAttribute("height") || 0);
+        if (AVATAR.test(`${e.alt} ${e.className}`) || (small && small <= 64)) e.remove();
+      }
+      for (const a of holder.querySelectorAll("a")) if (!a.textContent.trim() && !a.querySelector("img")) a.remove();
       if (el.localName === "li") holder.innerHTML = holder.firstElementChild?.innerHTML ?? ""; // a bare <li> would come out as a bullet
       const text = toMarkdown(holder.innerHTML);
       return text ? { ...ok(text), links } : { error: "Ce bloc n'a pas de texte." };
