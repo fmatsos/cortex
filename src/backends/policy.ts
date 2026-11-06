@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Mode } from "./backend";
+import { HELP } from "../help";
 
 // --- What the agent may run: ONE table, rendered in each backend's dialect----------------------
 
@@ -32,6 +33,13 @@ export const POLICY: Record<Mode, Rule[]> = {
     { cmd: "log add", args: "required" },
   ],
 };
+
+/** The `cortex --help` lines of the commands allowed in this mode (`log` without `log add` unless allowed). */
+export function usage(mode: Mode): string {
+  const cmds = POLICY.write.map((r) => r.cmd), allowed = new Set(POLICY[mode].map((r) => r.cmd));
+  const cmdOf = (line: string) => cmds.filter((c) => line.startsWith(`cortex ${c}`) && /^( |$)/.test(line.slice(7 + c.length))).sort((a, b) => b.length - a.length)[0];
+  return HELP.split("\n").map((l) => l.trim()).filter((l) => allowed.has(cmdOf(l) ?? "")).join("\n");
+}
 
 const isFlags = (r: Rule): r is Extract<Rule, { flags: Flag[] }> => "flags" in r;
 

@@ -2,7 +2,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { isUnder } from "../paths";
 import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
-import { toLabel, toRegex } from "./policy";
+import { toLabel, toRegex, usage } from "./policy";
 
 // --- Claude Agent SDK: the cortex tool pack (tools.ts) in process, every call guarded; Claude Code's own tools are off------------------
 
@@ -107,9 +107,9 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
   if (tool === "Bash") {
     const raw = String(input.command ?? "").trim();
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
-    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone.` };
+    if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone; shorten the output with its options (--limit N), not head or grep. Allowed:\n${usage(mode)}` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limited to ${toLabel(mode)}.` };
+      : { allow: false, reason: `Bash limited to ${toLabel(mode)}. Allowed:\n${usage(mode)}` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Read-only: rerun with --file to write a synthesis." };

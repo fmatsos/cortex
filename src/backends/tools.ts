@@ -2,6 +2,7 @@ import { join, relative, resolve } from "node:path";
 import { z } from "zod";
 import type { Mode } from "./backend";
 import { guard } from "./claude";
+import { usage } from "./policy";
 import { confine } from "./sandbox";
 import { LIMITS } from "../limits";
 import { frontmatterError, identityChange, serializeDoc } from "../lib";
@@ -23,7 +24,7 @@ const READ_TOOLS = [
   def("Read", "Read a file of the wiki repository.", { file_path: str("path, relative to the repository root"), offset }, ["file_path"]),
   def("Glob", "List the files matching a glob pattern.", { pattern: str("e.g. wiki/**/*.md"), offset }, ["pattern"]),
   def("Grep", "Lines matching a regular expression, in the files of a folder.", { pattern: str("regular expression"), path: str("folder, default: the root"), offset }, ["pattern"]),
-  def("Bash", "Run one cortex command (cortex search, cortex log…), nothing else.", { command: str("e.g. cortex search \"term\""), offset }, ["command"]),
+  def("Bash", `Run one cortex command, nothing else: no pipe, head or grep; shorten with --limit N. Allowed (in read mode, the first two only):\n${usage("write")}`, { command: str("e.g. cortex search \"term\""), offset }, ["command"]),
 ];
 const WRITE_TOOLS = [
   def("NewPage", "Create a new wiki page: cortex names the file and writes the YAML frontmatter, then returns the path. Refused when a page has the same or a near title: complete that page instead.",

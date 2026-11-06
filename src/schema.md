@@ -127,7 +127,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 ## INGEST workflow
 
 1. Read the raw source in full, `note` field included. For an image, describe it with your vision. For a transcript, ignore the spoken noise.
-2. Read `wiki/index.md`, then look for related pages: `cortex search "<terms>"`.
+2. Read `wiki/index.md`, then look for related pages: `cortex search "<terms>" --limit 20` (no pipe, `head` or `grep`: the commands run alone, `--limit` shortens the output).
 3. **Present to the human**, in 5 to 10 lines, what the source brings, what contradicts existing pages, and the list of pages to create or modify. Wait for their approval or corrections.
 4. Write:
    - the Source page, created by `cortex new Source "<title>"` (the CLI prints its path, then you fill in the file);
