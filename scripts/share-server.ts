@@ -132,6 +132,8 @@ button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1
 <h2>Utiliser</h2><p>Sur la page à capturer, tape <b>cortex</b> dans la barre d'adresse (sans valider) et touche la suggestion avec l'étoile. Touche un bloc, ajuste avec <b>Agrandir</b> / <b>Réduire</b>, puis <b>Envoyer</b> : la page de partage s'ouvre avec le texte, ajoute ta note et envoie. Les liens de la page ne sont pas suivis tant que le mode est actif ; <b>Annuler</b> le quitte.</p>
 <p><button id="c">Copier le bookmarklet</button> <span id="m" role="status"></span></p>
 <textarea id="code" rows="6" readonly>${code}</textarea>
+<h2>Si le code collé est tronqué</h2><p>Le champ URL d'un favori sur Android peut couper un code long. Installe-le plutôt depuis Chrome sur ordinateur, connecté au même compte Google avec la synchronisation des favoris : ouvre cette page sur l'ordinateur et <b>glisse ce lien dans la barre de favoris</b> (Ctrl+Maj+B pour l'afficher). Il arrive tel quel sur le téléphone, dans « Favoris sur ordinateur ».</p>
+<p><a href="${code}" style="display:inline-block;padding:.75rem 1rem;border:2px dashed #1a73e8;border-radius:8px;font-weight:bold">cortex</a></p>
 <p>Adresse du serveur intégrée au code : <code>${server.replace(/[<&>"]/g, "")}</code>. Si elle est fausse, ouvre cette page par la bonne adresse.</p>
 <h2>Rien ne se passe ?</h2><p>Chrome Android peut refuser un favori trop long. Copie un de ces favoris de test (il encadre la page en rouge), installe-le comme ci-dessus sous le nom <b>cortextest</b>, et note la plus grande taille qui marche.</p>
 ${probes().map(({ k, code: c }) => `<p><button data-p="${k}">Copier le test ${k} Ko</button></p><textarea id="p${k}" hidden>${esc(c)}</textarea>`).join("")}
