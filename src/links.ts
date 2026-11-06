@@ -89,7 +89,7 @@ export const lexical: Similarity = {
  */
 export function suggestLinks(all: Page[], sim: Similarity = lexical, scope?: { pages: Set<string>; targets: Set<string> }): LinkSuggestion[] {
   const pages = all.filter((d) => !isReservedPage(d.path));
-  const targets = pages.filter((d) => TARGET_TYPES.has(String(d.fm.type)) && d.fm.title);
+  const targets = pages.filter((d) => TARGET_TYPES.has(String(d.fm.type)) && d.fm.title && d.fm.status !== "deprecated"); // a deprecated page keeps its old title: its replacement carries it as an alias
 
   // names → target; a name two pages share is ambiguous
   const owner = new Map<string, Page | null>();

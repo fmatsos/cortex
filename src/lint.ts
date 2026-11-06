@@ -58,6 +58,7 @@ const reviewState: PageRule = (_, d) =>
 const stalePage: PageRule = (c, d) =>
   pageState(d.fm, c.now).stale ? [issue("warning", d.path, `stale since ${String(d.fm.stale_after).slice(0, 10)} (stale_after)`)] : [];
 const duplicateTitle: PageRule = (c, d) => {
+  if (d.fm.status === "deprecated") return []; // a merged page keeps the title it had, like its replacement may
   const first = c.firstTitle.get(slugify(String(d.fm.title ?? "")));
   return first !== undefined && first !== d.path ? [issue("warning", d.path, `probable duplicate of ${first} (same title)`)] : [];
 };
@@ -151,7 +152,7 @@ async function context(w: Wiki, now: Date): Promise<Ctx> {
   for (const d of pages) {
     for (const l of wikiLinks(d.body)) inbound.set(l, (inbound.get(l) ?? 0) + 1);
     const t = slugify(String(d.fm.title ?? ""));
-    if (!firstTitle.has(t)) firstTitle.set(t, d.path);
+    if (d.fm.status !== "deprecated" && !firstTitle.has(t)) firstTitle.set(t, d.path);
   }
   for (const d of raws) if (!firstRaw.has(rawId(d.path))) firstRaw.set(rawId(d.path), d.path);
   return { w, root: w.root, now, tpl, pagePat: pattern(tpl.page_path), rawPat: pattern(tpl.raw_path), pages, raws, cites, inbound, firstTitle, firstRaw };

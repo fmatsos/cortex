@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { openWiki, type Wiki } from "./context";
 import { nearest } from "./embed";
 import { clip, judge } from "./judge";
+import { fromResource } from "./doc";
 import { serializeDoc, slugify } from "./lib";
 import { LIMITS } from "./limits";
 import { expand, TYPE_DIRS, type PageType } from "./template";
@@ -62,9 +63,11 @@ export async function newPageCtx(w: Wiki, type: string, title: string, at = new 
   const t = (Object.keys(TYPE_DIRS) as PageType[]).find((k) => k.toLowerCase() === type.toLowerCase());
   if (!t) throw new Error(`unknown type: ${type} (${Object.keys(TYPE_DIRS).join(" | ")})`);
   if (!title.trim()) throw new Error("empty title");
-  const pages = await w.pages();
-  const same = pages.find((d) => d.fm.title && slugify(d.fm.title, Infinity) === slugify(title, Infinity));
-  if (same) throw new Error(`a page already has this title: ${same.path} (update it instead of creating another)`);
+  const all = await w.pages(), pages = all.filter((d) => d.fm.status !== "deprecated"); // a deprecated page is no longer a place for new content
+  const same = all.find((d) => d.fm.title && slugify(d.fm.title, Infinity) === slugify(title, Infinity));
+  // the title of a deprecated page (a merged one) points at the page that replaces it
+  const named = same?.fm.status === "deprecated" && typeof same.fm.superseded_by === "string" ? fromResource(same.fm.superseded_by) : same?.path;
+  if (same) throw new Error(`a page already has this title: ${named} (update it instead of creating another)`);
   const near = pages.find((d) => d.fm.type === t && d.fm.title && nearTitle(String(d.fm.title), title));
   if (near && !init.force) throw new Error(`a ${t} page has a near title: ${near.path} « ${near.fm.title} » (update it instead of creating another, or pick a title that tells them apart; by hand: cortex new --force)`);
   if (!init.force && t !== "Source") {

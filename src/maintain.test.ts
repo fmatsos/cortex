@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openWiki } from "./context";
+import { suggestLinks } from "./links";
+import { newPageCtx } from "./naming";
 import { refresh } from "./embed";
 import { buildSiteDataCtx } from "./export";
 import { lint } from "./lint";
@@ -171,6 +173,7 @@ test("--apply: merged page, deprecated page, links rewritten, queue, journal, st
   expect(text(root, "wiki/log.jsonl")).toContain("fusion : « Cache de prompt » absorbée dans « Prompt caching »");
   expect(Object.keys(JSON.parse(text(root, ".cortex/maintain.json")).merge.different)).toHaveLength(1);
   expect(text(root, "wiki/queue.md")).toContain("Fusion possible");
+  expect(text(root, "wiki/log.jsonl")).toContain("maintenance merge : 1 fusion(s), 1 entrée(s) ajoutée(s) à la file");
 
   // a rerun: the merged pair is gone, the different pair is not asked again, the queued pair is not queued twice
   s.judged.length = 0;
@@ -201,6 +204,8 @@ test("cortex queue apply on a merge entry: no new judgement, the UUID v7 file na
   expect(text(root, "wiki/concepts/prompt-caching.md")).toContain(`(/wiki/concepts/${ID_OLD}.md)`);
   expect(text(root, "wiki/syntheses/memoire.md")).toContain(`[fenêtre](/wiki/concepts/${ID_OLD}.md)`);
   expect(queue(root).find((i) => i.kind === "merge")).toMatchObject({ status: "done" });
+  // both pages are titled « Context window » (the model kept the title of the absorbed one): not a duplicate for lint
+  expect((await lint(root)).filter((i) => i.msg.includes("probable duplicate"))).toEqual([]);
   // the same entry applied again: refused as already closed by the CLI; a kind without applier says so
   await expect(applyQueueEntry(openWiki(root), { ...item, kind: "review" })).rejects.toThrow("not available yet for review entries");
 });
@@ -292,4 +297,14 @@ test("cortex maintain: usage errors, a listing without --apply exits 0", async (
   expect(list.code).toBe(0);
   expect(list.out).toContain("à fusionner : « Cache de prompt » dans « Prompt caching » (same 0.95)");
   expect(text(root, "wiki/concepts/cache-de-prompt.md")).not.toContain("deprecated");
+});
+
+test("after a merge: a new page cannot take the old title (the error names the replacement), and a mention of it is linked to the replacement", async () => {
+  const s = fake({ verdicts: VERDICTS, merge });
+  const root = await wiki(s.base_url);
+  await Bun.write(join(root, "wiki/concepts/mention.md"), page("Concept", "Mention", { tags: ["llm"], body: "Le Cache de prompt est une bonne pratique pour les agents." }));
+  await run(root, "merge", { apply: true });
+  await expect(newPageCtx(openWiki(root), "Concept", "Cache de prompt")).rejects.toThrow("a page already has this title: wiki/concepts/prompt-caching.md");
+  const found = suggestLinks(await openWiki(root).pages()).filter((l) => l.path === "wiki/concepts/mention.md");
+  expect(found.map((l) => [l.term, l.target])).toEqual([["Cache de prompt", "wiki/concepts/prompt-caching.md"]]);
 });

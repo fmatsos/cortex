@@ -273,6 +273,8 @@ export const maintainMerge: Task = async (w, o, say) => {
     say("info", `${added ? "en file" : "déjà en file"} : ${label} (${score})`);
   }
   if (changed) writeState(root, "merge", state);
+  const added = items.filter((i) => i.action === "queued" || i.action === "review");
+  if (added.length) await logUpdate(w, `maintenance merge : ${merged.length} fusion(s), ${added.length} entrée(s) ajoutée(s) à la file`, [...new Set(added.flatMap((i) => i.pages))], now()); // the merges wrote their own lines
   if (merged.length) { await regenerateCtx(openWiki(root)); await checkWritten(w, merged, say); }
   say(ok ? "ok" : "warn", `${merged.length} fusion(s), ${queued} paire(s) ${apply ? "en file" : "à mettre en file"}, ${different} paire(s) distincte(s)${apply ? "" : " ; --apply écrit (rien n'a été modifié)"}`);
   return { ok, items };
