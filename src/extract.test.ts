@@ -302,3 +302,8 @@ test("add: a post without a note gives its linked pages none either (compile sti
     expect(await Bun.file(join(root, (await Array.fromAsync(new Bun.Glob(`raw/**/${page.id}/source.md`).scan(root)))[0])).text()).toContain('note: ""');
   } finally { VIA.freedium = saved; }
 });
+
+test("a social post is kind social", async () => {
+  const { post } = await import("./social/social");
+  expect(post("bluesky", "https://bsky.app/profile/a/post/1", "Bonjour", "A", undefined, []).kind).toBe("social");
+});

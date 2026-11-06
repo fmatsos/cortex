@@ -188,7 +188,7 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
   if (post) {
     const canonical = parseHTML(html).document.querySelector('link[rel="canonical"]')?.getAttribute("href");
     return {
-      title: post.body.split("\n")[0].trim().slice(0, LIMITS.textTitleChars), content: post.body, kind: "article",
+      title: post.body.split("\n")[0].trim().slice(0, LIMITS.textTitleChars), content: post.body, kind: "social",
       url: canonical ? new URL(canonical, finalUrl).href : finalUrl, author: post.author, published: post.published,
       extractor: "json-ld",
     };
@@ -330,7 +330,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
       : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
   }
-  if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
+  if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: socialFor(opts.url) ? "social" : "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
   const hash = sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
   if (dup) return { id: dup, duplicate: true, ex };

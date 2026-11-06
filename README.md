@@ -201,7 +201,7 @@ Two templates in `cortex.json` decide where Cortex puts what it creates. `/` mak
 | `{yyyy}` `{mm}` `{dd}` `{hh}` `{mi}` `{ss}` | Creation date and time, local time |
 | `{slug}` | Title in lowercase words joined by dashes, 50 characters at most |
 | `{rand}` | 4 random characters `[a-z0-9]` |
-| `{kind}` | `raw_path` only: `article`, `pdf`, `note`… |
+| `{kind}` | `raw_path` only: `article`, `social`, `pdf`, `note`… |
 | `{type}` | `page_path` only: `sources`, `concepts`, `entities` or `syntheses` |
 
 ```sh

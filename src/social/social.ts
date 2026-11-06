@@ -28,7 +28,7 @@ export abstract class Social {
 export function post(name: string, url: string, text: string, author: string | undefined, published: string | undefined, media: string[], quote?: string, links: string[] = []): Extract {
   const body = [text.trim(), quote && quote.trim().split("\n").map((l) => `> ${l}`).join("\n"), ...media.map((m) => `![](${m})`)].filter(Boolean).join("\n\n");
   if (!body) throw new Error(`empty post on ${url}: nothing written.`);
-  return { title: body.split("\n")[0].slice(0, LIMITS.textTitleChars), content: body, kind: "article", url, author, published, extractor: name, links: [...new Set(links)] };
+  return { title: body.split("\n")[0].slice(0, LIMITS.textTitleChars), content: body, kind: "social", url, author, published, extractor: name, links: [...new Set(links)] };
 }
 
 /** Bare URLs in a post's plain text (LinkedIn's JSON-LD has no link entities). */
