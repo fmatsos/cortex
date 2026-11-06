@@ -255,7 +255,7 @@ test("no embeddings: only the pairs of near titles are examined, and it is said"
 
 test("an unknown subcommand is a usage error that lists the subcommands", async () => {
   const root = await wiki(fake().base_url);
-  await expect(maintainCtx(openWiki(root), "nope", {})).rejects.toThrow("cortex maintain <merge>");
+  await expect(maintainCtx(openWiki(root), "nope", {})).rejects.toThrow("cortex maintain <merge");
   await expect(maintainCtx(openWiki(root), undefined, {})).rejects.toThrow("Usage");
 });
 
@@ -291,7 +291,7 @@ test("cortex maintain: usage errors, a listing without --apply exits 0", async (
     return { code: await p.exited, out, err };
   };
   expect(await cli("maintain")).toMatchObject({ code: 2 });
-  expect((await cli("maintain")).err).toContain("cortex maintain <merge>");
+  expect((await cli("maintain")).err).toContain("cortex maintain <merge");
   expect((await cli("maintain", "merge", "--apply", "--dry-run")).code).toBe(2);
   const list = await cli("maintain", "merge");
   expect(list.code).toBe(0);

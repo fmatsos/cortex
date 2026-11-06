@@ -107,4 +107,8 @@ export const LIMITS = {
   mergeOutputTokens: 2000,
   /** Maintain merge: share of the footnote ids of the two pages the merged page must still carry. */
   mergeKeepNotes: 0.8,
+  /** Maintain contradictions: tokens (4 characters each) of the section and of the source summaries given to the model; beyond, the section goes to the queue. */
+  contradictionInputTokens: 3000,
+  /** Maintain contradictions: tokens of the rewritten section the model may write (the spec's 1 200 hold a short section; a longer one gets its own length). */
+  contradictionOutputTokens: 1200,
 } as const;
