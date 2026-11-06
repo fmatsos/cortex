@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { estimateTokens } from "./chunk";
-import { normalizeNotes } from "./cite";
+import { type Fact, normalizeNotes } from "./cite";
 import type { Config } from "./config";
 import { structured } from "./llm";
 import type { Report } from "./print";
@@ -10,8 +10,6 @@ import { pipelinePrompt } from "./prompts";
 // model only adds, `mergeUpdate` in merge.ts applies it), `repair` a body. One independent call each, the model sees
 // text and numbered lists, never paths. What it writes is cleaned before it is believed.
 
-/** A fact a page states: the claim, and the passage of the source that proves it (only shown to the model). */
-export type Fact = { claim: string; quote: string };
 /** A page the model may mention as `[[p:N]]` (N = its index in the list): `path` is known once the page exists. */
 export type PageRef = { title: string; path?: string };
 
@@ -30,8 +28,8 @@ const UpdateJson = {
 };
 const RepairJson = { type: "object", additionalProperties: false, required: ["body"], properties: { body: { type: "string", maxLength: REPAIR.max } } };
 
-/** Link to a wiki page or to a raw file written by the model, which knows no path: the text stays, `[Title](/wiki/…md)` goes. */
-const LINK = /\[([^\]]*)\]\((?:[^)\s]*\.md(?:#[^)\s]*)?|(?:\.{1,2}\/)*\/?(?:wiki|raw)\/[^)\s]*)\)/g;
+/** Link to a wiki page or to a raw file written by the model, which knows no path: the text stays, `[Title](/wiki/…md)` goes. An external link (`https://…`, `mailto:`), even to a `.md` file, is left alone. */
+const LINK = /\[([^\]]*)\]\((?:(?![a-z][a-z0-9+.-]*:|\/\/)[^)\s]*\.md(?:#[^)\s]*)?|(?:\.{1,2}\/)*\/?(?:wiki|raw)\/[^)\s]*)\)/g;
 
 /**
  * A text written by the model, made safe: frontmatter, a leading `#` title and note definitions removed (cortex writes

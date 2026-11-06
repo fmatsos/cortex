@@ -1,5 +1,8 @@
 import { slugify } from "./lib";
 
+/** A fact a page states: the claim, and the passage of the source that proves it (only shown to the model). */
+export type Fact = { claim: string; quote: string };
+
 /** Words of a window searched when a quote is not found whole (PIPELINE §4.2). */
 const WINDOW = 12;
 

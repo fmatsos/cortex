@@ -8,7 +8,8 @@ import { newPageCtx } from "./naming";
 import { refresh } from "./embed";
 import { buildSiteDataCtx } from "./export";
 import { lint } from "./lint";
-import { applyQueueEntry, maintainCtx } from "./maintain";
+import { HELP } from "./help";
+import { applyQueueEntry, maintainCtx, TASKS } from "./maintain";
 import type { Message } from "./print";
 import { queueItems, readQueue } from "./queue";
 
@@ -307,4 +308,8 @@ test("after a merge: a new page cannot take the old title (the error names the r
   await expect(newPageCtx(openWiki(root), "Concept", "Cache de prompt")).rejects.toThrow("a page already has this title: wiki/concepts/prompt-caching.md");
   const found = suggestLinks(await openWiki(root).pages()).filter((l) => l.path === "wiki/concepts/mention.md");
   expect(found.map((l) => [l.term, l.target])).toEqual([["Cache de prompt", "wiki/concepts/prompt-caching.md"]]);
+});
+
+test("cortex --help has a line for every maintain subcommand", () => {
+  for (const sub of Object.keys(TASKS)) expect(HELP).toContain(`cortex maintain ${sub} [--apply]`);
 });

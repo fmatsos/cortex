@@ -207,3 +207,9 @@ test("pool: results in order, at most n at a time", async () => {
   expect(peak).toBe(2);
   expect(await pool([], 4, async () => 1)).toEqual([]);
 });
+
+test("mergeSubjects: distinct titles stay distinct subjects (C++ and C#, non-Latin titles); the same title in another case or accent merges", () => {
+  const r = mergeSubjects("q", [part([sub("C++", 1), sub("C#", 1), sub("日本語", 1), sub("中文", 1), sub("Résumé", 1), sub("resume", 1), sub("???", 1), sub("!!!", 1)])]);
+  expect(r.subjects.map((s) => s.title).sort()).toEqual(["!!!", "???", "C#", "C++", "Résumé", "中文", "日本語"].sort());
+  expect(r.dropped).toEqual([]);
+});

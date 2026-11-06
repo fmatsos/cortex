@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { estimateTokens } from "./chunk";
 import type { Config } from "./config";
-import type { Fact, Subject } from "./extraction";
+import type { Fact } from "./cite";
+import type { Subject } from "./extraction";
+import { clip } from "./judge";
 import { LIMITS } from "./limits";
 import { structured } from "./llm";
 import type { Report } from "./print";
@@ -67,7 +69,6 @@ export function connectionSteps(connections: Connection[], pages: Candidate[], f
   return { updates: updates.sort(byTitle), links: links.sort(byTitle) };
 }
 
-const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
 const CONNECT_TOKENS = 4000;
 
 /** What the call reads (§2.9): summary, key points, numbered facts, numbered pages (one line each; the tail goes while the input exceeds 4k tokens); `pages` = how many were kept. */

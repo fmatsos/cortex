@@ -254,3 +254,17 @@ test("--limit bounds the pages judged, and --apply without a model says so", asy
   expect(r.ok).toBe(false);
   expect(r.messages.at(-1)!.text).toContain("a besoin d'un modèle");
 });
+
+test("the cached vectors of pages that were not examined survive a run (embeddings off): only the sections that are gone are dropped", async () => {
+  const s = fake({ verdicts: VERDICTS, plan: () => PLAN });
+  const root = await wiki(s.base_url);
+  await run(root, { apply: true });
+  const vectors = () => Object.keys(JSON.parse(text(root, ".cortex/maintain.json")).split.vectors).length;
+  expect(vectors()).toBe(8);
+  // no embed config any more: no page is examined by meaning, so only the page that was cut loses its vectors
+  const cfg = JSON.parse(text(root, "cortex.json"));
+  delete cfg.embed;
+  await Bun.write(join(root, "cortex.json"), JSON.stringify(cfg));
+  await run(root, { apply: true });
+  expect(vectors()).toBe(4); // Big topic was cut: its four sections are gone; the other pages' vectors stay (they were wiped before)
+});

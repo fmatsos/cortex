@@ -9,12 +9,11 @@ import { openWiki, type Wiki } from "./context";
 import { type Page } from "./doc";
 import { embed, EMBED, embedConfig } from "./embed";
 import { clip, judge, judgeConfig } from "./judge";
-import { frontmatterError, isReservedPage, parseDoc, setFmLine, sha256, slugify } from "./lib";
+import { frontmatterError, isReservedPage, parseDoc, setFmLine, sha256, slugify, withBody } from "./lib";
 import { LIMITS } from "./limits";
-import { lint } from "./lint";
 import { lexical, suggestLinks, writeLinks } from "./links";
 import { structured } from "./llm";
-import { confident, enqueueOnce, type Item, logUpdate, openEntry, readState, type Say, type Task, writeState } from "./maintain";
+import { checkWritten, confident, enqueueOnce, type Item, logUpdate, openEntry, readState, type Say, type Task, writeState } from "./maintain";
 import { nearDuplicate, nearTitle, newPageCtx } from "./naming";
 import { pipelinePrompt } from "./prompts";
 import { closeCtx, type QueueItem } from "./queue";
@@ -28,7 +27,6 @@ import { collator } from "./text";
 const one = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim();
 const title = (p: { fm: { title?: unknown }; path: string }) => one(p.fm.title) || p.path;
 const localDay = (d: Date) => d.toISOString().slice(0, 10);
-const withBody = (text: string, body: string) => text.slice(0, text.length - parseDoc("", text).body.length) + body;
 const NOTE = /\[\^([\w-]+)\](?!:)/g;
 const notesIn = (s: string) => new Set([...s.matchAll(NOTE)].map((m) => m[1]));
 
@@ -66,7 +64,7 @@ const firstLine = (b: Block) => clip(one(b.text.split("\n").slice(1).find((l) =>
 // --- 2. candidates
 
 const cosine = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0);
-type State = { model?: string; /** Vector of a section by hash of its text (the server is asked once per section). */ vectors: Record<string, number[]>; /** Hash of a page (path and text) a judge found to be one subject: not asked again until it changes. */ one: Record<string, string> };
+type State = { model?: string; /** Vector of a section by hash of its text (the server is asked once per section). */ vectors: Record<string, number[]>; /** Hashes of the sections of each page the last time it was examined (to drop the vectors of sections that are gone). */ owners?: Record<string, string[]>; /** Hash of a page (path and text) a judge found to be one subject: not asked again until it changes. */ one: Record<string, string> };
 
 /** Average-linkage clustering of the sections down to two groups; undefined unless they are far from each other and each one holds together. */
 function twoGroups(vecs: number[][]): number[][] | undefined {
@@ -83,13 +81,13 @@ function twoGroups(vecs: number[][]): number[][] | undefined {
 }
 
 /** The two groups of sections (indices among the movable ones) when the page looks multi-subject by meaning; undefined without embeddings. The vectors come from `state` or are asked for what is missing. */
-async function groupsOf(root: string, blocks: Block[], state: State, down: { done: boolean; seen?: Set<string> }, say?: Say): Promise<number[][] | undefined> {
+async function groupsOf(root: string, blocks: Block[], state: State, down: { done: boolean; seen?: (hashes: string[]) => void }, say?: Say): Promise<number[][] | undefined> {
   const movable = blocks.filter((b) => b.movable);
   const cfg = await embedConfig(root);
   if (!cfg || down.done || movable.length < 3 || movable.length > 12) return;
-  if (state.model !== `${cfg.model}/${cfg.dims}`) { state.vectors = {}; state.model = `${cfg.model}/${cfg.dims}`; }
+  if (state.model !== `${cfg.model}/${cfg.dims}`) { state.vectors = {}; state.owners = {}; state.model = `${cfg.model}/${cfg.dims}`; }
   const texts = movable.map((b) => b.text.replace(/\[\^[\w-]+\]/g, "").slice(0, 2000)), hashes = texts.map(sha256);
-  hashes.forEach((h) => down.seen?.add(h));
+  down.seen?.(hashes);
   const missing = [...new Set(hashes.filter((h) => !state.vectors[h]))];
   try {
     for (let i = 0; i < missing.length; i += EMBED.batch) {
@@ -104,15 +102,31 @@ async function groupsOf(root: string, blocks: Block[], state: State, down: { don
   return twoGroups(hashes.map((h) => state.vectors[h]));
 }
 
+/**
+ * Drops the vectors of sections that are gone, and only those: a page that was not examined this time (embeddings down, more than
+ * 12 sections, no embed config) keeps the vectors it had; a page that left the wiki gives its vectors up.
+ */
+function pruneVectors(state: State, pages: Page[], examined: Map<string, string[]>) {
+  const owners = state.owners ?? {}, live = new Set(pages.map((p) => p.path));
+  const before = new Set(Object.values(owners).flat());
+  for (const p of Object.keys(owners)) if (!live.has(p)) delete owners[p];
+  for (const [p, hashes] of examined) owners[p] = hashes;
+  const owned = new Set(Object.values(owners).flat());
+  state.owners = owners;
+  state.vectors = Object.fromEntries(Object.entries(state.vectors).filter(([h]) => owned.has(h) || !before.has(h))); // a vector nobody owned before (an older state) stays
+}
+
 type Candidate = { page: Page; words: number; long: boolean; groups?: number[][] };
 
 /** Concept and Entity pages (not deprecated) of at least 3 sections that are long, or whose sections fall in two distant groups. Longest first. */
-async function candidates(w: Wiki, pages: Page[], state: State, say: Say, seen: Set<string>): Promise<Candidate[]> {
-  const down = { done: false, seen }, out: Candidate[] = [];
+async function candidates(w: Wiki, pages: Page[], state: State, say: Say, examined: Map<string, string[]>): Promise<Candidate[]> {
+  let path = "";
+  const down = { done: false, seen: (hashes: string[]) => examined.set(path, hashes) }, out: Candidate[] = [];
   if (!(await embedConfig(w.root))) say("warn", "embeddings absentes (cortex index) : seules les pages longues sont examinées", "  ⚠");
   for (const p of pages.filter((p) => (p.fm.type === "Concept" || p.fm.type === "Entity") && p.fm.status !== "deprecated" && !isReservedPage(p.path)).sort((a, b) => collator.compare(a.path, b.path))) {
+    path = p.path;
     const { blocks, pre } = parseBody(p.body);
-    if (blocks.filter((b) => b.movable).length < 3) continue;
+    if (blocks.filter((b) => b.movable).length < 3) { examined.set(path, []); continue; } // nothing left to compare: its vectors go
     const words = wordCount([pre, ...blocks.map((b) => b.text)].join(" ")), long = words > LIMITS.splitWords;
     const groups = await groupsOf(w.root, blocks, state, down, say);
     if (long || groups) out.push({ page: p, words, long, groups });
@@ -277,12 +291,6 @@ async function splitPage(w: Wiki, path: string, groups: number[][] | undefined, 
   return { split: { page: path, created } };
 }
 
-/** Lint errors of the pages a run wrote: by construction there should be none, so they are said. */
-async function checkWritten(w: Wiki, done: Split[], say: Say) {
-  const files = new Set(done.flatMap((s) => [s.page, ...s.created]));
-  for (const i of (await lint(w.root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, "")))) say("warn", `${i.path} : ${i.msg}`, "  ⚠");
-}
-
 // --- the subcommand
 
 const proposal = (c: Candidate | undefined, blocks: Block[]) => {
@@ -294,9 +302,9 @@ export const maintainSplit: Task = async (w, o, say) => {
   const now = o.now ?? (() => new Date()), root = w.root, apply = !!o.apply;
   const items: Item[] = [], done: Split[] = [];
   const pages = await w.pages(), state = readState<State>(root, "split", { vectors: {}, one: {} });
-  const before = JSON.stringify(state.vectors), seen = new Set<string>();
-  const found = await candidates(w, pages, state, say, seen);
-  state.vectors = Object.fromEntries(Object.entries(state.vectors).filter(([h]) => seen.has(h))); // the vectors of sections that are gone are dropped
+  const before = JSON.stringify([state.vectors, state.owners]), examined = new Map<string, string[]>();
+  const found = await candidates(w, pages, state, say, examined);
+  pruneVectors(state, pages, examined);
   if (!found.length) { say("info", "Aucune page à découper."); return { ok: true, items }; }
   if (apply && !(await w.config()).model) { say("fail", "cortex maintain split --apply a besoin d'un modèle : cortex config set model <nom>"); return { ok: false, items }; }
   const hasJudge = !!(await judgeConfig(root));
@@ -338,10 +346,10 @@ export const maintainSplit: Task = async (w, o, say) => {
     items.push({ action: added ? "queued" : "already-queued", pages: [p.path], note: score });
     say("info", `${added ? "en file" : "déjà en file"} : ${label} (${score})`);
   }
-  if (apply && (changed || JSON.stringify(state.vectors) !== before)) writeState(root, "split", state);
+  if (apply && (changed || JSON.stringify([state.vectors, state.owners]) !== before)) writeState(root, "split", state);
   const added = items.filter((i) => i.action === "queued" || i.action === "review");
   if (added.length) await logUpdate(w, `maintenance split : ${done.length} découpage(s), ${added.length} entrée(s) ajoutée(s) à la file`, [...new Set(added.flatMap((i) => i.pages))], now()); // the splits wrote their own lines
-  if (done.length) { await regenerateCtx(openWiki(root)); await checkWritten(w, done, say); }
+  if (done.length) { await regenerateCtx(openWiki(root)); await checkWritten(w, done.flatMap((s) => [s.page, ...s.created]), say); }
   say(ok ? "ok" : "warn", `${done.length} découpage(s), ${queued} page(s) ${apply ? "en file" : "à mettre en file"}, ${single} page(s) à un seul sujet${apply ? "" : " ; --apply écrit (rien n'a été modifié)"}`);
   return { ok, items };
 };
@@ -355,7 +363,7 @@ export async function applySplitEntry(w: Wiki, item: QueueItem, say: Say): Promi
   const r = await splitPage(w, item.pages[0], groups, new Date());
   if ("split" in r) {
     await regenerateCtx(openWiki(w.root));
-    await checkWritten(w, [r.split], say);
+    await checkWritten(w, [r.split.page, ...r.split.created], say);
     say("ok", `#${item.n} appliquée : ${r.split.page} coupée en ${r.split.created.join(", ")}`);
     return true;
   }

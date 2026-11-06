@@ -423,3 +423,31 @@ test("a source that touches one group only, or groups too small: no synthesis en
   expect((await compile(root)).ok).toBe(true);
   expect(readQueue(root).entries).toEqual([]);
 });
+
+test("a rerun tries the failed chunks again (the saved ones are reused) and decides again from the complete extraction", async () => {
+  const body = [1, 2, 3, 4].map((i) => `## Part ${i}\n\n${`Filler paragraph about the part ${i}. `.repeat(380)}\n\nSentence marker ${i} appears here.`).join("\n\n");
+  let down = true;
+  const s = fake(script({
+    extract: (b) => {
+      const user: string = b.messages[1].content;
+      if (down && /Part 2 of/.test(user)) return new Response("boom", { status: 500 });
+      const marker = [...user.matchAll(/Sentence marker (\d) appears here\./g)].at(-1)![1];
+      return { ...head, subjects: [subject("Entity", `Topic ${marker}`, -1, [[`Fact ${marker}`, `Sentence marker ${marker} appears here.`]])] };
+    },
+    reduce: () => ({ ...head, summary: "Résumé global de toutes les parties de la source." }), connect: () => ({ connections: [] }),
+    write: (b, n) => (down ? new Response("boom", { status: 500 }) : script().write!(b, n)),
+  }));
+  const root = await wiki(s.base_url, { raws: [{ id: ID, title: "Longue", body }] });
+  const r1 = await compile(root);
+  expect(r1.ok).toBe(false); // no page could be written: the state is kept, with the failed chunk in it
+  expect(JSON.parse(text(root, `.cortex/pipeline/${ID}.json`)).steps.extract.failed).toEqual([1]);
+  const extracts = s.count("extract");
+
+  down = false;
+  const r2 = await compile(root);
+  expect(r2.ok).toBe(true);
+  expect(s.count("extract")).toBe(extracts + 1); // only the failed chunk was asked again
+  expect(r2.stats.failedChunks).toEqual([]);
+  expect(text(root, "wiki/sources/longue.md")).not.toContain("Extraction partielle");
+  expect(existsSync(join(root, "wiki/entities/topic-2.md"))).toBe(true); // what the failed chunk holds is in the wiki now
+});

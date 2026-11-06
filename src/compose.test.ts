@@ -139,3 +139,8 @@ test("repair: step name, errors and body in user, the corrected body back", asyn
     expect(s.seen[0].messages[1].content).toBe("Problems:\n- footnote [^x] has no sources[] entry\nPage body:\nBroken.");
   } finally { s.stop(); }
 });
+
+test("tidy: an external link to a .md file keeps its link; a wiki, raw or relative .md link is reduced to its text", () => {
+  const t = tidy("See [README](https://github.com/x/y/blob/main/README.md#top), [doc](http://x.org/a.md), [mail](mailto:a@b.md), [page](/wiki/concepts/a.md), [rel](notes/b.md), [raw](../raw/2026/11/x/source.md).", "id", 0);
+  expect(t.text).toBe("See [README](https://github.com/x/y/blob/main/README.md#top), [doc](http://x.org/a.md), [mail](mailto:a@b.md), page, rel, raw.");
+});

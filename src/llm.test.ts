@@ -151,3 +151,18 @@ test("stripSchema: keywords go, a property with the same name stays", () => {
   expect(stripSchema({ type: "object", properties: { pattern: { type: "string", pattern: "^a", minLength: 1 }, k: { type: "array", items: { type: "integer", minimum: 0 } } } }))
     .toEqual({ type: "object", properties: { pattern: { type: "string" }, k: { type: "array", items: { type: "integer" } } } });
 });
+
+test("structured: a 500 or 503 is retried once with the same format (no downgrade of the schema), then it fails", async () => {
+  const s = await serve([() => new Response("boom", { status: 500 }), () => reply('{"title":"Abc","n":2}')]);
+  try {
+    expect(await call(s.cfg)).toEqual({ title: "Abc", n: 2 });
+    expect(s.seen.map((b) => b.response_format.type)).toEqual(["json_schema", "json_schema"]);
+    expect(s.seen[1].response_format.json_schema.schema).toEqual(schema); // not the stripped schema
+  } finally { s.stop(); }
+  const down = await serve([() => new Response("unavailable", { status: 503 })]);
+  try {
+    await expect(call(down.cfg)).rejects.toThrow("answered 503");
+    expect(down.seen).toHaveLength(2);
+    expect(down.seen.every((b) => b.response_format.type === "json_schema")).toBe(true);
+  } finally { down.stop(); }
+});

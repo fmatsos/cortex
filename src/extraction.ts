@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { chunkSource, estimateTokens, renderChunk, type Chunk } from "./chunk";
-import { fold, verifyFacts } from "./cite";
+import { type Fact, fold, verifyFacts } from "./cite";
 import type { Config } from "./config";
-import { slugify } from "./lib";
+import { clip } from "./judge";
+import { sha256, titleKey } from "./lib";
 import { LIMITS } from "./limits";
 import { tagKey } from "./lint";
 import { structured } from "./llm";
@@ -15,7 +16,6 @@ import { collator } from "./text";
 // --- Steps 1 and 2 of the pipeline (docs/PIPELINE.md §2.2, §2.3, §3): one extraction per chunk of the source, then the
 // reduction: the verified subjects are merged by cortex, only the global summary and key points go through the model.
 
-export type Fact = { claim: string; quote: string };
 export type Subject = { kind: "Concept" | "Entity"; title: string; /** Number in the list of candidates the extraction saw, -1 for a new page. */ candidate: number; description: string; facts: Fact[] };
 /** What describes the source as a whole (the Source page). */
 export type Head = { summary: string; key_points: string[]; description: string; tags: string[] };
@@ -70,7 +70,6 @@ export const reduceZod = z.object(headZod);
 
 // --- Calls
 
-const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`);
 const vars = (language?: string) => ({ language: language ?? DEFAULT_LANGUAGE });
 const tagLine = (tags: string[]) => `Tags in use: ${tags.length ? tags.join(", ") : "none yet"}`;
 
@@ -126,7 +125,7 @@ export function fallbackHead(parts: Head[], inUse: string[]): Head {
 
 /**
  * Subjects of all the chunks as one list. Facts whose quote is not in the source are rejected (step 3); a subject left
- * without fact is skipped. Key = the candidate page if there is one, else the slug of the title; facts concatenated and
+ * without fact is skipped. Key = the candidate page if there is one, else the identity of the title (`titleKey`); facts concatenated and
  * deduplicated on the folded claim, description of the first chunk, kind the majority one. Above `pipelineMaxSubjects`, the
  * subjects with the most verified facts stay. Sorted by title (collator), so that two runs write the same diff.
  */
@@ -138,7 +137,7 @@ export function mergeSubjects(source: string, parts: ChunkExtraction[]): { subje
     const { kept, rejected: bad } = verifyFacts(source, s.facts);
     rejected += bad.length;
     if (!kept.length) { skipped.push(s.title); continue; }
-    const key = s.candidate >= 0 ? `c${s.candidate}` : `t${slugify(s.title, Infinity)}`;
+    const key = s.candidate >= 0 ? `c${s.candidate}` : `t${titleKey(s.title) || sha256(s.title)}`;
     groups.set(key, [...(groups.get(key) ?? []), { ...s, facts: kept }]);
   }
   const merged = [...groups.values()].map((g): Subject => {

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { Wiki } from "./context";
 import { CortexError } from "./lib";
 import { LIMITS } from "./limits";
+import { lint } from "./lint";
 import { appendLogCtx } from "./log";
 import { collector, type Report, type Result } from "./print";
 import { enqueueCtx, queueItems, type QueueItem, type QueueKind } from "./queue";
@@ -98,3 +99,9 @@ export const logUpdate = (w: Wiki, text: string, pages: string[], now: Date) => 
 
 /** Does this path exist under the root (a page that moved or went since the candidates were listed)? */
 export const exists = (w: Wiki, p: string) => existsSync(join(w.root, p));
+
+/** Lint errors of the pages a run wrote: by construction there should be none, so they are said. */
+export async function checkWritten(w: Wiki, paths: string[], say: Say) {
+  const files = new Set(paths);
+  for (const i of (await lint(w.root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, "")))) say("warn", `${i.path} : ${i.msg}`, "  ⚠");
+}

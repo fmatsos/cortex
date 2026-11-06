@@ -2,7 +2,8 @@ import type { Page } from "./doc";
 import { type Wiki } from "./context";
 import { EMBED, nearest } from "./embed";
 import { clip, judge, JUDGE } from "./judge";
-import { isReservedPage, slugify } from "./lib";
+import { fold } from "./cite";
+import { isReservedPage, titleKey } from "./lib";
 import { LIMITS } from "./limits";
 import { nearDuplicate, nearTitle } from "./naming";
 import { search } from "./search";
@@ -79,8 +80,6 @@ export type RouteSubject = { kind: string; title: string; description: string; /
 /** `target`: the wiki page to update, none for a new page. `via`: what decided (the extraction's candidate, the duplicate guard by meaning, a title). */
 export type Routed<S extends RouteSubject> = { subject: S; target?: string; via: "candidate" | "duplicate" | "title" | "new" };
 
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-
 /**
  * Decides for each subject, in the collator's order of titles (the same diff on every run): the page it updates or a new
  * page. A candidate of the right type wins; otherwise the same checks as `cortex new` (meaning, then title), run before
@@ -100,13 +99,14 @@ export async function routeSubjects<S extends RouteSubject>(w: Wiki, subjects: S
       const dup = await nearDuplicate(w.root, pages, s.kind, s.title, s.description);
       if (dup?.refuse) { target = dup.near[0].path; via = "duplicate"; }
       else {
-        // the slug of a title is taken whatever the type (`cortex new` refuses it); a near title only within the type
-        const slug = slugify(s.title, Infinity);
-        const same = pages.find((p) => p.fm.title && (slugify(p.fm.title, Infinity) === slug || (p.fm.type === s.kind && nearTitle(String(p.fm.title), s.title))));
+        // the identity of a title is taken whatever the type (`cortex new` refuses it), but only a Concept or Entity page is a target:
+        // never a Source or Synthesis page, nor one whose title has no letter or digit (no key, nothing to match)
+        const key = titleKey(s.title);
+        const same = pages.find((p) => (p.fm.type === "Concept" || p.fm.type === "Entity") && p.fm.title && ((!!key && titleKey(String(p.fm.title)) === key) || (p.fm.type === s.kind && nearTitle(String(p.fm.title), s.title))));
         if (same) { target = same.path; via = "title"; }
       }
     }
-    const twin = routes.find((r) => target ? r.target === target : !r.target && (slugify(r.subject.title, Infinity) === slugify(s.title, Infinity) || (r.subject.kind === s.kind && nearTitle(r.subject.title, s.title))));
+    const twin = routes.find((r) => target ? r.target === target : !r.target && ((!!titleKey(s.title) && titleKey(r.subject.title) === titleKey(s.title)) || (r.subject.kind === s.kind && nearTitle(r.subject.title, s.title))));
     if (!twin) { routes.push({ subject: s, target, via }); continue; }
     const seen = new Set(twin.subject.facts.map((f) => fold(f.claim)));
     twin.subject = { ...twin.subject, facts: [...twin.subject.facts, ...s.facts.filter((f) => !seen.has(fold(f.claim)) && seen.add(fold(f.claim)))] };

@@ -105,13 +105,28 @@ test("an unmerged maintenance branch blocks the next run (no piling) until it is
   const t = setup({ write: ["merge"] });
   t.run();
   const again = t.run([], { MAINTAIN_DATE: "2026-11-15" });
-  expect(again.code).toBe(0);
+  expect(again.code).toBe(3); // visible: the unit shows as failed until the branch is reviewed
   expect(again.out).toContain("waiting for the review of: maintain/2026-11-08");
   expect(branches(t.wiki)).toEqual(["main", "maintain/2026-11-08"]);
   expect(t.called()).toHaveLength(4); // the second run launched nothing
   git(t.wiki, "-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--ff-only", "maintain/2026-11-08");
   expect(t.run([], { MAINTAIN_DATE: "2026-11-15", MAINTAIN_NO_SYNC: "1" }).code).toBe(0);
   expect(t.called()).toHaveLength(8);
+});
+
+test("a branch merged by squash (or rebase) is seen as merged: deleted, the run goes on", () => {
+  const t = setup({ write: ["merge"] });
+  t.run();
+  const id = ["-c", "user.name=t", "-c", "user.email=t@t"];
+  git(t.wiki, ...id, "merge", "-q", "--squash", "maintain/2026-11-08");
+  git(t.wiki, ...id, "commit", "-q", "-m", "squash");
+  git(t.wiki, "push", "-q", "origin", "main");
+  expect(git(t.wiki, "branch", "--no-merged", "main", "--format", "%(refname:short)").out).toContain("maintain/2026-11-08"); // git itself says unmerged
+  const again = t.run([], { MAINTAIN_DATE: "2026-11-15" });
+  expect(again.code).toBe(0);
+  expect(again.out).toContain("already in main");
+  expect(t.called()).toHaveLength(8);
+  expect(branches(t.wiki)).not.toContain("maintain/2026-11-08");
 });
 
 test("a dirty clone is refused (exit 2) before anything runs; .cortex/ alone does not count as dirty", () => {

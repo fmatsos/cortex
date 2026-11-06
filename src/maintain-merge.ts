@@ -9,12 +9,11 @@ import { openWiki, type Wiki } from "./context";
 import { dateMs, type Page } from "./doc";
 import { similar } from "./embed";
 import { clip, judge, judgeConfig } from "./judge";
-import { frontmatterError, isReservedPage, parseDoc, setFmLine, sha256, slugify } from "./lib";
+import { frontmatterError, isReservedPage, parseDoc, setFmLine, sha256, slugify, withBody } from "./lib";
 import { LIMITS } from "./limits";
-import { lint } from "./lint";
 import { stampLinked } from "./links";
 import { structured } from "./llm";
-import { confident, enqueueOnce, type Item, logUpdate, openEntry, readState, type Say, type Task, writeState } from "./maintain";
+import { checkWritten, confident, enqueueOnce, type Item, logUpdate, openEntry, readState, type Say, type Task, writeState } from "./maintain";
 import { nearTitle } from "./naming";
 import { pipelinePrompt } from "./prompts";
 import { closeCtx, type QueueItem } from "./queue";
@@ -37,7 +36,6 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A page body with the model's or the page's note definitions removed (cortex writes those from `sources[]`). */
 const noDefs = (body: string) => body.replace(/^\[\^[\w-]+\]:.*\n?/gm, "").trim();
 const notesIn = (body: string) => new Set([...body.matchAll(/\[\^([\w-]+)\](?!:)/g)].map((m) => m[1]));
-const withBody = (text: string, body: string) => text.slice(0, text.length - parseDoc("", text).body.length) + body;
 
 // --- 1. candidate pairs
 
@@ -214,12 +212,6 @@ async function mergePair(w: Wiki, p: string, q: string, now: Date): Promise<Outc
   return { merged: { target: t.path, absorbed: x.path } };
 }
 
-/** Lint errors of the pages a run wrote: by construction there should be none, so they are said. */
-async function checkWritten(w: Wiki, merged: Merge[], say: Say) {
-  const files = new Set(merged.flatMap((m) => [m.target, m.absorbed]));
-  for (const i of (await lint(w.root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, "")))) say("warn", `${i.path} : ${i.msg}`, "  ⚠");
-}
-
 // --- the subcommand
 
 export const maintainMerge: Task = async (w, o, say) => {
@@ -275,7 +267,7 @@ export const maintainMerge: Task = async (w, o, say) => {
   if (changed) writeState(root, "merge", state);
   const added = items.filter((i) => i.action === "queued" || i.action === "review");
   if (added.length) await logUpdate(w, `maintenance merge : ${merged.length} fusion(s), ${added.length} entrée(s) ajoutée(s) à la file`, [...new Set(added.flatMap((i) => i.pages))], now()); // the merges wrote their own lines
-  if (merged.length) { await regenerateCtx(openWiki(root)); await checkWritten(w, merged, say); }
+  if (merged.length) { await regenerateCtx(openWiki(root)); await checkWritten(w, merged.flatMap((m) => [m.target, m.absorbed]), say); }
   say(ok ? "ok" : "warn", `${merged.length} fusion(s), ${queued} paire(s) ${apply ? "en file" : "à mettre en file"}, ${different} paire(s) distincte(s)${apply ? "" : " ; --apply écrit (rien n'a été modifié)"}`);
   return { ok, items };
 };
@@ -288,7 +280,7 @@ export async function applyMergeEntry(w: Wiki, item: QueueItem, say: Say): Promi
   const r = await mergePair(w, a, b, new Date());
   if ("merged" in r) {
     await regenerateCtx(openWiki(w.root));
-    await checkWritten(w, [r.merged], say);
+    await checkWritten(w, [r.merged.target, r.merged.absorbed], say);
     say("ok", `#${item.n} appliquée : ${r.merged.absorbed} absorbée dans ${r.merged.target}`);
     return true;
   }

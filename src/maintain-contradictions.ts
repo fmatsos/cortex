@@ -9,9 +9,8 @@ import type { Page } from "./doc";
 import { clip, judge, judgeConfig } from "./judge";
 import { frontmatterError, isReservedPage, parseDoc, setFmLine, sha256 } from "./lib";
 import { LIMITS } from "./limits";
-import { lint } from "./lint";
 import { structured } from "./llm";
-import { confident, enqueueOnce, type Item, logUpdate, readState, type Say, type Task, writeState } from "./maintain";
+import { checkWritten, confident, enqueueOnce, type Item, logUpdate, readState, type Say, type Task, writeState } from "./maintain";
 import { pipelinePrompt } from "./prompts";
 import { closeCtx, enqueueCtx, queueItems, type QueueItem } from "./queue";
 import { DEFAULT_LANGUAGE } from "./schema";
@@ -195,7 +194,7 @@ const queuedEntry = (w: Wiki, u: Unit) => queueItems(w.queue().entries).find((i)
 function replaceSection(text: string, u: Unit, body: string): string {
   const doc = parseDoc(u.page.path, text), head = text.slice(0, text.length - doc.body.length), lines = doc.body.split("\n");
   const own = lines.slice(u.from, u.to), defs = own.filter((l) => DEF.test(l));
-  const next = [...(u.title === null ? [] : [own[0], ""]), ...body.split("\n"), ...(defs.length ? ["", ...defs] : []), ...(u.to < lines.length ? [""] : [])];
+  const next = [...(u.title === null ? [] : [own[0], ""]), ...body.split("\n"), ...(defs.length ? ["", ...defs] : []), ...(u.to < lines.length || lines.at(-1) === "" ? [""] : [])]; // a blank line before the next section, or the final newline of the body
   return head + [...lines.slice(0, u.from), ...next, ...lines.slice(u.to)].join("\n");
 }
 
@@ -224,12 +223,6 @@ async function writeResolution(w: Wiki, path: string, at: { section: string; bas
   if (open) await closeCtx(w, open.n, "done", now);
   await logUpdate(w, `contradiction résolue dans « ${title(page)} » § ${at.section} (${r.verdict}) : ${r.note}`, [path], now);
   return { ok: true };
-}
-
-/** Lint errors of the pages a run wrote: by construction there should be none, so they are said. */
-async function checkWritten(w: Wiki, paths: string[], say: Say) {
-  const files = new Set(paths);
-  for (const i of (await lint(w.root)).filter((i) => i.level === "error" && files.has(i.path.replace(/:\d+$/, "")))) say("warn", `${i.path} : ${i.msg}`, "  ⚠");
 }
 
 // --- the subcommand

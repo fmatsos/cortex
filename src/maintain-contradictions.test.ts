@@ -251,3 +251,14 @@ test("a wiki without callout: nothing to do; a foreign contradiction entry canno
   expect(a.ok).toBe(false);
   expect(a.messages.at(-1)!.text).toContain("à résoudre à la main");
 });
+
+test("--apply: replacing the last section of a page keeps the final newline of the file", async () => {
+  const s = fake({ resolve: (p, n) => (p === "Last section" ? verdict("newer_source_wins", "Le fait ancien et le nouveau, tous deux sourcés [^blog].") : script(p, n)) });
+  const root = await wiki(s.base_url);
+  await Bun.write(join(root, "wiki/concepts/last-section.md"), page("Concept", "Last section", { sources: [["blog", R("b"), "Blog"]], body: `## Un\nTexte [^blog].\n\n## Fin\n> [!warning] Contradiction\n> Autre [^blog].\n\nFait ancien [^blog].\n\n[^blog]: Blog, ${R("b")}` }));
+  await run(root, { apply: true });
+  const out = text(root, "wiki/concepts/last-section.md");
+  expect(out).toContain("## Fin\n\nLe fait ancien et le nouveau, tous deux sourcés [^blog].\n\n[^blog]: Blog,");
+  expect(out).not.toContain("Contradiction");
+  expect(out.endsWith(`${R("b")}\n`)).toBe(true);
+});

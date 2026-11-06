@@ -65,7 +65,7 @@ export async function structured<T>(cfg: Config, c: StructuredCall<T>): Promise<
     : { type: "json_schema", json_schema: { name: c.name, schema: modes[mode] === "stripped" ? stripped : full, strict: true } };
 
   const t0 = Date.now(), sum = { prompt_tokens: 0, cached_tokens: 0, completion_tokens: 0, prompt_ms: 0, predicted_ms: 0 };
-  let retries = 0, ok = false, errors: string[] = [];
+  let retries = 0, ok = false, serverRetried = false, errors: string[] = [];
   try {
     for (;;) {
       const res = await fetch(`${url}/chat/completions`, {
@@ -80,7 +80,9 @@ export async function structured<T>(cfg: Config, c: StructuredCall<T>): Promise<
       if (!res.ok) {
         const t = await res.text();
         // the server refuses the schema (unsupported keyword, no json_schema at all): a weaker format, not a retry. A full context is not that.
-        if ([400, 422, 500].includes(res.status) && !/context/i.test(t) && mode < modes.length - 1) {
+        // A 500 or 503 is the server's trouble, not the schema's: the same request once more, then the failure.
+        if ([500, 503].includes(res.status) && !serverRetried) { serverRetried = true; continue; }
+        if ([400, 422].includes(res.status) && !/context/i.test(t) && mode < modes.length - 1) {
           mode++;
           if (modes[mode] === "json_object") {
             messages[0] = { role: "system", content: `${c.system}\n\nAnswer with one JSON object that matches this JSON Schema, and nothing else:\n${JSON.stringify(full)}` };

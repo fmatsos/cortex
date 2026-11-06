@@ -4,7 +4,7 @@ import { openWiki, type Wiki } from "./context";
 import { nearest } from "./embed";
 import { clip, judge } from "./judge";
 import { fromResource } from "./doc";
-import { serializeDoc, slugify } from "./lib";
+import { serializeDoc, slugify, titleKey } from "./lib";
 import { LIMITS } from "./limits";
 import { expand, TYPE_DIRS, type PageType } from "./template";
 
@@ -64,7 +64,7 @@ export async function newPageCtx(w: Wiki, type: string, title: string, at = new 
   if (!t) throw new Error(`unknown type: ${type} (${Object.keys(TYPE_DIRS).join(" | ")})`);
   if (!title.trim()) throw new Error("empty title");
   const all = await w.pages(), pages = all.filter((d) => d.fm.status !== "deprecated"); // a deprecated page is no longer a place for new content
-  const same = all.find((d) => d.fm.title && slugify(d.fm.title, Infinity) === slugify(title, Infinity));
+  const key = titleKey(title), same = key ? all.find((d) => d.fm.title && titleKey(String(d.fm.title)) === key) : undefined;
   // the title of a deprecated page (a merged one) points at the page that replaces it
   const named = same?.fm.status === "deprecated" && typeof same.fm.superseded_by === "string" ? fromResource(same.fm.superseded_by) : same?.path;
   if (same) throw new Error(`a page already has this title: ${named} (update it instead of creating another)`);

@@ -9,8 +9,9 @@
 # Environment: CORTEX_BIN (cortex), MAINTAIN_REMOTE (origin), MAINTAIN_BASE (the branch checked out at start),
 #   MAINTAIN_NO_SYNC=1 (no fetch and fast-forward of the base before the run), MAINTAIN_LIMIT=N (--limit of each subtask),
 #   MAINTAIN_DATE (YYYY-MM-DD, tests). The model server comes from cortex.json / $OPENAI_BASE_URL like any cortex command.
-# Exit: 0 nothing wrong (including "nothing to do" and "a previous branch still awaits review"), 1 a subtask failed (the
-#   others ran and what they wrote is committed), 2 refused (dirty clone, no git repository, failed push...).
+# Exit: 0 nothing wrong (including "nothing to do"), 1 a subtask failed (the others ran and what they wrote is committed),
+#   2 refused (dirty clone, no git repository, failed push...), 3 blocked by a maintenance branch nobody reviewed yet
+#   (nothing ran: the failed unit in the journal is the reminder to merge or delete it).
 set -euo pipefail
 
 dry=0 push=${MAINTAIN_PUSH:-0} root=""
@@ -62,10 +63,15 @@ if [ "${MAINTAIN_NO_SYNC:-0}" != 1 ] && git remote get-url "$remote" >/dev/null 
   { git fetch -q "$remote" && git merge -q --ff-only "$remote/$base"; } || die "cannot bring $base up to date with $remote (fetch or fast-forward failed)"
 fi
 # A branch of an earlier week still unmerged: a second run would pile its changes (and queue entries) on top; wait for the review.
-pending=$(git branch --list 'maintain/*' --no-merged "$base" --format '%(refname:short)' | tr '\n' ' ')
+# A squash or rebase merge leaves the branch "unmerged" for git: it counts as merged when merging it would change nothing in the base.
+already_in_base() { local t; t=$(git merge-tree --write-tree "$base" "$1" 2>/dev/null) || return 1; [ "${t%%$'\n'*}" = "$(git rev-parse "$base^{tree}")" ]; }
+pending=""
+for b in $(git branch --list 'maintain/*' --no-merged "$base" --format '%(refname:short)'); do
+  if already_in_base "$b"; then git branch -q -D "$b"; say "$b: its changes are already in $base (squash or rebase merge), branch deleted."; else pending+="$b "; fi
+done
 if [ -n "$pending" ]; then
   say "waiting for the review of: ${pending}(merge or delete the branch to resume). Nothing done."
-  exit 0
+  exit 3
 fi
 git rev-parse --verify -q "refs/heads/$branch" >/dev/null && { say "$branch already exists: nothing done."; exit 0; }
 

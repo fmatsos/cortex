@@ -193,3 +193,34 @@ test("subjects: near subjects of one compile merge their facts, a repeated claim
   ]);
   expect(routes[1].subject.description).toBe("d2");
 });
+
+test("subjects: titles with the same ASCII slug but not the same title are not the same page (C++ / C#, non-Latin); an empty slug matches nothing", async () => {
+  const bare = await wiki(0, { judge: false, embed: false });
+  await Bun.write(join(bare, "wiki/concepts/csharp.md"), page("Concept", "C#"));
+  await Bun.write(join(bare, "wiki/concepts/nihongo.md"), page("Concept", "日本語"));
+  await Bun.write(join(bare, "wiki/concepts/punct.md"), page("Concept", "???"));
+  const f = (claim: string) => ({ claim, quote: claim });
+  const subj = (title: string, claim: string) => ({ kind: "Concept", title, description: "d", candidate: -1, facts: [f(claim)] });
+  const { routes } = await routeSubjects(openWiki(bare), [subj("C++", "a"), subj("C#", "b"), subj("中文", "c"), subj("日本語", "d"), subj("!!!", "e"), subj("???", "f")], []);
+  const by = (t: string) => routes.find((r) => r.subject.title === t)!;
+  expect([by("C++").target, by("中文").target, by("!!!").target, by("???").target]).toEqual([undefined, undefined, undefined, undefined]); // new pages, each of its own (no letter, no digit: no identity)
+  expect([by("C#").target, by("日本語").target]).toEqual(["wiki/concepts/csharp.md", "wiki/concepts/nihongo.md"]);
+  expect(routes).toHaveLength(6);
+  // two non-Latin claims are two claims, not one empty fold
+  const m = await routeSubjects(openWiki(bare), [subj("Alpha beta", "日本"), { ...subj("Beta alpha", "中国"), facts: [f("中国")] }], []);
+  expect(m.routes[0].subject.facts.map((x) => x.claim).sort()).toEqual(["中国", "日本"]);
+});
+
+test("subjects: the title fallback only targets a Concept or Entity page, never a Source or a Synthesis", async () => {
+  const bare = await wiki(0, { judge: false, embed: false });
+  await Bun.write(join(bare, "wiki/sources/redis.md"), page("Source", "Redis"));
+  await Bun.write(join(bare, "wiki/syntheses/cache-strategies.md"), page("Synthesis", "Cache strategies"));
+  await Bun.write(join(bare, "wiki/entities/valkey.md"), page("Entity", "Valkey"));
+  const f = (claim: string) => ({ claim, quote: claim });
+  const { routes } = await routeSubjects(openWiki(bare), [
+    { kind: "Entity", title: "Redis", description: "d", candidate: -1, facts: [f("a")] },
+    { kind: "Concept", title: "Cache strategies", description: "d", candidate: -1, facts: [f("b")] },
+    { kind: "Concept", title: "Valkey", description: "d", candidate: -1, facts: [f("c")] }, // other type, same title: a Concept or Entity page, still taken
+  ], []);
+  expect(routes.map((r) => [r.subject.title, r.target, r.via])).toEqual([["Cache strategies", undefined, "new"], ["Redis", undefined, "new"], ["Valkey", "wiki/entities/valkey.md", "title"]]);
+});

@@ -14,6 +14,7 @@ export const HELP = `cortex — second brain
   cortex queue [--kind k] [--json]               (what needs a human decision: synthesis, merge, contradiction, split, review)
   cortex queue done|dismiss|apply <n>            (closes entry n; apply: merge, split, synthesis and contradiction entries)
   cortex maintain merge [--apply] [--limit N]   (two pages on the same subject become one; without --apply it only lists; judge uncertain: queue)
+  cortex maintain contradictions [--apply] [--limit N]   (settles the contradiction callouts the ingestion wrote; without --apply it only lists; judge uncertain: proposal in the queue)
   cortex maintain split [--apply] [--limit N]   (a long or multi-subject page is cut into pages; without --apply it only lists; judge uncertain: queue)
   cortex maintain synthesize [--apply] [--limit N]   (writes the synthesis pages the queue asks for; without --apply it only lists; judge uncertain: proposal in the queue)
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)

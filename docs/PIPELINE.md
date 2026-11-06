@@ -363,7 +363,7 @@ WP2, WP4 et (après WP1) WP5 sont indépendants et parallélisables ; le module 
 
 ## Résultats du WP0
 
-Mesures sur `http://192.168.1.96:8080/v1`, `qwen3.5-4b` (llama.cpp b1188, mode routeur), du 2026-11-06. **Biais : un run du labo (`cortex-lab` run 50) occupait en continu le slot 3 pendant toute la session** (`/slots` : `is_processing` constant), donc les débits de génération sont probablement pénalisés. Peu de requêtes, toutes courtes ; les scripts sont restés hors du dépôt. Source de test : les 1 500 premiers mots (~4,3k tokens avec les consignes, 12,6k caractères) d'une spécification technique française (`djlib`), avec le schéma d'extraction de §2.2 et trois candidats factices.
+Mesures sur `http://192.168.1.116:8080/v1`, `qwen3.5-4b` (llama.cpp b1188, mode routeur), du 2026-11-06. **Biais : un run du labo (`cortex-lab` run 50) occupait en continu le slot 3 pendant toute la session** (`/slots` : `is_processing` constant), donc les débits de génération sont probablement pénalisés. Peu de requêtes, toutes courtes ; les scripts sont restés hors du dépôt. Source de test : les 1 500 premiers mots (~4,3k tokens avec les consignes, 12,6k caractères) d'une spécification technique française (`djlib`), avec le schéma d'extraction de §2.2 et trois candidats factices.
 
 | Question | Résultat |
 |---|---|
@@ -441,10 +441,10 @@ La file `review` (juge incertain, entrée trop longue, titre refusé) et la rele
 
 `scripts/maintain-weekly.sh [--dry-run] [--push] [<clone du wiki>]` lance chaque semaine les quatre sous-commandes avec `--apply`, dans l'ordre `merge`, `contradictions`, `split`, `synthesize` (les doublons d'abord : moins de pages à juger ensuite ; les synthèses en dernier : elles lisent la file). Il n'y a pas de `cortex maintain all` : la liste vit dans le script, et chaque sous-commande reste utilisable seule.
 
-1. **Refus** : clone non propre (le dossier `.cortex/` est ignoré), pas de dépôt git. Une branche `maintain/*` d'une semaine précédente non fusionnée dans la base bloque le run (sortie 0, message) : un deuxième run empilerait ses pages et ses entrées de file sur celles qu'on n'a pas relues ; fusionner ou supprimer la branche le débloque.
+1. **Refus** : clone non propre (le dossier `.cortex/` est ignoré), pas de dépôt git. Une branche `maintain/*` d'une semaine précédente non fusionnée dans la base bloque le run (sortie 3 et avertissement sur stderr, pour que l'unité systemd apparaisse en échec tant que la branche n'est pas relue ; une fusion squash ou rebase, dont les changements sont déjà dans la base, est reconnue et la branche supprimée) : un deuxième run empilerait ses pages et ses entrées de file sur celles qu'on n'a pas relues ; fusionner ou supprimer la branche le débloque.
 2. **Préparation** : base = la branche courante (`MAINTAIN_BASE`), mise à jour par `fetch` et `merge --ff-only` si le dépôt a un `origin` (`MAINTAIN_NO_SYNC=1` l'évite), puis branche `maintain/AAAA-MM-JJ`.
 3. **Exécution** : une sous-commande en échec n'arrête pas les autres ; les pages qu'elles touchent restent en `draft` (§8) et chacune écrit déjà ses lignes `update` du journal. Le script y ajoute une ligne de bilan (`cortex log add update`, sous-tâches terminées ou en échec, nombre de fichiers, branche).
-4. **Clôture** : s'il n'y a rien à relire, la branche est supprimée ; sinon un commit unique (`maintain: AAAA-MM-JJ`, hors `.cortex/`) et retour sur la base. Le push de la branche n'a lieu que sur demande (`--push` ou `MAINTAIN_PUSH=1`, jamais forcé). Sortie 1 si une sous-commande a échoué, 2 si le script a refusé ou si le push a échoué (le commit reste local).
+4. **Clôture** : s'il n'y a rien à relire, la branche est supprimée ; sinon un commit unique (`maintain: AAAA-MM-JJ`, hors `.cortex/`) et retour sur la base. Le push de la branche n'a lieu que sur demande (`--push` ou `MAINTAIN_PUSH=1`, jamais forcé). Sortie 1 si une sous-commande a échoué, 3 si une branche non relue bloque le run, 2 si le script a refusé ou si le push a échoué (le commit reste local).
 
 La relecture est celle d'une branche ordinaire : `git diff main...maintain/AAAA-MM-JJ`, `cortex queue` pour les entrées à trancher, puis fusion (ou suppression) de la branche.
 

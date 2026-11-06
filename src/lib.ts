@@ -30,6 +30,9 @@ export function parseDoc(path: string, txt: string): Doc {
   return { path, fm: fm as Fm, body: txt.slice(m[0].length) };
 }
 
+/** The text of a page with another body, frontmatter untouched. */
+export const withBody = (text: string, body: string) => text.slice(0, text.length - parseDoc("", text).body.length) + body;
+
 /** Why a page's text has an unreadable frontmatter, or undefined when it parses. */
 export function frontmatterError(text: string): string | undefined {
   try { parseDoc("", text); return undefined; } catch (e) { return `invalid YAML frontmatter (${(e as Error).message}): every key starts at column 0.`; }
@@ -130,6 +133,13 @@ export function slugify(s: string, max = 50): string {
   for (const w of words) if ((out + "-" + w).length <= max + 1) out += "-" + w; else break;
   return out.slice(1) || "source";
 }
+
+/**
+ * Identity of a title: lowercase, accents removed, any run of other characters one space; letters of every script and `+` and `#`
+ * stay (« C++ » and « C# » are two subjects, a non-Latin title is not « source »). Empty only for a title with no letter or digit:
+ * such a key never identifies anything.
+ */
+export const titleKey = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}+#]+/gu, " ").trim();
 
 /** Raw id: the last segment of a source's folder (unique under raw/). */
 export const RAW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;

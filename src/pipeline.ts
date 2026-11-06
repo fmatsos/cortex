@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from "node:path";
 import { changed, markCompiled, outOfScope, prepareSource, sourceCallouts, stamp, tagUsage, weave, actor } from "./agent";
 import { components, detectBridges } from "./bridges";
-import { addNoteDefs, noteDef, noteId, normalizeNotes } from "./cite";
+import { addNoteDefs, type Fact, noteDef, noteId, normalizeNotes } from "./cite";
 import { repairPage, updatePage, writePage, linkPages, type Addition, type PageRef, type Written } from "./compose";
 import type { Config } from "./config";
 import { openWiki, type Wiki } from "./context";
 import { type ConnectUpdate, connectSource, linkLine, type Connected } from "./connect";
 import { rawId, toResource, type RawSource } from "./doc";
-import { type ChunkExtraction, type Extracted, extractSource, type SavedChunks, pool, type Fact, type Head, type Subject } from "./extraction";
-import { frontmatterError, parseDoc, setFmLine, sha256, slugify } from "./lib";
+import { type ChunkExtraction, type Extracted, extractSource, type SavedChunks, pool, type Head, type Subject } from "./extraction";
+import { frontmatterError, parseDoc, setFmLine, sha256, titleKey, withBody } from "./lib";
 import { LIMITS } from "./limits";
 import { lint } from "./lint";
 import { appendLogCtx } from "./log";
@@ -69,7 +69,7 @@ export type PipelineResult = { ok: boolean; stats: PipelineStats };
 
 const one = (s: string) => s.replace(/\s+/g, " ").trim();
 const read = (root: string, p: string) => readFileSync(join(root, p), "utf8");
-const newKey = (s: { title: string }) => `new:${slugify(s.title, Infinity)}`;
+const newKey = (s: { title: string }) => `new:${titleKey(s.title) || sha256(s.title)}`;
 const byTitle = (a: { title: string; path: string }, b: { title: string; path: string }) => collator.compare(a.title, b.title) || a.path.localeCompare(b.path);
 
 /** Body of the Source page (§4.1): the callouts, summary and key points cited to the raw source, the linked pages, the definition of the note. */
@@ -83,9 +83,6 @@ function renderSource(o: { callouts: string; head: Head; links: string[]; id: st
     noteDef(o.id, o.title, o.resource),
   ].filter(Boolean).join("\n\n")}\n`;
 }
-
-/** The text of a page with another body, frontmatter untouched. */
-const withBody = (text: string, body: string) => text.slice(0, text.length - parseDoc("", text).body.length) + body;
 
 // --- Step 8: lint and repair (§4.5)
 
@@ -125,20 +122,23 @@ export async function settlePages(root: string, paths: string[], o: { cfg: Confi
   let errors = await pageErrors(root, paths);
   if (!errors.length) return [];
   const group = (list: typeof errors) => Map.groupBy(list, (e) => e.path);
+  let written = false; // the wiki is linted again only after a write
   for (const [p, list] of group(errors)) {
     const text = read(root, p), fixed = mechanical(p, text, list.map((e) => e.msg), o.description);
-    if (fixed !== text) writeFileSync(join(root, p), fixed);
+    if (fixed !== text) { writeFileSync(join(root, p), fixed); written = true; }
   }
-  errors = await pageErrors(root, paths);
+  if (written) errors = await pageErrors(root, paths);
+  written = false;
   for (const [p, list] of group(errors)) {
     if (!list.some((e) => /^(footnote|broken link|relative link|empty body)/.test(e.msg))) continue; // the frontmatter is not the model's to fix
     try {
       const text = read(root, p), body = await repairPage(o.cfg, { body: parseDoc(p, text).body, errors: list.map((e) => e.msg), language: o.language, source: o.source, report: o.report });
       const next = withBody(text, `${body}\n`);
-      if (!frontmatterError(next)) writeFileSync(join(root, p), next);
+      if (!frontmatterError(next)) { writeFileSync(join(root, p), next); written = true; }
     } catch (e) { o.report?.({ level: "warn", text: `réparation de ${p} sans résultat (${(e as Error).message})`, mark: "  ⚠" }); }
   }
-  return (await pageErrors(root, paths)).map((e) => `${e.path}: ${e.msg}`);
+  if (written) errors = await pageErrors(root, paths);
+  return errors.map((e) => `${e.path}: ${e.msg}`);
 }
 
 // --- The compile of one source
@@ -167,28 +167,41 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   const resumed = Object.keys(st.steps).filter((k) => k !== "write" && k !== "update" && (st.steps as Record<string, unknown>)[k]).map((k) => (k === "chunks" ? `chunks (${Object.keys(st.steps.chunks!.parts).length}/${st.steps.chunks!.of})` : k));
   if (resumed.length) say("info", `reprise : ${resumed.join(", ")} déjà faits (--fresh pour tout refaire)`);
   const before = await changed(root, report);
-  const { inUse, top } = tagUsage(await openWiki(root).pages());
+  // one memoized wiki for every read before step 7 (nothing writes to wiki/ until then); w0 may be older (a batch shares it), so it is opened here
+  const w1 = openWiki(root);
+  const { inUse, top } = tagUsage(await w1.pages());
 
   // 0-1. candidates (routing, §4.7), then the extraction, which merges and verifies the subjects (steps 2-3)
   if (!st.steps.candidates) {
-    try { st.steps.candidates = await routeCandidates(openWiki(root), { title, body: source }); } catch (e) {
+    try { st.steps.candidates = await routeCandidates(w1, { title, body: source }); } catch (e) {
       say("warn", `candidats : sans résultat (${(e as Error).message}), extraction sans pages proches`, "  ⚠");
       st.steps.candidates = { extract: [], pool: [] };
     }
     save();
   }
   const cands = st.steps.candidates;
-  if (!st.steps.extract) {
+  // a rerun tries the failed chunks again (the others come from `chunks`), as long as no page was written from the partial extraction
+  const retry = !!st.steps.extract?.failed.length && !st.applied.created.length && !Object.keys(st.applied.paths).length;
+  if (!st.steps.extract || retry) {
     // a chunk answered is saved at once: a crash on the last one of a long source does not redo the others (a failed chunk is not saved: the rerun tries it again)
     const onChunk = (i: number, x: ChunkExtraction, of: number) => { st.steps.chunks = { of, parts: { ...(st.steps.chunks?.of === of ? st.steps.chunks.parts : {}), [i]: x } }; save(); };
-    try { st.steps.extract = await extractSource(cfg, { source, title, tags: top, candidates: cands.extract, language, id, report, saved: st.steps.chunks, onChunk }); } catch (e) { return fail(`${(e as Error).message}; wiki unchanged`); }
+    try {
+      const x = await extractSource(cfg, { source, title, tags: top, candidates: cands.extract, language, id, report, saved: st.steps.chunks, onChunk });
+      if (!st.steps.extract) st.steps.extract = x;
+      else if (x.failed.length < st.steps.extract.failed.length) { // a chunk answered this time: what was decided from the partial extraction is decided again
+        st.steps.extract = x; st.steps.route = st.steps.connect = undefined; st.steps.write = {}; st.steps.update = {};
+      }
+    } catch (e) {
+      if (!st.steps.extract) return fail(`${(e as Error).message}; wiki unchanged`);
+      say("warn", `nouvel essai des morceaux sans résultat : ${(e as Error).message}`, "  ⚠");
+    }
     save();
   }
   const ex = st.steps.extract, head = ex.extraction;
   Object.assign(stats, { chunks: ex.chunks, failedChunks: ex.failed, rejected: ex.rejected, dropped: ex.dropped });
 
   // 4. one decision per subject: the page it updates, or a new page
-  if (!st.steps.route) { st.steps.route = { routes: (await routeSubjects(openWiki(root), head.subjects, cands.extract)).routes }; save(); }
+  if (!st.steps.route) { st.steps.route = { routes: (await routeSubjects(w1, head.subjects, cands.extract)).routes }; save(); }
   const routes = st.steps.route.routes;
   stats.skipped = [...ex.skipped, ...head.subjects.filter((s) => !s.facts.length).map((s) => s.title)];
   say("info", `extraction : ${ex.chunks} morceau(x), ${stats.rejected} fait(s) sans citation rejeté(s), ${stats.skipped.length} sujet(s) ignoré(s), ${stats.failedChunks.length} morceau(x) sans résultat`);
@@ -202,7 +215,7 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   stats.links = conn.links.length;
 
   // 5-6. the model's writing steps, in parallel; each result is saved as it comes
-  const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
+  const titles = new Map((await w1.pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
   const news = routes.filter((r) => !r.target);
   type Edit = { path: string; title: string; facts: Fact[]; contradicts: boolean };
   const edits: Edit[] = [
@@ -240,13 +253,13 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   for (const e of errors) say("warn", `${e}`, "  ⚠");
   stats.failedSteps.push(...errors);
 
-  const groups = components(await openWiki(root).pages()); // the groups of linked pages before the source (7bis, in step 9)
+  const groups = components(await w1.pages()); // the groups of linked pages before the source (7bis, in step 9)
 
   // 7. application: only cortex writes, in the collator's order of the titles; each page created is noted in the state first
   const { paths } = st.applied, exists = (p?: string) => !!p && existsSync(join(root, p));
-  let src = exists(paths.source) ? paths.source : (await openWiki(root).citations()).get(resource)?.[0]?.path;
+  let src = exists(paths.source) ? paths.source : (await w1.citations()).get(resource)?.[0]?.path;
   if (!src) {
-    const skeleton = (await prepareSource(openWiki(root), d, by, now())) ?? (await prepareSource(openWiki(root), { ...d, fm: { ...d.fm, title: `${title} (source)` } }, by, now()));
+    const skeleton = (await prepareSource(w1, d, by, now())) ?? (await prepareSource(w1, { ...d, fm: { ...d.fm, title: `${title} (source)` } }, by, now()));
     if (!skeleton) return fail("a page already has the title of the source and the Source page cannot be created; wiki unchanged");
     src = skeleton.path;
     st.applied.created.push(src);
@@ -266,7 +279,8 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
     } catch (e) {
       // the title is taken (the routing missed it): the body goes to the page the error names, as a new section
       const named = /(wiki\/[^\s«»,]+\.md)/.exec((e as Error).message)?.[1];
-      if (!named || !exists(named)) { stats.failedSteps.push(`page « ${r.subject.title} » : ${(e as Error).message}`); say("warn", `page « ${r.subject.title} » non créée (${(e as Error).message})`, "  ⚠"); continue; }
+      const namedType = named && (await openWiki(root).pages()).find((p) => p.path === named)?.fm.type;
+      if (!named || !exists(named) || (namedType !== "Concept" && namedType !== "Entity")) { stats.failedSteps.push(`page « ${r.subject.title} » : ${(e as Error).message}`); say("warn", `page « ${r.subject.title} » non créée (${(e as Error).message})`, "  ⚠"); continue; }
       const text = read(root, named), m = mergeUpdate(named, text, { section: r.subject.title, addition: linkPages(wr.body, resolved(key)), contradiction: null }, { id: sourceId(named, text, { title, resource }), title, resource });
       if (m) writeFileSync(join(root, named), m.text);
       paths[key] = named; save();
