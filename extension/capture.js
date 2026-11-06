@@ -69,7 +69,7 @@
       const post = el.closest('[data-urn],article,[role=article],[role=listitem],[data-testid=tweet],shreddit-post,shreddit-comment') || el;
       const author = (post.getAttribute("author") || [...post.querySelectorAll('a[href*="/in/"],a[href*="/company/"],[data-testid=User-Name] a')]
         .filter((a) => el.contains(post) || !el.contains(a)) // picked text only: a profile linked in it is a mention, not the author
-        .map((a) => (a.querySelector('[aria-hidden="true"]') || a).textContent.trim().split(/\n|•/)[0].trim()).find(Boolean) || "").slice(0, 80);
+        .map((a) => (a.querySelector('[aria-hidden="true"]')?.textContent.trim() || a.textContent.trim()).split(/\n|•/)[0].trim()).find(Boolean) || "").slice(0, 80);
       if (author && !text.startsWith(author)) text = `Auteur : ${author}\n\n${text}`;
       // the block's first line as title, rather than the tab's ("Post | LinkedIn")
       const first = text.replace(/^Auteur : .*\n\n/, "").split("\n").map((l) => l.replace(/[#>*_`\[\]]|\(https?:[^)]*\)/g, "").trim()).find(Boolean) || "";
