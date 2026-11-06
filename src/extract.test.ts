@@ -3,6 +3,7 @@ import { extractPdf, extractUrl } from "./add";
 import { socialFor } from "./social";
 import { X } from "./social/x";
 import { Bluesky } from "./social/bluesky";
+import { LinkedIn } from "./social/linkedin";
 
 /** A transport that answers with a canned payload: the network side is tested without the network (the bridge's point). */
 const canned = (data: unknown) => ({ get: async () => data });
@@ -162,3 +163,13 @@ test("fetch timeout is honoured", async () => {
   const b = `http://localhost:${srv.port}`;
   await expect(extractUrl(`${b}/slow`, { timeoutMs: 50 })).rejects.toThrow();
 });
+
+test("social: LinkedIn reads the JSON-LD of the post page", async () => {
+  expect(socialFor("https://fr.linkedin.com/posts/bob_x-activity-1-abc")?.request).toBe("https://fr.linkedin.com/posts/bob_x-activity-1-abc");
+  expect(socialFor("https://www.linkedin.com/pulse/an-article")).toBeUndefined(); // an article: the page extractors
+  const ld = { "@type": "SocialMediaPosting", articleBody: "Le post.", datePublished: "2026-11-04T11:29:06Z", author: { name: "Bob" } };
+  const ex = await new LinkedIn(canned(`<script type="application/ld+json">${JSON.stringify(ld)}</script>`)).read("https://www.linkedin.com/posts/x", "unused");
+  expect(ex).toMatchObject({ content: "Le post.", author: "Bob", published: "2026-11-04T11:29:06Z", extractor: "linkedin-jsonld", url: "https://www.linkedin.com/posts/x" });
+  await expect(new LinkedIn(canned("<html>authwall</html>")).read("u", "unused")).rejects.toThrow(/authwall/);
+});
+

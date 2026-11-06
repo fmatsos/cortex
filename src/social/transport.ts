@@ -15,3 +15,12 @@ export class JsonApi implements Transport {
     return JSON.parse(new TextDecoder().decode((await fetchCapped(request, this.opts)).bytes));
   }
 }
+
+/** A web page as text: for networks whose public pages carry the post (JSON-LD, meta). */
+export class HtmlPage implements Transport {
+  constructor(private opts: FetchOpts = {}) {}
+  async get(request: string): Promise<string> {
+    return new TextDecoder().decode((await fetchCapped(request, this.opts)).bytes);
+  }
+}
+

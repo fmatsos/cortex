@@ -1,12 +1,16 @@
 import type { FetchOpts } from "../add";
 import type { Social } from "./social";
-import { JsonApi, type Transport } from "./transport";
+import { HtmlPage, JsonApi } from "./transport";
 import { X } from "./x";
 import { Bluesky } from "./bluesky";
 import { Mastodon } from "./mastodon";
+import { LinkedIn } from "./linkedin";
 
 /** The networks, each bound to its transport; tried in order, the ambiguous ones (fallback) last. */
-export const socials = (opts: FetchOpts = {}, api: Transport = new JsonApi(opts)): Social[] => [new X(api), new Bluesky(api), new Mastodon(api)];
+export function socials(opts: FetchOpts = {}): Social[] {
+  const api = new JsonApi(opts);
+  return [new X(api), new Bluesky(api), new LinkedIn(new HtmlPage(opts)), new Mastodon(api)];
+}
 
 /** The network for this URL and its request, or undefined (the page is read normally). */
 export function socialFor(url: string, opts: FetchOpts = {}): { social: Social; request: string } | undefined {
