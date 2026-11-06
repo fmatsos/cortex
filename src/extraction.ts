@@ -163,6 +163,9 @@ export async function pool<T, R>(items: T[], n: number, fn: (x: T, i: number) =>
   return out;
 }
 
+/** Raw answers of the chunks already extracted (by index), for a source cut into `of` chunks: the caller keeps them to resume. */
+export type SavedChunks = { of: number; parts: Record<number, ChunkExtraction> };
+
 export type Extracted = {
   extraction: Extraction;
   /** Chunks the source was cut into. */
@@ -182,10 +185,12 @@ export type Extracted = {
  * merged and verified by cortex, and for a source in several chunks the model writes the global summary and key points. A
  * chunk that fails is left out (`failed`), a failed reduction falls back to `fallbackHead`; it throws only when no chunk gave an answer.
  */
-export async function extractSource(cfg: Config, o: CallOpts & { source: string; title?: string; candidates: Candidate[]; parallel?: number; chunkTokens?: number; overlapTokens?: number }): Promise<Extracted> {
+export async function extractSource(cfg: Config, o: CallOpts & { source: string; title?: string; candidates: Candidate[]; parallel?: number; chunkTokens?: number; overlapTokens?: number; saved?: SavedChunks; onChunk?: (index: number, x: ChunkExtraction, of: number) => void }): Promise<Extracted> {
   const chunks = chunkSource(o.source, { chunkTokens: o.chunkTokens, overlapTokens: o.overlapTokens });
-  const results = await pool<Chunk, { ok: ChunkExtraction } | { err: string }>(chunks, o.parallel ?? LIMITS.pipelineParallel, async (chunk) => {
-    try { return { ok: await extractChunk(cfg, { ...o, chunk, of: chunks.length }) }; } catch (e) { return { err: (e as Error).message }; }
+  const results = await pool<Chunk, { ok: ChunkExtraction } | { err: string }>(chunks, o.parallel ?? LIMITS.pipelineParallel, async (chunk, i) => {
+    const kept = o.saved?.of === chunks.length ? o.saved.parts[i] : undefined; // a rerun after a crash: this chunk has its answer already
+    if (kept) return { ok: kept };
+    try { const ok = await extractChunk(cfg, { ...o, chunk, of: chunks.length }); o.onChunk?.(i, ok, chunks.length); return { ok }; } catch (e) { return { err: (e as Error).message }; }
   });
   const parts = results.flatMap((r) => ("ok" in r ? [r.ok] : [] as ChunkExtraction[]));
   const failed = results.flatMap((r, i) => ("err" in r ? [i] : []));

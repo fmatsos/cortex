@@ -7,7 +7,7 @@ import { chunkSource } from "./chunk";
 import { openWiki } from "./context";
 import { refresh } from "./embed";
 import { rawId } from "./doc";
-import { parseDoc, sha256 } from "./lib";
+import { localIso, sha256 } from "./lib";
 import { compilePipeline, settlePages, type PipelineOpts } from "./pipeline";
 import type { Message } from "./print";
 import { readQueue } from "./queue";
@@ -118,7 +118,7 @@ test("a source end to end: Source page, new page, updated pages, links, journal,
   expect(src).toContain("- [Memoization](/wiki/concepts/memoization.md) — Autre forme de cache.");
   expect(src).toContain("- [Redis](/wiki/entities/redis.md)");
   expect(src).toContain(`[^${ID}]: Caches, /raw/2026/11/${ID}/source.md`);
-  expect(src).toContain('generated: { by: "openai/m:pipeline", at: 2026-11-06T09:00:00+00:00 }');
+  expect(src).toContain(`generated: { by: "openai/m:pipeline", at: ${localIso(NOW())} }`);
 
   const redis = text(root, "wiki/entities/redis.md");
   expect(redis).not.toContain("[[p:");
@@ -187,7 +187,7 @@ test("crash before the application: the wiki is intact, the rerun does not call 
   down = false;
   const r2 = await compile(root);
   expect(r2.ok).toBe(true);
-  expect(r2.messages.some((m) => m.text.includes("reprise : candidates, extract, route, connect"))).toBe(true);
+  expect(r2.messages.some((m) => m.text.includes("reprise : candidates, chunks (1/1), extract, route, connect"))).toBe(true);
   expect([s.count("extract"), s.count("connect")]).toEqual([1, 1]);
   expect(existsSync(join(root, "wiki/entities/redis.md"))).toBe(true);
   expect(await status(root)).toBe("compiled");
@@ -305,6 +305,33 @@ test("a long source: chunks in parallel, one fails (partial extraction, callout)
   expect(r.messages.some((m) => m.level === "warn" && m.text.includes("sans résultat"))).toBe(true);
   expect(existsSync(join(root, "wiki/entities/topic-2.md"))).toBe(false); // the failed chunk gave no subject
   expect(existsSync(join(root, "wiki/entities/topic-1.md"))).toBe(true);
+});
+
+test("crash during the extraction of a long source: the chunks already answered are not asked again", async () => {
+  const body = [1, 2, 3, 4].map((i) => `## Part ${i}\n\n${`Filler paragraph about the part ${i}. `.repeat(380)}\n\nSentence marker ${i} appears here.`).join("\n\n");
+  const n = chunkSource(body).length;
+  expect(n).toBe(3);
+  const topic = (i: number) => ({ ...head, subjects: [subject("Entity", `Topic ${i}`, -1, [[`Fact ${i}`, `Sentence marker ${i} appears here.`]])] });
+  const s = fake(script({
+    extract: (b) => topic(Number([...b.messages[1].content.matchAll(/Sentence marker (\d) appears here\./g)].at(-1)![1])),
+    reduce: () => ({ ...head, summary: "Résumé global." }), connect: () => ({ connections: [] }),
+  }));
+  const root = await wiki(s.base_url, { raws: [{ id: ID, title: "Longue", body }] });
+  // what a crashed run left: the answers of chunks 0 and 1 (the state is only valid for this text and this model)
+  const seeded = { version: 1, model: "m", source_sha256: sha256(`Longue\n${body}\n`), steps: { chunks: { of: n, parts: { 0: topic(1), 1: topic(2) } }, write: {}, update: {} }, applied: { paths: {}, created: [] } };
+  await Bun.write(state(root), JSON.stringify(seeded));
+  const r = await compile(root);
+  expect(r.ok).toBe(true);
+  expect(r.messages.some((m) => m.text.includes("reprise : chunks (2/3)"))).toBe(true);
+  expect(s.count("extract")).toBe(1);
+  expect(s.calls.find((c) => c.name === "extract")!.user).toContain("Part 3 of 3");
+  expect(s.count("reduce")).toBe(1); // over the three parts
+  expect(r.stats.failedChunks).toEqual([]);
+  expect(["topic-1", "topic-2", "topic-4"].every((t) => existsSync(join(root, `wiki/entities/${t}.md`)))).toBe(true); // the third chunk holds parts 3 and 4: the script answers with its last marker
+  // a source cut differently (another chunk count) does not use them
+  await Bun.write(state(root), JSON.stringify({ ...seeded, steps: { ...seeded.steps, chunks: { of: n + 1, parts: seeded.steps.chunks.parts } } }));
+  await compile(root, { fresh: false });
+  expect(s.count("extract")).toBe(1 + 3);
 });
 
 test("determinism: two compiles of the same source on the same wiki write the same bytes", async () => {

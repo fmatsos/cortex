@@ -7,7 +7,7 @@ import type { Config } from "./config";
 import { openWiki, type Wiki } from "./context";
 import { type ConnectUpdate, connectSource, linkLine, type Connected } from "./connect";
 import { rawId, toResource, type RawSource } from "./doc";
-import { type Extracted, extractSource, pool, type Fact, type Head, type Subject } from "./extraction";
+import { type ChunkExtraction, type Extracted, extractSource, type SavedChunks, pool, type Fact, type Head, type Subject } from "./extraction";
 import { frontmatterError, parseDoc, setFmLine, sha256, slugify } from "./lib";
 import { LIMITS } from "./limits";
 import { lint } from "./lint";
@@ -29,7 +29,7 @@ type Done<T> = T & { /** Note id the model was given. */ id: string };
 type State = {
   version: 1; model: string; source_sha256: string;
   steps: {
-    candidates?: Candidates; extract?: Extracted; route?: { routes: Routed<Subject>[] }; connect?: Connected;
+    candidates?: Candidates; /** Raw answers of the chunks, saved one by one while the extraction runs. */ chunks?: SavedChunks; extract?: Extracted; route?: { routes: Routed<Subject>[] }; connect?: Connected;
     write: Record<string, Done<Written>>; update: Record<string, Done<Addition>>;
   };
   /** What step 7 did: page path by subject key (`source` for the Source page), and the pages it created. */
@@ -163,7 +163,7 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
 
   const st = loadState(root, id, cfg.model, sha256(`${title}\n${source}`), opts.fresh);
   const save = () => saveState(root, id, st);
-  const resumed = Object.keys(st.steps).filter((k) => k !== "write" && k !== "update" && (st.steps as Record<string, unknown>)[k]);
+  const resumed = Object.keys(st.steps).filter((k) => k !== "write" && k !== "update" && (st.steps as Record<string, unknown>)[k]).map((k) => (k === "chunks" ? `chunks (${Object.keys(st.steps.chunks!.parts).length}/${st.steps.chunks!.of})` : k));
   if (resumed.length) say("info", `reprise : ${resumed.join(", ")} déjà faits (--fresh pour tout refaire)`);
   const before = await changed(root, report);
   const { inUse, top } = tagUsage(await openWiki(root).pages());
@@ -178,7 +178,9 @@ async function run(w0: Wiki, d: RawSource, opts: PipelineOpts, report: Report, s
   }
   const cands = st.steps.candidates;
   if (!st.steps.extract) {
-    try { st.steps.extract = await extractSource(cfg, { source, title, tags: top, candidates: cands.extract, language, id, report }); } catch (e) { return fail(`${(e as Error).message}; wiki unchanged`); }
+    // a chunk answered is saved at once: a crash on the last one of a long source does not redo the others (a failed chunk is not saved: the rerun tries it again)
+    const onChunk = (i: number, x: ChunkExtraction, of: number) => { st.steps.chunks = { of, parts: { ...(st.steps.chunks?.of === of ? st.steps.chunks.parts : {}), [i]: x } }; save(); };
+    try { st.steps.extract = await extractSource(cfg, { source, title, tags: top, candidates: cands.extract, language, id, report, saved: st.steps.chunks, onChunk }); } catch (e) { return fail(`${(e as Error).message}; wiki unchanged`); }
     save();
   }
   const ex = st.steps.extract, head = ex.extraction;
