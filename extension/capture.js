@@ -3,7 +3,7 @@
   const toMarkdown = (html) => {
     const td = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced" });
     td.remove(["script", "style", "noscript", "template"]);
-    return td.turndown(html).replace(/\n{3,}/g, "\n\n").trim();
+    return td.turndown(html).replace(/\*{4}/g, "**").replace(/\n{3,}/g, "\n\n").trim(); // nested <strong> (LinkedIn) gives ****
   };
   // absolute links and images; inline (data:) images are dropped, they would weigh the source down
   const absolute = (root) => {
@@ -68,6 +68,7 @@
       // the author, looked for in the whole post even when only its text was picked
       const post = el.closest('[data-urn],article,[role=article],[data-testid=tweet],shreddit-post,shreddit-comment') || el;
       const author = (post.getAttribute("author") || [...post.querySelectorAll('a[href*="/in/"],a[href*="/company/"],[data-testid=User-Name] a')]
+        .filter((a) => el.contains(post) || !el.contains(a)) // picked text only: a profile linked in it is a mention, not the author
         .map((a) => (a.querySelector('[aria-hidden="true"]') || a).textContent.trim().split("\n")[0].trim()).find(Boolean) || "").slice(0, 80);
       if (author && !text.startsWith(author)) text = `Auteur : ${author}\n\n${text}`;
       // the block's first line as title, rather than the tab's ("Post | LinkedIn")
