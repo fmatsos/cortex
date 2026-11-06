@@ -14,6 +14,7 @@ export const HELP = `cortex — second brain
   cortex queue [--kind k] [--json]               (what needs a human decision: synthesis, merge, contradiction, split, review)
   cortex queue done|dismiss|apply <n>            (closes entry n; apply is not available yet)
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
+  cortex compile … --pipeline [--fresh] [--keep-state]   (client openai: cortex runs fixed steps, the model only infers; --fresh ignores the saved state in .cortex/pipeline/)
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
   cortex ls [--type T] [--json]                (the wiki pages, by title)

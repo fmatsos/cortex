@@ -169,20 +169,25 @@ export function actor(cfg: { client?: string; model?: string; effort?: string })
   return `${client}/${cfg.model ?? "default"}${cfg.effort ? `:${cfg.effort}` : ""}`;
 }
 
+/** The callouts at the head of a Source page: the human note and the partial-extraction warning of the raw source (none when it has neither). */
+export function sourceCallouts(d: RawSource): string {
+  const text = String(d.fm.note ?? "").trim(); // optional: no note, no callout
+  const note = text ? `> [!note] Note personnelle\n${text.split(/\r?\n/).map((l) => `> ${l}`).join("\n")}` : "";
+  const partial = d.fm.partial ? `> [!warning]\n> ${d.fm.partial === true ? "Partial extraction." : String(d.fm.partial)}` : "";
+  return [note, partial].filter(Boolean).join("\n\n");
+}
+
 /**
  * Batch compile: the Source page is written by cortex from what it already knows (path, type, title, status, sources,
  * generated, note and partial-extraction callouts); the agent only adds what needs reading the source. Undefined when a
  * page with that title exists already (the agent then writes the Source page as before).
  */
-async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promise<{ path: string; text: string } | undefined> {
+export async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promise<{ path: string; text: string } | undefined> {
   const id = rawId(d.path), title = String(d.fm.title ?? id).trim() || id;
-  const text = String(d.fm.note ?? "").trim(); // optional: no note, no callout
-  const note = text ? `> [!note] Note personnelle\n${text.split(/\r?\n/).map((l) => `> ${l}`).join("\n")}` : "";
-  const partial = d.fm.partial ? `\n\n> [!warning]\n> ${d.fm.partial === true ? "Partial extraction." : String(d.fm.partial)}` : "";
   try {
     const path = await newPageCtx(w, "Source", title, at, {
       fm: { generated: { by, at: localIso(at) }, sources: [{ id, resource: toResource(d.path), title }] },
-      body: `${[note, partial.trim()].filter(Boolean).join("\n\n")}\n`,
+      body: `${sourceCallouts(d)}\n`,
     });
     return { path, text: await Bun.file(join(w.root, path)).text() };
   } catch { return undefined; }
@@ -209,7 +214,7 @@ export async function routeCandidates(w: Wiki, d: RawSource): Promise<string[]> 
  * of `fresh` (created by the agent) keeps at most `maxTags` tags (cortex.json max_tags, default LIMITS.maxTags).
  * Only those two lines are rewritten (`setFmLine`): comments, order and style of the rest of the frontmatter stay.
  */
-async function stamp(root: string, paths: string[], by: string, at: Date, inUse: Map<string, string>, fresh: Set<string>, maxTags: number) {
+export async function stamp(root: string, paths: string[], by: string, at: Date, inUse: Map<string, string>, fresh: Set<string>, maxTags: number) {
   for (const p of paths) {
     const f = Bun.file(join(root, p));
     if (!(await f.exists())) continue;
@@ -232,7 +237,7 @@ async function stamp(root: string, paths: string[], by: string, at: Date, inUse:
  * of `paths` citing the source, each of them links back to `src`, and the human note callout only stays on `src`.
  * A link already there (any text) is kept as is.
  */
-async function weave(root: string, src: string, resource: string, paths: string[], note: string) {
+export async function weave(root: string, src: string, resource: string, paths: string[], note: string) {
   const read = async (p: string) => { try { const text = await Bun.file(join(root, p)).text(); return { text, doc: parseDoc(p, text) }; } catch { return undefined; } };
   const me = await read(src);
   if (!me) return;
@@ -259,7 +264,17 @@ async function weave(root: string, src: string, resource: string, paths: string[
 /** Does a Source page cite the raw source at `path`? */
 const isCited = async (w: Wiki, path: string) => (await w.citations()).has(toResource(path));
 
-type CompileOpts = { pending?: boolean; batch?: boolean };
+/** Tags in use: the spelling kept for each `tagKey`, and the 50 most used (by page count, sorted) that a prompt lists: a wiki with hundreds of tags would fill a small context. */
+export function tagUsage(pages: Page[]): { inUse: Map<string, string>; top: string[] } {
+  const all = pages.flatMap((p) => p.fm.tags ?? []);
+  const tags = [...new Set(all)].sort(collator.compare);
+  const count = new Map<string, number>();
+  for (const t of all) count.set(t, (count.get(t) ?? 0) + 1);
+  return { inUse: new Map(tags.map((t) => [tagKey(t), t] as const)), top: [...tags].sort((a, b) => count.get(b)! - count.get(a)! || collator.compare(a, b)).slice(0, 50).sort(collator.compare) };
+}
+
+/** `pipeline`: no agent, cortex runs the fixed steps of src/pipeline.ts (needs `client: openai`); `fresh`: ignore the saved state; `keepState`: keep it after a success. */
+type CompileOpts = { pending?: boolean; batch?: boolean; pipeline?: boolean; fresh?: boolean; keepState?: boolean };
 /** Compiles raw sources one agent session at a time. Progress goes to `report` live; `ok` is false on any failure. */
 export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, report?: Report): Promise<Result> {
   const { say, done } = collector(report);
@@ -272,21 +287,21 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
 
   let ok = true;
   const sink: Report = (m) => say(m.level, m.text, m.mark);
+  if (opts.pipeline && (await w.config()).client !== "openai") { say("fail", "--pipeline needs the openai client: cortex config set client openai"); return done(false); }
   for (const d of targets) {
     const id = rawId(d.path);
     if (d.fm.status !== "pending") say("info", paint.dim(`(${id} is already ${d.fm.status}: recompiling)`));
+    if (opts.pipeline) {
+      say("info", `${paint.accent("→")} compile ${paint.bold(id)}${paint.dim(" (pipeline)")}`);
+      ok = (await (await import("./pipeline")).compilePipeline(w, d, { fresh: opts.fresh, keepState: opts.keepState }, sink)).ok && ok;
+      continue;
+    }
     const cfg = await w.config();
     const by = actor(cfg), started = new Date();
     const pagesBefore = await pageHashes(root);
     // batch: cortex writes the mechanical part of the Source page; interactive: the agent presents its plan first
     const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
-    const all = (await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []);
-    const tags = [...new Set(all)].sort(collator.compare);
-    const inUse = new Map(tags.map((t) => [tagKey(t), t] as const));
-    // the prompt lists at most the 50 most used tags (by page count): a wiki with hundreds of tags would fill a small context
-    const count = new Map<string, number>();
-    for (const t of all) count.set(t, (count.get(t) ?? 0) + 1);
-    const topTags = [...tags].sort((a, b) => count.get(b)! - count.get(a)! || collator.compare(a, b)).slice(0, 50).sort(collator.compare);
+    const { inUse, top: topTags } = tagUsage(await openWiki(root).pages());
     const prompt = compilePrompt({ agentFile: agentFile(cfg.client), source: toResource(d.path), id, batch: opts.batch, language: cfg.language, page: prepared?.path, tags: topTags, maxTags: cfg.max_tags ?? LIMITS.maxTags, candidates: await routeCandidates(w, d) });
     say("info", `${paint.accent("→")} compile ${paint.bold(id)}${opts.batch ? paint.dim(" (batch)") : ""}`);
     const before = await changed(root, sink);

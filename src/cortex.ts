@@ -42,7 +42,7 @@ try {
       tokens: true, // token order tells whether `add` directly follows `log`
       options: {
         note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
-        json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
+        json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" }, pipeline: { type: "boolean" }, fresh: { type: "boolean" }, "keep-state": { type: "boolean" },
         file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" },
       },
     });
@@ -174,7 +174,7 @@ try {
     }
     case "compile":
       if (!args.length && !o.pending) throw usage("Usage: cortex compile <id…> | --pending [--batch]");
-      finish(await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch }, print));
+      finish(await (await import("./agent")).compileCtx(wiki, args, { pending: o.pending, batch: o.batch || o.pipeline, pipeline: o.pipeline, fresh: o.fresh, keepState: o["keep-state"] }, print));
       break;
     case "ask": {
       const q = args.join(" ");

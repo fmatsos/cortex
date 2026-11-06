@@ -89,6 +89,8 @@ export const LIMITS = {
   pipelineMaxSubjects: 8,
   /** Pipeline: connections (pages a source touches without being about them) kept per source, in the model's order. */
   pipelineMaxConnections: 10,
+  /** Pipeline: pages a `write` step may mention as `[[p:N]]` (the Source page, the other subjects, the connected pages, the candidates), the first ones. */
+  pipelineLinkablePages: 20,
   /** Pipeline: numbered facts the connections step reads (the first ones, in the order of the subjects). */
   pipelineConnectFacts: 30,
 } as const;
