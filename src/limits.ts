@@ -81,4 +81,6 @@ export const LIMITS = {
   pipelineChunkOverlap: 300,
   /** Pipeline: characters of a fact's quote (the proof that the source says it); cortex does not copy it to the page. */
   pipelineQuoteChars: 200,
+  /** Pipeline: times a structured call is asked again when its answer is not valid JSON, fails the schema or is cut by the output limit. */
+  pipelineRetries: 2,
 } as const;

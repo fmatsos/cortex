@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { interactiveWith, type Backend, type Config } from "./backend";
 import { LIMITS } from "../limits";
 import { callTool, toolPack } from "./tools";
@@ -16,6 +17,26 @@ export const thinking = (effort?: string) =>
 
 /** llama.cpp reuses the KV cache of the prompt prefix (`cache_prompt`). OpenAI rejects unknown parameters, the other servers ignore this one. */
 export const cache = (cfg: Config) => (new URL(baseUrl(cfg)).hostname === "api.openai.com" ? {} : { cache_prompt: true });
+
+/**
+ * What a response cost: llama.cpp's `timings` first (`prompt_n` = tokens really prefilled; `usage.prompt_tokens` also counts
+ * those read back from the prompt cache), else OpenAI's `usage`.
+ */
+export function tokens(body: any) {
+  const t = body?.timings, u = body?.usage;
+  const cached = t?.cache_n ?? u?.prompt_tokens_details?.cached_tokens ?? 0;
+  return {
+    prompt_tokens: t?.prompt_n ?? Math.max(0, (u?.prompt_tokens ?? 0) - cached), cached_tokens: cached,
+    completion_tokens: t?.predicted_n ?? u?.completion_tokens ?? 0, prompt_ms: t?.prompt_ms, predicted_ms: t?.predicted_ms,
+  };
+}
+
+/** `$CORTEX_METRICS=<file.jsonl>`: one line per model call, for the A/B between the agent loop and the pipeline. Never fails the run. */
+export function metrics(entry: Record<string, unknown>) {
+  const file = process.env.CORTEX_METRICS;
+  if (!file) return;
+  try { appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`); } catch { /* a metrics file must not break a compile */ }
+}
 
 /** What the model is told when its tool calls were cut by the output limit: nothing ran, write in smaller parts. */
 const CUT = `Your last answer exceeded the output limit (${LIMITS.llmMaxTokens} tokens) and was cut: none of its tool calls ran. ` +
@@ -40,6 +61,7 @@ export default function openai(cfg: Config): Backend {
         // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
         // server's prompt cache keeps the prefix on the turns in between
         if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
+        const t0 = Date.now(), call = { step: "agent", model: cfg.model, retries: 0 };
         const res = await fetch(`${baseUrl(cfg)}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
@@ -48,6 +70,7 @@ export default function openai(cfg: Config): Backend {
         });
         if (!res.ok) {
           const t = await res.text();
+          metrics({ ...call, ms: Date.now() - t0, ok: false });
           // llama.cpp answers 500 when a cut answer leaves the tool arguments unreadable: same as finish_reason "length"
           if (res.status === 500 && /parse tool call arguments/i.test(t) && cuts++ < LIMITS.cutRetries) { messages.push({ role: "user", content: CUT }); continue; }
           // context full (llama.cpp's n_ctx): the old tool results go, the model can read them again; then retry
@@ -58,6 +81,7 @@ export default function openai(cfg: Config): Backend {
         }
         const body = await res.json();
         const msg = body.choices?.[0]?.message;
+        metrics({ ...call, ...tokens(body), ms: Date.now() - t0, ok: !!msg && body.choices[0].finish_reason !== "length" });
         if (!msg) throw new Error(`${baseUrl(cfg)}: answer without a message: ${JSON.stringify(body).slice(0, 300)}`);
         if (body.choices[0].finish_reason === "length") {
           // nothing of a cut answer is used as is: its tool calls may be incomplete, its text goes on in the next turn
