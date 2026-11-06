@@ -67,6 +67,8 @@ export const LIMITS = {
   routeChars: 1500,
   /** Ingest: the judge answers « yes » to « does the source bring something to this page? » at or above this (a hint to the agent: cheaper to be wrong than for a new-page check). */
   routeYes: 0.5,
+  /** Pipeline routing: candidate pages (core, one-link neighbours, shared tags) kept before the judge sorts them. */
+  pipelineCandidatesPool: 30,
   /** Journal entries shown by `cortex log` without `--limit`. */
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */

@@ -24,12 +24,14 @@ export function nearTitle(a: string, b: string): boolean {
   return small.size >= 2 && [...small].every((w) => big.has(w)) && big.size - small.size <= 1;
 }
 
+export type NearDuplicate = { refuse: boolean; near: { path: string; title: string; score: number }[] };
+
 /**
  * Duplicate guard (by meaning): the same-type pages closest to the new page by embeddings; when the judge is there it picks
  * the one the page duplicates (or none), else a very close cosine decides. Returns what to refuse (`refuse`, the pages
  * to complete instead) or only warn about; nothing when embeddings are off or no page is close.
  */
-async function nearDuplicate(root: string, pages: { path: string; fm: Record<string, unknown> }[], type: string, title: string, description: string): Promise<{ refuse: boolean; near: { path: string; title: string; score: number }[] } | undefined> {
+export async function nearDuplicate(root: string, pages: { path: string; fm: Record<string, unknown> }[], type: string, title: string, description: string): Promise<NearDuplicate | undefined> {
   const hits = await nearest(root, `${title}\n${description}`, LIMITS.dupCandidates * 5, false);
   const byPath = new Map(pages.map((d) => [d.path, d]));
   const near = (hits ?? []).filter((h) => byPath.get(h.path)?.fm.type === type).slice(0, LIMITS.dupCandidates)
