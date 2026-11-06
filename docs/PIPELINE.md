@@ -363,7 +363,7 @@ WP2, WP4 et (après WP1) WP5 sont indépendants et parallélisables ; le module 
 
 ## Résultats du WP0
 
-Mesures sur `http://192.168.1.116:8080/v1`, `qwen3.5-4b` (llama.cpp b1188, mode routeur), du 2026-11-06. **Biais : un run du labo (`cortex-lab` run 50) occupait en continu le slot 3 pendant toute la session** (`/slots` : `is_processing` constant), donc les débits de génération sont probablement pénalisés. Peu de requêtes, toutes courtes ; les scripts sont restés hors du dépôt. Source de test : les 1 500 premiers mots (~4,3k tokens avec les consignes, 12,6k caractères) d'une spécification technique française (`djlib`), avec le schéma d'extraction de §2.2 et trois candidats factices.
+Mesures sur `http://192.168.1.96:8080/v1`, `qwen3.5-4b` (llama.cpp b1188, mode routeur), du 2026-11-06. **Biais : un run du labo (`cortex-lab` run 50) occupait en continu le slot 3 pendant toute la session** (`/slots` : `is_processing` constant), donc les débits de génération sont probablement pénalisés. Peu de requêtes, toutes courtes ; les scripts sont restés hors du dépôt. Source de test : les 1 500 premiers mots (~4,3k tokens avec les consignes, 12,6k caractères) d'une spécification technique française (`djlib`), avec le schéma d'extraction de §2.2 et trois candidats factices.
 
 | Question | Résultat |
 |---|---|
