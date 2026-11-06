@@ -109,7 +109,7 @@ export function guard(root: string, tool: string, input: Record<string, any>, mo
     const cmd = raw.includes("\n") ? undefined : unquote(raw);
     if (cmd === undefined || /[;&|<>`$]/.test(cmd)) return { allow: false, reason: `Bash: no chaining or redirection, quoted text without $ or backtick (${raw.slice(0, 80)}). Run cortex alone; shorten the output with its options (--limit N), not head or grep. Allowed:\n${usage(mode)}` };
     return CORTEX_CMD[mode].test(cmd) ? { allow: true }
-      : { allow: false, reason: `Bash limited to ${toLabel(mode)}. Allowed:\n${usage(mode)}` };
+      : { allow: false, reason: `Bash limited to ${toLabel(mode)} (refused: ${raw.slice(0, 80)}). Allowed:\n${usage(mode)}` };
   }
   if (WRITERS.has(tool)) {
     if (mode === "read") return { allow: false, reason: "Read-only: rerun with --file to write a synthesis." };
