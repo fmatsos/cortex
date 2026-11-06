@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { add, formatAdd } from "./add";
+import { add, formatAdd, VIA } from "./add";
 import { toResource } from "./doc";
 import { inbox } from "./inbox";
 import { openWiki } from "./context";
@@ -20,7 +20,7 @@ import pkg from "../package.json";
 
 const HELP = `cortex — second brain
 
-  cortex add <url|file|-> --note "why I keep this" [--dry-run]
+  cortex add <url|file|-> --note "why I keep this" [--via freedium] [--dry-run]
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
   cortex index
@@ -68,7 +68,7 @@ try {
       allowPositionals: true,
       tokens: true, // token order tells whether `add` directly follows `log`
       options: {
-        note: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
+        note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
         file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" },
       },
@@ -93,9 +93,10 @@ try {
   switch (cmd) {
     case "add": {
       if (!args[0]) throw usage("Usage: cortex add <url|file|-> --note \"…\"");
+      if (o.via && !VIA[o.via]) throw usage(`Unknown --via: ${o.via} (${Object.keys(VIA).join(", ")}).`);
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
-          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"] });
+          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], mirrors: o.via ? VIA[o.via] : undefined });
           console.log(formatAdd(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);

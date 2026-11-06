@@ -31,7 +31,11 @@ export type Extract = {
 };
 
 /** `publicOnly`: MCP path, refuses loopback/private/link-local targets (the CLI stays permissive). `maxBytes`: body cap, injectable for tests. */
-export type FetchOpts = { publicOnly?: boolean; maxBytes?: number };
+export type FetchOpts = { publicOnly?: boolean; maxBytes?: number; mirrors?: string[] };
+
+/** `--via` → mirror bases, tried in order; the article URL is appended as is. */
+// ponytail: hardcoded, the .cfd domains move; make them a cortex.json setting once one dies
+export const VIA: Record<string, string[]> = { freedium: ["https://freedium-mirror.cfd/", "https://freedium.cfd/"] };
 
 /** IPv4 in dotted form → private/loopback/link-local/CGNAT/unspecified/multicast-reserved? */
 function privateV4(ip: string): boolean {
@@ -144,6 +148,7 @@ export function socialPost(html: string): { body: string; author?: string; publi
  * (defuddle sometimes truncates without warning, cf. OKF at step 0).
  */
 export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Extract> {
+  if (opts.mirrors?.length) return viaMirrors(url, opts.mirrors, opts);
   const { res, bytes, url: finalUrl } = await fetchCapped(url, opts);
   const type = res.headers.get("content-type") ?? "";
   if (type.includes("pdf")) return extractPdf(bytes, url);
@@ -175,6 +180,19 @@ export async function extractUrl(url: string, opts: FetchOpts = {}): Promise<Ext
     extractor: useRb ? `readability/${depVersion("@mozilla/readability")}+turndown` : `defuddle/${depVersion("defuddle")}+linkedom`,
     partial: paywall ? "paywall: partial content" : undefined,
   };
+}
+
+/** Each mirror in turn (a down mirror hangs or serves an error page); the source keeps the original URL. */
+async function viaMirrors(url: string, mirrors: string[], opts: FetchOpts): Promise<Extract> {
+  const errs: string[] = [];
+  for (const m of mirrors) {
+    try {
+      const ex = await extractUrl(m + url, { ...opts, mirrors: undefined });
+      if (/Could not load this article|Reconnect to read new articles/.test(ex.content)) throw new Error("mirror error page");
+      return { ...ex, url, author: ex.author?.replace(/\s*\d+\s*min read\s*$/i, "") || undefined, extractor: `${new URL(m).host}+${ex.extractor}` };
+    } catch (e) { errs.push(`${new URL(m).host}: ${(e as Error).message}`); }
+  }
+  throw new Error(`No mirror served ${url}: nothing written.\n  ${errs.join("\n  ")}`);
 }
 
 export async function extractPdf(bytes: Uint8Array, url?: string, name = "document"): Promise<Extract> {

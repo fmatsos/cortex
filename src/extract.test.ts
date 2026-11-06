@@ -39,6 +39,9 @@ beforeAll(() => {
     fetch(req) {
       const u = new URL(req.url);
       switch (u.pathname) {
+        case "/down/https://medium.com/a": return new Response("bad gateway", { status: 502 });
+        case "/broken/https://medium.com/a": return html(page("", `<article><p>Could not load this article</p>${para(8)}</article>`));
+        case "/up/https://medium.com/a": return html(page('<meta name="author" content="Bob 8 min read">', `<article><h1>Mirrored</h1>${para(8)}</article>`));
         case "/plain": return html(page("", `<article><h1>Plain</h1>${para(8)}</article>`));
         // a 60-word <main> next to the real story: defuddle keeps the <main>, Readability scores the story higher
         case "/trap": return html(page("", `<main><p>${"mot ".repeat(60)}.</p></main><div id="story">${para(14)}</div>`));
@@ -114,4 +117,13 @@ test("extractPdf: without pdftotext in the PATH, a clear French message", () => 
   const p = Bun.spawnSync([process.execPath, "-e", script], { env: { PATH: "/nonexistent", HOME: process.env.HOME ?? "/" } });
   expect(p.stdout.toString()).toContain("pdftotext not found");
   expect(p.stdout.toString()).toContain("poppler-utils");
+});
+
+test("mirrors: failing ones are skipped, the source keeps the original URL", async () => {
+  const b = `http://localhost:${srv.port}`;
+  const ex = await extractUrl("https://medium.com/a", { mirrors: [`${b}/down/`, `${b}/broken/`, `${b}/up/`] });
+  expect(ex.url).toBe("https://medium.com/a");
+  expect(ex.author).toBe("Bob");
+  expect(ex.extractor).toStartWith(`localhost:${srv.port}+`);
+  await expect(extractUrl("https://medium.com/a", { mirrors: [`${b}/down/`] })).rejects.toThrow(/No mirror served/);
 });
