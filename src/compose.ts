@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { estimateTokens } from "./chunk";
-import { type Fact, normalizeNotes } from "./cite";
+import { type Fact, fold, normalizeNotes } from "./cite";
 import type { Config } from "./config";
 import { structured } from "./llm";
 import type { Report } from "./print";
@@ -36,11 +36,34 @@ const LINK = /\[([^\]]*)\]\((?:(?![a-z][a-z0-9+.-]*:|\/\/)[^)\s]*\.md(?:#[^)\s]*
  * those), links to wiki or raw files reduced to their text, `[[p:N]]` kept when N < `pages` (spaces allowed) and removed
  * otherwise, every `[^x]` pointed at `id`. `notes` = how many notes the text carries.
  */
-export function tidy(text: string, id: string, pages: number): { text: string; notes: number } {
-  const t = text.replace(/^\s*---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, "").replace(/^\s*# [^\n]*\n/, "").replace(/^\[\^[\w-]+\]:.*$/gm, "")
+export function tidy(text: string, id: string, pages: number, quotes: string[] = []): { text: string; notes: number } {
+  const t = place(unquote(text, quotes)).replace(/^\s*---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, "").replace(/^\s*# [^\n]*\n/, "").replace(/^\[\^[\w-]+\]:.*$/gm, "")
     .replace(LINK, "$1").replace(/\[\[\s*p\s*:\s*(\d+)\s*\]\]/g, (_, n) => (Number(n) < pages ? `[[p:${Number(n)}]]` : "")).trim();
   const r = normalizeNotes(t, id);
   return { text: r.body, notes: r.count };
+}
+
+const QUOTE_MIN = 40; // folded characters: shorter quotes are ordinary phrases the text may well share
+/** Drops the sentences that copy a fact's quote (the model pastes the source's passage into the page): the fact is stated, its proof stays in the source. */
+function unquote(text: string, quotes: string[]): string {
+  const qs = quotes.map(fold).filter((q) => q.length >= QUOTE_MIN);
+  if (!qs.length) return text;
+  return text.split(/\n{2,}/).map((para) => para.split(/(?<=[.!?»…])\s+(?=\S)/).filter((s) => { const f = fold(s); return !qs.some((q) => f.includes(q)); }).join(" "))
+    .filter((p) => p.trim()).join("\n\n");
+}
+
+/** A paragraph made only of `[[p:N]]` links and notes (the model's way of placing them) joins the paragraph before it: links in a « (voir …) », notes after its last sentence. */
+function place(text: string): string {
+  const out: string[] = [];
+  for (const para of text.split(/\n{2,}/)) {
+    const links = para.match(/\[\[\s*p\s*:\s*\d+\s*\]\]/g) ?? [], notes = para.match(/\[\^[\w-]+\]/g) ?? [];
+    const bare = para.replace(/\[\[\s*p\s*:\s*\d+\s*\]\]|\[\^[\w-]+\]|[\s,;.·—–-]/g, "") === "";
+    const prev = out.length - 1;
+    if (!bare || prev < 0 || /^\s*(#|[-*>|]|```)/m.test(out[prev].split("\n").at(-1) ?? "")) { out.push(para); continue; }
+    const tail = out[prev].slice(-300);
+    out[prev] = out[prev].replace(/\s+$/, "") + notes.filter((n) => !tail.includes(n)).join("") + (links.length ? ` (voir ${links.join(", ")})` : "");
+  }
+  return out.join("\n\n");
 }
 
 /** Turns `[[p:N]]` into `[Title](/wiki/…md)` (the form `weave` writes) once the paths are known; a page without a path becomes its plain title, an unknown N disappears. */
@@ -70,7 +93,7 @@ export async function writePage(cfg: Config, o: { kind: string; title: string; d
   const pages = o.pages ?? [];
   let last: { text: string; notes: number } | undefined;
   const zod = z.object({ body: z.string() }).superRefine((v, ctx) => {
-    const t = (last = tidy(v.body, o.id, pages.length));
+    const t = (last = tidy(v.body, o.id, pages.length, o.facts.map((f) => f.quote)));
     const add = (message: string) => ctx.addIssue({ code: "custom", path: ["body"], message });
     if (v.body.length > BODY.max) add(`too long (${v.body.length} characters, at most ${BODY.max})`);
     else if (t.text.length < BODY.min) add(`too short (${t.text.length} characters, at least ${BODY.min}): develop the facts, without adding any`);
@@ -80,7 +103,7 @@ export async function writePage(cfg: Config, o: { kind: string; title: string; d
     pages.length ? `Pages you may mention:\n${pages.map((p, i) => `[[p:${i}]] ${one(p.title)}`).join("\n")}` : "No page to mention.", `Facts:\n${facts(o.facts)}`].filter(Boolean).join("\n");
   try {
     const r = await structured(cfg, { name: "write", system: pipelinePrompt("write", { language: o.language }), user, schema: WriteJson, zod, maxTokens: BODY.tokens, source: o.source, report: o.report });
-    const t = tidy(r.body, o.id, pages.length);
+    const t = tidy(r.body, o.id, pages.length, o.facts.map((f) => f.quote));
     return { body: t.text, noted: t.notes > 0 };
   } catch (e) {
     if (!exhausted(e) || !last?.text) throw e;
@@ -107,7 +130,7 @@ export function pageForPrompt(body: string): string {
 export async function updatePage(cfg: Config, o: { title: string; body: string; facts: Fact[]; id: string; contradicts?: boolean; language: string; source?: string; report?: Report }): Promise<Addition> {
   let last: { addition: string; notes: number; section: string; contradiction: string | null } | undefined;
   const zod = z.object({ section: z.string(), addition: z.string(), contradiction: z.string().nullable() }).superRefine((v, ctx) => {
-    const a = tidy(v.addition, o.id, 0), c = v.contradiction && tidy(v.contradiction, o.id, 0).text;
+    const a = tidy(v.addition, o.id, 0, o.facts.map((f) => f.quote)), c = v.contradiction && tidy(v.contradiction, o.id, 0).text;
     last = { addition: a.text, notes: a.notes, section: v.section.replace(/^[#\s]+/, "").trim(), contradiction: c || null };
     const add = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
     if (v.section.length > 80) add("section", "too long (80 characters at most)");
@@ -119,7 +142,7 @@ export async function updatePage(cfg: Config, o: { title: string; body: string; 
   const user = [`Page: ${one(o.title)}`, `Note to cite: [^${o.id}]`, o.contradicts && "This source contradicts the page: say how in `contradiction`.", `Page body:\n${pageForPrompt(o.body)}`, `Facts to add:\n${facts(o.facts)}`].filter(Boolean).join("\n");
   try {
     const r = await structured(cfg, { name: "update", system: pipelinePrompt("update", { language: o.language }), user, schema: UpdateJson, zod, maxTokens: ADD.tokens, source: o.source, report: o.report });
-    const a = tidy(r.addition, o.id, 0), c = r.contradiction && tidy(r.contradiction, o.id, 0).text;
+    const a = tidy(r.addition, o.id, 0, o.facts.map((f) => f.quote)), c = r.contradiction && tidy(r.contradiction, o.id, 0).text;
     return { section: r.section.replace(/^[#\s]+/, "").trim(), addition: a.text, contradiction: c || null, noted: a.notes > 0 };
   } catch (e) {
     if (!exhausted(e) || !last?.addition) throw e;

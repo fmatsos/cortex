@@ -144,3 +144,11 @@ test("tidy: an external link to a .md file keeps its link; a wiki, raw or relati
   const t = tidy("See [README](https://github.com/x/y/blob/main/README.md#top), [doc](http://x.org/a.md), [mail](mailto:a@b.md), [page](/wiki/concepts/a.md), [rel](notes/b.md), [raw](../raw/2026/11/x/source.md).", "id", 0);
   expect(t.text).toBe("See [README](https://github.com/x/y/blob/main/README.md#top), [doc](http://x.org/a.md), [mail](mailto:a@b.md), page, rel, raw.");
 });
+
+test("tidy: a paragraph of only links or notes joins the one before; a sentence that copies a fact's quote is dropped", async () => {
+  const { tidy } = await import("./compose");
+  const quote = "blocks are grouped into super-blocks, and a mixed strategy keeps more bits on the sensitive tensors.";
+  const body = `Les K-quants regroupent les blocs.[^x]\n\n[[p:0]]\n\nLa technique est décrite ainsi : «${quote}»\n\n[^x]\n\n## Suite\n\nUn autre fait.\n\n[[p:1]] [[p:0]]`;
+  const t = tidy(body, "x", 2, [quote]);
+  expect(t.text).toBe("Les K-quants regroupent les blocs.[^x] (voir [[p:0]])\n\n## Suite\n\nUn autre fait. (voir [[p:1]], [[p:0]])");
+});
