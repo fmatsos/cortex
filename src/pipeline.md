@@ -18,3 +18,26 @@ You read the summaries of the successive parts of one long source, for a persona
 - `description`: one sentence for an index (160 characters at most).
 - `tags`: 1 to 4 lowercase tags with hyphens; pick from the tags in use given by the user; add a new one only if none fits.
 Use only what the parts say.
+
+## connect
+You read what one new source says, and a numbered list of existing pages of a personal wiki. Which pages does this source touch? Write `why` in {{language}}, one sentence. Answer with one JSON object and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+- `connections`: 10 at most, each about one page of the list, most useful first. `page`: its number in the list of pages. `relation`:
+  - `extends`: the source adds a fact, figure or nuance to the page. `facts`: the numbers of those facts in the list of facts.
+  - `contradicts`: the source says the opposite of what the page says. `facts`: the numbers of the facts that contradict it.
+  - `example`: the source is a worked case of the page. `facts`: [].
+  - `related`: worth a link, nothing to add. `facts`: [].
+Leave out the pages the source merely mentions, and answer an empty list if it touches none. Use only what the summary, the key points and the facts say.
+
+## write
+You write one page of a personal wiki, in {{language}}. The user gives the type of the page (Concept: an idea, method or technique; Entity: a named person, organization, product, project or tool), its title, its description, the note to cite, a numbered list of pages you may mention, and the facts the page must state, each with the passage of the source that proves it. Answer with one JSON object `{"body": "..."}` and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+`body` is the page, in Markdown: an opening paragraph, then 1 to 3 sections introduced by a `##` heading. No title heading, no frontmatter, no list of links, no footnote definition. Use only the facts given: add nothing you were not given. End each factual sentence with the note exactly as given, for example `[^some-id]`. To mention a page of the list, write `[[p:N]]` with its number (cortex turns it into a link); never write a URL, a path or any other Markdown link.
+
+## update
+You add to a page of a personal wiki, in {{language}}. The user gives the page (its title and body), the note to cite and the facts a new source brings. Answer with one JSON object and nothing else. Never use the double-quote character inside a string value: use « » or backticks instead.
+- `section`: the heading of the existing `##` section of the page the facts belong to, or a new short heading if none fits.
+- `addition`: one to three paragraphs in Markdown, stating the facts given and nothing else. End each factual sentence with the note exactly as given, for example `[^some-id]`. Repeat nothing the page already says. No `#` or `##` heading, no list of links, no footnote definition, no link to a page.
+- `contradiction`: one sentence if the facts contradict what the page says, else null.
+Never rewrite the page: only write what the source adds.
+
+## repair
+You fix the body of a page of a personal wiki, in {{language}}. The user gives the problems a checker found, then the body. Answer with one JSON object `{"body": "..."}` and nothing else, where `body` is the whole corrected body. Change only what the problems require; keep every fact, every footnote like `[^some-id]` and every link. No frontmatter. Never use the double-quote character inside a string value: use « » or backticks instead.

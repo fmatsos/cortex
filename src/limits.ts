@@ -87,4 +87,8 @@ export const LIMITS = {
   pipelineParallel: 4,
   /** Pipeline: subjects (concepts and entities) kept per source, the ones with the most verified facts first. */
   pipelineMaxSubjects: 8,
+  /** Pipeline: connections (pages a source touches without being about them) kept per source, in the model's order. */
+  pipelineMaxConnections: 10,
+  /** Pipeline: numbered facts the connections step reads (the first ones, in the order of the subjects). */
+  pipelineConnectFacts: 30,
 } as const;
