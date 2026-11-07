@@ -1,7 +1,7 @@
 import type Fuse from "fuse.js";
 import { fold } from "./fold";
 import { t as tr } from "./i18n/index";
-import { activeValues, hasText, IS_VALUES, isEmpty, keyWord, matches, parseQuery, STATUS_VALUES, token, TYPE_VALUES, valueWord, valueWords, type Parsed } from "./query";
+import { activeValues, allText, hasText, IS_VALUES, isEmpty, keyWord, matches, parseQuery, STATUS_VALUES, token, TYPE_VALUES, valueWord, valueWords, type Parsed } from "./query";
 import type { SearchDoc, SearchIndex } from "./types";
 
 /**
@@ -100,6 +100,9 @@ export function rank(e: Engine, p: Parsed, isFav: (id: string) => boolean): Rank
 	});
 	for (const ph of p.phrases) for (const w of tokens(ph.text)) narrow(e.terms.get(w) ?? []);
 	const ids = cand ?? new Set(e.docs.keys());
+	// words of OR groups: they score and highlight, but do not narrow (only one alternative has to match)
+	const top = new Set(p.words);
+	perWord.push(...allText(p).words.filter((w) => !top.has(w)).map((w) => expand(e, w)));
 
 	const out: Ranked[] = [];
 	for (const i of ids) {
@@ -169,7 +172,7 @@ export function search(e: Engine, q: string, isFav: (id: string) => boolean, lim
 	const p = parseQuery(q);
 	if (isEmpty(p)) return { hits: [], total: 0 };
 	const all = rank(e, p, isFav);
-	const phrases = p.phrases.map((x) => x.text), text_ = hasText(p);
+	const phrases = allText(p).phrases, text_ = hasText(p);
 	return { total: all.length, hits: all.slice(0, limit).map(({ doc, hits }) => {
 		const text = doc.text, xs = ranges(text, hits, phrases);
 		let snippet: string;
@@ -256,7 +259,7 @@ export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean
 export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): { filters: FilterSuggestion[]; terms: string[]; titles: SearchDoc[] } {
 	const none = { filters: [], terms: [], titles: [] };
 	if (!q.trim()) return { ...none, filters: keyHints() };
-	const m = q.match(/(^|\s)(-?)(\S*)$/);
+	const m = q.match(/(^|\s)(-?\(*)(\S*)$/);
 	if (!m) return none; // the query ends with a space: nothing to complete
 	const head = q.slice(0, m.index! + m[1].length) + m[2], tok = m[3], t = fold(tok);
 

@@ -5,6 +5,7 @@ import { DICTS, getLocale, LOCALES, t, type Locale } from "./i18n/index";
  * Search bar query: free text (inverted index) + structured filters (metadata), all combined with AND.
  *   #tag  tag:x  type:concept|entity|synthesis|source  status:draft|stable|deprecated  is:fav|verified|unverified|review|partial
  *   "exact phrase"   -word   -#tag   -type:source …
+ *   a OR b   (a OR b) c   -(a OR b)   — OR (also OU, |) binds looser than the implicit AND; groups nest.
  * Pure function, insensitive to accents and case. Operators and values are typed in English or French whatever the
  * site language (`est:relue` = `is:verified`, `statut:brouillon` = `status:draft`); tokens the site writes follow its language.
  * `text`/`value`: folded form, for comparing; `display`: what the reader typed, to display it (accents kept).
@@ -15,7 +16,28 @@ export type Parsed = {
 	phrases: { text: string; raw: string; display: string }[]; // "exact phrase"
 	exclude: { text: string; raw: string; display: string }[]; // -word and -"phrase"
 	ops: Op[];
+	groups: Group[]; // (a OR b): at least one alternative matches (none, when negated)
 };
+/** A parenthesized or OR-separated part of the query: each alternative is a query of its own. */
+export type Group = { neg: boolean; raw: string; alts: Parsed[] };
+
+/** OR keyword: `query.word.or` of every dictionary (uppercase only: "ou" is also a common word), or `|`. */
+const OR = new Set(["|", ...LOCALES.map((l) => DICTS[l]["query.word.or"]).filter(Boolean)]);
+/** Top-level pieces of `q`: quoted strings and parenthesized groups stay whole. Unbalanced parentheses count as text. */
+function split(q: string): { text: string; or: boolean }[] {
+	const out: { text: string; or: boolean }[] = [];
+	let cur = "", depth = 0, quote = false;
+	const flush = () => { if (cur.trim()) out.push({ text: cur.trim(), or: depth === 0 && OR.has(cur.trim()) }); cur = ""; };
+	for (const c of q) {
+		if (c === '"') quote = !quote;
+		else if (!quote && c === "(") depth++;
+		else if (!quote && c === ")" && depth > 0) depth--;
+		if (!quote && depth === 0 && /\s/.test(c)) flush(); else cur += c;
+	}
+	flush();
+	return out;
+}
+const GROUP = /^(-?)\((.*)\)$/s;
 
 export const KEYS = ["tag", "type", "status", "is"] as const;
 /** Recognized values of each operator (except `tag`, free). */
@@ -49,8 +71,23 @@ export const canonType = (v: string) => canon("type", v);
 const TOKEN = /(-?)(?:"([^"]*)"|(#[^\s"]+)|([a-z]+):("[^"]*"|[^\s"]+)|([^\s"]+))/giu;
 
 export function parseQuery(q: string): Parsed {
-	const out: Parsed = { words: [], phrases: [], exclude: [], ops: [] };
-	for (const m of q.matchAll(TOKEN)) {
+	const out: Parsed = { words: [], phrases: [], exclude: [], ops: [], groups: [] };
+	const parts = split(q);
+	if (parts.some((x) => x.or)) {
+		// a OR b c OR d → (a) | (b c) | (d): AND binds tighter
+		const alts: string[][] = [[]];
+		for (const x of parts) if (x.or) alts.push([]); else alts[alts.length - 1].push(x.text);
+		out.groups.push({ neg: false, raw: q.trim(), alts: alts.filter((a) => a.length).map((a) => parseQuery(a.join(" "))) });
+		return out;
+	}
+	let rest = "";
+	for (const x of parts) {
+		const g = x.text.match(GROUP);
+		if (!g) { rest += ` ${x.text}`; continue; }
+		const inner = parseQuery(g[2]), only = inner.groups.length === 1 && !inner.groups[0].neg && isEmpty({ ...inner, groups: [] });
+		if (!isEmpty(inner)) out.groups.push({ neg: g[1] === "-", raw: x.text, alts: only ? inner.groups[0].alts : [inner] });
+	}
+	for (const m of rest.matchAll(TOKEN)) {
 		const [raw, dash, phrase, hashtag, key, val, word] = m;
 		const neg = dash === "-", unq = (s: string) => s.replace(/^"|"$/g, "");
 		if (phrase !== undefined) {
@@ -75,10 +112,15 @@ export function parseQuery(q: string): Parsed {
 	return out;
 }
 
-export const isEmpty = (p: Parsed) => !p.words.length && !p.phrases.length && !p.exclude.length && !p.ops.length;
+export const isEmpty = (p: Parsed): boolean => !p.words.length && !p.phrases.length && !p.exclude.length && !p.ops.length && !p.groups.length;
 
 /** The query searches for text (free word or phrase): the only case where an excerpt and a highlight make sense. */
-export const hasText = (p: Parsed) => p.words.length > 0 || p.phrases.length > 0;
+export const hasText = (p: Parsed): boolean => p.words.length > 0 || p.phrases.length > 0 || p.groups.some((g) => !g.neg && g.alts.some(hasText));
+/** Every searched text of the query, groups included (not negated ones): highlighting and scoring. */
+export const allText = (p: Parsed): { words: string[]; phrases: string[] } => {
+	const sub = p.groups.filter((g) => !g.neg).flatMap((g) => g.alts.map(allText));
+	return { words: [...p.words, ...sub.flatMap((x) => x.words)], phrases: [...p.phrases.map((x) => x.text), ...sub.flatMap((x) => x.phrases)] };
+};
 
 /** Query to pass on to a page opened from a result (passage highlighting): empty if there is no searched text. */
 export const passageQuery = (q: string) => (hasText(parseQuery(q)) ? q.trim() : "");
@@ -104,6 +146,7 @@ export function chips(p: Parsed): Chip[] {
 		}),
 		...p.phrases.map((x): [string, string, string] => [`"${x.text}"`, t("query.quoted", { text: x.display }), x.raw]),
 		...p.exclude.map((x): [string, string, string] => [`-${x.text}`, `${t("query.without")} ${x.display}`, x.raw]),
+		...p.groups.map((g): [string, string, string] => [g.raw, g.raw, g.raw]),
 	];
 	for (const [key, label, raw] of all) {
 		const c = out.get(key);
@@ -176,6 +219,7 @@ export function diagnose(p: Parsed, knownTags?: Set<string>): Issue[] {
 		const opposite = p.ops.find((x) => x.neg && x.key === o.key && x.value === o.value);
 		if (opposite) out.push({ text: t("query.issue.contradiction", { a: o.raw, b: opposite.raw }), raws: [opposite.raw], fix: t("query.fix.remove", { token: opposite.raw }) });
 	}
+	for (const g of p.groups) for (const a of g.alts) out.push(...diagnose(a, knownTags));
 	return out;
 }
 
@@ -196,5 +240,8 @@ export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean, hay =
 			: false;
 		if (hit === o.neg) return false;
 	}
-	return p.phrases.every((x) => hay.includes(x.text)) && !p.exclude.some((x) => hay.includes(x.text));
+	if (!p.phrases.every((x) => hay.includes(x.text)) || p.exclude.some((x) => hay.includes(x.text))) return false;
+	// inside a group, free words are checked here (the inverted index only narrows the top-level ones): word start, like a prefix
+	const alt = (a: Parsed) => matches(d, a, isFav, hay) && a.words.every((w) => new RegExp(`(^|[^\\p{L}\\p{N}])${w}`, "u").test(hay));
+	return p.groups.every((g) => g.alts.some(alt) !== g.neg);
 }

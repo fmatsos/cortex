@@ -156,3 +156,28 @@ test("historique : dédoublonné sans accents, borné, vide ignoré, relecture t
 	expect(parseRecent('{"a":1}')).toEqual([]);
 	expect(parseRecent(null)).toEqual([]);
 });
+
+test("expressions : OR / OU / |, parenthèses imbriquées, groupe nié, ET implicite prioritaire", async () => {
+	const { search } = await eng();
+	const { parseQuery, diagnose } = await q();
+	const e = await engine([
+		doc("a", "Cache mémoire", { tags: ["llm"], text: "ram cache" }),
+		doc("b", "Agents", { tags: ["agents"], status: "draft" }),
+		doc("c", "Source brute", { type: "Source", tags: ["llm"], text: "ram" }),
+		doc("d", "Autre", { tags: ["divers"] }),
+	]);
+	const ids = (s: string) => search(e, s, () => false).hits.map((h) => h.doc.id).sort();
+	expect(ids("#llm OR #agents")).toEqual(["a", "b", "c"]);
+	expect(ids("#llm OU #agents")).toEqual(["a", "b", "c"]);
+	expect(ids("#llm | #agents")).toEqual(["a", "b", "c"]);
+	expect(ids("(#llm OR #agents) statut:brouillon")).toEqual(["b"]);
+	expect(ids("#llm -(type:source OR statut:obsolete)")).toEqual(["a"]);
+	expect(ids("ram (cache OR brute)")).toEqual(["a", "c"]);
+	expect(ids("type:source #llm OR #agents")).toEqual(["b", "c"]); // (type:source #llm) OR #agents
+	expect(ids("((#llm OR #divers) -type:source) OR #agents")).toEqual(["a", "b", "d"]);
+	expect(ids("chat ou chien")).toEqual([]); // lowercase "ou" is a word, not an operator
+	expect(ids('"cache OR ram"')).toEqual([]); // inside quotes: a phrase
+	expect(search(e, "ram (cache OR brute)", () => false).hits.find((h) => h.doc.id === "a")!.snippet).toContain("<mark>cache</mark>");
+	expect(diagnose(parseQuery("(type:truc OR #llm)"))[0].raws).toEqual(["type:truc"]);
+	expect(ids("(#llm")).toEqual(["a", "c"]); // unbalanced: the parenthesis is ignored
+});

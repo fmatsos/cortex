@@ -1,4 +1,5 @@
 {
+	"query.word.or": "OR",
 	"query.word.op.tag": "tag",
 	"query.word.op.type": "type",
 	"query.word.op.status": "status",
@@ -359,6 +360,7 @@
 	"search.noResultsFor": "No results for “{q}”.",
 	"search.operators": "Refine with operators",
 	"search.operators.exclude": "to exclude",
+	"search.operators.or": "either one; OU and | also work",
 	"search.operators.help": "Filters combine with AND. Shortcuts: Ctrl K or / to search, Alt F to favorite, Alt C to copy the link of a palette result.",
 	"search.operators.name": "name",
 	"search.operators.phrase": "exact phrase",

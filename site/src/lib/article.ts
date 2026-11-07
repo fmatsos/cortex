@@ -1,6 +1,6 @@
 import type { IconName } from "#lib/icons.js";
 import { fold } from "./fold";
-import { token, type Parsed } from "./query";
+import { allText, token, type Parsed } from "./query";
 import type { Link, PageData, RelatedReason, SourceRef, TocItem } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -123,7 +123,7 @@ export function shareUrl(href: string): string {
 export type HitTerms = { words: string[]; phrases: string[] };
 
 /** Query terms that are searched in the text: free words and exact phrases (filters and exclusions are not). */
-export const hitTerms = (p: Parsed): HitTerms => ({ words: [...new Set(p.words)], phrases: p.phrases.map((x) => x.text) });
+export const hitTerms = (p: Parsed): HitTerms => { const x = allText(p); return { words: [...new Set(x.words)], phrases: x.phrases }; };
 export const hasTerms = (t: HitTerms) => t.words.length > 0 || t.phrases.length > 0;
 
 /**
