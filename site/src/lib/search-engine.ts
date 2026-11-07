@@ -1,7 +1,7 @@
 import type Fuse from "fuse.js";
 import { fold } from "./fold";
 import { t as tr } from "./i18n/index";
-import { activeValues, hasText, isEmpty, matches, parseQuery, STATUS_VALUES, TYPE_VALUES, type Parsed } from "./query";
+import { activeValues, hasText, IS_VALUES, isEmpty, keyWord, matches, parseQuery, STATUS_VALUES, token, TYPE_VALUES, valueWord, valueWords, type Parsed } from "./query";
 import type { SearchDoc, SearchIndex } from "./types";
 
 /**
@@ -196,14 +196,12 @@ export function suggestTitles(e: Engine, p: Parsed, isFav: (id: string) => boole
 }
 
 const count = <T>(xs: T[], f: (x: T) => boolean) => xs.filter(f).length;
-export const KEY_HINTS: FilterSuggestion[] = [
-	{ label: "#tag", insert: "#", get hint() { return tr("search.hint.tag"); } },
-	{ label: "type:", insert: "type:", hint: "concept, entity, synthesis, source" },
-	{ label: "status:", insert: "status:", hint: "draft, stable, deprecated" },
-	{ label: "is:fav", insert: "is:fav ", get hint() { return tr("search.hint.fav"); } },
-	{ label: "is:unverified", insert: "is:unverified ", get hint() { return tr("search.hint.unverified"); } },
-	{ label: "is:review", insert: "is:review ", get hint() { return tr("search.hint.review"); } },
-	{ label: "is:partial", insert: "is:partial ", get hint() { return tr("search.hint.partial"); } },
+/** Operators offered on an empty input, in the site language (computed at call time: the visitor may switch language). */
+export const keyHints = (): FilterSuggestion[] => [
+	{ label: "#tag", insert: "#", hint: tr("search.hint.tag") },
+	{ label: `${keyWord("type")}:`, insert: `${keyWord("type")}:`, hint: valueWords("type") },
+	{ label: `${keyWord("status")}:`, insert: `${keyWord("status")}:`, hint: valueWords("status") },
+	...IS_VALUES.map((v) => ({ label: token("is", v), insert: `${token("is", v)} `, hint: tr(`search.hint.${v}`) })),
 ];
 
 /** Pages that pass the filters, phrases and exclusions of `p` (and its free words): the context of the counters. */
@@ -257,7 +255,7 @@ export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean
  */
 export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): { filters: FilterSuggestion[]; terms: string[]; titles: SearchDoc[] } {
 	const none = { filters: [], terms: [], titles: [] };
-	if (!q.trim()) return { ...none, filters: KEY_HINTS };
+	if (!q.trim()) return { ...none, filters: keyHints() };
 	const m = q.match(/(^|\s)(-?)(\S*)$/);
 	if (!m) return none; // the query ends with a space: nothing to complete
 	const head = q.slice(0, m.index! + m[1].length) + m[2], tok = m[3], t = fold(tok);
@@ -276,21 +274,25 @@ export function suggest(e: Engine, q: string, isFav: (id: string) => boolean): {
 		const pre = t.replace(/^#|^tag:/, "");
 		return { ...none, filters: values(tagCounts(), pre).map((f) => ({ ...f, label: `#${f.label}`, insert: `${head}#${f.label} ` })) };
 	}
-	const op = t.match(/^(type|status|is):(.*)$/);
-	if (op) {
-		const [, key, pre] = op;
+	const op = t.match(/^([a-z]+):(.*)$/);
+	const key = op ? parseQuery(`${op[1]}:x`).ops[0]?.key : undefined;
+	if (op && key && key !== "tag") {
+		const pre = op[2];
+		// a value matches by its English or French spelling, whatever the language the input started in
+		const starts = (canon: string) => [valueWord(key, canon, "en"), valueWord(key, canon, "fr")].some((w) => w.startsWith(pre));
 		const docs = contextDocs(e, key === "is" ? rest : without(rest, key), isFav);
 		const all: [string, string, number][] =
-			key === "type" ? TYPE_VALUES.map((ty) => [ty.toLowerCase(), `type:${ty.toLowerCase()} `, count(docs, (d) => d.type === ty)])
-			: key === "status" ? STATUS_VALUES.map((s) => [s, `status:${s} `, count(docs, (d) => fold(d.status) === s)])
-			: [["fav", "is:fav ", count(docs, (d) => isFav(d.id))], ["unverified", "is:unverified ", count(docs, (d) => !d.verified)],
-				["review", "is:review ", count(docs, (d) => !!d.needsReview)], ["partial", "is:partial ", count(docs, (d) => !!d.partial)]];
+			key === "type" ? TYPE_VALUES.filter(starts).map((ty) => [ty, `${token("type", ty)} `, count(docs, (d) => d.type === ty)])
+			: key === "status" ? STATUS_VALUES.filter(starts).map((s) => [s, `${token("status", s)} `, count(docs, (d) => fold(d.status) === s)])
+			: ([["fav", (d: SearchDoc) => isFav(d.id)], ["verified", (d: SearchDoc) => !!d.verified], ["unverified", (d: SearchDoc) => !d.verified],
+				["review", (d: SearchDoc) => !!d.needsReview], ["partial", (d: SearchDoc) => !!d.partial]] as const)
+				.filter(([v]) => starts(v)).map(([v, f]) => [v, `${token("is", v)} `, count(docs, f)]);
 		// counters are contextual: a value with zero pages would lead to a dead end, so it is not offered
-		return { ...none, filters: values(all, pre).filter((f) => f.count !== 0) };
+		return { ...none, filters: values(all, "").filter((f) => f.count !== 0) };
 	}
 	if (/^[a-z]+:/.test(t) || t.startsWith('"')) return none;
 
-	const filters = t ? KEY_HINTS.filter((k) => fold(k.label).startsWith(t) && fold(k.label) !== t).map((k) => ({ ...k, insert: head + k.insert })) : [];
+	const filters = t ? keyHints().filter((k) => fold(k.label).startsWith(t) && fold(k.label) !== t).map((k) => ({ ...k, insert: head + k.insert })) : [];
 	const mm = fold(q).match(/^(.*?)([\p{L}\p{N}]+)$/u);
 	if (!mm) return { ...none, filters };
 	const [, pre, last] = mm;

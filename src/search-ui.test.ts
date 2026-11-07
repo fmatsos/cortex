@@ -28,8 +28,8 @@ test("puces : phrases et tags gardent leurs accents, le dédoublonnage reste rep
 
 test("facettes : type et statut à choix unique, tags et indicateurs cumulables, retrait par jeton (UX04)", async () => {
 	const { toggleFacet, clearOps, activeValues, parseQuery } = await q();
-	expect(toggleFacet("", "type", "Concept")).toBe("type:Concept");
-	expect(toggleFacet("contexte type:Concept", "type", "Source")).toBe("contexte type:Source"); // replaces, does not add up
+	expect(toggleFacet("", "type", "Concept")).toBe("type:concept");
+	expect(toggleFacet("contexte type:Concept", "type", "Source")).toBe("contexte type:source"); // replaces, does not add up
 	expect(toggleFacet("contexte type:concept", "type", "Concept")).toBe("contexte"); // active → removed, even when typed by hand
 	expect(toggleFacet("x status:draft", "status", "stable")).toBe("x status:stable");
 	expect(toggleFacet("#llm", "tag", "agents")).toBe("#llm #agents");
@@ -37,7 +37,7 @@ test("facettes : type et statut à choix unique, tags et indicateurs cumulables,
 	expect(toggleFacet("", "tag", "deux words")).toBe('tag:"deux words"');
 	expect(toggleFacet("", "is", "fav")).toBe("is:fav");
 	expect(toggleFacet("is:fav x", "is", "fav")).toBe("x");
-	expect(toggleFacet("-type:source", "type", "Source")).toBe("-type:source type:Source"); // a negated filter is not the facet
+	expect(toggleFacet("-type:source", "type", "Source")).toBe("-type:source type:source"); // a negated filter is not the facet
 	expect(clearOps('a "b c" #t type:source -#u status:draft')).toBe('a "b c"');
 	expect([...activeValues(parseQuery("type:sources #A -#b"), "type")]).toEqual(["Source"]);
 	expect([...activeValues(parseQuery("#A -#b"), "tag")]).toEqual(["a"]);
@@ -47,7 +47,7 @@ test("diagnostic : valeur inconnue, filtres exclusifs, contradiction, tag absent
 	const { diagnose, parseQuery, removeToken } = await q();
 	const d = (s: string, tags?: string[]) => diagnose(parseQuery(s), tags ? new Set(tags) : undefined);
 	expect(d("contexte type:concept status:stable is:fav")).toEqual([]); // valid, even if it finds nothing
-	expect(d("status:brouillon")[0].text).toContain("does not exist");
+	expect(d("status:truc")[0].text).toContain("does not exist");
 	expect(d("type:truc")[0].raws).toEqual(["type:truc"]);
 	expect(d("is:xyz")[0].fix).toBe("Remove is:xyz");
 	const two = d("type:concept type:source");
@@ -60,6 +60,22 @@ test("diagnostic : valeur inconnue, filtres exclusifs, contradiction, tag absent
 	expect(d("-type:source type:concept")).toEqual([]); // negated and positive with different values: consistent
 	expect(d("#llm #zzz", ["llm"]).map((x) => x.raws)).toEqual([["#zzz"]]);
 	expect(d("#zzz")).toEqual([]); // unknown tags: we don't know, we say nothing
+});
+
+test("filtres bilingues : saisis en anglais ou en français quelle que soit la langue, écrits dans la langue du site", async () => {
+	const { matches, parseQuery, toggleFacet, localizeQuery, diagnose } = await q();
+	const { setLocale } = await import("../site/src/lib/i18n/index");
+	const a = doc("a", "A", { status: "draft", verified: true });
+	const ok = (s: string) => matches(a, parseQuery(s), () => false);
+	expect([ok("est:relue"), ok("is:verified"), ok("statut:brouillon"), ok("status:draft"), ok("est:nonrelue")]).toEqual([true, true, true, true, false]);
+	expect(diagnose(parseQuery("statut:brouillon est:relue type:entite"))).toEqual([]);
+	setLocale("fr");
+	try {
+		expect(toggleFacet("", "status", "draft")).toBe("statut:brouillon");
+		expect(toggleFacet("statut:brouillon", "status", "draft")).toBe(""); // typed in French, recognized as active
+		expect(localizeQuery("x is:verified -type:synthesis")).toBe("x est:relue -type:synthese");
+	} finally { setLocale("en"); }
+	expect(localizeQuery("est:relue")).toBe("is:verified");
 });
 
 test("indicateurs is:review et is:partial", async () => {

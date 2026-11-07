@@ -1,11 +1,12 @@
 import { fold } from "./fold";
-import { t } from "./i18n/index";
+import { DICTS, getLocale, LOCALES, t, type Locale } from "./i18n/index";
 
 /**
  * Search bar query: free text (inverted index) + structured filters (metadata), all combined with AND.
- *   #tag  tag:x  type:concept|entity|synthesis|source  status:draft|stable|deprecated  is:fav|unverified|review|partial
+ *   #tag  tag:x  type:concept|entity|synthesis|source  status:draft|stable|deprecated  is:fav|verified|unverified|review|partial
  *   "exact phrase"   -word   -#tag   -type:source …
- * Pure function, insensitive to accents and case.
+ * Pure function, insensitive to accents and case. Operators and values are typed in English or French whatever the
+ * site language (`est:relue` = `is:verified`, `statut:brouillon` = `status:draft`); tokens the site writes follow its language.
  * `text`/`value`: folded form, for comparing; `display`: what the reader typed, to display it (accents kept).
  */
 export type Op = { key: "tag" | "type" | "status" | "is"; value: string; neg: boolean; raw: string; display: string };
@@ -17,24 +18,33 @@ export type Parsed = {
 };
 
 export const KEYS = ["tag", "type", "status", "is"] as const;
-const TYPES: Record<string, string> = {
-	concept: "Concept", concepts: "Concept", entity: "Entity", entities: "Entity", entite: "Entity", entites: "Entity",
-	synthesis: "Synthesis", syntheses: "Synthesis", synthese: "Synthesis", source: "Source", sources: "Source",
-};
-const IS: Record<string, string> = {
-	fav: "fav", favori: "fav", favoris: "fav", favorite: "fav",
-	unverified: "unverified", nonrelue: "unverified", jamaisrelue: "unverified",
-	review: "review", relire: "review", arelire: "review", needsreview: "review",
-	partial: "partial", partiel: "partial", partielle: "partial",
-};
-
 /** Recognized values of each operator (except `tag`, free). */
 export const TYPE_VALUES = ["Concept", "Entity", "Synthesis", "Source"] as const;
 export const STATUS_VALUES = ["draft", "stable", "deprecated"] as const;
-export const IS_VALUES = ["fav", "unverified", "review", "partial"] as const;
+export const IS_VALUES = ["fav", "verified", "unverified", "review", "partial"] as const;
+
+/**
+ * How each operator and value is written: `query.word.<op|type|status|is>.<canonical>` in each dictionary (lib/i18n/*.json),
+ * extra input spellings in `query.alias.<…>` (comma-separated). Every language is accepted on input, folded (no accents).
+ */
+type Kind = "op" | "type" | "status" | "is";
+const CANON: Record<Kind, readonly string[]> = { op: KEYS, type: TYPE_VALUES, status: STATUS_VALUES, is: IS_VALUES };
+const word = (k: Kind, c: string, l: Locale) => DICTS[l][`query.word.${k}.${c}`] ?? fold(c);
+const LOOKUP = Object.fromEntries((Object.keys(CANON) as Kind[]).map((k) => [k, Object.fromEntries(CANON[k].flatMap((c) => [
+	[fold(c), c],
+	...LOCALES.flatMap((l) => [word(k, c, l), ...(DICTS[l][`query.alias.${k}.${c}`] ?? "").split(",")].map((w) => [fold(w).trim(), c])),
+]).filter(([w]) => w))])) as Record<Kind, Record<string, string>>;
+const canon = (k: Kind, v: string) => LOOKUP[k][fold(v).replace(/\W/g, "")] ?? fold(v);
+
+/** Operator name in the site language (`statut`, `est`…). */
+export const keyWord = (key: Op["key"], l: Locale = getLocale()) => word("op", key, l);
+/** Value of an operator in the site language (`brouillon`, `relue`…); a tag or an unknown value stays as is. */
+export const valueWord = (key: Op["key"], value: string, l: Locale = getLocale()) => (key !== "tag" && CANON[key].includes(value) ? word(key, value, l) : value);
+/** Recognized values of an operator, in the site language (messages, hints). */
+export const valueWords = (key: "type" | "status" | "is", l: Locale = getLocale()) => CANON[key].map((c) => word(key, c, l)).join(", ");
 
 /** Canonical type (Concept, Entity…) of a typed value: "synthèses", "entity"…; otherwise the folded value. */
-export const canonType = (v: string) => TYPES[fold(v)] ?? fold(v);
+export const canonType = (v: string) => canon("type", v);
 
 const TOKEN = /(-?)(?:"([^"]*)"|(#[^\s"]+)|([a-z]+):("[^"]*"|[^\s"]+)|([^\s"]+))/giu;
 
@@ -49,10 +59,10 @@ export function parseQuery(q: string): Parsed {
 		} else if (hashtag) {
 			const value = fold(hashtag.slice(1));
 			if (value) out.ops.push({ key: "tag", value, neg, raw, display: hashtag.slice(1) });
-		} else if (key && (KEYS as readonly string[]).includes(fold(key))) {
-			const k = fold(key) as Op["key"], v = fold(unq(val));
+		} else if (key && LOOKUP.op[fold(key)]) {
+			const k = LOOKUP.op[fold(key)] as Op["key"], v = fold(unq(val));
 			if (v) {
-				const value = k === "type" ? canonType(v) : k === "is" ? (IS[v.replace(/\W/g, "")] ?? v) : v;
+				const value = k === "tag" ? v : canon(k, v);
 				out.ops.push({ key: k, value, neg, raw, display: k === "tag" ? unq(val).trim() : value });
 			}
 		} else {
@@ -89,8 +99,8 @@ export function chips(p: Parsed): Chip[] {
 	// key: folded form (deduplication); label: typed form, accents included
 	const all: [string, string, string][] = [
 		...p.ops.map((o): [string, string, string] => {
-			const pre = `${o.neg ? `${t("query.without")} ` : ""}${o.key === "tag" ? "#" : `${o.key}:`}`;
-			return [pre + o.value, pre + (o.key === "tag" ? o.display : o.value), o.raw];
+			const pre = `${o.neg ? `${t("query.without")} ` : ""}${o.key === "tag" ? "#" : `${keyWord(o.key)}:`}`;
+			return [`${o.neg ? "-" : ""}${o.key}:${o.value}`, pre + (o.key === "tag" ? o.display : valueWord(o.key, o.value)), o.raw];
 		}),
 		...p.phrases.map((x): [string, string, string] => [`"${x.text}"`, t("query.quoted", { text: x.display }), x.raw]),
 		...p.exclude.map((x): [string, string, string] => [`-${x.text}`, `${t("query.without")} ${x.display}`, x.raw]),
@@ -108,7 +118,10 @@ export const wantsFav = (p: Parsed) => p.ops.some((o) => o.key === "is" && o.val
 /** Folded values of the non-negated `key` operators of the query: state of the facets. */
 export const activeValues = (p: Parsed, key: Op["key"]): Set<string> => new Set(p.ops.filter((o) => o.key === key && !o.neg).map((o) => o.value));
 
-const token = (key: Op["key"], value: string) => (key === "tag" ? (/[\s"]/.test(value) ? `tag:"${value.replace(/"/g, "")}"` : `#${value}`) : `${key}:${value}`);
+/** Input token of a filter, in the site language: `#llm`, `statut:brouillon`, `est:relue`… */
+export const token = (key: Op["key"], value: string) => (key === "tag" ? (/[\s"]/.test(value) ? `${keyWord("tag")}:"${value.replace(/"/g, "")}"` : `#${value}`) : `${keyWord(key)}:${valueWord(key, value)}`);
+/** The query with its filters rewritten in the site language (examples, links written in English): `is:verified` → `est:relue`. */
+export const localizeQuery = (q: string) => parseQuery(q).ops.reduce((s, o) => s.split(o.raw).join(`${o.neg ? "-" : ""}${token(o.key, o.key === "tag" ? o.display : o.value)}`), q);
 
 /**
  * Toggles a facet in the input: active → removes all its tokens; inactive → appends it at the end of the input.
@@ -116,13 +129,13 @@ const token = (key: Op["key"], value: string) => (key === "tag" ? (/[\s"]/.test(
  * `tag` and `is` add up (AND).
  */
 export function toggleFacet(q: string, key: Op["key"], value: string): string {
-	const v = key === "type" ? canonType(value) : fold(value);
+	const v = key === "tag" ? fold(value) : canon(key, value);
 	const p = parseQuery(q);
 	const same = p.ops.filter((o) => o.key === key && !o.neg && o.value === v);
 	if (same.length) return same.reduce((s, o) => removeToken(s, o.raw), q).trim();
 	let out = q;
 	if (key === "type" || key === "status") for (const o of p.ops) if (o.key === key && !o.neg) out = removeToken(out, o.raw);
-	return `${out.trim()} ${token(key, key === "type" ? v : key === "tag" ? value : v)}`.trim();
+	return `${out.trim()} ${token(key, key === "tag" ? value : v)}`.trim();
 }
 
 /** Removes every filter (operator) from the input, keeping the searched text. */
@@ -131,7 +144,6 @@ export const clearOps = (q: string) => parseQuery(q).ops.reduce((s, o) => remove
 /** A query problem: the message, the faulty tokens and the label of the fix (remove those tokens). */
 export type Issue = { text: string; raws: string[]; fix: string };
 const VALID: Record<"type" | "status" | "is", readonly string[]> = { type: TYPE_VALUES, status: STATUS_VALUES, is: IS_VALUES };
-const VALID_LABEL = { type: "concept, entity, synthesis, source", status: "draft, stable, deprecated", is: "fav, unverified, review, partial" } as const;
 
 /**
  * Recognized but unusable operators: unknown value, two exclusive values ANDed, a filter and its opposite,
@@ -144,7 +156,7 @@ export function diagnose(p: Parsed, knownTags?: Set<string>): Issue[] {
 		if (o.key === "tag") {
 			if (!o.neg && knownTags && !knownTags.has(o.value)) out.push({ text: t("query.issue.unknownTag", { tag: o.display }), raws: [o.raw], fix: t("query.fix.remove", { token: `#${o.display}` }) });
 		} else if (!VALID[o.key].includes(o.value)) {
-			out.push({ text: t("query.issue.unknownValue", { token: `${o.key}:${o.display}`, values: VALID_LABEL[o.key] }), raws: [o.raw], fix: t("query.fix.remove", { token: `${o.key}:${o.display}` }) });
+			out.push({ text: t("query.issue.unknownValue", { token: o.raw.replace(/^-/, ""), values: valueWords(o.key) }), raws: [o.raw], fix: t("query.fix.remove", { token: o.raw }) });
 		}
 	}
 	for (const key of ["type", "status"] as const) {
@@ -153,9 +165,9 @@ export function diagnose(p: Parsed, knownTags?: Set<string>): Issue[] {
 		if (distinct.length > 1) {
 			const first = vs[0].value;
 			out.push({
-				text: t(key === "type" ? "query.issue.exclusiveType" : "query.issue.exclusiveStatus", { tokens: distinct.map((v) => `${key}:${v}`).join(` ${t("query.and")} `) }),
+				text: t(key === "type" ? "query.issue.exclusiveType" : "query.issue.exclusiveStatus", { tokens: distinct.map((v) => token(key, v)).join(` ${t("query.and")} `) }),
 				raws: vs.filter((o) => o.value !== first).map((o) => o.raw),
-				fix: t("query.fix.keepOnly", { token: `${key}:${first}` }),
+				fix: t("query.fix.keepOnly", { token: token(key, first) }),
 			});
 		}
 	}
@@ -177,6 +189,7 @@ export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean, hay =
 			: o.key === "type" ? d.type === o.value
 			: o.key === "status" ? fold(d.status) === o.value
 			: o.value === "fav" ? isFav(d.id)
+			: o.value === "verified" ? !!d.verified
 			: o.value === "unverified" ? !d.verified
 			: o.value === "review" ? !!d.needsReview
 			: o.value === "partial" ? !!d.partial

@@ -23,7 +23,7 @@ test("search query: filters, quotes, exclusions, accents", async () => {
   const labels = (q: string) => chips(parseQuery(q)).map((c) => c.label);
   expect(labels("#llm #llm")).toEqual(["#llm"]);
   expect(labels("#llm tag:LLM")).toEqual(["#llm"]);
-  expect(labels("-x -x type:source -type:source -#llm #llm")).toEqual(["type:Source", "without type:Source", "without #llm", "#llm", "without x"]);
+  expect(labels("-x -x type:source -type:source -#llm #llm")).toEqual(["type:source", "without type:source", "without #llm", "#llm", "without x"]);
   expect(labels('"a b" "a b"')).toEqual(["“a b”"]);
   expect(chips(parseQuery("#llm x #llm"))[0].raws).toEqual(["#llm", "#llm"]);
   expect(removeToken("#llm x #llm", "#llm")).toBe("x");
@@ -40,6 +40,7 @@ test("search query: filters, quotes, exclusions, accents", async () => {
   expect(ok("-type:source -#absent")).toBe(true);
   expect(ok("-#ram")).toBe(false);
   expect(ok("is:unverified")).toBe(true);
+  expect(ok("is:verified")).toBe(false);
   expect(ok("is:fav")).toBe(false);
   expect(ok("is:favoris", true)).toBe(true);
   expect(ok('"coute cher"')).toBe(true); // exact phrase, without accents

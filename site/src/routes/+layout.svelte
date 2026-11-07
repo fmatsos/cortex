@@ -5,6 +5,7 @@
 	import { page } from "$app/state";
 	import { favs } from "#lib/favs.svelte.js";
 	import { search } from "#lib/search-state.svelte.js";
+	import { parseQuery, token, wantsFav } from "#lib/query.js";
 	import { theme } from "#lib/theme.svelte.js";
 	import { lang } from "#lib/lang.svelte.js";
 	import { intlLocale, t } from "#lib/i18n/index.js";
@@ -60,7 +61,7 @@
 	// active section: the route id also works at prerender (the relative URL cannot be compared)
 	const current = (route: string) => page.route.id === route || page.route.id?.startsWith(`${route}/`);
 	// "Favorites" = the search filtered on `is:fav` (same view everywhere); the shared query only exists in the browser
-	const onFavs = $derived(page.route.id === "/search" && /(^|\s)is:fav/i.test(search.q));
+	const onFavs = $derived(page.route.id === "/search" && wantsFav(parseQuery(search.q)));
 	// the home page and /search/ carry their own large field: no second field in the header
 	const pageSearch = $derived(page.route.id === "/" || page.route.id === "/search");
 </script>
@@ -79,7 +80,7 @@
 				{@const here = current(route) && !(route === "/search" && onFavs)}
 				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only sm:not-sr-only">{t(label)}</span></a>
 			{/each}
-			<a href="{toRoute('/search')}?q=is%3Afav" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">{t("favs.title")}</span></a>
+			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">{t("favs.title")}</span></a>
 		</nav>
 		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full lg:ml-auto lg:basis-auto lg:flex-1'}">
 			{#if !pageSearch}<SearchBox class="min-w-0 flex-1 lg:ml-auto lg:max-w-xl" />{/if}
@@ -104,7 +105,7 @@
 				<span class="text-xs">({t("footer.concepts", { count: f.concepts })}, {t("footer.entities", { count: f.entities })}, {t("footer.syntheses", { count: f.syntheses })}, {t("footer.sources", { count: f.sources })})</span></li>
 			<li><a href={toRoute("/graph")} class="hover:text-foreground">{t("footer.links", { count: f.links })}</a></li>
 			<li><a href={toRoute("/tags")} class="hover:text-foreground">{t("footer.tags", { count: f.tags })}</a></li>
-			<li><a href="{toRoute('/search')}?q=-is%3Aunverified" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>
+			<li><a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'verified'))}" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>
 			<li><a href={toRoute("/log")} class="hover:text-foreground">{t("footer.log", { count: f.log })}</a></li>
 		</ul>
 	</div>

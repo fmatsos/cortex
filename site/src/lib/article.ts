@@ -1,6 +1,6 @@
 import type { IconName } from "#lib/icons.js";
 import { fold } from "./fold";
-import type { Parsed } from "./query";
+import { token, type Parsed } from "./query";
 import type { Link, PageData, RelatedReason, SourceRef, TocItem } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -110,7 +110,7 @@ export function originalSource(sources: SourceRef[]): (SourceRef & { url: string
 export const graphFocus = (id: string) => `?focus=${encodeURIComponent(id).replace(/%2F/gi, "/")}`;
 
 /** Query for the collection of a page type (`type:concept`), or `undefined` for an unknown type. */
-export const collectionQuery = (type: string) => (TYPES.some((t) => t.type === type) ? `?q=${encodeURIComponent(`type:${type.toLowerCase()}`)}` : undefined);
+export const collectionQuery = (type: string) => (TYPES.some((t) => t.type === type) ? `?q=${encodeURIComponent(token("type", type))}` : undefined);
 export const collectionLabel = (type: string) => TYPES.find((x) => x.type === type)?.plural ?? type;
 
 /** Link to copy: the page address without the search context (`?q=`) which is not part of the page. */

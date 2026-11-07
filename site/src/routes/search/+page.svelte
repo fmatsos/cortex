@@ -9,7 +9,7 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { diagnose, parseQuery, removeToken, wantsFav, withPassage } from "#lib/query.js";
+	import { diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, facetCounts, loadEngine, search as run } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeIcon, typePlural } from "#lib/type-meta.js";
@@ -167,7 +167,7 @@
 						<h2 id="s-examples" class="text-lg font-semibold">{t("search.try")}</h2>
 						<ul class="mt-2 grid gap-2 sm:grid-cols-2">
 							{#each data.seed.examples as ex (ex.q)}
-								<li><a href={urlOf(ex.q)} class="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 focus-visible:ring-3"><code class="text-link">{ex.q}</code><span class="text-muted-foreground text-sm">{t(ex.hint)}</span></a></li>
+								<li><a href={urlOf(localizeQuery(ex.q))} class="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 focus-visible:ring-3"><code class="text-link">{localizeQuery(ex.q)}</code><span class="text-muted-foreground text-sm">{t(ex.hint)}</span></a></li>
 							{/each}
 						</ul>
 					</section>
@@ -176,7 +176,7 @@
 					<h2 id="s-collections" class="text-lg font-semibold">{t("search.collections")}</h2>
 					<ul class="mt-2 flex flex-wrap gap-2">
 						{#each data.seed.types.filter((x) => x.count) as ty (ty.type)}
-							<li><a href={urlOf(`type:${ty.type.toLowerCase()}`)} class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm focus-visible:ring-3"><Icon name={typeIcon(ty.type)} size={16} />{typePlural(ty.type)} <span class="text-muted-foreground">{ty.count}</span></a></li>
+							<li><a href={urlOf(token("type", ty.type))} class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm focus-visible:ring-3"><Icon name={typeIcon(ty.type)} size={16} />{typePlural(ty.type)} <span class="text-muted-foreground">{ty.count}</span></a></li>
 						{/each}
 					</ul>
 				</section>
@@ -194,8 +194,8 @@
 					<h2 id="s-syntax" class="text-lg font-semibold">{t("search.operators")}</h2>
 					<ul class="mt-2 space-y-2 text-[0.9375rem]">
 						<li class="flex items-center gap-3"><Icon name="operator-tag" size={20} class="text-muted-foreground" /><code>#tag</code> <span class="text-muted-foreground">{t("search.or")}</span> <code>tag:{t("search.operators.name")}</code></li>
-						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code>type:concept</code> <span class="text-muted-foreground">concept, entity, synthesis, source</span></li>
-						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>status:draft</code> <code>is:fav</code> <code>is:unverified</code> <code>is:review</code> <code>is:partial</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code>{token("type", "Concept")}</code> <span class="text-muted-foreground">{valueWords("type")}</span></li>
+						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>{token("status", "draft")}</code> {#each IS_VALUES as v (v)}<code>{token("is", v)}</code> {/each}</li>
 						<li class="flex items-center gap-3"><Icon name="operator-phrase" size={20} class="text-muted-foreground" /><code>"{t("search.operators.phrase")}"</code></li>
 						<li class="flex items-center gap-3"><Icon name="operator-exclude" size={20} class="text-muted-foreground" /><code>-{t("search.operators.word")}</code> <code>-#tag</code> <span class="text-muted-foreground">{t("search.operators.exclude")}</span></li>
 					</ul>
