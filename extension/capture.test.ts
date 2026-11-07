@@ -12,7 +12,8 @@ async function load(html: string, url: string, select?: (document: Document, sel
   Object.defineProperty(document, "baseURI", { value: url });
   select?.(document, sel);
   delete g.__cortex;
-  for (const f of ["vendor/Readability.js", "vendor/turndown.js", "capture.js", "picker.js"]) (0, eval)(await Bun.file(new URL(`./${f}`, import.meta.url)).text()); // indirect eval: global scope, like a classic script
+  // the two libraries from node_modules, as extension/build.ts copies them into vendor/ (git-ignored, absent in CI)
+  for (const f of ["../node_modules/@mozilla/readability/Readability.js", "../node_modules/turndown/lib/turndown.browser.umd.js", "capture.js", "picker.js"]) (0, eval)(await Bun.file(new URL(`./${f}`, import.meta.url)).text()); // indirect eval: global scope, like a classic script
   return g.__cortex;
 }
 
