@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, asset: cortex-linux-x64 }
-          - { os: macos-14, asset: cortex-darwin-arm64 }
+          - { os: macos-15, asset: cortex-darwin-arm64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
