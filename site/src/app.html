@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="%cortex.lang%">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="light dark" />
+		<script>try{var t=(localStorage.getItem("cortex:theme")||localStorage.getItem("brain:theme"));if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);var l=localStorage.getItem("cortex:lang");if(l==="en"||l==="fr")document.documentElement.lang=l}catch(e){}</script>
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="%sveltekit.assets%/favicon-32.png" sizes="32x32" type="image/png" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<!-- fallback without JavaScript: reading remains possible (prerendered pages), but search, favorites, theme and graph need it -->
+		<noscript>
+			<p class="bg-muted text-foreground border-b px-4 py-2 text-center text-sm">
+				%cortex.noscript.text%
+				%cortex.noscript.browse% <a class="underline underline-offset-4" href="%sveltekit.assets%/">%cortex.noscript.home%</a>
+				%cortex.noscript.or% <a class="underline underline-offset-4" href="%sveltekit.assets%/tags/">%cortex.noscript.tags%</a>.
+			</p>
+		</noscript>
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

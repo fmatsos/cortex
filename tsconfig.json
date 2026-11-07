@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ESNext", "module": "Preserve", "moduleResolution": "bundler",
+    "strict": true, "noEmit": true, "skipLibCheck": true, "types": ["bun"],
+    "paths": { "#payload": ["./build/payload.ts"] } // written by scripts/build.sh; declared in src/assets.d.ts when absent
+  },
+  "exclude": ["node_modules", "site"] // le site a son propre tsconfig ; seuls les modules qu'export.ts importe sont vérifiés ici
+}

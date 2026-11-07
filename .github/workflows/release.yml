@@ -1,0 +1,62 @@
+name: release
+# Publishing a version: bump "version" in package.json, commit, then `git tag v<version> && git push --tags`.
+# Each binary is built on its own platform (a macOS binary must be signed on macOS), then one job publishes them.
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: cortex-linux-x64 }
+          - { os: macos-14, asset: cortex-darwin-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Tag matches package.json
+        run: test "v$(bun -e 'console.log(require("./package.json").version)')" = "$GITHUB_REF_NAME"
+      - run: bun install --frozen-lockfile --omit optional
+      # both builds embed the sources; cortex export installs the site's locked dependencies in the user's cache
+      - run: scripts/build.sh binary ${{ matrix.asset }}
+      - name: The binary alone runs every offline command
+        run: scripts/check-binary.sh "$PWD/${{ matrix.asset }}"
+      # cortex.js is platform-independent: built and checked once, on Linux
+      - if: runner.os == 'Linux'
+        run: scripts/build.sh bundle cortex.js && scripts/check-binary.sh "$PWD/cortex.js" && gzip -9 cortex.js
+      - run: gzip -9 ${{ matrix.asset }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.gz
+            cortex.js.gz
+          if-no-files-found: ignore
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: actions/checkout@v5
+        with:
+          path: repo
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: sha256sum cortex*.gz > SHA256SUMS
+      # cortex upgrade refuses a SHA256SUMS whose signature does not match the public key built into the binary
+      - run: bun repo/scripts/sign.ts SHA256SUMS
+        env:
+          CORTEX_SIGNING_KEY: ${{ secrets.CORTEX_SIGNING_KEY }}
+      - run: gh release create "$GITHUB_REF_NAME" cortex*.gz SHA256SUMS SHA256SUMS.sig --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Cortex",
+  "version": "0.2.0",
+  "description": "Envoie la page affichée (la sélection, ou un bloc choisi) dans l'inbox de Cortex, texte rendu par le navigateur.",
+  "icons": { "32": "icons/icon-32.png", "128": "icons/icon-192.png" },
+  "permissions": ["activeTab", "scripting", "contextMenus", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "action": { "default_popup": "popup.html", "default_title": "Envoyer la page à Cortex" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "commands": { "pick-block": { "suggested_key": { "default": "Alt+Shift+C" }, "description": "Choisir un bloc à envoyer à Cortex" } },
+  "background": { "service_worker": "background.js", "type": "module" }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "brain-site",
+  "private": true,
+  "type": "module",
+  "imports": { "#lib/*": "./src/lib/*" }
+}

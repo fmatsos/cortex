@@ -1,0 +1,617 @@
+@import "tailwindcss";
+
+/* theme: follows the system (prefers-color-scheme); data-theme="dark|light" forces it (palette command) */
+@custom-variant dark {
+	@media (prefers-color-scheme: dark) {
+		&:where(:root:not([data-theme="light"]) *) {
+			@slot;
+		}
+	}
+	&:where([data-theme="dark"] *) {
+		@slot;
+	}
+}
+
+/*
+ * Direction "mineral paper, petrol ink": tinted background, white surfaces, petrol action,
+ * semantic colors reserved for data. Each text/background pair is measured by src/theme.test.ts
+ * (WCAG 2.2 AA); the dark block is written twice (system, then forced) and the test checks that they stay identical.
+ */
+:root {
+	--anchor-offset: 5rem; /* height of the sticky header: anchors land below it (taller on mobile: search on a second line) */
+	color-scheme: light dark;
+	--background: #f7f8fa;
+	--foreground: #172a34;
+	--card: #ffffff;
+	--card-foreground: #172a34;
+	--popover: #ffffff;
+	--popover-foreground: #172a34;
+	--primary: #075e75;
+	--primary-foreground: #ffffff;
+	--secondary: #e8edf1;
+	--secondary-foreground: #172a34;
+	--muted: #e8edf1;
+	--muted-foreground: #52616b;
+	--accent: #e1f1f3;
+	--accent-foreground: #103b47;
+	--destructive: #a81f37;
+	--border: #cbd5de;
+	--input: #7d8d9a; /* field border: ≥ 3:1 against the background and against a card */
+	--ring: #176b83;
+	--radius: 0.75rem;
+	--link: #075e75;
+	--link-visited: #5b3f99;
+	--mark: #f4e3a7;
+	/* one hue per page type (Concept, Entity, Synthesis, Source): badges, legend and graph; also readable as text */
+	--type-concept: #315bc5;
+	--type-entity: #9a4d07;
+	--type-synthesis: #247342;
+	--type-source: #546875;
+	--type-other: #5b6870;
+	/* one hue per log entry type */
+	--kind-add: #247342;
+	--kind-ingest: #315bc5;
+	--kind-query: #7844a1;
+	--kind-lint: #8a5a0a;
+	--kind-update: #176b83;
+	/* graph: relations (≥ 3:1 against the background) and favorites */
+	--graph-edge: #7d8d9a;
+	--favorite: #8a5a0a;
+	/* "Note personnelle" callout (the human's intent) and "Avertissement" callout (limit of the source) */
+	--note-background: #fff3da;
+	--note-foreground: #624300;
+	--warning-background: #fdece4;
+	--warning-foreground: #8a2a0b;
+}
+
+@media (max-width: 639px) {
+	:root {
+		--anchor-offset: 8.5rem;
+	}
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		color-scheme: dark;
+		--background: #101820;
+		--foreground: #e9f0f4;
+		--card: #182630;
+		--card-foreground: #e9f0f4;
+		--popover: #182630;
+		--popover-foreground: #e9f0f4;
+		--primary: #79d6e5;
+		--primary-foreground: #10232b;
+		--secondary: #23323e;
+		--secondary-foreground: #e9f0f4;
+		--muted: #23323e;
+		--muted-foreground: #acbdc9;
+		--accent: #23434b;
+		--accent-foreground: #d8f5f8;
+		--destructive: #ff9aae;
+		--border: #354956;
+		--input: #7c929f;
+		--ring: #79d6e5;
+		--link: #79d6e5;
+		--link-visited: #c9b8f2;
+		--mark: #514218;
+		--type-concept: #9cb7ff;
+		--type-entity: #f4ba76;
+		--type-synthesis: #83d7a4;
+		--type-source: #aec2cd;
+		--type-other: #b4c0c8;
+		--kind-add: #83d7a4;
+		--kind-ingest: #9cb7ff;
+		--kind-query: #d2b0f5;
+		--kind-lint: #f0c775;
+		--kind-update: #80d2db;
+		--graph-edge: #7c929f;
+		--favorite: #f0c775;
+		--note-background: #342b1b;
+		--note-foreground: #f2d591;
+		--warning-background: #3b2420;
+		--warning-foreground: #ffbfa3;
+	}
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--background: #101820;
+	--foreground: #e9f0f4;
+	--card: #182630;
+	--card-foreground: #e9f0f4;
+	--popover: #182630;
+	--popover-foreground: #e9f0f4;
+	--primary: #79d6e5;
+	--primary-foreground: #10232b;
+	--secondary: #23323e;
+	--secondary-foreground: #e9f0f4;
+	--muted: #23323e;
+	--muted-foreground: #acbdc9;
+	--accent: #23434b;
+	--accent-foreground: #d8f5f8;
+	--destructive: #ff9aae;
+	--border: #354956;
+	--input: #7c929f;
+	--ring: #79d6e5;
+	--link: #79d6e5;
+	--link-visited: #c9b8f2;
+	--mark: #514218;
+	--type-concept: #9cb7ff;
+	--type-entity: #f4ba76;
+	--type-synthesis: #83d7a4;
+	--type-source: #aec2cd;
+	--type-other: #b4c0c8;
+	--kind-add: #83d7a4;
+	--kind-ingest: #9cb7ff;
+	--kind-query: #d2b0f5;
+	--kind-lint: #f0c775;
+	--kind-update: #80d2db;
+	--graph-edge: #7c929f;
+	--favorite: #f0c775;
+	--note-background: #342b1b;
+	--note-foreground: #f2d591;
+	--warning-background: #3b2420;
+	--warning-foreground: #ffbfa3;
+}
+
+:root[data-theme="light"] {
+	color-scheme: light;
+}
+
+@theme inline {
+	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--color-link: var(--link);
+	--color-link-visited: var(--link-visited);
+	--color-favorite: var(--favorite);
+	--color-graph-edge: var(--graph-edge);
+	--color-note-background: var(--note-background);
+	--color-note-foreground: var(--note-foreground);
+	--color-warning-background: var(--warning-background);
+	--color-warning-foreground: var(--warning-foreground);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: 0.5rem; /* buttons, fields: 0.5 rem */
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-4xl: calc(var(--radius) * 2.6); /* pills: fully rounded */
+}
+
+/* fluid page titles: 28 px on mobile, 40 px from ~1150 px wide (every h1 of the site is text-3xl) */
+@theme {
+	--text-3xl: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem);
+	--text-3xl--line-height: 1.15;
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	/* Tailwind v4 no longer sets a pointer on buttons: everything clickable shows it */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]),
+	[role="option"],
+	summary,
+	label[for],
+	select {
+		cursor: pointer;
+	}
+	html {
+		@apply font-sans;
+		scroll-behavior: smooth;
+	}
+	body {
+		@apply bg-background text-foreground;
+		line-height: 1.6;
+		text-rendering: optimizeLegibility;
+	}
+	h1,
+	h2,
+	h3 {
+		text-wrap: balance;
+	}
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	/* reduced motion: no more transition, animation or smooth scrolling, whatever the component */
+	@media (prefers-reduced-motion: reduce) {
+		html {
+			scroll-behavior: auto;
+		}
+		*,
+		::before,
+		::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
+}
+
+/* reading body: 17 px, line height 1.75, full width of the column (in the components layer: a page utility keeps the upper hand) */
+@layer components {
+	.wiki {
+		font-size: 1.0625rem;
+		line-height: 1.75;
+	}
+}
+
+/* body of a wiki page (HTML produced by the export) */
+.wiki {
+	overflow-wrap: anywhere;
+}
+.wiki > * + * {
+	margin-top: 1rem;
+}
+.wiki p,
+.wiki li {
+	text-wrap: pretty;
+}
+.wiki h1,
+.wiki h2,
+.wiki h3,
+.wiki h4 {
+	font-weight: 650;
+	line-height: 1.3;
+	margin-top: 1.8rem;
+	scroll-margin-top: var(--anchor-offset);
+}
+.wiki h1 {
+	font-size: 1.75rem;
+}
+.wiki h2 {
+	font-size: 1.4rem;
+}
+.wiki h3 {
+	font-size: 1.2rem;
+}
+.wiki h4 {
+	font-size: 1.0625rem;
+}
+.wiki a {
+	color: var(--link);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+/* visited links: distinct tint, for content links only (not navigation);
+   page lists (text-link class) and `.link-content` benefit from it too */
+.wiki a:visited,
+a.text-link:visited,
+a.link-content:visited {
+	color: var(--link-visited);
+}
+.wiki .fn-ref a:visited {
+	color: var(--link);
+}
+.wiki ul,
+.wiki ol {
+	padding-left: 1.5rem;
+}
+.wiki ul {
+	list-style: disc;
+}
+.wiki ol {
+	list-style: decimal;
+}
+.wiki li + li {
+	margin-top: 0.35rem;
+}
+
+/* callouts: personal note (yellow) and warning (rust), two distinct functions; the title icon comes from the pack
+   (CSS mask: the exported HTML carries no SVG; src/icons.test.ts checks that it follows lib/icons.ts) */
+.wiki .personal-note,
+.wiki .callout-warning {
+	margin: 1.25rem 0;
+	padding: 0.85rem 1rem;
+	border-radius: var(--radius-md);
+	border: 1px solid;
+	border-left-width: 4px;
+	color: var(--foreground);
+}
+.wiki .personal-note {
+	--callout: var(--note-foreground);
+	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M5 5.5A2.5 2.5 0 0 1 7.5 3h9A2.5 2.5 0 0 1 19 5.5V14l-5 5H7.5A2.5 2.5 0 0 1 5 16.5z'/%3E%3Cpath d='M14 19v-3.5a1.5 1.5 0 0 1 1.5-1.5H19'/%3E%3C/svg%3E");
+	background: var(--note-background);
+}
+.wiki .callout-warning {
+	--callout: var(--warning-foreground);
+	--callout-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round' focusable='false' aria-hidden='true'%3E%3Cpath d='M10.3 4.5 3.2 17a2 2 0 0 0 1.7 3h14.2a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 9.5v4M12 17h.01'/%3E%3C/svg%3E");
+	background: var(--warning-background);
+}
+.wiki .personal-note,
+.wiki .callout-warning {
+	border-color: color-mix(in oklch, var(--callout) 35%, transparent);
+	border-left-color: var(--callout);
+}
+.wiki .personal-note-title,
+.wiki .callout-warning-title {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin: 0 0 0.3rem;
+	font-size: 0.875rem;
+	font-weight: 650;
+	line-height: 1.4;
+	color: var(--callout);
+}
+.wiki .personal-note-title::before,
+.wiki .callout-warning-title::before {
+	content: "";
+	flex: none;
+	width: 1.15rem;
+	height: 1.15rem;
+	background: currentColor;
+	-webkit-mask: var(--callout-icon) center / contain no-repeat;
+	mask: var(--callout-icon) center / contain no-repeat;
+}
+.wiki .personal-note > p:last-child,
+.wiki .callout-warning > p:last-child {
+	margin-bottom: 0;
+}
+.wiki blockquote {
+	border-left: 3px solid var(--border);
+	padding-left: 1rem;
+	color: var(--muted-foreground);
+}
+.wiki code {
+	font-family: var(--font-mono);
+	font-size: 0.88em;
+	background: var(--muted);
+	border-radius: 0.3rem;
+	padding: 0.1rem 0.35rem;
+}
+.wiki pre {
+	background: var(--muted);
+	border-radius: var(--radius-md);
+	padding: 0.9rem 1rem;
+	overflow-x: auto;
+}
+.wiki pre code {
+	background: none;
+	padding: 0;
+}
+
+/* tables: frame, alternating rows, marked header; horizontal scrolling is signaled by a shadow on the edge
+   that still hides content (`local` gradients that mask the `scroll` shadow once at the end) */
+.wiki table {
+	display: block;
+	width: fit-content;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	font-size: 0.9375rem;
+	line-height: 1.5;
+	background:
+		linear-gradient(to right, var(--card) 30%, transparent) left center / 2rem 100% no-repeat local,
+		linear-gradient(to left, var(--card) 30%, transparent) right center / 2rem 100% no-repeat local,
+		linear-gradient(to right, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+		linear-gradient(to left, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll var(--card);
+}
+.wiki th,
+.wiki td {
+	border: 1px solid var(--border);
+	padding: 0.5rem 0.75rem;
+	text-align: left;
+	vertical-align: top;
+}
+.wiki tr > :first-child {
+	border-left: 0;
+}
+.wiki tr > :last-child {
+	border-right: 0;
+}
+.wiki thead th {
+	border-top: 0;
+}
+.wiki tbody tr:last-child > * {
+	border-bottom: 0;
+}
+.wiki th {
+	background: color-mix(in oklch, var(--muted) 90%, transparent);
+	font-weight: 600;
+}
+.wiki tbody tr:nth-child(even) > td {
+	background: color-mix(in oklch, var(--muted) 45%, transparent);
+}
+.wiki img {
+	max-width: 100%;
+	height: auto;
+}
+.wiki hr {
+	border-color: var(--border);
+}
+.wiki .fn-ref {
+	font-size: 0.75em;
+	line-height: 0;
+	vertical-align: super;
+}
+.wiki .fn-ref a {
+	text-decoration: none;
+	padding: 0 0.1rem;
+}
+.missing-link {
+	border-bottom: 1px dashed var(--muted-foreground);
+	cursor: help;
+}
+mark {
+	background: var(--mark);
+	color: inherit;
+	border-radius: 0.2rem;
+}
+
+/* touch screen: the clickable area reaches ~44 px without changing the compact look (transparent pseudo-element) */
+@media (pointer: coarse) {
+	/* in a layer: a component's Tailwind utilities (absolute, sticky…) keep control of `position` */
+	@layer components {
+		.touch-target {
+			position: relative;
+		}
+		.touch-target::after {
+			content: "";
+			position: absolute;
+			inset-block: min(0px, calc((100% - 44px) / 2));
+			inset-inline: min(0px, calc((100% - 44px) / 2));
+		}
+	}
+	/* bullet lists: enough space so that the enlarged areas do not overlap */
+	.touch-gap {
+		gap: 0.75rem 0.5rem;
+	}
+	/* footnote calls: the padding of an inline element enlarges the clickable area without moving the text */
+	.wiki .fn-ref a {
+		padding: 0.6rem 0.4rem;
+	}
+}
+
+/* footnotes: arrival marker below the sticky header, highlighted target */
+.wiki .fn-ref a,
+.note-item,
+.anchor-target {
+	scroll-margin-top: var(--anchor-offset);
+}
+.wiki .fn-ref a:target,
+.note-item:target {
+	background: var(--mark);
+	border-radius: 0.2rem;
+}
+/* return from a note to the text: the call lands at a third of the screen (not stuck under the header),
+   and the whole paragraph that holds it is highlighted, otherwise a highlighted "1" goes unnoticed */
+.wiki .fn-ref a {
+	scroll-margin-top: calc(var(--anchor-offset) + 30vh);
+}
+.wiki :is(p, li, td, blockquote):has(> .fn-ref a:target, > * > .fn-ref a:target) {
+	background: color-mix(in oklab, var(--mark) 45%, transparent);
+	box-shadow: -0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent), 0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent);
+	border-radius: 0.25rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+	.wiki .fn-ref a:target {
+		animation: fn-arrivee 1.2s ease-out 2;
+	}
+}
+@keyframes fn-arrivee {
+	50% { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+/* print: the article alone, black on white whatever the theme, without controls or navigation */
+@media print {
+	:root:not([data-theme="light"]),
+	:root[data-theme="dark"],
+	:root[data-theme="light"] {
+		color-scheme: light;
+		--background: #ffffff;
+		--foreground: #000000;
+		--card: #ffffff;
+		--muted: #f0f0f0;
+		--muted-foreground: #333333;
+		--border: #8a8a8a;
+		--link: #000000;
+		--link-visited: #000000;
+		--mark: #e6e6e6;
+		--note-background: #ffffff;
+		--note-foreground: #000000;
+		--warning-background: #ffffff;
+		--warning-foreground: #000000;
+		/* the rest: the light palette, taken as is (src/theme.test.ts checks that it does not drift) */
+		--card-foreground: #172a34;
+		--popover: #ffffff;
+		--popover-foreground: #172a34;
+		--primary: #075e75;
+		--primary-foreground: #ffffff;
+		--secondary: #e8edf1;
+		--secondary-foreground: #172a34;
+		--accent: #e1f1f3;
+		--accent-foreground: #103b47;
+		--destructive: #a81f37;
+		--input: #7d8d9a;
+		--ring: #176b83;
+		--type-concept: #315bc5;
+		--type-entity: #9a4d07;
+		--type-synthesis: #247342;
+		--type-source: #546875;
+		--type-other: #5b6870;
+		--kind-add: #247342;
+		--kind-ingest: #315bc5;
+		--kind-query: #7844a1;
+		--kind-lint: #8a5a0a;
+		--kind-update: #176b83;
+		--graph-edge: #7d8d9a;
+		--favorite: #8a5a0a;
+	}
+	header.sticky,
+	nav,
+	aside,
+	button,
+	article > details,
+	[role="status"],
+	.no-print {
+		display: none !important;
+	}
+	main {
+		max-width: none;
+		padding: 0;
+	}
+	article {
+		max-width: none;
+	}
+	.wiki {
+		max-width: none;
+		font-size: 11pt;
+		line-height: 1.5;
+	}
+	.wiki a[href^="http"]::after {
+		content: " (" attr(href) ")";
+		font-size: 0.85em;
+		overflow-wrap: anywhere;
+	}
+	.wiki h1,
+	.wiki h2,
+	.wiki h3,
+	.wiki h4 {
+		break-after: avoid;
+	}
+	.wiki .personal-note,
+	.wiki .callout-warning,
+	.wiki table,
+	.wiki pre,
+	.wiki blockquote,
+	.wiki img,
+	.note-item {
+		break-inside: avoid;
+	}
+	.wiki table {
+		display: table;
+		background: none;
+	}
+}
+
+/* footer always at the bottom: the body is a column at least as tall as the screen, <main> takes the rest
+   (the SvelteKit container is display: contents, so its children are those of body) */
+body {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+}
+

@@ -1,0 +1,222 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import type { RelatedReason } from "../site/src/lib/types";
+import { fromResource, type Page, type RawSource, toPage, toRawSource } from "./doc";
+
+/** Error with a category the CLI maps to an exit code: `usage` → 2, anything else → 1. */
+export class CortexError extends Error {
+  constructor(message: string, readonly code: "usage" | "notfound" | "refused" | "external") { super(message); }
+}
+
+/** Wiki root: $CORTEX_ROOT, otherwise the nearest parent directory holding cortex.json. */
+export function findRoot(from = process.cwd()): string {
+  if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
+  for (let d = from; ; d = dirname(d)) {
+    if (existsSync(join(d, "cortex.json"))) return d;
+    if (dirname(d) === d) throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it) or set CORTEX_ROOT.");
+  }
+}
+
+/** A parsed .md file: the frontmatter as YAML gave it. `toPage` / `toRawSource` (doc.ts) type it. */
+export type Fm = Record<string, unknown>;
+export type Doc = { path: string; fm: Fm; body: string };
+
+export function parseDoc(path: string, txt: string): Doc {
+  txt = txt.replace(/^﻿/, ""); // BOM
+  const m = txt.match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---\r?\n?/);
+  if (!m) return { path, fm: {}, body: txt };
+  const fm = (m[1] === undefined ? null : Bun.YAML.parse(m[1])) ?? {};
+  if (typeof fm !== "object" || Array.isArray(fm)) throw new Error("invalid frontmatter: YAML object expected");
+  return { path, fm: fm as Fm, body: txt.slice(m[0].length) };
+}
+
+/** Why a page's text has an unreadable frontmatter, or undefined when it parses. */
+export function frontmatterError(text: string): string | undefined {
+  try { parseDoc("", text); return undefined; } catch (e) { return `invalid YAML frontmatter (${(e as Error).message}): every key starts at column 0.`; }
+}
+
+/**
+ * Why writing `next` over the existing page text `prev` replaces the page with another one, or undefined: its type or
+ * title changes, or a source it cites disappears. A model reusing a path it saw would otherwise erase a page.
+ */
+export function identityChange(path: string, prev: string, next: string): string | undefined {
+  let a: Fm, b: Fm;
+  try { a = parseDoc(path, prev).fm; b = parseDoc(path, next).fm; } catch { return undefined; } // unreadable YAML: frontmatterError reports it
+  const ids = (fm: Fm) => (Array.isArray(fm.sources) ? fm.sources : []).map((s) => String((s as Fm)?.id ?? ""));
+  const lost = ids(a).filter((id) => id && !ids(b).includes(id));
+  const why = a.type !== b.type ? `its type ${JSON.stringify(a.type)} would become ${JSON.stringify(b.type)}`
+    : a.title !== b.title ? `its title ${JSON.stringify(a.title)} would become ${JSON.stringify(b.title)}`
+    : lost.length ? `it would stop citing ${lost.join(", ")}` : undefined;
+  return why && `${path} is an existing page and ${why}: another page goes in a file of its own (cortex new <Type> "<title>"), an existing one is completed with Edit.`;
+}
+
+/**
+ * Why a new page at `path` takes the name of something that exists: an existing page elsewhere under wiki/ (`known`:
+ * existing paths) or a raw source id (under `root`), or undefined. A new page gets its own name from cortex new.
+ */
+export function stemClash(path: string, known: Iterable<string>, root?: string): string | undefined {
+  const stem = path.split("/").pop()!;
+  const fix = `a new page gets its own name from cortex new <Type> "<title>".`;
+  for (const k of known) if (k !== path && k.endsWith(".md") && k.split("/").pop() === stem) return `${path} reuses the file name of the existing page ${k}: ${fix}`;
+  const id = stem.replace(/\.md$/, "");
+  if (root && rawPath(root, id)) return `${path} is named after the raw source ${id}: ${fix}`;
+}
+
+/**
+ * Sets one top-level frontmatter key by line replacement, never a YAML re-serialization: the key's line and its indented
+ * continuation (a block list or mapping) become `line`; absent, `line` goes last. Comments, order and style of the other
+ * keys stay byte for byte. Text without frontmatter is returned unchanged.
+ */
+export function setFmLine(text: string, key: string, line: string): string {
+  const m = text.match(/^﻿?---\r?\n(?:[\s\S]*?\r?\n)?---/);
+  if (!m) return text;
+  const lines = m[0].split("\n"); // first "---", the keys, last "---"
+  const at = lines.findIndex((l, i) => i > 0 && i < lines.length - 1 && new RegExp(`^${key}[ \\t]*:`).test(l));
+  if (at < 0) lines.splice(lines.length - 1, 0, line);
+  else {
+    let end = at + 1;
+    while (end < lines.length - 1 && /^([ \t]+\S|[ \t]*$)/.test(lines[end]) && lines[end].trim() !== "") end++;
+    lines.splice(at, end - at, line);
+  }
+  return lines.join("\n") + text.slice(m[0].length);
+}
+
+/** Inverse of parseDoc: `---`, YAML frontmatter, `---`, then the body as is. */
+export const serializeDoc = (fm: Record<string, unknown>, body: string) => `---\n${Bun.YAML.stringify(fm, null, 2)}\n---\n${body}`;
+
+/** wiki/index.md and wiki/log.md: generated by the CLI, never a regular page. */
+export const isReservedPage = (path: string) => /^wiki\/(index|log)\.md$/.test(path);
+
+export type DocError = { path: string; msg: string };
+
+/**
+ * `.md` files under `dir` (relative to root), paths returned relative to root. A page whose frontmatter does not
+ * parse is reported in `errors` instead of stopping the read: each caller decides what to do with it.
+ */
+export async function readDocs(root: string, dir: string): Promise<{ docs: Doc[]; errors: DocError[] }> {
+  const docs: Doc[] = [], errors: DocError[] = [];
+  if (!existsSync(join(root, dir))) return { docs, errors };
+  for (const f of [...new Bun.Glob("**/*.md").scanSync(join(root, dir))].sort()) { // sorted: lint and index do not depend on the file system order
+    const path = `${dir}/${f}`;
+    try { docs.push(parseDoc(path, await Bun.file(join(root, path)).text())); }
+    catch (e) { errors.push({ path, msg: (e as Error).message.split("\n")[0] }); }
+  }
+  return { docs, errors };
+}
+
+/** The wiki pages under `dir` (default: all of wiki/), typed. A page whose frontmatter does not conform still loads: see `Page.issues`. */
+export async function readPages(root: string, dir = "wiki"): Promise<{ pages: Page[]; errors: DocError[] }> {
+  const { docs, errors } = await readDocs(root, dir);
+  return { pages: docs.map(toPage), errors };
+}
+
+/** The raw sources, typed. */
+export async function readRawSources(root: string): Promise<{ raws: RawSource[]; errors: DocError[] }> {
+  const { docs, errors } = await readDocs(root, "raw");
+  return { raws: docs.map(toRawSource), errors };
+}
+
+/** Local ISO timestamp with the real UTC offset (handles daylight saving). */
+export function localIso(d = new Date()): string {
+  const off = -d.getTimezoneOffset();
+  const p = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  const local = new Date(d.getTime() + off * 60000).toISOString().slice(0, 19);
+  return `${local}${off >= 0 ? "+" : "-"}${p(off / 60)}:${p(off % 60)}`;
+}
+
+export function slugify(s: string, max = 50): string {
+  const words = s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let out = "";
+  for (const w of words) if ((out + "-" + w).length <= max + 1) out += "-" + w; else break;
+  return out.slice(1) || "source";
+}
+
+/** Raw id: the last segment of a source's folder (unique under raw/). */
+export const RAW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** Path (relative to root) of raw source `id`, wherever the naming filed it under raw/; undefined if absent. */
+export function rawPath(root: string, id: string): string | undefined {
+  if (!RAW_ID.test(id) || !existsSync(join(root, "raw"))) return;
+  for (const f of new Bun.Glob(`**/${id}/source.md`).scanSync(join(root, "raw"))) return `raw/${f}`;
+}
+
+export const sha256 = (s: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
+
+/** Tracking query parameters, removed from every captured URL (`ref`, `source`, `id`… are kept: they can name the page). */
+const TRACKING_PARAM = /^(utm_|lmd_)|^(fbclid|gclid|mc_cid|mc_eid|igshid|ref_src|trk|trackingId)$/i;
+
+/** The URL without its tracking parameters (a trailing `?` goes with the last one); the rest, fragment included, is left as written. */
+export function cleanUrl(u: string): string {
+  const h = u.indexOf("#"), frag = h < 0 ? "" : u.slice(h), head = h < 0 ? u : u.slice(0, h), q = head.indexOf("?");
+  if (q < 0) return u;
+  const kept = head.slice(q + 1).split("&").filter((p) => p && !TRACKING_PARAM.test(p.split("=")[0]));
+  return head.slice(0, q) + (kept.length ? `?${kept.join("&")}` : "") + frag;
+}
+
+/** Comparable URL: no fragment, no tracking parameters (cleanUrl), sorted parameters, no trailing /, lowercase host. */
+export function normUrl(u: string): string {
+  try {
+    const x = new URL(u);
+    x.hash = "";
+    for (const k of [...x.searchParams.keys()]) if (TRACKING_PARAM.test(k)) x.searchParams.delete(k);
+    x.searchParams.sort(); // ?a=1&b=2 and ?b=2&a=1 are the same page
+    return (x.origin.toLowerCase() + x.pathname.replace(/\/+$/, "") + x.search);
+  } catch { return u; }
+}
+
+export type Related = { path: string; title: string; score: number; reasons: RelatedReason[] };
+
+/** Site-root folders a Markdown link can point into. */
+export const LINK_DIRS = ["wiki", "raw"] as const;
+/** Regex source of a link prefix (`/wiki/`, `/(?:wiki|raw)/`), shared by the Markdown scan below and the export's HTML rewrite. */
+export const linkPrefix = (...dirs: readonly string[]) => `\\/(?:${dirs.join("|")})\\/`;
+const WIKI_LINK = new RegExp(`\\]\\((${linkPrefix("wiki")}[^)#\\s]+)`, "g");
+
+/** Every link to a wiki page in a Markdown body, as root-relative paths, in document order, duplicates kept (callers count or dedupe). */
+export const wikiLinks = (body: string): string[] => [...body.matchAll(WIKI_LINK)].map((m) => fromResource(m[1]));
+const resources = (d: Page) => new Set<string>((d.fm.sources ?? []).flatMap((s) => (s.resource ? [s.resource] : [])));
+
+/**
+ * Link sets of a wiki, computed once: `links` page → pages it links to, `backlinks` page → pages linking to it.
+ * Only existing wiki pages (index.md and log.md excluded) are nodes and targets; a link to a missing page or to
+ * itself is not an edge. Keys are root-relative paths (`wiki/concepts/x.md`).
+ */
+export type LinkGraph = { links: Map<string, Set<string>>; backlinks: Map<string, Set<string>> };
+
+export function linkGraph(docs: Page[]): LinkGraph {
+  const pages = docs.filter((d) => !isReservedPage(d.path));
+  const known = new Set(pages.map((d) => d.path));
+  const links = new Map<string, Set<string>>(), backlinks = new Map<string, Set<string>>();
+  for (const d of pages) { links.set(d.path, new Set()); backlinks.set(d.path, new Set()); }
+  for (const d of pages) for (const t of wikiLinks(d.body)) {
+    if (t === d.path || !known.has(t)) continue;
+    links.get(d.path)!.add(t);
+    backlinks.get(t)!.add(d.path);
+  }
+  return { links, backlinks };
+}
+
+/**
+ * Wiki pages linked to `path`, by decreasing strength: outgoing or incoming link (3 each), shared raw source (2),
+ * shared tag (1). Pure: works on pages already read (index.md and log.md excluded). `graph` is the precomputed
+ * `linkGraph(docs)` (the context memoises it); without it, it is built here, which only suits a single call.
+ */
+export function related(docs: Page[], path: string, graph: LinkGraph = linkGraph(docs)): Related[] {
+  const pages = docs.filter((d) => !isReservedPage(d.path));
+  const me = pages.find((d) => d.path === fromResource(path));
+  if (!me) throw new Error(`Wiki page not found: ${path}`);
+  const out = graph.links.get(me.path), inc = graph.backlinks.get(me.path), mine = resources(me), tags = new Set<string>(me.fm.tags ?? []);
+  const hits: Related[] = [];
+  for (const d of pages) {
+    if (d === me) continue;
+    const reasons: RelatedReason[] = [];
+    let score = 0;
+    const plus = (n: number, why: RelatedReason) => { score += n; reasons.push(why); };
+    if (out?.has(d.path)) plus(3, { kind: "out" });
+    if (inc?.has(d.path)) plus(3, { kind: "in" });
+    for (const r of resources(d)) if (mine.has(r)) plus(2, { kind: "source", value: r });
+    for (const t of d.fm.tags ?? []) if (tags.has(t)) plus(1, { kind: "tag", value: t });
+    if (score) hits.push({ path: d.path, title: String(d.fm.title ?? ""), score, reasons });
+  }
+  return hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+}

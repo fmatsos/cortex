@@ -1,0 +1,78 @@
+<script lang="ts">
+	import { Badge } from "#lib/components/ui/badge/index.js";
+	import { Button } from "#lib/components/ui/button/index.js";
+	import Icon from "#lib/components/icon.svelte";
+	import StatusBadge from "#lib/components/status-badge.svelte";
+	import TypeBadge from "#lib/components/type-badge.svelte";
+	import { favs } from "#lib/favs.svelte.js";
+	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
+	import { t as tr } from "#lib/i18n/index.js";
+
+	/**
+	 * Page line shared by the palette, the results, the tag lists and the home page: type, title, trust information
+	 * (status, review, partial source), description and found passage. `verified` and `needsReview` are optional: a list
+	 * that does not know them shows nothing rather than false information.
+	 * `compact`: palette form (one line, truncated excerpts, no link or button: the option carries the action).
+	 * `titleHtml`, `descriptionHtml`, `snippetHtml`: HTML already escaped by the engine (<mark> highlighting).
+	 */
+	type RowDoc = { id: string; type: string; title: string; description?: string; status?: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
+	let {
+		doc, href, titleHtml, descriptionHtml, snippetHtml, compact = false, selected = false, showFav = false, showType = true, onopen,
+	}: {
+		doc: RowDoc; href?: string; titleHtml?: string; descriptionHtml?: string; snippetHtml?: string;
+		compact?: boolean; selected?: boolean; showFav?: boolean; showType?: boolean; onopen?: () => void;
+	} = $props();
+	const fav = $derived(favs.has(doc.id));
+	const showStatus = $derived(!!doc.status && doc.status !== "stable");
+	const desc = $derived(descriptionHtml ?? doc.description ?? "");
+</script>
+
+{#snippet title()}
+	{#if titleHtml !== undefined}{@html titleHtml}{:else}{doc.title}{/if}
+{/snippet}
+
+{#snippet trust()}
+	{#if showStatus}<StatusBadge status={doc.status!} />{/if}
+	{#if doc.needsReview}
+		<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>
+	{:else if doc.verified === false}
+		<span class="text-muted-foreground inline-flex min-h-6 items-center gap-1 text-sm"><Icon name="unverified" size={16} />{tr("page.neverReviewed")}</span>
+	{/if}
+	{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partialSource")}</Badge>{/if}
+{/snippet}
+
+{#if compact}
+	<div class="flex items-baseline justify-between gap-3">
+		<span class="flex min-w-0 items-baseline gap-2 {selected ? 'line-clamp-2' : 'truncate'}">
+			<Icon name={typeIcon(doc.type)} size={16} class="relative top-0.5 self-start" style="color: {typeColor(doc.type)}" />
+			<span class="min-w-0 {selected ? '' : 'truncate'}">{@render title()}</span>
+		</span>
+		<span class="text-muted-foreground flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
+			<span class="sr-only">{typeLabel(doc.type)} :</span>
+			{#if showStatus}<StatusBadge status={doc.status!} />{/if}
+			{#if doc.needsReview}<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>{/if}
+			{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partial")}</Badge>{/if}
+		</span>
+	</div>
+	{#if snippetHtml || desc}<p class="text-muted-foreground mt-0.5 text-sm {selected ? 'line-clamp-3' : 'line-clamp-1'}">{@html snippetHtml ?? desc}</p>{/if}
+{:else}
+	<div class="flex items-start gap-2">
+		<div class="min-w-0 flex-1">
+			<div class="text-base">
+				{#if href}<a {href} class="text-link link-content font-medium underline-offset-4 hover:underline" onclick={onopen}>{@render title()}</a>{:else}<span class="font-medium">{@render title()}</span>{/if}
+			</div>
+			<!-- showType=false in a list already grouped by type (home columns); line hidden if empty -->
+			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 empty:hidden">
+				{#if showType}<TypeBadge type={doc.type} />{/if}
+				{@render trust()}
+			</div>
+			{#if desc}<p class="text-muted-foreground mt-1.5 text-[0.9375rem] leading-relaxed">{@html desc}</p>{/if}
+			{#if snippetHtml}<p class="mt-1.5 text-[0.9375rem] leading-relaxed">{@html snippetHtml}</p>{/if}
+		</div>
+		{#if showFav}
+			<Button variant="ghost" size="icon" aria-pressed={fav} aria-label={tr("fav.toggleLabel", { title: doc.title })} title={tr("fav.title")} onclick={() => favs.toggle(doc.id)}>
+				<Icon name="star" size={20} filled={fav} class={fav ? "text-favorite" : "text-muted-foreground"} />
+			</Button>
+		{/if}
+	</div>
+{/if}

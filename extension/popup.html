@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Cortex</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 12px; width: 300px; }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; margin: 6px 0; resize: vertical; }
+  button { font: inherit; padding: 6px 12px; }
+  #status { margin: 8px 0 0; min-height: 1.2em; }
+  #status.err { color: #c62828; }
+</style></head>
+<body>
+  <textarea id="note" rows="3" placeholder="Pourquoi je garde ça (note, facultative)"></textarea>
+  <button id="send">Envoyer la page</button>
+  <button id="pick" title="Alt+Maj+C">Choisir un bloc</button>
+  <p id="status" role="status"></p>
+  <script type="module" src="popup.js"></script>
+</body></html>

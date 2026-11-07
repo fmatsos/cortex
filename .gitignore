@@ -1,0 +1,5 @@
+node_modules/
+site/.svelte-kit/
+.cortex/
+site/.export.lock
+build/
