@@ -8,6 +8,7 @@
 	import ReadingHits from "#lib/components/reading-hits.svelte";
 	import RelatedPages from "#lib/components/related-pages.svelte";
 	import StatusBadge from "#lib/components/status-badge.svelte";
+	import TrustIcon from "#lib/components/trust-icon.svelte";
 	import Toc from "#lib/components/toc.svelte";
 	import TocSheet from "#lib/components/toc-sheet.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
@@ -85,16 +86,16 @@
 				<TypeBadge type={p.type} />
 				<StatusBadge status={p.status} />
 				{#if p.partial}
-					<Badge variant="caution"><Icon name="warning" size={16} />{p.type === "Source" ? t("page.partialSource") : t("page.partialContent")}</Badge>
+					<TrustIcon icon="warning" label={p.type === "Source" ? t("page.partialSource") : t("page.partialContent")} />
 				{/if}
 				{#if !p.verified}
-					<Badge variant="outline"><Icon name="unverified" size={16} />{t("page.neverReviewed")}</Badge>
+					<TrustIcon icon="unverified" label={t("page.neverReviewed")} />
 				{:else if p.needsReview}
-					<Badge variant="caution"><Icon name="needs-review" size={16} />{t("page.needsReview")}</Badge>
+					<TrustIcon icon="needs-review" label={t("page.needsReview")} />
 				{:else}
-					<Badge variant="outline" title={t("page.reviewedBy", { by: p.verified.by })}><Icon name="verified" size={16} />{t("page.reviewedOn")} <time datetime={p.verified.at}>{day(p.verified.at)}</time></Badge>
+					<TrustIcon icon="verified" label={`${t("page.reviewedOn")} ${day(p.verified.at)} — ${t("page.reviewedBy", { by: p.verified.by })}`} />
 				{/if}
-				{#if stale}<Badge variant="destructive"><Icon name="stale" size={16} />{t("page.staleSince")} <time datetime={p.stale_after}>{day(p.stale_after)}</time></Badge>{/if}
+				{#if stale}<TrustIcon icon="stale" label={`${t("page.staleSince")} ${day(p.stale_after)}`} />{/if}
 			</div>
 			<h1 class="mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
 			<p class="text-muted-foreground mt-2">{p.description}</p>

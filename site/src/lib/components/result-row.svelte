@@ -3,6 +3,7 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import Icon from "#lib/components/icon.svelte";
 	import StatusBadge from "#lib/components/status-badge.svelte";
+	import TrustIcon from "#lib/components/trust-icon.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { typeColor, typeIcon, typeLabel } from "#lib/type-meta.js";
@@ -34,11 +35,11 @@
 {#snippet trust()}
 	{#if showStatus}<StatusBadge status={doc.status!} />{/if}
 	{#if doc.needsReview}
-		<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>
+		<TrustIcon icon="needs-review" label={tr("row.review")} />
 	{:else if doc.verified === false}
-		<span class="text-muted-foreground inline-flex min-h-6 items-center gap-1 text-sm"><Icon name="unverified" size={16} />{tr("page.neverReviewed")}</span>
+		<TrustIcon icon="unverified" label={tr("page.neverReviewed")} />
 	{/if}
-	{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partialSource")}</Badge>{/if}
+	{#if doc.partial}<TrustIcon icon="warning" label={tr("row.partialSource")} />{/if}
 {/snippet}
 
 {#if compact}
@@ -50,8 +51,8 @@
 		<span class="text-muted-foreground flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
 			<span class="sr-only">{typeLabel(doc.type)} :</span>
 			{#if showStatus}<StatusBadge status={doc.status!} />{/if}
-			{#if doc.needsReview}<Badge variant="caution"><Icon name="needs-review" size={16} />{tr("row.review")}</Badge>{/if}
-			{#if doc.partial}<Badge variant="outline"><Icon name="warning" size={16} class="text-warning-foreground" />{tr("row.partial")}</Badge>{/if}
+			{#if doc.needsReview}<TrustIcon icon="needs-review" label={tr("row.review")} />{/if}
+			{#if doc.partial}<TrustIcon icon="warning" label={tr("row.partial")} />{/if}
 		</span>
 	</div>
 	{#if snippetHtml || desc}<p class="text-muted-foreground mt-0.5 text-sm {selected ? 'line-clamp-3' : 'line-clamp-1'}">{@html snippetHtml ?? desc}</p>{/if}
