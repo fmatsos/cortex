@@ -61,7 +61,7 @@ try {
   // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
   // help and version too: no command, `--help`, `--version` (the release workflow runs them outside any wiki)
   if (o.version) { console.log(pkg.version); process.exit(0); }
-  const anywhere = !cmd || o.help || cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor";
+  const anywhere = !cmd || o.help || cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor" || cmd === "share";
   const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
@@ -156,6 +156,17 @@ try {
       const q = args.join(" ");
       if (!q) throw usage('Usage: cortex ask "<question>" [--file]');
       finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive }, print));
+      break;
+    }
+    case "share": {
+      if (process.env.CORTEX_IN_AGENT) throw usage("cortex share is for a human only.");
+      if ((await import("./upgrade")).dist() !== "sources") { // the bookmarklet is bundled from the extension's sources at startup
+        process.exitCode = await (await import("./payload")).runFromSources(root);
+        break;
+      }
+      const server = (await import("../scripts/share-server")).start();
+      console.log(`cortex share: http://127.0.0.1:${server.port}/share/`);
+      await new Promise(() => {}); // serves until stopped
       break;
     }
     case "serve": {

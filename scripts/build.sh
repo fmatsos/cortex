@@ -11,7 +11,8 @@ kind="${1:?usage: scripts/build.sh binary|bundle <outfile>}"
 out="${2:?usage: scripts/build.sh binary|bundle <outfile>}"
 mkdir -p build
 tar -czf build/payload.tar.gz --exclude='src/*.test.ts' --exclude='site/.svelte-kit' --exclude='site/.export.lock' \
-  --exclude='site/node_modules' package.json bun.lock tsconfig.json src site
+  --exclude='site/node_modules' --exclude='extension/*.test.ts' --exclude='extension/node_modules' --exclude='extension/dist' \
+  package.json bun.lock tsconfig.json src site scripts/share-server.ts scripts/bookmarklet.ts extension assets/logo/cortex-192.png assets/logo/cortex-512.png
 printf 'export default "%s";\n' "$(base64 -w0 build/payload.tar.gz 2>/dev/null || base64 -i build/payload.tar.gz)" > build/payload.ts
 case "$kind" in
   binary) bun build --compile --minify src/bin.ts --external vite --define CORTEX_DIST_BUILD='"binary"' --outfile "$out" ;;

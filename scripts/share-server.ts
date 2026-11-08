@@ -3,7 +3,8 @@
  * Share target for the phone: an installable web app (Android "Share" menu) that drops what is shared into the
  * notes repo's `inbox/` through the Gitea API, one file per share. The push then runs the CI (inbox → compile → site).
  *
- *   GITEA_URL=http://127.0.0.1:3000 GITEA_TOKEN=… SHARE_REPO=owner/thoughts [SHARE_PORT=8090] bun scripts/share-server.ts
+ *   GITEA_URL=http://127.0.0.1:3000 GITEA_TOKEN=… SHARE_REPO=owner/thoughts [SHARE_PORT=8090] cortex share
+ *   (or bun scripts/share-server.ts from the sources)
  *
  * Serve it under /share/ behind the same SSO as the site (HTTPS is required for the install). A pure link becomes
  * `<id>.url` (cortex fetches the page); text (a LinkedIn post, a note) becomes `<id>.md`, its link kept inside, so
@@ -14,7 +15,6 @@
 import { bookmarklet, probes } from "./bookmarklet";
 
 const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;
-if (import.meta.main && (!GITEA_TOKEN || !SHARE_REPO)) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
 
 type Share = { title?: string; text?: string; url?: string; note?: string };
 
@@ -165,4 +165,10 @@ export async function route(req: Request): Promise<Response> {
   return new Response("not found", { status: 404 });
 }
 
-if (import.meta.main) Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: route });
+/** Serves the share target on 127.0.0.1:SHARE_PORT (`cortex share`, or this file run directly). */
+export function start() {
+  if (!GITEA_TOKEN || !SHARE_REPO) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
+  return Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: route });
+}
+
+if (import.meta.main) start();
