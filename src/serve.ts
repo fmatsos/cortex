@@ -51,6 +51,10 @@ export function sameOrigin(h: Headers): boolean {
   try { return new URL(origin).host === (h.get("x-forwarded-host") ?? h.get("host")); } catch { return false; }
 }
 
+/** Commit message of an inbox run: the subject, then one line per source processed. */
+export const inboxCommitMessage = (sources: string[]) =>
+  `inbox: add sources from inbox${sources.length ? `\n\n${sources.map((s) => `- ${s}`).join("\n")}` : ""}`;
+
 /** File of the export for a URL path: `x/` → x/index.html, `x` → x, x.html or x/index.html; never outside `dir`. */
 export function fileFor(dir: string, pathname: string): string | undefined {
   let p: string;
@@ -92,7 +96,7 @@ export async function serve(root: string, o: ServeOpts) {
     if (!r.ok) say("inbox: some entries failed, they stay in inbox/ for the next run");
     const changed = Bun.spawnSync(["git", "-C", root, "status", "--porcelain", "--", "raw", "wiki"]).stdout.toString().trim();
     if (!changed) return;
-    if (o.sync) commitAndPush(root, "inbox: sources ajoutées", ["raw", "wiki"]);
+    if (o.sync) commitAndPush(root, inboxCommitMessage(r.sources), ["raw", "wiki"]);
     void rebuild();
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
   const { route: shareRoute } = await import("../scripts/share-server");

@@ -81,3 +81,9 @@ test("fileFor: x/ → index.html, never outside the folder", () => {
   expect(fileFor(dir, "/%2e%2e/%2e%2e/etc/passwd")).toBeUndefined();
   expect(fileFor(dir, "/missing")).toBeUndefined();
 });
+
+test("inboxCommitMessage: English subject, one line per source in the body", async () => {
+  const { inboxCommitMessage } = await import("./serve");
+  expect(inboxCommitMessage([])).toBe("inbox: add sources from inbox");
+  expect(inboxCommitMessage(["A (01a) ← partage-1.md", "B (01b) ← https://x/y"])).toBe("inbox: add sources from inbox\n\n- A (01a) ← partage-1.md\n- B (01b) ← https://x/y");
+});

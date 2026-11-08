@@ -10,7 +10,7 @@ import { paint } from "./style";
  * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
  * and are returned; `ok` is false when an entry failed.
  */
-export async function inbox(root: string, opts: { dryRun?: boolean } = {}, report?: Report): Promise<Result> {
+export async function inbox(root: string, opts: { dryRun?: boolean } = {}, report?: Report): Promise<Result & { sources: string[] }> {
   const { say, done: result } = collector(report);
   const dir = join(root, "inbox");
   const urlsFile = join(dir, "urls.txt");
@@ -20,11 +20,18 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
 
   const done = new Set<string>(); // urls.txt lines to remove
   let added = 0, known = 0, failed = 0;
+  /** One line per source added (and the pages it links to): `<title> (<id>) ← <entry>`, for a commit body. */
+  const sources: string[] = [];
+  const record = (r: Awaited<ReturnType<typeof add>>, label: string): void => {
+    if (!r.duplicate && r.ex) sources.push(`${r.ex.title} (${r.id}) ← ${label}`);
+    for (const l of r.linked ?? []) if (!("error" in l)) record(l, `${label} (linked)`);
+  };
   const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string) => {
     try {
       const r = await add(root, input, { note, url, dryRun: opts.dryRun });
       say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else added++;
+      record(r, label);
       if (!opts.dryRun) await onOk();
     } catch (e) {
       say("fail", `${label}: ${(e as Error).message}`);
@@ -60,5 +67,5 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
 
   if (!added && !known && !failed) say("info", paint.dim("Empty inbox."));
   else say("info", `${opts.dryRun ? "(dry-run, inbox unchanged) " : ""}${added} added, ${known} already present, ${failed} failed.`);
-  return result(!failed);
+  return { ...result(!failed), sources };
 }

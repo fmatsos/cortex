@@ -35,6 +35,8 @@ test("inbox: files and urls.txt emptied, failures kept, idempotent", async () =>
     const real = await inbox(root);
     expect(real.ok).toBe(false);
     expect(sources()).toBe(3);
+    expect(real.sources).toHaveLength(3); // one line per source, for the commit body
+    expect(real.sources.every((l) => /^.+ \(\S+\) ← \S+/.test(l))).toBe(true);
     expect(await Bun.file(urls).text()).toBe(`# commentaire\n\n${ko}\n`);
     expect(readdirSync(join(root, "inbox")).sort()).toEqual([".gitkeep", "urls.txt"]);
     const raws = (await import("./lib")).readDocs(root, "raw");
