@@ -14,6 +14,8 @@ export const HELP = `cortex — second brain
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
   cortex ask "<question>" [--file] [--interactive]
   cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
+  cortex serve [--port <n>] [--sync]            (serves the site, pages can be marked reviewed from it as $CORTEX_REVIEWER;
+                                               --sync: git pull before, commit and push after; default port 8080)
   cortex ls [--type T] [--json]                (the wiki pages, by title)
   cortex show <path|raw id|title>              (prints a page or a source)
   cortex related <path|title> [--limit N] [--json]

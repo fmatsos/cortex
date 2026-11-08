@@ -43,7 +43,7 @@ try {
       options: {
         note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" }, model: { type: "string" }, effort: { type: "string" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" }, model: { type: "string" }, effort: { type: "string" }, port: { type: "string" }, sync: { type: "boolean" },
       },
     });
   } catch (e) {
@@ -156,6 +156,18 @@ try {
       const q = args.join(" ");
       if (!q) throw usage('Usage: cortex ask "<question>" [--file]');
       finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive }, print));
+      break;
+    }
+    case "serve": {
+      if (process.env.CORTEX_IN_AGENT) throw usage("cortex serve is for a human only.");
+      const reviewer = process.env.CORTEX_REVIEWER;
+      if (!reviewer) throw usage("cortex serve needs $CORTEX_REVIEWER: the name written in verified.by (human:<name>).");
+      if ((await import("./upgrade")).dist() !== "sources") { // the site export needs Vite: run from the embedded sources, as export does
+        process.exitCode = await (await import("./payload")).runFromSources(root);
+        break;
+      }
+      await (await import("./serve")).serve(root, { port: int("--port", o.port, { min: 0 }) ?? 8080, sync: !!o.sync, reviewer });
+      await new Promise(() => {}); // serves until stopped
       break;
     }
     case "export": {

@@ -11,7 +11,26 @@
 	// the secondary actions (copy the link, copy the Markdown, see in the graph) are inline buttons from `sm`
 	// and are grouped behind "Actions" on mobile (UI24). Copy feedback goes through a persistent `role="status"`
 	// region (UI13); on failure, the text is offered selected in a field for manual copy (UI12).
-	let { id, md, original }: { id: string; md: string; original?: { url: string; domain: string } } = $props();
+	// "Mark as reviewed": only when the site is served by `cortex serve` (the HEAD probe answers; a static host has no
+	// /api/) and the page awaits a review. HEAD and POST: the service worker only handles GET, nothing is cached.
+	type Reviewed = { by: string; at: string };
+	let { id, md, original, reviewable = false, onreviewed }: { id: string; md: string; original?: { url: string; domain: string }; reviewable?: boolean; onreviewed?: (r: Reviewed) => void } = $props();
+	let api = $state(false), reviewing = $state(false);
+	$effect(() => { fetch("/api/verify", { method: "HEAD" }).then((r) => (api = r.status === 204), () => {}); });
+	const review = async () => {
+		reviewing = true;
+		message = "";
+		try {
+			const r = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+			const b = await r.json().catch(() => ({}));
+			if (!r.ok) throw new Error(b.error ?? r.statusText);
+			onreviewed?.({ by: b.by, at: new Date().toISOString() });
+			await tick();
+			message = t("actions.reviewed");
+		} catch (e) {
+			message = t("actions.reviewFailed", { error: (e as Error).message });
+		} finally { reviewing = false; }
+	};
 
 	type What = "link" | "md";
 	let copied = $state<"" | What>("");
@@ -58,6 +77,12 @@
 
 <div class="flex flex-wrap items-center gap-2">
 	<FavButton {id} />
+	{#if api && reviewable}
+		<Button size="sm" variant="outline" disabled={reviewing} onclick={review}>
+			<Icon name="verified" size={16} />
+			{t("actions.markReviewed")}
+		</Button>
+	{/if}
 	{#if original}
 		<Button href={original.url} rel="noopener noreferrer" size="sm">
 			<Icon name="external-link" size={16} />

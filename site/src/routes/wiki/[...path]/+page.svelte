@@ -23,6 +23,10 @@
 	const original = $derived(p.type === "Source" ? originalSource(p.sources) : undefined);
 	const stale = $derived(!!p.stale_after && Date.parse(p.stale_after) < Date.now());
 	const related = $derived(relatedEntries(p.backlinks, p.related, data.shared));
+	// reviewed from this page (cortex serve): shown at once, the rebuilt site carries it afterwards
+	let reviewedHere = $state<Record<string, { by: string; at: string }>>({});
+	const verified = $derived(reviewedHere[p.id] ?? p.verified);
+	const needsReview = $derived(!reviewedHere[p.id] && p.needsReview);
 
 	// Return from a note: to the call actually followed (remembered on click, per page and per note), otherwise the first;
 	// a note cited several times additionally has one return per occurrence (a b c).
@@ -84,22 +88,22 @@
 			<!-- trust: the stable status stays discreet, what calls for caution is prominent (text and icon together) -->
 			<div class="flex flex-wrap items-center gap-2">
 				<TypeBadge type={p.type} />
-				<StatusBadge status={p.status} />
+				<StatusBadge status={reviewedHere[p.id] ? "stable" : p.status} />
 				{#if p.partial}
 					<TrustIcon icon="warning" label={p.type === "Source" ? t("page.partialSource") : t("page.partialContent")} />
 				{/if}
-				{#if !p.verified}
+				{#if !verified}
 					<TrustIcon icon="unverified" label={t("page.neverReviewed")} />
-				{:else if p.needsReview}
+				{:else if needsReview}
 					<TrustIcon icon="needs-review" label={t("page.needsReview")} />
 				{:else}
-					<TrustIcon icon="verified" label={`${t("page.reviewedOn")} ${day(p.verified.at)} — ${t("page.reviewedBy", { by: p.verified.by })}`} />
+					<TrustIcon icon="verified" label={`${t("page.reviewedOn")} ${day(verified.at)} — ${t("page.reviewedBy", { by: verified.by })}`} />
 				{/if}
 				{#if stale}<TrustIcon icon="stale" label={`${t("page.staleSince")} ${day(p.stale_after)}`} />{/if}
 			</div>
 			<h1 class="mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
 			<p class="text-muted-foreground mt-2">{p.description}</p>
-			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} /></div>
+			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} reviewable={!verified || needsReview} onreviewed={(r) => (reviewedHere[p.id] = r)} /></div>
 			{#if p.tags.length}
 				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label={t("nav.tags")}>
 					{#each p.tags as tag}<li><Badge href={toTag(data.slugs[tag])} variant="secondary">#{tag}</Badge></li>{/each}
@@ -172,8 +176,8 @@
 					</div>
 				{/if}
 				<div class="flex items-start gap-2">
-					{#if p.verified}
-						<div><dt class="text-muted-foreground text-xs">{t("page.reviewer")}</dt><dd><span class="font-medium">{actor(p.verified.by)}</span> · <time datetime={p.verified.at}>{day(p.verified.at)}</time></dd></div>
+					{#if verified}
+						<div><dt class="text-muted-foreground text-xs">{t("page.reviewer")}</dt><dd><span class="font-medium">{actor(verified.by)}</span> · <time datetime={verified.at}>{day(verified.at)}</time></dd></div>
 					{:else}
 						<div><dt class="sr-only">{t("page.review")}</dt><dd class="text-muted-foreground">{t("page.neverReviewedCap")}</dd></div>
 					{/if}
