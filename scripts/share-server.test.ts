@@ -95,3 +95,14 @@ test("share: a share is committed to inbox/ and pushed to the checkout's remote,
     expect(sh(d, "--git-dir=remote.git", "log", "--format=%s", "main")).toBe(`inbox: partage ${paths[0].slice("inbox/partage-".length, -".url".length)}\nci\ninit\n`);
   } finally { server.stop(true); }
 });
+
+test("share: route hands the inbox files to the given deliver (cortex serve writes them to its local inbox/)", async () => {
+  const { route } = await import("./share-server");
+  const got: { path: string; content: string }[][] = [];
+  const r = await route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify({ url: "https://a.b/c" }) }), async (f) => { got.push(f); });
+  expect(r.status).toBe(200);
+  expect(got[0]![0]!.path).toMatch(/^inbox\/partage-.+\.url$/);
+  expect(got[0]![0]!.content).toBe("https://a.b/c\n");
+  const failed = await route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify({ url: "https://a.b/c" }) }), async () => { throw new Error("disk full"); });
+  expect(failed.status).toBe(502);
+});

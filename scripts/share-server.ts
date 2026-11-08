@@ -7,7 +7,8 @@
  *   [SHARE_PORT=8090] cortex share        (in a checkout of the notes repo, or CORTEX_ROOT=<checkout>)
  *   (or bun scripts/share-server.ts from the sources)
  *
- * Give it its own checkout: `cortex serve --sync` commits in its own, two processes must not share one git index.
+ * `cortex serve` serves the same pages under /share/ without git for the inbox: the files land in its checkout's
+ * (untracked) `inbox/`, it runs `cortex inbox` and commits the sources. `cortex share` is for a host without `serve`.
  * Serve it under /share/ behind the same SSO as the site (HTTPS is required for the install). A pure link becomes
  * `<id>.url` (cortex fetches the page); text (a LinkedIn post, a note) becomes `<id>.md`, its link kept inside, so
  * nothing depends on a page that needs a login. The page keeps unsent shares on the phone and retries them.
@@ -107,21 +108,28 @@ document.getElementById("f").onsubmit = (e) => { e.preventDefault();
 flush();
 </script></body></html>`;
 
-async function put(share: Share): Promise<Response> {
-  const files = toInbox(share);
-  if (!files) return new Response("rien à envoyer", { status: 400 });
-  const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
-  const paths = files.map(([ext]) => `inbox/partage-${id}.${ext}`);
-  // one commit for the share and its note, on top of the remote
+/** Where a share's inbox files go: written (and committed, pushed…) by the caller, which returns once they are safe. */
+export type Deliver = (files: { path: string; content: string }[], id: string) => Promise<void>;
+
+/** `cortex share` alone: committed to `inbox/` in its checkout and pushed to its remote, one share at a time. */
+const gitDeliver: Deliver = (files, id) => {
   const run = queue.then(async () => {
     pullRebase(checkout);
     mkdirSync(join(checkout, "inbox"), { recursive: true });
-    for (const [i, [, content]] of files.entries()) await Bun.write(join(checkout, paths[i]!), content);
-    commitAndPush(checkout, `inbox: partage ${id}`, paths, "cortex-share");
+    for (const f of files) await Bun.write(join(checkout, f.path), f.content);
+    commitAndPush(checkout, `inbox: partage ${id}`, files.map((f) => f.path), "cortex-share");
   });
   queue = run.catch(() => {});
-  try { await run; return Response.json({ paths }); }
-  catch (e) { console.error(`share ${id}: ${(e as Error).message}`); return new Response("échec du push git", { status: 502 }); }
+  return run;
+};
+
+async function put(share: Share, deliver: Deliver): Promise<Response> {
+  const files = toInbox(share);
+  if (!files) return new Response("rien à envoyer", { status: 400 });
+  const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
+  const out = files.map(([ext, content]) => ({ path: `inbox/partage-${id}.${ext}`, content }));
+  try { await deliver(out, id); return Response.json({ paths: out.map((f) => f.path) }); }
+  catch (e) { console.error(`share ${id}: ${(e as Error).message}`); return new Response("échec de l'enregistrement", { status: 502 }); }
 }
 
 /** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */
@@ -154,7 +162,7 @@ for (const b of document.querySelectorAll("[data-p]")) b.onclick = async () => {
 }
 
 /** The browser extension (chrome-extension://<id>) posts from its own origin: it is answered, other origins are not. */
-export async function route(req: Request): Promise<Response> {
+export async function route(req: Request, deliver: Deliver = gitDeliver): Promise<Response> {
   const { pathname } = new URL(req.url);
   const origin = req.headers.get("origin") ?? "";
   const cors: Record<string, string> = /^chrome-extension:\/\/[a-p]{32}$/.test(origin)
@@ -162,7 +170,7 @@ export async function route(req: Request): Promise<Response> {
     : {};
   if (pathname === "/share/api" && req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (pathname === "/share/api" && req.method === "POST") {
-    const r = await put(await req.json().catch(() => ({})));
+    const r = await put(await req.json().catch(() => ({})), deliver);
     for (const [k, v] of Object.entries(cors)) r.headers.set(k, v);
     return r;
   }
@@ -179,7 +187,7 @@ export function start(root = checkout) {
   checkout = root;
   if (Bun.spawnSync(["git", "-C", root, "rev-parse", "--abbrev-ref", "@{u}"], { stderr: "ignore" }).exitCode !== 0)
     throw new Error(`${root}: not a git checkout with an upstream branch (clone the notes repo, then run cortex share in it).`);
-  return Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: route });
+  return Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: (req) => route(req) });
 }
 
 if (import.meta.main) start();

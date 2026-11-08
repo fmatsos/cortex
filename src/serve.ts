@@ -1,7 +1,8 @@
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { openWiki } from "./context";
 import { exportSite } from "./export";
+import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 
 /**
@@ -9,6 +10,9 @@ import { verifyPage } from "./verify";
  * `sync`, the wiki is a git checkout kept in step with its remote: pull before a write, commit and push after it,
  * and `POST /api/sync` (loopback only: the CI, after its own push) pulls and rebuilds. The site is rebuilt after
  * every change into the other of two folders, then swapped; requests keep the previous build meanwhile.
+ * It also serves the phone share target under /share/ (scripts/share-server.ts): a share is written to `inbox/`
+ * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
+ * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
  */
 export type ServeOpts = { port: number; sync: boolean; reviewer: string; say?: (m: string) => void };
 
@@ -81,8 +85,26 @@ export async function serve(root: string, o: ServeOpts) {
   };
   const pull = () => o.sync && pullRebase(root);
 
+  /** `cortex inbox`, then (sync) the new sources committed and pushed; the site rebuilt when something was added. */
+  const ingest = () => serial(async () => {
+    pull();
+    const r = await inbox(root, {}, (m) => say(m.text));
+    if (!r.ok) say("inbox: some entries failed, they stay in inbox/ for the next run");
+    const changed = Bun.spawnSync(["git", "-C", root, "status", "--porcelain", "--", "raw", "wiki"]).stdout.toString().trim();
+    if (!changed) return;
+    if (o.sync) commitAndPush(root, "inbox: sources ajoutées", ["raw", "wiki"]);
+    void rebuild();
+  }).catch((e) => say(`inbox: ${(e as Error).message}`));
+  const { route: shareRoute } = await import("../scripts/share-server");
+  const deliver = async (files: { path: string; content: string }[]) => {
+    mkdirSync(join(root, "inbox"), { recursive: true });
+    for (const f of files) await Bun.write(join(root, f.path), f.content);
+    void ingest(); // the phone gets its answer now; the source is fetched and committed in the background
+  };
+
   pull();
   await rebuild();
+  void ingest(); // entries left by a previous run
   if (!current) throw new Error("the first export failed: nothing to serve.");
 
   const server = Bun.serve({
@@ -109,12 +131,14 @@ export async function serve(root: string, o: ServeOpts) {
           return Response.json({ error: (e as Error).message }, { status: /unknown page/.test((e as Error).message) ? 404 : 500 });
         }
       }
+      if (url.pathname === "/share" || url.pathname.startsWith("/share/")) return shareRoute(req, deliver);
       if (url.pathname === "/api/sync" && req.method === "POST") {
         const ip = srv.requestIP(req)?.address ?? "";
         // the CI's direct call only: a request through the reverse proxy (same host, so loopback too) carries x-forwarded-*
         if (!/^(127\.|::1$|::ffff:127\.)/.test(ip) || req.headers.has("x-forwarded-for") || req.headers.has("x-forwarded-host")) return new Response(null, { status: 403 });
         try { await serial(pull); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
         void rebuild();
+        void ingest();
         return Response.json({ ok: true });
       }
       if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
