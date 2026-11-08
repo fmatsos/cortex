@@ -117,7 +117,7 @@ const gitDeliver: Deliver = (files, id) => {
     pullRebase(checkout);
     mkdirSync(join(checkout, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(checkout, f.path), f.content);
-    commitAndPush(checkout, `inbox: partage ${id}`, files.map((f) => f.path), "cortex-share");
+    commitAndPush(checkout, `inbox: add share ${id}\n\n${files.map((f) => `- ${f.path}`).join("\n")}`, files.map((f) => f.path), "cortex-share");
   });
   queue = run.catch(() => {});
   return run;

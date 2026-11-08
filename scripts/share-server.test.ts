@@ -92,7 +92,8 @@ test("share: a share is committed to inbox/ and pushed to the checkout's remote,
     expect(r.status).toBe(200);
     const { paths } = await r.json();
     expect(sh(d, "--git-dir=remote.git", "show", `main:${paths[0]}`)).toBe("https://a.b/c why\n");
-    expect(sh(d, "--git-dir=remote.git", "log", "--format=%s", "main")).toBe(`inbox: partage ${paths[0].slice("inbox/partage-".length, -".url".length)}\nci\ninit\n`);
+    expect(sh(d, "--git-dir=remote.git", "log", "--format=%s", "main")).toBe(`inbox: add share ${paths[0].slice("inbox/partage-".length, -".url".length)}\nci\ninit\n`);
+    expect(sh(d, "--git-dir=remote.git", "log", "-1", "--format=%b", "main").trim()).toBe(`- ${paths[0]}`);
   } finally { server.stop(true); }
 });
 
