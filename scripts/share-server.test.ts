@@ -67,3 +67,31 @@ test("share: GET /share/bookmarklet is the install page with the code for the re
   expect(html).toContain("Copier le bookmarklet");
   expect((await (await route(new Request("http://x/share/"))).text())).toContain("/share/bookmarklet");
 });
+
+test("share: a share is committed to inbox/ and pushed to the checkout's remote, on top of a commit made meanwhile", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const sh = (cwd: string, ...a: string[]) => {
+    const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, stderr: "pipe" });
+    if (r.exitCode !== 0) throw new Error(r.stderr.toString());
+    return r.stdout.toString();
+  };
+  const d = mkdtempSync(join(tmpdir(), "cortex-share-"));
+  sh(d, "init", "-q", "--bare", "-b", "main", "remote.git");
+  sh(d, "clone", "-q", "remote.git", "a");
+  writeFileSync(join(d, "a/README"), "x\n");
+  sh(join(d, "a"), "add", "-A"); sh(join(d, "a"), "commit", "-qm", "init"); sh(join(d, "a"), "push", "-q", "-u", "origin", "main");
+  sh(d, "clone", "-q", "remote.git", "share");
+  writeFileSync(join(d, "a/other"), "y\n"); sh(join(d, "a"), "add", "-A"); sh(join(d, "a"), "commit", "-qm", "ci"); sh(join(d, "a"), "push", "-q");
+  const { route, start } = await import("./share-server");
+  expect(() => start(d)).toThrow("not a git checkout");
+  const server = start(join(d, "share"));
+  try {
+    const r = await route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify({ url: "https://a.b/c", note: "why" }) }));
+    expect(r.status).toBe(200);
+    const { paths } = await r.json();
+    expect(sh(d, "--git-dir=remote.git", "show", `main:${paths[0]}`)).toBe("https://a.b/c why\n");
+    expect(sh(d, "--git-dir=remote.git", "log", "--format=%s", "main")).toBe(`inbox: partage ${paths[0].slice("inbox/partage-".length, -".url".length)}\nci\ninit\n`);
+  } finally { server.stop(true); }
+});

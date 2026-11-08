@@ -16,8 +16,8 @@ export const HELP = `cortex — second brain
   cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
   cortex serve [--port <n>] [--sync]            (serves the site, pages can be marked reviewed from it as $CORTEX_REVIEWER;
                                                --sync: git pull before, commit and push after; default port 8080)
-  cortex share                                 (the phone share target → inbox/ through the Gitea API; env: GITEA_URL,
-                                               GITEA_TOKEN, SHARE_REPO, SHARE_PORT; see scripts/share-server.ts)
+  cortex share                                 (the phone share target: each share committed to inbox/ and pushed to the
+                                               checkout's git remote, any host; run it in its own checkout; env SHARE_PORT)
   cortex ls [--type T] [--json]                (the wiki pages, by title)
   cortex show <path|raw id|title>              (prints a page or a source)
   cortex related <path|title> [--limit N] [--json]

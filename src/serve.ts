@@ -31,10 +31,10 @@ export function pullRebase(root: string) {
   }
 }
 
-/** Commit `wiki/` and push; a rejected push is rebased once (`pullRebase`). */
-export function commitAndPush(root: string, message: string) {
-  git(root, "add", "wiki");
-  git(root, "-c", "user.name=cortex-serve", "-c", "user.email=cortex-serve@localhost", "commit", "-q", "-m", message);
+/** Commit `paths` (default `wiki/`) and push to the checkout's remote, whatever it is; a rejected push is rebased once (`pullRebase`). */
+export function commitAndPush(root: string, message: string, paths = ["wiki"], who = "cortex-serve") {
+  git(root, "add", "--", ...paths);
+  git(root, "-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "commit", "-q", "-m", message);
   try { git(root, "push", "-q"); return; } catch {}
   pullRebase(root);
   git(root, "push", "-q");

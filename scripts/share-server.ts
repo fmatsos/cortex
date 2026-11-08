@@ -1,20 +1,29 @@
 #!/usr/bin/env bun
 /**
  * Share target for the phone: an installable web app (Android "Share" menu) that drops what is shared into the
- * notes repo's `inbox/` through the Gitea API, one file per share. The push then runs the CI (inbox → compile → site).
+ * notes repo's `inbox/`, one commit per share, pushed to the checkout's remote (Gitea, GitHub, GitLab… any git remote:
+ * its credentials are git's, an SSH key or a token in the remote URL). The push then runs the CI (inbox → compile → site).
  *
- *   GITEA_URL=http://127.0.0.1:3000 GITEA_TOKEN=… SHARE_REPO=owner/thoughts [SHARE_PORT=8090] cortex share
+ *   [SHARE_PORT=8090] cortex share        (in a checkout of the notes repo, or CORTEX_ROOT=<checkout>)
  *   (or bun scripts/share-server.ts from the sources)
  *
+ * Give it its own checkout: `cortex serve --sync` commits in its own, two processes must not share one git index.
  * Serve it under /share/ behind the same SSO as the site (HTTPS is required for the install). A pure link becomes
  * `<id>.url` (cortex fetches the page); text (a LinkedIn post, a note) becomes `<id>.md`, its link kept inside, so
  * nothing depends on a page that needs a login. The page keeps unsent shares on the phone and retries them.
  * `/share/bookmarklet` serves the Android bookmarklet (block picker); SHARE_PUBLIC_URL is the origin baked into it when the proxy
  * does not forward the public Host / X-Forwarded-Proto.
  */
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { commitAndPush, pullRebase } from "../src/serve";
 import { bookmarklet, probes } from "./bookmarklet";
 
-const { GITEA_URL = "http://127.0.0.1:3000", GITEA_TOKEN, SHARE_REPO, SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;
+const { SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;
+/** The notes repo's checkout the shares are committed in (`start`). */
+let checkout = process.env.CORTEX_ROOT ?? process.cwd();
+// one share at a time: they share the git index
+let queue: Promise<unknown> = Promise.resolve();
 
 type Share = { title?: string; text?: string; url?: string; note?: string };
 
@@ -103,16 +112,16 @@ async function put(share: Share): Promise<Response> {
   if (!files) return new Response("rien à envoyer", { status: 400 });
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
   const paths = files.map(([ext]) => `inbox/partage-${id}.${ext}`);
-  // one commit for the share and its note
-  const r = await fetch(`${GITEA_URL}/api/v1/repos/${SHARE_REPO}/contents`, {
-    method: "POST",
-    headers: { authorization: `token ${GITEA_TOKEN}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      message: `inbox: partage ${id}`,
-      files: files.map(([, content], i) => ({ operation: "create", path: paths[i], content: Buffer.from(content).toString("base64") })),
-    }),
+  // one commit for the share and its note, on top of the remote
+  const run = queue.then(async () => {
+    pullRebase(checkout);
+    mkdirSync(join(checkout, "inbox"), { recursive: true });
+    for (const [i, [, content]] of files.entries()) await Bun.write(join(checkout, paths[i]!), content);
+    commitAndPush(checkout, `inbox: partage ${id}`, paths, "cortex-share");
   });
-  return r.ok ? Response.json({ paths }) : new Response(`Gitea ${r.status}`, { status: 502 });
+  queue = run.catch(() => {});
+  try { await run; return Response.json({ paths }); }
+  catch (e) { console.error(`share ${id}: ${(e as Error).message}`); return new Response("échec du push git", { status: 502 }); }
 }
 
 /** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */
@@ -165,9 +174,11 @@ export async function route(req: Request): Promise<Response> {
   return new Response("not found", { status: 404 });
 }
 
-/** Serves the share target on 127.0.0.1:SHARE_PORT (`cortex share`, or this file run directly). */
-export function start() {
-  if (!GITEA_TOKEN || !SHARE_REPO) throw new Error("GITEA_TOKEN and SHARE_REPO are required");
+/** Serves the share target on 127.0.0.1:SHARE_PORT (`cortex share`, or this file run directly), committing in `root`. */
+export function start(root = checkout) {
+  checkout = root;
+  if (Bun.spawnSync(["git", "-C", root, "rev-parse", "--abbrev-ref", "@{u}"], { stderr: "ignore" }).exitCode !== 0)
+    throw new Error(`${root}: not a git checkout with an upstream branch (clone the notes repo, then run cortex share in it).`);
   return Bun.serve({ hostname: "127.0.0.1", port: Number(SHARE_PORT), fetch: route });
 }
 

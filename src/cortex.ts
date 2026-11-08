@@ -164,7 +164,7 @@ try {
         process.exitCode = await (await import("./payload")).runFromSources(root);
         break;
       }
-      const server = (await import("../scripts/share-server")).start();
+      const server = (await import("../scripts/share-server")).start(root);
       console.log(`cortex share: http://127.0.0.1:${server.port}/share/`);
       await new Promise(() => {}); // serves until stopped
       break;
