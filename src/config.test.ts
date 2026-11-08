@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { override, withOverride } from "./config";
 
 test("cortex.json: absent = agnostic, unknown client = error", async () => {
   const { loadConfig } = await import("./config");
@@ -55,4 +56,12 @@ test("cortex config: init, set, get, remove, lint", async () => {
   expect(lintConfig({ parser: { social: { external_link: { limit: -1 } } } })[0].level).toBe("error");
   expect(lintConfig({ parser: { social: { tiktok: { external_link: { limit: 1 } } } } })[0].level).toBe("error");
   expect(lintConfig({ external_link: { limit: 0 } })[0].level).toBe("error"); // not at the root
+});
+
+test("--model/--effort override cortex.json; a bare model keeps the opencode provider", () => {
+  Object.assign(override, { model: "qwen-3.5", effort: "high" });
+  try {
+    expect(withOverride({ client: "opencode", model: "openai/gpt-x" })).toEqual({ client: "opencode", model: "openai/qwen-3.5", effort: "high" });
+    expect(withOverride({ client: "claude" })).toEqual({ client: "claude", model: "qwen-3.5", effort: "high" });
+  } finally { Object.assign(override, { model: undefined, effort: undefined }); }
 });

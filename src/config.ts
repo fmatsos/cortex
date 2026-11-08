@@ -115,8 +115,19 @@ export async function readConfig(root: string): Promise<Record<string, unknown>>
   try { return await f.json(); } catch { throw new Error("cortex.json: invalid JSON."); }
 }
 
+/** Per-command `--model` / `--effort` (cortex.ts): applied over cortex.json by every `loadConfig` of this process. */
+export const override: { model?: string; effort?: string } = {};
+
+/** cortex.json with `override` on top. `--model` is the bare name: an opencode `provider/model` keeps its provider. */
+export function withOverride(c: Record<string, unknown>): Record<string, unknown> {
+  const r = { ...c };
+  if (override.model) r.model = typeof c.model === "string" && c.model.includes("/") ? c.model.replace(/[^/]*$/, override.model) : override.model;
+  if (override.effort) r.effort = override.effort;
+  return r;
+}
+
 export async function loadConfig(root: string): Promise<Config> {
-  const c = await readConfig(root);
+  const c = withOverride(await readConfig(root));
   const e = lintConfig(c).find((i) => i.level === "error");
   if (e) throw new Error(`cortex.json: ${e.msg} (cortex config lint)`);
   return Object.fromEntries(Object.entries(c).filter(([, v]) => v != null)) as Config;

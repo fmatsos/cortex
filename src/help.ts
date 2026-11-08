@@ -26,7 +26,8 @@ export const HELP = `cortex — second brain
   cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>
                                                (keys: ${CONFIG_KEYS.join(", ")})
 
-Agent: cortex.json (client claude|codex|opencode|openai, model, effort). Without a client:
+Agent: cortex.json (client claude|codex|opencode|openai, model, effort); --model <name> / --effort <level> override
+them for one command (bare model name: an opencode provider/model keeps its provider). Without a client:
 $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "claude -p").
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json.`;

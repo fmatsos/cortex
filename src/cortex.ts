@@ -10,7 +10,7 @@ import { KINDS, kindLabel, logAddCtx, newestFirst } from "./log";
 import { search } from "./search";
 import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
-import { CONFIG_KEYS } from "./config";
+import { CONFIG_KEYS, override } from "./config";
 import { CortexError, findRoot } from "./lib";
 import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
@@ -43,7 +43,7 @@ try {
       options: {
         note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
         json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" },
+        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" }, model: { type: "string" }, effort: { type: "string" },
       },
     });
   } catch (e) {
@@ -53,6 +53,7 @@ try {
     throw e;
   }
   const { values: o, positionals: [cmd, ...args], tokens } = parsed;
+  Object.assign(override, { model: o.model, effort: o.effort }); // this command only: every loadConfig applies it
   // `log add` only when `add` is the very next token after `log`: `cortex log --json add …` and `cortex search log add` must write nothing
   const first = tokens!.findIndex((t) => t.kind === "positional");
   const isLogAdd = cmd === "log" && tokens![first + 1]?.kind === "positional" && (tokens![first + 1] as { value?: string }).value === "add";
