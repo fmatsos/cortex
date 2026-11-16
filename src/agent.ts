@@ -75,14 +75,16 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
   const backend = await backendFor(root, await w.config());
-  process.env.CORTEX_IN_AGENT = "1"; // inherited by every agent process: cortex new --force stays a human-only option
+  // inherited by every agent process: cortex new --force stays a human-only option. Bun.spawn reads the environment of
+  // the start, not process.env as it is now: every spawn of an agent passes `env: process.env` (the SDKs read it themselves)
+  process.env.CORTEX_IN_AGENT = "1";
   prompt = scopePrefix(root, mode === "write", (await w.config()).language) + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
   if (!batch) {
     // Ctrl+C targets the agent; without this handler, cortex would die too (same process group) before checking the Source page and flipping the status
     const keep = () => {};
     process.on("SIGINT", keep);
-    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, stdio: ["inherit", "inherit", "inherit"] }).exited; }
+    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, env: process.env, stdio: ["inherit", "inherit", "inherit"] }).exited; }
     catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
     finally { process.off("SIGINT", keep); }
   }

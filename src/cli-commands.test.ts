@@ -478,6 +478,15 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription:
     expect(r.code).toBe(0);
     expect(r.out).toBe("réponse\n");
   });
+  test("the agent sees CORTEX_IN_AGENT=1, batch and interactive (cortex new --force stays refused to it)", () => {
+    const say = 'cat >/dev/null; echo "in_agent=$CORTEX_IN_AGENT"';
+    expect(cortex(wiki(), ["ask", "quoi ?"], { env: agent(say) }).out).toBe("in_agent=1\n");
+    const root = wiki(), script = agent(say).CORTEX_AGENT_BATCH;
+    const env: Record<string, string | undefined> = { ...process.env, NO_COLOR: "1", CORTEX_ROOT: root, CORTEX_AGENT: script };
+    delete env.CORTEX_IN_AGENT;
+    const p = Bun.spawnSync(["bun", CLI, "ask", "quoi ?", "--interactive"], { env, stdin: "ignore" });
+    expect(p.stdout.toString()).toContain("in_agent=1");
+  });
   test("ask domain error: the agent fails → 1", () => {
     const r = cortex(wiki(), ["ask", "quoi ?"], { env: agent("cat >/dev/null; exit 3") });
     expect(r.code).toBe(1);

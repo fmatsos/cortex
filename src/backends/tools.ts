@@ -134,7 +134,7 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     }
     case "Bash": {
       // guard allowed a single cortex command, quotes without expansion; sh only parses them, bwrap still confines it
-      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode), { cwd: root, stdout: "pipe", stderr: "pipe" });
+      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode), { cwd: root, env: process.env, stdout: "pipe", stderr: "pipe" });
       const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
       return part(`${out}${err}${code ? `\n(exit ${code})` : ""}`, a.offset);
     }

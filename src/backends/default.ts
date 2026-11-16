@@ -16,7 +16,7 @@ export default function agnostic(): Backend {
       const args = cmd[0] === "claude"
         ? [...cmd, "--strict-mcp-config", "--mcp-config", packMcpConfig(root, mode), "--allowedTools", "mcp__cortex__*", "--disallowedTools", ...BUILTINS]
         : cmd;
-      const p = Bun.spawn(confine(root, args, mode), { cwd: root, stdin: new TextEncoder().encode(prompt), stdout: "pipe", stderr: "inherit" });
+      const p = Bun.spawn(confine(root, args, mode), { cwd: root, env: process.env, stdin: new TextEncoder().encode(prompt), stdout: "pipe", stderr: "inherit" });
       const out = await new Response(p.stdout).text();
       if (await p.exited) throw new Error(`${cmd[0]} exited with an error`);
       return out.trim();
