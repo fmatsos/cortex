@@ -226,12 +226,12 @@ claude mcp add cortex -e CORTEX_ROOT=/path/to/your/wiki -- cortex mcp
 On a machine without the wiki, the CLI can send each command over SSH to the `cortex` of the host that keeps it. That host runs it in its own checkout, pulls before and commits and pushes after. Nothing of the wiki is written locally.
 
 ```sh
-cortex remote add perso runner@wiki-host      # once; the first remote added is the default
+cortex remote add perso runner@wiki-host --identity ~/.ssh/id_cortex   # once; the first remote added is the default
 cortex search "context rot"                    # runs on wiki-host
 claude mcp add cortex -- cortex mcp            # Claude Code on this machine, the wiki over there
 ```
 
-A local wiki (`$CORTEX_ROOT`, a parent folder holding `cortex.json`) still comes first; `--wiki <name>` or `$CORTEX_WIKI` picks a remote one explicitly. `cortex add ./file.pdf` sends the file along. `serve`, `share`, `export`, `inbox`, `compile` and `ask` are refused through a remote wiki, and `config` only reads. `cortex doctor` checks that the host answers and runs the same minor version.
+`--identity` names the key for that wiki (ssh gets `-i <key> -o IdentitiesOnly=yes`); without it, ssh uses your `~/.ssh/config` and default keys, so `<user@host>` may also be a `Host` alias. A local wiki (`$CORTEX_ROOT`, a parent folder holding `cortex.json`) still comes first; `--wiki <name>` or `$CORTEX_WIKI` picks a remote one explicitly. `cortex add ./file.pdf` sends the file along. `serve`, `share`, `export`, `inbox`, `compile` and `ask` are refused through a remote wiki, and `config` only reads. `cortex doctor` checks that the host answers and runs the same minor version.
 
 On the host, give each machine's key a forced command, so that it can run nothing but cortex, in that checkout:
 

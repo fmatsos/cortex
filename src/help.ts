@@ -35,8 +35,9 @@ Agent: cortex.json (client claude|codex|opencode|openai, model, effort); --model
 them for one command (bare model name: an opencode provider/model keeps its provider). Without a client:
 $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "claude -p").
 
-  cortex remote add <name> <user@host> [--port N] | remove <name> | default <name> | list
-                                               (remote wikis, in ~/.config/cortex/remotes.json; the first one added is the default)
+  cortex remote add <name> <user@host> [--port N] [--identity <key>] | remove <name> | default <name> | list
+                                               (remote wikis, in ~/.config/cortex/remotes.json; the first one added is the default;
+                                               --identity: the ssh private key for that wiki, no ~/.ssh/config needed)
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json, otherwise the default remote wiki.
 --wiki <name> (or $CORTEX_WIKI) sends the command to that remote wiki over ssh, even inside a local one. Through a

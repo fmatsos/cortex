@@ -74,7 +74,7 @@ try {
   // remote wiki (docs/REMOTE-PLAN.md): the remotes.json commands, the server side of a forwarded call, then the forwarding
   if (cmd === "remote" || cmd === "remote-exec") {
     const r = await import("./remote");
-    if (cmd === "remote") { for (const l of r.remoteCommand(args, o.port)) console.log(l); process.exit(0); }
+    if (cmd === "remote") { for (const l of r.remoteCommand(args, { port: o.port, identity: o.identity })) console.log(l); process.exit(0); }
     process.exit(await r.remoteExec(args, SELF));
   }
   const anywhere = !cmd || o.help || cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor" || cmd === "share";

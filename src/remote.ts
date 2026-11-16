@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { OPTIONS } from "./cli-options";
@@ -19,6 +19,8 @@ const usage = (msg: string) => new CortexError(msg, "usage");
 const Remote = z.object({
   ssh: z.string().regex(/^[^\s-][^\s]*$/, "ssh: user@host or an ~/.ssh/config Host alias (no space, not starting with -)"),
   port: z.number().int().min(1).max(65535).optional(),
+  /** Private key for this wiki (absolute path): ssh gets `-i <key> -o IdentitiesOnly=yes`, no ~/.ssh/config needed. */
+  identity: z.string().regex(/^\//, "identity: an absolute path").optional(),
 }).strict();
 const RemotesFile = z.object({ default: z.string().optional(), wikis: z.record(z.string(), Remote).default({}) }).strict();
 export type Remote = z.infer<typeof Remote>;
@@ -42,22 +44,28 @@ function writeRemotes(r: Remotes, path = remotesPath()) {
   writeFileSync(path, JSON.stringify(r, null, 2) + "\n");
 }
 
+/** `~/…` and relative paths made absolute, as the user typed them from here. */
+const absolute = (p: string) => resolve(p.replace(/^~(?=$|\/)/, process.env.HOME || homedir()));
+
 /** `cortex remote add|remove|list|default`: the lines to print. */
-export function remoteCommand(args: string[], port?: string, path = remotesPath()): string[] {
+export function remoteCommand(args: string[], opts: { port?: string; identity?: string } = {}, path = remotesPath()): string[] {
+  const { port } = opts;
   const [sub, name, target] = args;
   const r = readRemotes(path);
   const known = (n: string | undefined) => { if (!n || !r.wikis[n]) throw usage(`unknown remote wiki: ${n ?? ""} (cortex remote list)`); return n; };
   switch (sub) {
     case "add": {
-      if (!name || !target || args.length !== 3) throw usage("Usage: cortex remote add <name> <user@host> [--port N]");
+      if (!name || !target || args.length !== 3) throw usage("Usage: cortex remote add <name> <user@host> [--port N] [--identity <key>]");
       if (!NAME.test(name)) throw usage("remote name: letters, digits, . _ - only");
       const p = port === undefined ? undefined : Number(port);
-      const w = Remote.safeParse({ ssh: target, ...(p !== undefined && { port: p }) });
+      const key = opts.identity === undefined ? undefined : absolute(opts.identity);
+      if (key !== undefined && !(existsSync(key) && statSync(key).isFile())) throw usage(`--identity: no key file at ${key}`);
+      const w = Remote.safeParse({ ssh: target, ...(p !== undefined && { port: p }), ...(key && { identity: key }) });
       if (!w.success) throw usage(w.error.issues.map((i) => i.message).join("; "));
       r.wikis[name] = w.data;
       r.default ??= name;
       writeRemotes(r, path);
-      return [`remote wiki ${name}: ${target}${p ? ` (port ${p})` : ""}${r.default === name ? ", default" : ""}`];
+      return [`remote wiki ${name}: ${target}${p ? ` (port ${p})` : ""}${key ? `, key ${key}` : ""}${r.default === name ? ", default" : ""}`];
     }
     case "remove": {
       if (args.length !== 2) throw usage("Usage: cortex remote remove <name>");
@@ -76,10 +84,10 @@ export function remoteCommand(args: string[], port?: string, path = remotesPath(
     case undefined: {
       const names = Object.keys(r.wikis);
       if (!names.length) return ["No remote wiki (cortex remote add <name> <user@host>)."];
-      return names.map((n) => `${n === r.default ? "*" : " "} ${n}  ${r.wikis[n]!.ssh}${r.wikis[n]!.port ? `:${r.wikis[n]!.port}` : ""}`);
+      return names.map((n) => { const w = r.wikis[n]!; return `${n === r.default ? "*" : " "} ${n}  ${w.ssh}${w.port ? `:${w.port}` : ""}${w.identity ? `  key ${w.identity}` : ""}`; });
     }
     default:
-      throw usage("Usage: cortex remote add <name> <user@host> [--port N] | remove <name> | default <name> | list");
+      throw usage("Usage: cortex remote add <name> <user@host> [--port N] [--identity <key>] | remove <name> | default <name> | list");
   }
 }
 
@@ -160,7 +168,7 @@ export async function pack(argv: string[]): Promise<{ argv: string[]; envelope?:
 
 /** The ssh command line of a forwarded call. `-t` only with two terminals and no envelope (a pty would alter its bytes). */
 export function sshArgs(r: Remote, payload: string, tty: boolean): string[] {
-  return ["ssh", ...(r.port ? ["-p", String(r.port)] : []), ...(tty ? ["-t"] : []), "--", r.ssh, "cortex", "remote-exec", payload];
+  return ["ssh", ...(r.port ? ["-p", String(r.port)] : []), ...(r.identity ? ["-i", r.identity, "-o", "IdentitiesOnly=yes"] : []), ...(tty ? ["-t"] : []), "--", r.ssh, "cortex", "remote-exec", payload];
 }
 
 /** Runs the command on the remote wiki; resolves the exit code (ssh's, which is cortex's, or 255 when ssh failed). */

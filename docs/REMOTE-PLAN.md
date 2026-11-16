@@ -42,13 +42,14 @@ A user-level file, outside any wiki: `$XDG_CONFIG_HOME/cortex/remotes.json` (def
 {
   "default": "perso",
   "wikis": {
-    "perso": { "ssh": "cortex@192.168.1.138" },
+    "perso": { "ssh": "runner@192.168.1.138", "identity": "/home/me/.ssh/id_cortex" },
     "pro":   { "ssh": "cortex@work-host", "port": 2222 }
   }
 }
 ```
 
 - Only how to reach the host. **The path of the wiki is decided on the server** (§4.2): a client cannot point the remote `cortex` at another directory.
+- `identity` (0.8.3, `--identity <key>`): the private key of that wiki, stored as an absolute path; ssh gets `-i <key> -o IdentitiesOnly=yes`. Without it, ssh uses `~/.ssh/config` and the default keys.
 - Managed with `cortex remote add <name> <user@host> [--port N]`, `cortex remote remove <name>`, `cortex remote list`, `cortex remote default <name>`. These run anywhere, like `config init`.
 
 ### 3.2 Which wiki a command uses

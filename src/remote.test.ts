@@ -9,18 +9,18 @@ const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
 
 test("cortex remote: add (first one is the default), list, default, remove; names and ssh targets checked", () => {
   const path = join(tmp("cortex-remotes-"), "cortex/remotes.json");
-  expect(remoteCommand(["list"], undefined, path)).toEqual(["No remote wiki (cortex remote add <name> <user@host>)."]);
-  expect(remoteCommand(["add", "perso", "runner@192.168.1.138"], undefined, path)[0]).toContain("default");
-  remoteCommand(["add", "pro", "work"], "2222", path);
-  expect(remoteCommand(["list"], undefined, path)).toEqual(["* perso  runner@192.168.1.138", "  pro  work:2222"]);
-  remoteCommand(["default", "pro"], undefined, path);
+  expect(remoteCommand(["list"], {}, path)).toEqual(["No remote wiki (cortex remote add <name> <user@host>)."]);
+  expect(remoteCommand(["add", "perso", "runner@192.168.1.138"], {}, path)[0]).toContain("default");
+  remoteCommand(["add", "pro", "work"], { port: "2222" }, path);
+  expect(remoteCommand(["list"], {}, path)).toEqual(["* perso  runner@192.168.1.138", "  pro  work:2222"]);
+  remoteCommand(["default", "pro"], {}, path);
   expect(readRemotes(path).default).toBe("pro");
-  remoteCommand(["remove", "pro"], undefined, path);
+  remoteCommand(["remove", "pro"], {}, path);
   expect(readRemotes(path)).toEqual({ wikis: { perso: { ssh: "runner@192.168.1.138" } } });
-  expect(() => remoteCommand(["add", "x", "-oProxyCommand=evil"], undefined, path)).toThrow("not starting with -");
-  expect(() => remoteCommand(["add", "a b", "h"], undefined, path)).toThrow("remote name");
-  expect(() => remoteCommand(["add", "x", "h"], "0", path)).toThrow();
-  expect(() => remoteCommand(["remove", "nope"], undefined, path)).toThrow("unknown remote wiki");
+  expect(() => remoteCommand(["add", "x", "-oProxyCommand=evil"], {}, path)).toThrow("not starting with -");
+  expect(() => remoteCommand(["add", "a b", "h"], {}, path)).toThrow("remote name");
+  expect(() => remoteCommand(["add", "x", "h"], { port: "0" }, path)).toThrow();
+  expect(() => remoteCommand(["remove", "nope"], {}, path)).toThrow("unknown remote wiki");
   writeFileSync(path, "{ nope");
   expect(() => readRemotes(path)).toThrow(path);
 });
@@ -58,6 +58,19 @@ test("refusal: host jobs, phase-1 agent commands, writes to cortex.json, host pa
   expect(refusal(["add", "@file:0"], 2)).toContain("do not match");
   expect(refusal(["search", "x", "--bogus"])).toContain("Unknown option");
   expect(refusal(["search", "x", "--json"])).toBeUndefined();
+});
+
+test("cortex remote add --identity: the key stored as an absolute path, checked to exist, passed to ssh alone", () => {
+  const dir = tmp("cortex-key-"), path = join(dir, "remotes.json"), key = join(dir, "id_cortex");
+  writeFileSync(key, "k");
+  expect(remoteCommand(["add", "perso", "runner@h"], { identity: key }, path)[0]).toContain(`key ${key}`);
+  expect(readRemotes(path).wikis.perso).toEqual({ ssh: "runner@h", identity: key });
+  expect(() => remoteCommand(["add", "x", "h"], { identity: join(dir, "missing") }, path)).toThrow("no key file");
+  const saved = process.env.HOME;
+  process.env.HOME = dir;
+  try { remoteCommand(["add", "y", "h"], { identity: "~/id_cortex" }, path); } finally { process.env.HOME = saved; }
+  expect(readRemotes(path).wikis.y?.identity).toBe(key); // ~ expanded, never stored as typed
+  expect(sshArgs({ ssh: "h", identity: key }, "P", false)).toEqual(["ssh", "-i", key, "-o", "IdentitiesOnly=yes", "--", "h", "cortex", "remote-exec", "P"]);
 });
 
 test("sshArgs: port, -t only when asked, the target after --", () => {
