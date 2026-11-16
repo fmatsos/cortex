@@ -39,6 +39,22 @@ test("withSync: pulls first, then commits what the command wrote and pushes, wit
   expect(lastMessage(d)).toBe("cortex-remote\ncortex new: 1 file changed\n\n- wiki/new.md");
 });
 
+test("withSync: rebases on a concurrent change on a host with no git identity configured (no pending branch)", async () => {
+  const { d, a, b } = repos();
+  const keys = ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"] as const;
+  const saved = keys.map((k) => process.env[k]);
+  Object.assign(process.env, { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.useConfigOnly", GIT_CONFIG_VALUE_0: "true" });
+  try {
+    await withSync(a, "new", async () => {
+      pushFrom(b, "wiki/q.md", "from b\n"); // another writer, another file: a plain rebase
+      writeFileSync(join(a, "wiki/new.md"), "x\n");
+    }, quiet().say);
+  } finally { keys.forEach((k, i) => (saved[i] === undefined ? delete process.env[k] : (process.env[k] = saved[i]))); }
+  expect(remoteFile(d, "wiki/new.md")).toBe("x\n");
+  expect(remoteFile(d, "wiki/q.md")).toBe("from b\n");
+  expect(sh(join(d, "remote.git"), "branch", "--list", "cortex/pending-*")).toBe("");
+});
+
 test("withSync: a read command commits nothing; without an upstream the command just runs", async () => {
   const { d, a } = repos();
   const before = sh(join(d, "remote.git"), "rev-parse", "main");

@@ -8,7 +8,8 @@ import { join, resolve } from "node:path";
  */
 
 export const git = (root: string, ...args: string[]) => {
-  const r = Bun.spawnSync(["git", "-C", root, ...args], { stderr: "pipe", stdout: "pipe" });
+  // env passed explicitly: Bun.spawnSync otherwise uses the environment of the start, not process.env as it is now
+  const r = Bun.spawnSync(["git", "-C", root, ...args], { stderr: "pipe", stdout: "pipe", env: process.env });
   if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.toString().trim()}`);
   return r.stdout.toString().trim();
 };
@@ -16,11 +17,17 @@ let lastError = "";
 const tryGit = (root: string, ...args: string[]) => { try { git(root, ...args); return true; } catch (e) { lastError = (e as Error).message.split("\n").at(-1) ?? ""; return false; } };
 
 /**
+ * `git pull --rebase` with an identity: a rebase rewrites the local commits, so git needs a committer even on a host with
+ * no user.name / user.email (a CI runner, a service account); without one it fails, as if the remote had conflicted.
+ */
+const pull = (who: string) => ["-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "pull", "-q", "--rebase"];
+
+/**
  * Pull with rebase: local commits a failed push left behind go on top of the remote, pushed by the next change.
  * A conflict leaves the checkout at the remote (local commits dropped) rather than stuck in a rebase.
  */
-export function pullRebase(root: string) {
-  try { git(root, "pull", "-q", "--rebase"); }
+export function pullRebase(root: string, who = "cortex-serve") {
+  try { git(root, ...pull(who)); }
   catch (e) {
     try { git(root, "rebase", "--abort"); } catch {}
     git(root, "reset", "-q", "--hard", "@{u}");
@@ -33,7 +40,7 @@ export function commitAndPush(root: string, message: string, paths = ["wiki"], w
   git(root, "add", "--", ...paths);
   git(root, "-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "commit", "-q", "-m", message);
   try { git(root, "push", "-q"); return; } catch {}
-  pullRebase(root);
+  pullRebase(root, who);
   git(root, "push", "-q");
 }
 
@@ -43,7 +50,7 @@ const WHO = "cortex-remote";
 
 /** Changed paths among SYNC_PATHS (untracked files one by one; the new name of a rename). */
 export function changedPaths(root: string): string[] {
-  const r = Bun.spawnSync(["git", "-C", root, "status", "--porcelain=v1", "-z", "-uall", "--", ...SYNC_PATHS], { stdout: "pipe", stderr: "pipe" });
+  const r = Bun.spawnSync(["git", "-C", root, "status", "--porcelain=v1", "-z", "-uall", "--", ...SYNC_PATHS], { stdout: "pipe", stderr: "pipe", env: process.env });
   if (r.exitCode !== 0) throw new Error(`git status: ${r.stderr.toString().trim()}`);
   // -z: "XY path", NUL-separated, unquoted; a rename or copy is followed by its old name, staged too
   const out: string[] = [], parts = r.stdout.toString().split("\0").filter(Boolean);
@@ -85,7 +92,7 @@ function savePending(root: string, say: (m: string) => void, now: Date) {
 
 /** Pull (rebase), then push local commits. Never drops a commit: a conflict saves them on a pending branch. */
 export function syncUp(root: string, say: (m: string) => void, now = new Date()) {
-  if (!tryGit(root, "pull", "-q", "--rebase")) {
+  if (!tryGit(root, ...pull(WHO))) {
     tryGit(root, "rebase", "--abort");
     if (!ahead(root)) throw new Error(`git pull failed, nothing was run: ${lastError}`);
     savePending(root, say, now);
@@ -93,7 +100,7 @@ export function syncUp(root: string, say: (m: string) => void, now = new Date())
   }
   if (!ahead(root)) return;
   if (tryGit(root, "push", "-q")) return;
-  if (tryGit(root, "pull", "-q", "--rebase") && tryGit(root, "push", "-q")) return;
+  if (tryGit(root, ...pull(WHO)) && tryGit(root, "push", "-q")) return;
   tryGit(root, "rebase", "--abort");
   savePending(root, say, now);
 }

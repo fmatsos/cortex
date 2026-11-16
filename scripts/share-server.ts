@@ -114,7 +114,7 @@ export type Deliver = (files: { path: string; content: string }[], id: string) =
 /** `cortex share` alone: committed to `inbox/` in its checkout and pushed to its remote, one share at a time. */
 const gitDeliver: Deliver = (files, id) => {
   const run = queue.then(async () => {
-    pullRebase(checkout);
+    pullRebase(checkout, "cortex-share");
     mkdirSync(join(checkout, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(checkout, f.path), f.content);
     commitAndPush(checkout, `inbox: add share ${id}\n\n${files.map((f) => `- ${f.path}`).join("\n")}`, files.map((f) => f.path), "cortex-share");
