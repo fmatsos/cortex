@@ -112,11 +112,10 @@ export const REFUSED: Record<string, string> = {
   export: "cortex export writes a site on the wiki host: not through a remote wiki.",
   inbox: "cortex inbox reads a local inbox/ folder: with a remote wiki, use cortex add or the share app.",
   compile: "cortex compile is not available through a remote wiki yet: run it on the wiki host (or let its CI compile).",
-  ask: "cortex ask is not available through a remote wiki yet: search, show and the MCP server are.",
   "remote-exec": "remote-exec is the server side of a remote wiki.",
 };
 /** What the wiki host accepts: the wiki commands minus REFUSED; `config` read-only (`schema` names a file the host would read). */
-const ALLOWED = new Set(["add", "search", "index", "new", "lint", "log", "links", "ls", "show", "related", "mcp", "schema", "config", "version"]);
+const ALLOWED = new Set(["add", "ask", "search", "index", "new", "lint", "log", "links", "ls", "show", "related", "mcp", "schema", "config", "version"]);
 
 /** Why the host refuses a forwarded argv, or undefined. A path of the host is never an input: it would land in raw/, then in git. */
 export function refusal(argv: string[], uploads = 0): string | undefined {

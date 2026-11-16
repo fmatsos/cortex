@@ -44,8 +44,9 @@ test("payload: any argv comes back identical; anything else is refused", () => {
     expect(() => decodePayload(bad)).toThrow("unreadable payload");
 });
 
-test("refusal: host jobs, phase-1 agent commands, writes to cortex.json, host paths, internal flags", () => {
-  for (const c of ["serve", "share", "export", "inbox", "compile", "ask", "remote-exec", "upgrade", "doctor"]) expect(refusal([c])).toBeDefined();
+test("refusal: host jobs, compile, writes to cortex.json, host paths, internal flags", () => {
+  for (const c of ["serve", "share", "export", "inbox", "compile", "remote-exec", "upgrade", "doctor"]) expect(refusal([c])).toBeDefined();
+  expect(refusal(["ask", "why?", "--file"])).toBeUndefined();
   expect(refusal(["config", "set", "schema", "/etc/passwd"])).toContain("only reads");
   expect(refusal(["config", "init"])).toContain("only reads");
   expect(refusal(["config", "get", "language"])).toBeUndefined();

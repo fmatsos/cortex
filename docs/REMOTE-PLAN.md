@@ -67,7 +67,7 @@ A local checkout keeps working exactly as today; a remote is only used when ther
 `src/remote.ts`, called at the top of `main` (`src/cortex.ts`) before `openWiki`:
 
 - **Always local:** `--version`, help, `upgrade`, `config init`, `remote …`, `doctor` (which also checks the remote: reachable, remote version).
-- **Refused in remote mode,** with one line saying why: `serve`, `share` (host jobs), `export` (writes a site on the host), `inbox` (a local folder; use the share app or `cortex add`), and in phase 1 `compile` and `ask` (§4.4).
+- **Refused in remote mode,** with one line saying why: `serve`, `share` (host jobs), `export` (writes a site on the host), `inbox` (a local folder; use the share app or `cortex add`), and in phase 1 `compile` (§4.4).
 - **Everything else is forwarded:** `ssh [-p port] [-t] <user@host> cortex remote-exec <payload>`.
   - `<payload>`: the argv as JSON, base64url-encoded: one shell word, nothing for any shell to interpret on either side.
   - `-t` when local stdin and stdout are both terminals (colors, interactive agent sessions); without it otherwise (pipes, `mcp`, `--json`).
@@ -120,7 +120,7 @@ Ceiling: the lock serializes everything, so a long command makes a `search` wait
 
 The host has no agent outside the CI (§0). Two phases:
 
-- **Phase 1 (this plan):** `compile` and `ask` are refused in remote mode, with one line saying to run them on the wiki host. A source added remotely is compiled by the CI within the hour, as today for a share from the phone. Everything else works: `add`, `search`, `show`, `ls`, `related`, `log`, `lint`, `new`, `index`, `links`, `mcp`.
+- **Phase 1 (this plan):** `compile` is refused in remote mode (`ask` was too, until it was allowed: it runs the host's agent, phase 2 below), with one line saying to run them on the wiki host. A source added remotely is compiled by the CI within the hour, as today for a share from the phone. Everything else works: `add`, `search`, `show`, `ls`, `related`, `log`, `lint`, `new`, `index`, `links`, `mcp`.
 - **Phase 2 (only if phase 1 is not enough):** install the agent CLI for the remote account (`bun add @anthropic-ai/claude-code` in its home, as the CI does in a job) and give it a token made with `claude setup-token`, in a file readable by that account only, loaded by the forced command. Interactive sessions then run under `bwrap`, which works (§0).
 
 ## 5. Changes (done)
@@ -142,7 +142,7 @@ The host has no agent outside the CI (§0). Two phases:
 - `cortex remote`: add (first one is the default), list, default, remove; a name with spaces, an ssh target starting with `-`, a bad port and an invalid file are refused.
 - Choice of the wiki: `--wiki`, `$CORTEX_WIKI`, a local wiki, the default.
 - Payload: an argv with spaces, quotes, `$`, backticks, newlines and non-ASCII comes back identical; anything else is refused.
-- `refusal`: host jobs, `compile` and `ask`, `config set` / `init`, `mcp --agent`, a host path given to `add` (an option value is not an input), uploads that do not match the arguments, an unknown option.
+- `refusal`: host jobs, `compile`, `config set` / `init`, `mcp --agent`, a host path given to `add` (an option value is not an input), uploads that do not match the arguments, an unknown option.
 - `pack`: only the inputs of `add` travel as files, never an option value naming a file.
 - End to end: `search` answers from the host with a clean JSON stdout, the command first and `--wiki` not sent, no `-t` without terminals; `add` of a local file travels in the envelope; `add -` passes stdin; exit codes come back; refused commands say why in one line without calling ssh; `remote-exec` needs the host's `$CORTEX_ROOT` and refuses a host path.
 - End to end on a git-backed host: a forwarded `add` is committed and pushed as `cortex-remote`; `cortex mcp` over ssh answers JSON-RPC on a clean stdout and each `add` call is pushed.

@@ -231,7 +231,7 @@ cortex search "context rot"                    # runs on wiki-host
 claude mcp add cortex -- cortex mcp            # Claude Code on this machine, the wiki over there
 ```
 
-`--identity` names the key for that wiki (ssh gets `-i <key> -o IdentitiesOnly=yes`); without it, ssh uses your `~/.ssh/config` and default keys, so `<user@host>` may also be a `Host` alias. A local wiki (`$CORTEX_ROOT`, a parent folder holding `cortex.json`) still comes first; `--wiki <name>` or `$CORTEX_WIKI` picks a remote one explicitly. `cortex add ./file.pdf` sends the file along. `serve`, `share`, `export`, `inbox`, `compile` and `ask` are refused through a remote wiki, and `config` only reads. `cortex doctor` checks that the host answers and runs the same minor version.
+`--identity` names the key for that wiki (ssh gets `-i <key> -o IdentitiesOnly=yes`); without it, ssh uses your `~/.ssh/config` and default keys, so `<user@host>` may also be a `Host` alias. A local wiki (`$CORTEX_ROOT`, a parent folder holding `cortex.json`) still comes first; `--wiki <name>` or `$CORTEX_WIKI` picks a remote one explicitly. `cortex add ./file.pdf` sends the file along. `serve`, `share`, `export`, `inbox` and `compile` are refused through a remote wiki, and `config` only reads. `ask` runs the agent on the wiki host: its agent CLI must be installed and logged in there. `cortex doctor` checks that the host answers and runs the same minor version.
 
 On the host, give each machine's key a forced command, so that it can run nothing but cortex, in that checkout:
 

@@ -41,4 +41,4 @@ $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "cla
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json, otherwise the default remote wiki.
 --wiki <name> (or $CORTEX_WIKI) sends the command to that remote wiki over ssh, even inside a local one. Through a
-remote wiki: serve, share, export, inbox, compile and ask are refused; config only reads.`;
+remote wiki: serve, share, export, inbox and compile are refused; config only reads; ask runs the host's agent.`;
