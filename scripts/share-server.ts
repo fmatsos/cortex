@@ -17,7 +17,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { commitAndPush, pullRebase } from "../src/serve";
+import { commitAndPush, pullRebase } from "../src/sync";
 import { bookmarklet, probes } from "./bookmarklet";
 
 const { SHARE_PORT = "8090", SHARE_PUBLIC_URL } = process.env;

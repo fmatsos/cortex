@@ -1,0 +1,3 @@
+[test]
+# every test, and every cortex it spawns, sees an empty remotes.json: none may reach a real remote wiki
+preload = ["./src/test-preload.ts"]

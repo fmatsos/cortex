@@ -15,6 +15,7 @@ import type { RelatedReason } from "../site/src/lib/types";
 import { mcpInstructions } from "./prompts";
 import { loadConfig } from "./config";
 import pkg from "../package.json";
+import { withSync } from "./sync";
 
 /** A structured related reason as the external agent reads it: the French text the CLI used to emit as data. */
 export const reasonText = (r: RelatedReason): string =>
@@ -52,6 +53,9 @@ export function buildServer(root: string, language?: string): McpServer {
     instructions: mcpInstructions(language),
   });
   const readOnly = { readOnlyHint: true };
+  // a remote wiki's MCP server (cortex remote-exec): each call synced with git under the lock, never the whole session
+  const tool = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) =>
+    toolResult(process.env.CORTEX_SYNC === "1" ? (a: A) => withSync(root, "mcp", () => fn(a)) : fn);
 
   s.registerTool("search", {
     description: "Full-text search (BM25) in the wiki, then in raw/. Use it first for any question about the user's knowledge. A result found only in raw/ flags a gap to compile.",
@@ -61,7 +65,7 @@ export function buildServer(root: string, language?: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("maximum number of results (default 10)"),
     }),
     annotations: readOnly,
-  }, toolResult(async ({ q, in: area, limit }) => {
+  }, tool(async ({ q, in: area, limit }) => {
     const hits = await search(root, q, { in: area, limit: limit ?? 10 });
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
@@ -74,7 +78,7 @@ export function buildServer(root: string, language?: string): McpServer {
     description: "Reads the raw content of a .md page under wiki/ or raw/, for example /wiki/concepts/x.md. Use it to read a whole page after a search or a related.",
     inputSchema: z.object({ path: z.string().describe("path relative to the repository root, with or without a leading \"/\"") }),
     annotations: readOnly,
-  }, toolResult(async ({ path }) => text(await getFile(root, path))));
+  }, tool(async ({ path }) => text(await getFile(root, path))));
 
   s.registerTool("related", {
     description: "Wiki pages related to a page: outgoing links, backlinks, shared raw sources and tags, ranked by strength with the reason. Use it to explore a page's neighborhood before answering or proposing an update.",
@@ -83,13 +87,13 @@ export function buildServer(root: string, language?: string): McpServer {
       limit: z.number().int().min(1).max(50).optional().describe("maximum number of pages (default 10)"),
     }),
     annotations: readOnly,
-  }, toolResult(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
+  }, tool(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
 
   s.registerTool("lint", {
     description: "Mechanical checks of the wiki: errors and warnings (broken links, orphans, pending sources, pages to review…). Contradictions between pages remain yours to find.",
     inputSchema: z.object({}),
     annotations: readOnly,
-  }, toolResult(async () => {
+  }, tool(async () => {
     const issues = await lint(root);
     return json({ issues: issues.filter((i) => i.level !== "info"), neverReviewed: issues.filter((i) => i.level === "info").length });
   }));
@@ -101,7 +105,7 @@ export function buildServer(root: string, language?: string): McpServer {
       text: z.string().optional().describe("text to add, instead of input"),
       note: z.string().optional().describe("why the user keeps this source (optional)"),
     }),
-  }, toolResult(async ({ input, text: txt, note }) => {
+  }, tool(async ({ input, text: txt, note }) => {
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Give either input (URL or path) or text.");
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input must be an http(s) URL; for a local file, use cortex add or cortex inbox.");
@@ -116,7 +120,7 @@ export function buildServer(root: string, language?: string): McpServer {
       kind: z.enum(KINDS).optional().describe("keep only this kind of entry"),
     }),
     annotations: readOnly,
-  }, toolResult(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
+  }, tool(async ({ limit, kind }) => json(lastLog(root, limit ?? 1, kind))));
 
   return s;
 }

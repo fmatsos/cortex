@@ -221,6 +221,26 @@ cortex config set page_path "{type}/{slug}"                 # wiki/concepts/cont
 claude mcp add cortex -e CORTEX_ROOT=/path/to/your/wiki -- cortex mcp
 ```
 
+### Remote wiki
+
+On a machine without the wiki, the CLI can send each command over SSH to the `cortex` of the host that keeps it. That host runs it in its own checkout, pulls before and commits and pushes after. Nothing of the wiki is written locally.
+
+```sh
+cortex remote add perso runner@wiki-host      # once; the first remote added is the default
+cortex search "context rot"                    # runs on wiki-host
+claude mcp add cortex -- cortex mcp            # Claude Code on this machine, the wiki over there
+```
+
+A local wiki (`$CORTEX_ROOT`, a parent folder holding `cortex.json`) still comes first; `--wiki <name>` or `$CORTEX_WIKI` picks a remote one explicitly. `cortex add ./file.pdf` sends the file along. `serve`, `share`, `export`, `inbox`, `compile` and `ask` are refused through a remote wiki, and `config` only reads. `cortex doctor` checks that the host answers and runs the same minor version.
+
+On the host, give each machine's key a forced command, so that it can run nothing but cortex, in that checkout:
+
+```
+restrict,pty,command="CORTEX_ROOT=/srv/cortex/cli /usr/local/bin/cortex remote-exec" ssh-ed25519 AAAA… laptop
+```
+
+Commands run one at a time per checkout. A failed or interrupted command never loses what it wrote. When a push conflicts, the commit goes to a `cortex/pending-…` branch of the remote. See [docs/REMOTE-PLAN.md](docs/REMOTE-PLAN.md).
+
 ### Static site
 
 `cortex export` reads `wiki/` only, so `raw/` is never published and sources link to their original URL. The result is a prerendered SvelteKit site, and you can serve it from any static file server, including under a sub-path:

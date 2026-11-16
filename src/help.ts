@@ -23,7 +23,7 @@ export const HELP = `cortex — second brain
   cortex show <path|raw id|title>              (prints a page or a source)
   cortex related <path|title> [--limit N] [--json]
   cortex links [--write] [--json]              (mentions of a concept or entity not linked yet, with their reasons; --write links them)
-  cortex doctor                                (system tools present or missing)
+  cortex doctor                                (system tools present or missing; the remote wiki reachable, its version)
   cortex --version
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
@@ -35,4 +35,9 @@ Agent: cortex.json (client claude|codex|opencode|openai, model, effort); --model
 them for one command (bare model name: an opencode provider/model keeps its provider). Without a client:
 $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "claude -p").
 
-Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json.`;
+  cortex remote add <name> <user@host> [--port N] | remove <name> | default <name> | list
+                                               (remote wikis, in ~/.config/cortex/remotes.json; the first one added is the default)
+
+Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json, otherwise the default remote wiki.
+--wiki <name> (or $CORTEX_WIKI) sends the command to that remote wiki over ssh, even inside a local one. Through a
+remote wiki: serve, share, export, inbox, compile and ask are refused; config only reads.`;

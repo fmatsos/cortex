@@ -4,6 +4,7 @@ import { openWiki } from "./context";
 import { exportSite } from "./export";
 import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
+import { commitAndPush, pullRebase } from "./sync";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -16,33 +17,7 @@ import { verifyPage } from "./verify";
  */
 export type ServeOpts = { port: number; sync: boolean; reviewer: string; say?: (m: string) => void };
 
-const git = (root: string, ...args: string[]) => {
-  const r = Bun.spawnSync(["git", "-C", root, ...args], { stderr: "pipe", stdout: "pipe" });
-  if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.toString().trim()}`);
-  return r.stdout.toString().trim();
-};
-
-/**
- * Pull with rebase: local commits a failed push left behind go on top of the remote, pushed by the next change.
- * A conflict leaves the checkout at the remote (local commits dropped) rather than stuck in a rebase.
- */
-export function pullRebase(root: string) {
-  try { git(root, "pull", "-q", "--rebase"); }
-  catch (e) {
-    try { git(root, "rebase", "--abort"); } catch {}
-    git(root, "reset", "-q", "--hard", "@{u}");
-    throw new Error(`conflict with the remote, change dropped: ${(e as Error).message}`);
-  }
-}
-
-/** Commit `paths` (default `wiki/`) and push to the checkout's remote, whatever it is; a rejected push is rebased once (`pullRebase`). */
-export function commitAndPush(root: string, message: string, paths = ["wiki"], who = "cortex-serve") {
-  git(root, "add", "--", ...paths);
-  git(root, "-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "commit", "-q", "-m", message);
-  try { git(root, "push", "-q"); return; } catch {}
-  pullRebase(root);
-  git(root, "push", "-q");
-}
+export { commitAndPush, pullRebase };
 
 /** Same origin only (behind the proxy the scheme may differ, the host does not); `Origin: null` is cross-origin. */
 export function sameOrigin(h: Headers): boolean {

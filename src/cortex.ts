@@ -18,10 +18,24 @@ import { fail, paint, warn } from "./style";
 import { LIMITS } from "./limits";
 import pkg from "../package.json";
 import { HELP } from "./help";
+import { OPTIONS } from "./cli-options";
 
 
 
 const usage = (msg: string) => new CortexError(msg, "usage");
+/** This very cortex: the compiled binary, or bun and the script. */
+const SELF = /\.[jt]s$/.test(Bun.main) ? [process.execPath, Bun.main] : [process.execPath];
+/** Whether a local wiki answers: $CORTEX_ROOT, or a parent folder holding cortex.json. */
+const hasLocalWiki = () => { try { findRoot(); return true; } catch { return false; } };
+type Token = { kind: string; index: number; name?: string; value?: string; inlineValue?: boolean };
+/** The argv sent to a remote wiki: the command first (remote-exec checks it), without --wiki, everything else as typed. */
+function forwardedArgv(argv: string[], tokens: Token[]): string[] {
+  const drop = new Set<number>();
+  const cmd = tokens.find((t) => t.kind === "positional");
+  if (cmd) drop.add(cmd.index);
+  for (const t of tokens) if (t.kind === "option" && t.name === "wiki") { drop.add(t.index); if (t.value !== undefined && !t.inlineValue) drop.add(t.index + 1); }
+  return [...(cmd ? [argv[cmd.index]!] : []), ...argv.filter((_, i) => !drop.has(i))];
+}
 /** Optional integer option: undefined when absent, a usage error unless it is an integer >= min. */
 const int = (name: string, value: string | undefined, { min }: { min: number }) => {
   if (value === undefined) return undefined;
@@ -40,11 +54,7 @@ try {
     parsed = parseArgs({
       allowPositionals: true,
       tokens: true, // token order tells whether `add` directly follows `log`
-      options: {
-        note: { type: "string" }, via: { type: "string" }, "dry-run": { type: "boolean" }, in: { type: "string" },
-        json: { type: "boolean" }, limit: { type: "string" }, pending: { type: "boolean" }, batch: { type: "boolean" },
-        file: { type: "boolean" }, kind: { type: "string" }, source: { type: "string", multiple: true }, page: { type: "string", multiple: true }, out: { type: "string" }, interactive: { type: "boolean" }, help: { type: "boolean", short: "h" }, type: { type: "string" }, check: { type: "boolean" }, write: { type: "boolean" }, version: { type: "boolean", short: "v" }, force: { type: "boolean" }, agent: { type: "string" }, model: { type: "string" }, effort: { type: "string" }, port: { type: "string" }, sync: { type: "boolean" },
-      },
+      options: OPTIONS,
     });
   } catch (e) {
     const code = (e as { code?: string }).code, opt = (e as Error).message.match(/'(-[^' ]*)/)?.[1] ?? "";
@@ -61,7 +71,21 @@ try {
   // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
   // help and version too: no command, `--help`, `--version` (the release workflow runs them outside any wiki)
   if (o.version) { console.log(pkg.version); process.exit(0); }
+  // remote wiki (docs/REMOTE-PLAN.md): the remotes.json commands, the server side of a forwarded call, then the forwarding
+  if (cmd === "remote" || cmd === "remote-exec") {
+    const r = await import("./remote");
+    if (cmd === "remote") { for (const l of r.remoteCommand(args, o.port)) console.log(l); process.exit(0); }
+    process.exit(await r.remoteExec(args, SELF));
+  }
   const anywhere = !cmd || o.help || cmd === "config" && args[0] === "init" || cmd === "upgrade" || cmd === "doctor" || cmd === "share";
+  if (!anywhere) {
+    const { forward, pickRemote, REFUSED } = await import("./remote");
+    const target = pickRemote(o.wiki, hasLocalWiki());
+    if (target) {
+      if (REFUSED[cmd!]) throw new CortexError(REFUSED[cmd!]!, "refused");
+      process.exit(await forward(target, forwardedArgv(process.argv.slice(2), tokens!)));
+    }
+  }
   const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
@@ -70,7 +94,7 @@ try {
       if (o.via && !VIA[o.via]) throw usage(`Unknown --via: ${o.via} (${Object.keys(VIA).join(", ")}).`);
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
-          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], mirrors: o.via ? VIA[o.via] : undefined });
+          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], mirrors: o.via ? VIA[o.via] : undefined, publicOnly: process.env.CORTEX_PUBLIC_ONLY === "1" });
           console.log(formatAdd(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);
@@ -210,12 +234,21 @@ try {
      ${paint.dim(h.reasons.join(", "))}`);
       break;
     }
-    case "doctor":
+    case "doctor": {
       for (const t of await (await import("./extras")).doctor(root)) {
         if (t.path) console.log(`${paint.ok("✓")} ${t.name.padEnd(13)} ${paint.dim(t.path)}`);
         else console.log(`${paint.warn("!")} ${t.name.padEnd(13)} missing: ${t.use}; ${paint.dim(t.install)}`);
       }
+      const { pickRemote, remoteVersion, skewed } = await import("./remote");
+      const target = pickRemote(o.wiki, hasLocalWiki());
+      if (target) {
+        const v = await remoteVersion(target), label = `remote ${target.name}`.padEnd(13);
+        if (v.error) { console.log(`${paint.warn("!")} ${label} ${target.ssh} unreachable: ${v.error}`); ok = false; }
+        else if (skewed(v.version!, pkg.version)) console.log(`${paint.warn("!")} ${label} ${target.ssh}: cortex ${v.version} there, ${pkg.version} here: cortex upgrade on the side that is behind`);
+        else console.log(`${paint.ok("✓")} ${label} ${paint.dim(`${target.ssh} (cortex ${v.version})`)}`);
+      }
       break;
+    }
     case "upgrade": {
       const { upgrade, compareVersions } = await import("./upgrade");
       const r = await upgrade(o.check);

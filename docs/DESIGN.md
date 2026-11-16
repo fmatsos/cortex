@@ -163,6 +163,8 @@ The format of `raw/.../source.md` and that of the wiki pages are defined in the 
 
 The SQLite index is a **rebuildable cache**, never a source of truth.
 
+**Remote wiki** (decision of 2026-11-16, [REMOTE-PLAN.md](REMOTE-PLAN.md)). On a machine without the wiki, `cortex` forwards the command over SSH to the `cortex` of the wiki host: `cortex remote add|remove|default|list` (user-level `~/.config/cortex/remotes.json`), `--wiki <name>` / `$CORTEX_WIKI`. A local wiki still wins. The argv travels as one base64url word, so no shell reads it, and a local file given to `add` travels on stdin. On the host, `cortex remote-exec` is the only entry point, usually as the forced command of each key. It takes the root from the host (`$CORTEX_ROOT`), never from the client. It refuses host jobs and phase-1 agent commands (`serve`, `share`, `export`, `inbox`, `compile`, `ask`), writes to `cortex.json`, and any path of the host given to `add`. It runs the command as a child under `withSync` (`src/sync.ts`): a lock per checkout, leftovers committed, pull, run, commit, push. Nothing is ever discarded: a push conflict goes to a `cortex/pending-…` branch. The MCP server syncs each tool call rather than the session. SSH rather than an HTTP API: every command, `cortex mcp` over stdio and interactive sessions work as they are, with keys for authentication and no new route on `serve`.
+
 ## 7. Extraction
 
 We compose existing tools, without seeking a native universal extractor. Each extractor produces a normalized `source.md` and records its name in `extractor:`, so that the source can be re-extracted later.

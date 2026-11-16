@@ -13,7 +13,7 @@ export function findRoot(from = process.cwd()): string {
   if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
   for (let d = from; ; d = dirname(d)) {
     if (existsSync(join(d, "cortex.json"))) return d;
-    if (dirname(d) === d) throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it) or set CORTEX_ROOT.");
+    if (dirname(d) === d) throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it), set CORTEX_ROOT, or configure a remote wiki: cortex remote add <name> <user@host>.");
   }
 }
 
