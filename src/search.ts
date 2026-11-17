@@ -83,16 +83,16 @@ export async function buildIndex(root: string): Promise<Database> {
   return db;
 }
 
-/** Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. */
-export const ftsQuery = (q: string) =>
-  q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`).join(" ");
+/** Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. All terms, or `any` of them. */
+export const ftsQuery = (q: string, any = false) =>
+  q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? " OR " : " ");
 
 /**
  * BM25 over the title (×5) and the text, wiki before raw. With `titles`, the match is on the title only (duplicate check).
  * When semantic search is on and available (embed.ts), the BM25 and the cosine top 50 are fused (RRF); `nearest` never fails
  * the search: without it, the BM25 ranking is the answer.
  */
-export async function search(root: string, q: string, opts: { in?: "wiki" | "raw"; limit?: number; titles?: boolean } = {}): Promise<Hit[]> {
+export async function search(root: string, q: string, opts: { in?: "wiki" | "raw"; limit?: number; titles?: boolean; any?: boolean } = {}): Promise<Hit[]> {
   const limit = opts.limit ?? 20;
   const near = limit > 0 && !opts.titles && opts.in !== "raw" ? await nearest(root, q, EMBED.topK) : undefined;
   const db = await buildIndex(root);
@@ -101,7 +101,7 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
     const rows = db.query(`
       SELECT path, area, title, snippet(docs, 3, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(docs, 0, 0, 5, 1) AS score
       FROM docs WHERE docs MATCH $q ${where}
-      ORDER BY area = 'raw', score, path LIMIT $limit`).all({ $q: opts.titles ? `title : (${ftsQuery(q)})` : ftsQuery(q), $area: opts.in ?? null, $limit: near ? EMBED.topK : limit }) as Hit[];
+      ORDER BY area = 'raw', score, path LIMIT $limit`).all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any), $area: opts.in ?? null, $limit: near ? EMBED.topK : limit }) as Hit[];
     if (!near) return rows;
     // reciprocal rank fusion; a page only the vectors found has no snippet; wiki stays before raw
     const rrf = new Map<string, number>();

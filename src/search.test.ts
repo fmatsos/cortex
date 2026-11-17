@@ -70,3 +70,13 @@ test("search: the persistent index follows added, changed and removed files, and
   await Bun.write(join(root, ".cortex"), "a file where the cache folder should be");
   expect(await paths("beta")).toEqual(["wiki/concepts/b.md"]); // memory fallback
 });
+
+test("any: a question whose words are not all in one page still finds it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await Bun.write(join(root, "wiki/concepts/rot.md"), page("Context rot", "Le context rot dégrade le modèle."));
+  const q = "Qu est-ce que le context rot ?";
+  expect(await search(root, q, { in: "wiki" })).toEqual([]);
+  expect((await search(root, q, { in: "wiki", any: true })).map((h) => h.path)).toEqual(["wiki/concepts/rot.md"]);
+  rmSync(root, { recursive: true, force: true });
+});

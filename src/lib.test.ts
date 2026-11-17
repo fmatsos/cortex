@@ -21,6 +21,7 @@ test("utilities: local ISO date, v7 ids, slugify, normUrl, ftsQuery", () => {
   expect(slugify("Le C++26 refusé à l'ISO : une première")).toBe("le-c-26-refuse-a-l-iso-une-premiere");
   expect(normUrl("https://X.com/a/?utm_source=z&hl=en#f")).toBe(normUrl("https://x.com/a?hl=en"));
   expect(ftsQuery(`l'IA "spec"`)).toBe(`"l'IA" """spec"""`);
+  expect(ftsQuery(`context rot ?`, true)).toBe(`"context" OR "rot" OR "?"`);
 });
 
 test("cleanUrl: tracking parameters out, the others and the fragment kept", () => {

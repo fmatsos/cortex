@@ -32,7 +32,10 @@ const MAX_QUESTION = 500;
 export const agentAsk: AskFn = async (root, question) => {
   const cfg = await openWiki(root).config();
   const model = cfg.site_ask?.model ?? (cfg.client && CHEAP[cfg.client]) ?? cfg.model;
-  const hits = await search(root, question, { in: "wiki", limit: 8 }).catch(() => []);
+  // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
+  const find = (any: boolean) => search(root, question, { in: "wiki", limit: 8, any }).catch(() => []);
+  const all = await find(false);
+  const hits = all.length ? all : await find(true);
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, hits: hits.map((h) => `/${h.path} « ${h.title} »`) });
   const { backendFor } = await import("./backends");
   return (await backendFor(root, { ...cfg, model, effort: undefined })).run(root, prompt, "read");
