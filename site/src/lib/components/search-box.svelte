@@ -9,7 +9,7 @@
 	import { toPage, toRoute } from "#lib/links.js";
 	import { fold } from "#lib/fold.js";
 	import type { IconName } from "#lib/icons.js";
-	import { parseQuery, wantsFav, withPassage } from "#lib/query.js";
+	import { parseQuery, questionLike, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, esc, loadEngine, search as searchIndex, suggest } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { asker } from "#lib/ask-state.svelte.js";
@@ -106,7 +106,7 @@
 		}
 		// the question to the agent first: a deliberate choice (arrow then Enter, or a click); Enter alone stays a search.
 		// While another question is being answered, the item opens it instead of sending this one.
-		if (asker.api) out.push({
+		if (asker.api && (asker.pending || questionLike(q))) out.push({
 			key: "ask", kind: "ask", group: t("ask.label"), icon: "kind-query",
 			html: esc(asker.pending ? t("ask.seePending") : t("ask.action")), snippet: esc(`« ${asker.pending ?? q} »`),
 			sub: asker.pending ? t("ask.busyShort") : undefined,
@@ -155,7 +155,7 @@
 		if (live || !open || !value.trim()) return undefined;
 		if (failed) return "error";
 		if (!engine) return "loading";
-		if (items.length) return undefined;
+		if (items.some((i) => i.kind !== "ask")) return undefined; // the ask item alone must not hide loading, failure or "no result"
 		return wantsFav(parseQuery(value)) && !favs.ids.length ? "nofav" : "none";
 	});
 	const reset = () => { setValue(""); input?.focus(); };

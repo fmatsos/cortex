@@ -9,7 +9,7 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
+	import { askable, diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, facetCounts, loadEngine, search as run } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { type AskError, asker, MAX_QUESTION } from "#lib/ask-state.svelte.js";
@@ -43,8 +43,8 @@
 	// cited page and the palette knows when one is pending; only an explicit action sends a question (it spends tokens)
 	onMount(() => asker.probe());
 	const shownQ = $derived(asker.pending ?? asker.error?.q ?? asker.last?.q);
-	const showAsk = $derived(asker.api && !!(text || shownQ));
-	const canAsk = $derived(!!text && !asker.pending && text !== shownQ);
+	const showAsk = $derived(asker.api && !!((text && askable(text)) || shownQ));
+	const canAsk = $derived(!!text && askable(text) && !asker.pending && text !== shownQ);
 	const citedDocs = $derived(asker.last && engine ? asker.last.cited.map((id) => engine!.docs.find((d) => d.id === id)).filter((d) => !!d) : []);
 	const askErrorText = (e: AskError) => t(`ask.error.${e.kind}`, { max: MAX_QUESTION });
 	// announced outside the busy region: start, then answer ready or failure (the answer itself is not read out)

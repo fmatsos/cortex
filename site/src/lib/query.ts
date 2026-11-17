@@ -245,3 +245,8 @@ export function matches(d: Doc, p: Parsed, isFav: (id: string) => boolean, hay =
 	const alt = (a: Parsed) => matches(d, a, isFav, hay) && a.words.every((w) => new RegExp(`(^|[^\\p{L}\\p{N}])${w}`, "u").test(hay));
 	return p.groups.every((g) => g.alts.some(alt) !== g.neg);
 }
+
+/** Worth sending to the wiki's agent: free text and no operator (#tag, type:… narrow a search, they are not a question). */
+export const askable = (q: string): boolean => { const p = parseQuery(q); return !p.ops.length && hasText(p); };
+/** Reads like a question (ends with "?" or has 4 words or more): the palette then offers the agent first. */
+export const questionLike = (q: string): boolean => askable(q) && (/\?\s*$/.test(q) || parseQuery(q).words.length >= 4);

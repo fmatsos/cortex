@@ -48,3 +48,14 @@ test("search query: filters, quotes, exclusions, accents", async () => {
   expect(ok("-cher")).toBe(false);
   expect(ok("-prix")).toBe(true);
 });
+
+test("ask: an operator query is a search, a sentence or a final ? is a question", async () => {
+  const { askable, questionLike } = await import("../site/src/lib/query");
+  expect(askable("#ag")).toBe(false);
+  expect(askable("type:Concept rot")).toBe(false);
+  expect(askable("context rot")).toBe(true);
+  expect(questionLike("context rot")).toBe(false);
+  expect(questionLike("rot ?")).toBe(true);
+  expect(questionLike("pourquoi un modèle se perd")).toBe(true);
+  expect(questionLike("#memoire pourquoi un modèle se perd ?")).toBe(false);
+});
