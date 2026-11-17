@@ -56,3 +56,19 @@ test("pageTitle: the page side of « Page · Site » when defuddle kept the site
   expect(pageTitle(undefined, undefined, "Titre H1", "u")).toBe("Titre H1");
   expect(pageTitle("", "", undefined, "https://x")).toBe("https://x");
 });
+
+test("add --linked-from: the source and its parent tied both ways, an unknown parent refused before anything is written", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const now = new Date("2026-11-04T10:00:00");
+  const mail = await add(root, "-", { text: "# Newsletter\n\nWhat changed this week.\n", now });
+  const page = join(root, "p.md");
+  await Bun.write(page, "# Linked page\n\nThe details.\n");
+  await expect(add(root, page, { linkedFrom: "nope", now })).rejects.toThrow("--linked-from: no source nope");
+  expect((await add(root, page, { linkedFrom: mail.id, dryRun: true, now })).duplicate).toBe(false); // dry run: nothing tied
+  const p = await add(root, page, { linkedFrom: mail.id, now });
+  await add(root, page, { linkedFrom: mail.id, now }); // again: duplicate, not tied twice
+  const fm = async (id: string) => Bun.file(join(root, rawPath(root, id)!)).text();
+  expect(await fm(p.id)).toContain(`linked_from: [${mail.id}]\n`);
+  expect(await fm(mail.id)).toContain(`linked: [${p.id}]\n`);
+});

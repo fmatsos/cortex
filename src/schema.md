@@ -45,8 +45,8 @@ fetched_at: 2026-11-04T09:12:00+01:00
 extractor: manual             # or cortex-cli/0.1+readability, yt-dlp+whisper…
 note: "Why I keep this"       # optional: the human's intent, when given
 status: pending               # pending | compiled | skipped
-linked: [<id>, …]             # a social post: the sources captured from its links (filled in by the CLI)
-linked_from: [<id>, …]        # a page a post links to: the post(s) it was captured from (filled in by the CLI)
+linked: [<id>, …]             # a social post or a newsletter: the sources captured from its links (filled in by the CLI)
+linked_from: [<id>, …]        # a page a post or newsletter links to: the source(s) it was captured from (filled in by the CLI, add --linked-from)
 ---
 <extracted content, in Markdown>
 ```

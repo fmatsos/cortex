@@ -250,7 +250,8 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
 }
 
 /** `url`: origin of a text or file given as input (a page captured from the browser): kept as the source's `url`, never fetched. */
-type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean; url?: string } & FetchOpts;
+/** `linkedFrom`: id of a source already in raw/ this input was found in (a newsletter and the pages it points to): tied both ways. */
+type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string } & FetchOpts;
 type AddResult = { id: string; duplicate: boolean; ex?: Extract; linked?: (AddResult | { url: string; error: string })[] };
 
 /**
@@ -259,7 +260,13 @@ type AddResult = { id: string; duplicate: boolean; ex?: Extract; linked?: (AddRe
  * a linked page that fails doesn't fail the post.
  */
 export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<AddResult> {
+  const parent = opts.linkedFrom;
+  if (parent && !rawPath(w.root, parent)) throw new Error(`--linked-from: no source ${parent} in raw/: nothing written.`); // before the fetch
   const r = await addOne(w, input, opts);
+  if (parent && !opts.dryRun && r.id !== parent) { // also on a source already there: it gets this parent too
+    await addFmLink(w.root, r.id, "linked_from", parent);
+    await addFmLink(w.root, parent, "linked", r.id);
+  }
   const social = (await w.config()).parser?.social; // the network's own limit, else the one for all networks; 0: links not followed
   const limit = (r.ex?.network && social?.[r.ex.network]?.external_link?.limit) ?? social?.external_link?.limit ?? LIMITS.maxLinkedSources;
   const links = [...new Set((r.ex?.links ?? []).map(cleanUrl))].filter((l) => l !== cleanUrl(input)).slice(0, limit);

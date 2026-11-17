@@ -94,7 +94,7 @@ try {
       if (o.via && !VIA[o.via]) throw usage(`Unknown --via: ${o.via} (${Object.keys(VIA).join(", ")}).`);
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
-          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], mirrors: o.via ? VIA[o.via] : undefined, publicOnly: process.env.CORTEX_PUBLIC_ONLY === "1" });
+          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], linkedFrom: o["linked-from"], mirrors: o.via ? VIA[o.via] : undefined, publicOnly: process.env.CORTEX_PUBLIC_ONLY === "1" });
           console.log(formatAdd(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);

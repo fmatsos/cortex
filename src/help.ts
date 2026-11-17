@@ -3,7 +3,7 @@ import { CONFIG_KEYS } from "./config";
 /** `cortex --help`; the agent is shown its allowed lines (backends/policy.ts). */
 export const HELP = `cortex — second brain
 
-  cortex add <url|file|-> [--note "why I keep this"] [--via freedium (then archive.ph, Wayback)] [--dry-run]
+  cortex add <url|file|-> [--note "why I keep this"] [--via freedium (then archive.ph, Wayback)] [--linked-from <id>] [--dry-run]
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
   cortex index
