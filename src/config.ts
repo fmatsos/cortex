@@ -48,6 +48,8 @@ const SHAPE = {
     base_url: str("embed.base_url"), model: str("embed.model"),
     dims: z.number({ error: '"embed.dims" must be an integer of at least 1, or null.' }).int({ error: '"embed.dims" must be an integer of at least 1, or null.' }).min(1, { error: '"embed.dims" must be an integer of at least 1, or null.' }).nullish(),
   }, { error: '"embed" must be an object (base_url, model, dims), or null.' }).nullish(),
+  /** Natural-language questions from the site's search bar (`cortex serve`: POST /api/ask), answered by the client's agent in read mode. Absent = off (the route spends tokens). model: default the client's cheapest (claude: haiku, codex: gpt-6-luna), otherwise `model`. */
+  site_ask: z.strictObject({ model: str("site_ask.model") }, { error: '"site_ask" must be an object (model), or null.' }).nullish(),
   /** Judge: a small System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url as `embed`; model: default `d3-mini`. */
   judge: z.strictObject({ base_url: str("judge.base_url"), model: str("judge.model") }, { error: '"judge" must be an object (base_url, model), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */

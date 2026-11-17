@@ -32,6 +32,8 @@
 	let mac = $state(false);
 	let notice = $state("");
 	let failed = $state(false); // the search index could not be loaded
+	let askApi = $state(false); // cortex serve answers questions (site_ask)
+	onMount(() => { fetch("/api/ask", { method: "HEAD" }).then((r) => (askApi = r.status === 204), () => {}); });
 	let panelMax = $state(0); // available height below the field (px): the panel never exceeds the visible screen
 	const uid = $props.id(); // stable identifier: the prerendered HTML is identical on every export
 	const listId = `sb-${uid}`;
@@ -116,6 +118,7 @@
 		const found = new Map(hits.map((h) => [h.doc.id, h.snippet]));
 		for (const d of titles) page(d, esc(d.title), found.get(d.id) ?? esc(d.description));
 		for (const h of hits) page(h.doc, h.title, h.snippet);
+		if (askApi) out.push({ key: "ask", kind: "command", group: t("ask.label"), icon: "kind-query", html: esc(t("ask.button", { q })), run: () => { open = false; search.remember(q); goto(`${toRoute("/search")}?q=${encodeURIComponent(q)}&ask=1`); } });
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((w) => fold(c.html).includes(w))) out.push(c);
 		// always visible access (sticky footer) to the full list, with its exact total

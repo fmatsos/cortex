@@ -1,4 +1,9 @@
 {
+	"ask.answerTo": "Answer to “{q}”, from the wiki:",
+	"ask.button": "Ask Cortex: “{q}”",
+	"ask.failed": "The question failed: {error}",
+	"ask.label": "Ask Cortex",
+	"ask.thinking": "Cortex is reading the wiki to answer “{q}”…",
 	"query.word.or": "OR",
 	"query.word.op.tag": "tag",
 	"query.word.op.type": "type",

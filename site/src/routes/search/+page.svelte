@@ -37,6 +37,21 @@
 	const urlOf = (query: string) => `${toRoute("/search")}?q=${encodeURIComponent(query)}`;
 	const titleOf = (id: string) => engine?.docs.find((d) => d.id === id)?.title ?? t("search.thePage");
 
+	// Natural-language question (cortex serve with site_ask): the HEAD probe shows the button; a static host has no /api/
+	let askApi = $state(false), asking = $state(false), answer = $state(""), askErr = $state(""), askedQ = $state("");
+	onMount(() => { fetch("/api/ask", { method: "HEAD" }).then((r) => (askApi = r.status === 204), () => {}); });
+	const ask = async (v = text) => {
+		if (!v || asking) return;
+		asking = true; askErr = ""; answer = ""; askedQ = v;
+		try {
+			const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ q: v }) });
+			const b = await r.json().catch(() => ({}));
+			if (!r.ok) throw new Error(b.error ?? r.statusText);
+			answer = b.html;
+		} catch (e) { askErr = t("ask.failed", { error: (e as Error).message }); }
+		finally { asking = false; }
+	};
+
 	const load = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
 	onMount(load);
 	// Filters: on large screens they are always expanded (left column), on small screens in a collapsible block
@@ -52,6 +67,8 @@
 		const url = nav.to?.url;
 		const p = url?.searchParams.get("q") ?? "";
 		if (url?.searchParams.has("q") || nav.type === "popstate") { if (p !== search.q.trim()) search.q = p; }
+		// ?ask=1 (the palette's "Ask" item): asked once, then dropped from the URL so a reload does not spend tokens again
+		if (url?.searchParams.get("ask") === "1" && p.trim()) { void ask(p.trim()); void goto(urlOf(p.trim()), { shallow: true, replace: true, keepFocus: true, noScroll: true }); }
 		ready = true;
 	});
 	// typing updates the URL in place (without a history entry)
@@ -117,6 +134,19 @@
 			{/if}
 		</p>
 		<p class="sr-only" role="status">{announced}</p>
+
+		{#if (askApi && text) || askedQ}
+			<section aria-label={t("ask.label")} class="bg-muted/40 mt-3 rounded-lg border px-4 py-3">
+				{#if askApi && text}
+					<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 disabled:opacity-60 pointer-coarse:min-h-11" disabled={asking} onclick={() => ask()}><Icon name="kind-query" size={16} />{t("ask.button", { q: text })}</button>
+				{/if}
+				<p class="text-muted-foreground mt-2 text-sm empty:hidden" role="status">{asking ? t("ask.thinking", { q: askedQ }) : askErr}</p>
+				{#if answer}
+					<p class="text-muted-foreground mt-2 text-sm">{t("ask.answerTo", { q: askedQ })}</p>
+					<div class="wiki mt-1">{@html answer}</div>
+				{/if}
+			</section>
+		{/if}
 
 		{#each issues as issue (issue.text)}
 			<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm">

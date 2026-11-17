@@ -32,5 +32,8 @@ Store the answer in a page created by cortex new Synthesis "<title>" (status: dr
 ## ask-read
 Do not modify any file: only answer. If the answer deserves a synthesis, say so in one line (rerun with --file).
 
+## ask-site
+Answer the question asked from the wiki's site: « {{question}} ». Read-only: never modify a file. Pages found by the site's search (meaning and words), best first: {{hits}}. Read the ones that matter, search again only if they are not enough. Answer in a few short Markdown paragraphs or a list, citing each page you use as a link [title](/wiki/….md). If the wiki does not answer, say so in one sentence.
+
 ## mcp-instructions
 Cortex: wiki in {{language}} under wiki/, raw sources under raw/. Search the wiki first; an answer found only in raw/ is a gap to compile.

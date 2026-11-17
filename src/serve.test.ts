@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { openWiki } from "./context";
 import { pageState } from "./doc";
 import { parseDoc } from "./lib";
-import { commitAndPush, fileFor, sameOrigin } from "./serve";
+import { commitAndPush, fileFor, sameOrigin, serve } from "./serve";
 import { verifyPage } from "./verify";
 
 test("verifyPage: stable + verified after generated, other lines untouched, unknown or reserved id refused", async () => {
@@ -87,3 +87,34 @@ test("inboxCommitMessage: English subject, one line per source in the body", asy
   expect(inboxCommitMessage([])).toBe("inbox: add sources from inbox");
   expect(inboxCommitMessage(["A (01a) ← partage-1.md", "B (01b) ← https://x/y"])).toBe("inbox: add sources from inbox\n\n- A (01a) ← partage-1.md\n- B (01b) ← https://x/y");
 });
+
+test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer with links relative to /search/", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
+  mkdirSync(join(root, "wiki/concepts"), { recursive: true });
+  writeFileSync(join(root, "cortex.json"), "{}");
+  writeFileSync(join(root, "wiki/concepts/idee.md"), `---\ntype: Concept\ntitle: "Idée"\nstatus: draft\n---\n\nCorps.\n`);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q) => { await gate; return `${q} : voir [Idée](/wiki/concepts/idee.md).<script>alert(1)</script>`; } });
+  try {
+    const at = `http://localhost:${server.port}/api/ask`, origin = `http://localhost:${server.port}`;
+    const post = (body: unknown, headers: Record<string, string> = { origin }) => fetch(at, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+    expect((await fetch(at, { method: "HEAD" })).status).toBe(404); // off without site_ask
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ site_ask: {} }));
+    expect((await fetch(at, { method: "HEAD" })).status).toBe(404); // nor without an SDK client
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
+    expect((await fetch(at, { method: "HEAD" })).status).toBe(204);
+    expect((await post({ q: "x" }, { origin: "http://evil" })).status).toBe(403);
+    expect((await post({ q: "x" }, {})).status).toBe(403); // no Origin: not the site
+    expect((await post({ q: "x".repeat(501) })).status).toBe(400);
+    const first = post({ q: "pourquoi" });
+    await Bun.sleep(50);
+    expect((await post({ q: "autre" })).status).toBe(429);
+    release();
+    const r = await first;
+    expect(r.status).toBe(200);
+    const { html } = (await r.json()) as { html: string };
+    expect(html).toContain('href="../wiki/concepts/idee/"');
+    expect(html).not.toContain("<script");
+  } finally { server.stop(true); }
+}, 120_000);
