@@ -17,6 +17,7 @@
 	"ask.title": "Cortex's answer",
 	"ask.waiting": "Cortex is reading the wiki. This usually takes 10 to 20 seconds.",
 	"ask.seePending": "See the question in progress",
+	"ask.auto": "Enter also asks Cortex (AI-generated answer)",
 	"search.label.ask": "Search the wiki or ask a question",
 	"search.pagesTitle": "Pages matching the search",
 	"search.placeholder.askHeader": "Search or ask a question…",

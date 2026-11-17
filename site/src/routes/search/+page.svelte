@@ -108,7 +108,12 @@
 
 {#if showAsk}
 	<section aria-labelledby="ask-h" class="bg-muted/40 mt-6 rounded-lg border px-4 py-4 sm:px-5">
-		<h2 id="ask-h" class="flex items-center gap-2 text-lg font-semibold"><Icon name="kind-query" size={20} />{t("ask.title")}</h2>
+		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+			<h2 id="ask-h" class="flex items-center gap-2 text-lg font-semibold"><Icon name="kind-query" size={20} />{t("ask.title")}</h2>
+			<label class="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 text-sm pointer-coarse:min-h-11">
+				<input type="checkbox" class="size-4" checked={asker.auto} onchange={(e) => asker.setAuto(e.currentTarget.checked)} />{t("ask.auto")}
+			</label>
+		</div>
 		{#if canAsk}
 			<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
 				<Button size="sm" class="pointer-coarse:min-h-11" onclick={() => asker.ask(text)}><Icon name="kind-query" size={16} />{t("ask.action")}</Button>

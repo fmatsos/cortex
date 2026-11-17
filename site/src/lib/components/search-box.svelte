@@ -9,7 +9,7 @@
 	import { toPage, toRoute } from "#lib/links.js";
 	import { fold } from "#lib/fold.js";
 	import type { IconName } from "#lib/icons.js";
-	import { parseQuery, questionLike, wantsFav, withPassage } from "#lib/query.js";
+	import { askable, parseQuery, questionLike, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, esc, loadEngine, search as searchIndex, suggest } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { asker } from "#lib/ask-state.svelte.js";
@@ -104,9 +104,9 @@
 			if (!live) out.push(...commands);
 			return out;
 		}
-		// the question to the agent first: a deliberate choice (arrow then Enter, or a click); Enter alone stays a search.
-		// While another question is being answered, the item opens it instead of sending this one.
-		if (asker.api && (asker.pending || questionLike(q))) out.push({
+		// with "Enter also asks" off, a question can still be sent by choosing this item (arrow then Enter, or a click);
+		// while another question is being answered, the item opens it instead of sending this one
+		if (asker.api && (asker.pending || (!asker.auto && questionLike(q)))) out.push({
 			key: "ask", kind: "ask", group: t("ask.label"), icon: "kind-query",
 			html: esc(asker.pending ? t("ask.seePending") : t("ask.action")), snippet: esc(`« ${asker.pending ?? q} »`),
 			sub: asker.pending ? t("ask.busyShort") : undefined,
@@ -140,12 +140,16 @@
 		open = false;
 		if (newTab) window.open(abs(href), "_blank", "noopener"); else goto(href);
 	}
+	// Enter: the search, and the question to the agent too when the visitor kept that on (free text only: #tag, type:… are a search)
 	const submit = () => {
 		open = false;
 		active = -1;
 		const q = value.trim();
-		if (q) search.remember(q);
-		if (!live && q) goto(`${toRoute("/search")}?q=${encodeURIComponent(q)}`);
+		if (!q) return;
+		search.remember(q);
+		const withAgent = asker.api && asker.auto && askable(q);
+		if (live) { if (withAgent) asker.ask(q); }
+		else goto(`${toRoute("/search")}?q=${encodeURIComponent(q)}${withAgent ? "&ask=1" : ""}`);
 	};
 	const copy = async (d: SearchDoc) => {
 		try { await navigator.clipboard.writeText(abs(withPassage(toPage(d.id), value))); flash(t("common.linkCopied")); } catch { flash(t("common.copyFailed")); }
@@ -288,6 +292,13 @@
 				</div>
 			{/if}
 			{#if notice}<p class="text-muted-foreground px-2 py-1 text-sm" role="status">{notice}</p>{/if}
+			{#if asker.api}
+				<!-- the field keeps focus (mousedown above): a click toggles the box without closing the panel -->
+				<label class="text-muted-foreground mt-1 flex min-h-9 cursor-pointer items-center gap-2 border-t px-2 pt-1 text-sm pointer-coarse:min-h-11">
+					<input type="checkbox" class="size-4" checked={asker.auto} onchange={(e) => asker.setAuto(e.currentTarget.checked)} />
+					{t("ask.auto")}
+				</label>
+			{/if}
 		</div>
 	{/if}
 </div>

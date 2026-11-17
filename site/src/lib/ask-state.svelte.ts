@@ -12,6 +12,7 @@ export const askErrorKind = (status: number): AskErrorKind =>
 	status === 429 ? "busy" : status === 404 ? "off" : status === 400 ? "invalid" : "failed";
 
 const KEY = storageKey("ask");
+const AUTO_KEY = storageKey("ask-auto");
 
 /**
  * Natural-language questions to the wiki's agent (`cortex serve` with site_ask), shared by the palette and /search/:
@@ -25,13 +26,21 @@ class AskState {
 	pending = $state<string>();
 	last = $state<AskAnswer>();
 	error = $state<AskError>();
+	/** Enter in a search field also asks the agent (default on; the visitor's choice is kept in localStorage). */
+	auto = $state(true);
 	private probed = false;
+
+	setAuto(on: boolean) {
+		this.auto = on;
+		try { localStorage.setItem(AUTO_KEY, on ? "1" : "0"); } catch { /* storage unavailable: for this page only */ }
+	}
 
 	/** Once per page load, in the browser. */
 	probe() {
 		if (this.probed) return;
 		this.probed = true;
 		try { this.last = JSON.parse(sessionStorage.getItem(KEY) ?? "null") ?? undefined; } catch { /* storage unavailable */ }
+		try { this.auto = localStorage.getItem(AUTO_KEY) !== "0"; } catch { /* storage unavailable: default on */ }
 		fetch("/api/ask", { method: "HEAD" }).then((r) => (this.api = r.status === 204), () => {});
 	}
 
@@ -39,6 +48,7 @@ class AskState {
 	ask(question: string): boolean {
 		const q = question.trim();
 		if (!q || this.pending) return false;
+		if (this.last?.q === q && !this.error) return true; // already answered: Enter again spends nothing
 		if (q.length > MAX_QUESTION) { this.error = { q, kind: "invalid" }; return false; }
 		this.pending = q;
 		this.error = undefined;

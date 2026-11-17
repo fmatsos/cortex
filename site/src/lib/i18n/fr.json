@@ -17,6 +17,7 @@
 	"ask.title": "Réponse de Cortex",
 	"ask.waiting": "Cortex consulte le wiki. Cela prend en général 10 à 20 secondes.",
 	"ask.seePending": "Voir la question en cours",
+	"ask.auto": "Entrée demande aussi à Cortex (réponse générée par IA)",
 	"search.label.ask": "Rechercher dans le wiki ou poser une question",
 	"search.pagesTitle": "Pages correspondant à la recherche",
 	"search.placeholder.askHeader": "Rechercher ou poser une question…",
