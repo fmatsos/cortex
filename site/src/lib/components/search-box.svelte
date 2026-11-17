@@ -12,6 +12,7 @@
 	import { parseQuery, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, esc, loadEngine, search as searchIndex, suggest } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
+	import { asker } from "#lib/ask-state.svelte.js";
 	import { theme } from "#lib/theme.svelte.js";
 	import { lang } from "#lib/lang.svelte.js";
 	import { defaultLocale, LOCALE_NAMES, t } from "#lib/i18n/index.js";
@@ -32,8 +33,7 @@
 	let mac = $state(false);
 	let notice = $state("");
 	let failed = $state(false); // the search index could not be loaded
-	let askApi = $state(false); // cortex serve answers questions (site_ask)
-	onMount(() => { fetch("/api/ask", { method: "HEAD" }).then((r) => (askApi = r.status === 204), () => {}); });
+	onMount(() => asker.probe()); // cortex serve answers questions (site_ask)
 	let panelMax = $state(0); // available height below the field (px): the panel never exceeds the visible screen
 	const uid = $props.id(); // stable identifier: the prerendered HTML is identical on every export
 	const listId = `sb-${uid}`;
@@ -72,7 +72,7 @@
 		};
 	});
 
-	type Item = { key: string; kind: "recent" | "filter" | "term" | "page" | "command" | "all"; group?: string; icon?: IconName; html: string; sub?: string; snippet?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
+	type Item = { key: string; kind: "recent" | "filter" | "term" | "page" | "command" | "all" | "ask"; group?: string; icon?: IconName; html: string; sub?: string; snippet?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
 	const GO = (to: string) => () => goto(to);
 	const commands = $derived<Item[]>(([
 		["c:home", "home", t("cmd.home"), GO(toRoute("/"))],
@@ -104,6 +104,14 @@
 			if (!live) out.push(...commands);
 			return out;
 		}
+		// the question to the agent first: a deliberate choice (arrow then Enter, or a click); Enter alone stays a search.
+		// While another question is being answered, the item opens it instead of sending this one.
+		if (asker.api) out.push({
+			key: "ask", kind: "ask", group: t("ask.label"), icon: "kind-query",
+			html: esc(asker.pending ? t("ask.seePending") : t("ask.action")), snippet: esc(`« ${asker.pending ?? q} »`),
+			sub: asker.pending ? t("ask.busyShort") : undefined,
+			run: () => { open = false; search.remember(q); goto(`${toRoute("/search")}?q=${encodeURIComponent(asker.pending ?? q)}${asker.pending ? "" : "&ask=1"}`); },
+		});
 		if (!engine) return out;
 		const { filters, terms, titles } = suggest(engine, value, has);
 		out.push(...filters.map(filter));
@@ -118,7 +126,6 @@
 		const found = new Map(hits.map((h) => [h.doc.id, h.snippet]));
 		for (const d of titles) page(d, esc(d.title), found.get(d.id) ?? esc(d.description));
 		for (const h of hits) page(h.doc, h.title, h.snippet);
-		if (askApi) out.push({ key: "ask", kind: "command", group: t("ask.label"), icon: "kind-query", html: esc(t("ask.button", { q })), run: () => { open = false; search.remember(q); goto(`${toRoute("/search")}?q=${encodeURIComponent(q)}&ask=1`); } });
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((w) => fold(c.html).includes(w))) out.push(c);
 		// always visible access (sticky footer) to the full list, with its exact total
@@ -198,8 +205,8 @@
 			type="search"
 			value={search.q}
 			oninput={(e) => { setValue(e.currentTarget.value); if (!engine && !failed) warm(); open = true; active = -1; }}
-			placeholder={main ? t("search.placeholder.main") : t("search.placeholder.header")}
-			aria-label={t("search.label")}
+			placeholder={asker.api ? (main ? t("search.placeholder.askMain") : t("search.placeholder.askHeader")) : main ? t("search.placeholder.main") : t("search.placeholder.header")}
+			aria-label={asker.api ? t("search.label.ask") : t("search.label")}
 			role="combobox"
 			aria-expanded={open && items.length > 0}
 			aria-controls={listId}
@@ -228,8 +235,18 @@
 					{/if}
 					<li role="presentation" class="group flex flex-wrap items-start rounded-md {sel ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'} {item.kind === 'all' ? `sticky bottom-0 mt-1 border-t font-medium ${sel ? '' : 'bg-popover'}` : ''}">
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<div id="{listId}-{i}" role="option" aria-selected={sel} tabindex="-1" class="min-h-9 min-w-0 flex-1 cursor-pointer px-2 py-1.5 text-sm" onmousemove={() => { if (active !== i) active = i; }} onclick={(e) => item.run(e.ctrlKey || e.metaKey)}>
-							{#if item.doc}
+						<div id="{listId}-{i}" role="option" aria-selected={sel} tabindex="-1" class="min-h-9 min-w-0 flex-1 cursor-pointer px-2 py-1.5 text-sm pointer-coarse:min-h-11" onmousemove={() => { if (active !== i) active = i; }} onclick={(e) => item.run(e.ctrlKey || e.metaKey)}>
+							{#if item.kind === "ask"}
+								<!-- short action label, the question on its own lines (never cut to one line on a phone) -->
+								<span class="flex items-start gap-2">
+									<Icon name="kind-query" size={16} class="text-muted-foreground mt-0.5 shrink-0" />
+									<span class="min-w-0">
+										<span class="font-medium">{@html item.html}</span>
+										<span class="text-muted-foreground line-clamp-2 block break-words">{@html item.snippet}</span>
+										{#if item.sub}<span class="text-muted-foreground block text-xs">{item.sub}</span>{/if}
+									</span>
+								</span>
+							{:else if item.doc}
 								<ResultRow compact selected={sel} doc={item.doc} titleHtml={item.html} snippetHtml={item.snippet} />
 							{:else}
 								<div class="flex items-baseline justify-between gap-3">
