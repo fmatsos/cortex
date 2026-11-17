@@ -4,6 +4,7 @@ import { openWiki } from "./context";
 import { exportSite, render } from "./export";
 import { askSitePrompt, scopePrefix } from "./prompts";
 import { search } from "./search";
+import { refresh } from "./embed";
 import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
@@ -79,6 +80,8 @@ export async function serve(root: string, o: ServeOpts) {
         while (dirty) {
           dirty = false;
           const out = dirs[next]!;
+          // the page embeddings (embed in cortex.json): incremental, for the site's questions and the related pages; never blocks the build
+          await refresh(root).catch((e) => say(`embeddings: ${(e as Error).message}`));
           rmSync(out, { recursive: true, force: true });
           try { await exportSite(root, out, () => {}); current = out; next = 1 - next; say(`site rebuilt (${out})`); }
           catch (e) { say(`export failed: ${(e as Error).message}`); }
