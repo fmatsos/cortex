@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { openWiki } from "./context";
 import { exportSite, render } from "./export";
+import { pageId } from "./doc";
+import type { Config } from "./config";
 import { askSitePrompt, scopePrefix } from "./prompts";
 import { search } from "./search";
 import { refresh } from "./embed";
@@ -24,6 +26,20 @@ export type AskFn = (root: string, question: string) => Promise<string>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
+/** The model that answers the site's questions (also shown on the site, next to the answer). */
+export const askModel = (cfg: Config) => cfg.site_ask?.model ?? (cfg.client && CHEAP[cfg.client]) ?? cfg.model;
+
+/**
+ * The answer as the site shows it: sanitized HTML (wiki links relative to /search/) with its footnotes appended as a
+ * list (their `#fn-<id>` targets), and the ids of the wiki pages it cites, for the site to list them with their real
+ * status: the trust signals never depend on what the model chose to write.
+ */
+export function askAnswer(md: string, paths: Set<string>) {
+  const { html, notes } = render(md, "search/", paths);
+  const list = notes.length ? `<hr><ol class="ask-notes">${notes.map((n) => `<li id="fn-${n.id}">${n.html}</li>`).join("")}</ol>` : "";
+  const cited = [...new Set([...md.matchAll(/\]\(\/?(wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]).filter((p) => paths.has(p)))].map(pageId);
+  return { html: html + list, cited };
+}
 const MAX_QUESTION = 500;
 
 /**
@@ -32,7 +48,7 @@ const MAX_QUESTION = 500;
  */
 export const agentAsk: AskFn = async (root, question) => {
   const cfg = await openWiki(root).config();
-  const model = cfg.site_ask?.model ?? (cfg.client && CHEAP[cfg.client]) ?? cfg.model;
+  const model = askModel(cfg);
   // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
   const find = (any: boolean) => search(root, question, { in: "wiki", limit: 8, any }).catch(() => []);
   const all = await find(false);
@@ -153,8 +169,8 @@ export async function serve(root: string, o: ServeOpts) {
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
         try {
           const md = await (o.ask ?? agentAsk)(root, q.trim());
-          const pages = new Set((await openWiki(root).pages()).map((p) => p.path));
-          return Response.json({ html: render(md, "search/", pages).html }); // sanitized, /wiki/x.md links made relative to /search/
+          const paths = new Set((await openWiki(root).pages()).map((p) => p.path));
+          return Response.json({ ...askAnswer(md, paths), model: askModel(askCfg) ?? askCfg.client });
         } catch (e) {
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });

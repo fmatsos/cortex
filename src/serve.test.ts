@@ -95,7 +95,7 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
   writeFileSync(join(root, "wiki/concepts/idee.md"), `---\ntype: Concept\ntitle: "Idée"\nstatus: draft\n---\n\nCorps.\n`);
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
-  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q) => { await gate; return `${q} : voir [Idée](/wiki/concepts/idee.md).<script>alert(1)</script>`; } });
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q) => { await gate; return `${q} : voir [Idée](/wiki/concepts/idee.md).[^n] [Absente](/wiki/concepts/nope.md)<script>alert(1)</script>\n\n[^n]: D'après [Idée](/wiki/concepts/idee.md).\n`; } });
   try {
     const at = `http://localhost:${server.port}/api/ask`, origin = `http://localhost:${server.port}`;
     const post = (body: unknown, headers: Record<string, string> = { origin }) => fetch(at, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
@@ -113,8 +113,13 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
     release();
     const r = await first;
     expect(r.status).toBe(200);
-    const { html } = (await r.json()) as { html: string };
+    const { html, cited, model } = (await r.json()) as { html: string; cited: string[]; model: string };
     expect(html).toContain('href="../wiki/concepts/idee/"');
     expect(html).not.toContain("<script");
+    // the footnote keeps its target and its link; only existing pages are listed as cited, once
+    expect(html).toContain('href="#fn-n"');
+    expect(html).toContain(`<li id="fn-n">D'après <a href="../wiki/concepts/idee/">Idée</a>.</li>`);
+    expect(cited).toEqual(["concepts/idee"]);
+    expect(model).toBe("haiku");
   } finally { server.stop(true); }
 }, 120_000);
