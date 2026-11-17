@@ -371,6 +371,20 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription:
     expect(readFileSync(join(root, source), "utf8")).toContain("status: pending");
   });
 
+  test("compile --batch: an existing page that only gains links to the source's pages needs no citation; one that gains prose does", () => {
+    for (const [add, compiled] of [["\\n## Voir aussi\\n\\n- [S](../sources/%s)\\n", true], ["\\nUne affirmation [S](../sources/%s).\\n", false]] as const) {
+      const root = wiki();
+      mkdirSync(join(root, "wiki/concepts"), { recursive: true });
+      writeFileSync(join(root, "wiki/concepts/a.md"), "---\ntype: Concept\ntitle: A\ndescription: d\nstatus: draft\n---\nTexte.\n");
+      const id = addNote(root);
+      const env = agent(`p=$(cat | grep -o 'Source page wiki/[^:]*\\.md' | cut -d' ' -f3)
+[ -n "$p" ] && { sed -i 's/^type: Source$/type: Source\\ndescription: d/' $p; echo 'Summary.[^${id}]' >> $p; printf '${add}' "$(basename $p)" >> wiki/concepts/a.md; }`);
+      const r = cortex(root, ["compile", id, "--batch"], { env });
+      if (compiled) expect(r.out).toContain(`${id} compiled`);
+      else expect(r.err).toContain("wiki/concepts/a.md: no sources[] entry for this source");
+    }
+  });
+
   test("compile --batch: a summary written as frontmatter keys, body left with only the callout, fails the compile", () => {
     const root = wiki();
     const id = addNote(root);

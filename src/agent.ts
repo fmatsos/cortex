@@ -93,6 +93,20 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
 }
 
 /** Hash of every file under wiki/ (pages, log.jsonl…): what the agent changed, with or without git. */
+/**
+ * The prose of a body, as a set of lines: headings and link-only lines (a "See also" entry) dropped, links reduced to
+ * their text. A page whose prose this leaves unchanged only gained links: it takes no claim from the source.
+ */
+function prose(body: string): Set<string> {
+  const out = new Set<string>();
+  for (const l of body.split("\n")) {
+    if (/^\s*#{1,6}\s/.test(l) || !/[\p{L}\p{N}]/u.test(l.replace(/\[\[[^\]]*\]\]|!?\[[^\]]*\]\([^)]*\)/g, ""))) continue;
+    out.add(l.replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, "$1").replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").trim());
+  }
+  return out;
+}
+const onlyLinksAdded = (before: string, after: string) => { const b = prose(before); return [...prose(after)].every((l) => b.has(l)); };
+
 async function pageHashes(root: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   for (const p of new Bun.Glob("wiki/**/*").scanSync({ cwd: root })) m.set(p, sha256(await Bun.file(join(root, p)).bytes()));
@@ -280,6 +294,8 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     const cfg = await w.config();
     const by = actor(cfg), started = new Date();
     const pagesBefore = await pageHashes(root);
+    const bodiesBefore = new Map<string, string>(); // existing pages: one that only gains links needs no citation
+    for (const p of pagesBefore.keys()) if (p.endsWith(".md")) try { bodiesBefore.set(p, parseDoc(p, await Bun.file(join(root, p)).text()).body); } catch { /* lint reports it */ }
     // batch: cortex writes the mechanical part of the Source page; interactive: the agent presents its plan first
     const prepared = opts.batch && !(await isCited(openWiki(root), d.path)) ? await prepareSource(openWiki(root), d, by, started) : undefined;
     const all = (await openWiki(root).pages()).flatMap((p) => p.fm.tags ?? []);
@@ -317,8 +333,8 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
     };
     /**
      * Every page the agent wrote or changed for this source carries it: an entry in sources[] and at least one [^id]
-     * footnote (schema rule 3; lint only checks that a footnote has an entry). And no literal "\n" in prose: a model that
-     * escapes its newlines writes them as text.
+     * footnote (schema rule 3; lint only checks that a footnote has an entry), except an existing page that only gained
+     * links (a "See also" entry). And no literal "\n" in prose: a model that escapes its newlines writes them as text.
      */
     const sourced: Check = async () => {
       const out: string[] = [];
@@ -326,11 +342,14 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
         if (pagesBefore.get(p) === h || !p.endsWith(".md") || isReservedPage(p)) continue;
         let doc;
         try { doc = parseDoc(p, await Bun.file(join(root, p)).text()); } catch { continue; } // lint reports it
-        const why: string[] = [], res = toResource(d.path);
+        const why: string[] = [], res = toResource(d.path), old = bodiesBefore.get(p);
         // the entry may have another id than the raw one (lint ties footnotes to ids): matched by id or by resource
         const entry = ((doc.fm.sources ?? []) as { id?: string; resource?: string }[]).find((s) => s.id === id || s.resource === res);
-        if (!entry) why.push(`no sources[] entry for this source: add { id: ${id}, resource: ${res} } to its sources`);
-        if (!doc.body.includes(`[^${entry?.id ?? id}]`)) why.push(`no footnote cites this source: end each claim taken from it with [^${entry?.id ?? id}] and define [^${entry?.id ?? id}]: at the end of the body`);
+        if (old === undefined || !onlyLinksAdded(old, doc.body)) {
+          const linksOnly = old === undefined ? "" : " (or, if this page takes nothing from the source, leave its prose as it was and only add links)";
+          if (!entry) why.push(`no sources[] entry for this source: add { id: ${id}, resource: ${res} } to its sources${linksOnly}`);
+          if (!doc.body.includes(`[^${entry?.id ?? id}]`)) why.push(`no footnote cites this source: end each claim taken from it with [^${entry?.id ?? id}] and define [^${entry?.id ?? id}]: at the end of the body`);
+        }
         if (/\\n/.test(doc.body.replace(/```[\s\S]*?```|`[^`\n]*`/g, ""))) why.push(`literal "\\n" in the body: write real line breaks`);
         if (why.length) out.push(`${p}: ${why.join("; ")}.`);
       }
