@@ -136,11 +136,19 @@
 		<p class="sr-only" role="status">{announced}</p>
 
 		{#if (askApi && text) || askedQ}
-			<section aria-label={t("ask.label")} class="bg-muted/40 mt-3 rounded-lg border px-4 py-3">
+			<section aria-label={t("ask.label")} aria-busy={asking} class="bg-muted/40 mt-3 rounded-lg border px-4 py-3">
 				{#if askApi && text}
 					<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 disabled:opacity-60 pointer-coarse:min-h-11" disabled={asking} onclick={() => ask()}><Icon name="kind-query" size={16} />{t("ask.button", { q: text })}</button>
 				{/if}
-				<p class="text-muted-foreground mt-2 text-sm empty:hidden" role="status">{asking ? t("ask.thinking", { q: askedQ }) : askErr}</p>
+				<p class="text-muted-foreground mt-2 flex items-center gap-2 text-sm empty:hidden" role="status">
+					{#if asking}<Icon name="retry" size={16} class="motion-safe:animate-spin" />{t("ask.thinking", { q: askedQ })}{:else}{askErr}{/if}
+				</p>
+				{#if asking}
+					<!-- placeholder of the answer to come; the pulse stops when the visitor asks for reduced motion -->
+					<div class="mt-3 space-y-2" aria-hidden="true">
+						{#each ["w-11/12", "w-full", "w-4/5", "w-2/3"] as w (w)}<div class="bg-muted-foreground/15 h-3 rounded motion-safe:animate-pulse {w}"></div>{/each}
+					</div>
+				{/if}
 				{#if answer}
 					<p class="text-muted-foreground mt-2 text-sm">{t("ask.answerTo", { q: askedQ })}</p>
 					<div class="wiki mt-1">{@html answer}</div>
