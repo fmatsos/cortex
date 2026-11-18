@@ -16,7 +16,8 @@ export type { Backend, Mode } from "./backend";
  */
 const CLIENTS = { claude, codex, opencode, openai } satisfies Record<Client, (cfg: Config) => Backend>;
 
-export async function backendFor(root: string, config?: Config): Promise<Backend> {
+/** `ep`: server and key of the openai client when the caller has its own (the site's questions); the other clients ignore it. */
+export async function backendFor(root: string, config?: Config, ep?: { url: string; key?: string }): Promise<Backend> {
   const cfg = config ?? await loadConfig(root);
-  return cfg.client ? CLIENTS[cfg.client](cfg) : agnostic();
+  return cfg.client === "openai" ? openai(cfg, ep) : cfg.client ? CLIENTS[cfg.client](cfg) : agnostic();
 }

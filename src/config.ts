@@ -48,8 +48,16 @@ const SHAPE = {
     base_url: str("embed.base_url"), model: str("embed.model"),
     dims: z.number({ error: '"embed.dims" must be an integer of at least 1, or null.' }).int({ error: '"embed.dims" must be an integer of at least 1, or null.' }).min(1, { error: '"embed.dims" must be an integer of at least 1, or null.' }).nullish(),
   }, { error: '"embed" must be an object (base_url, model, dims), or null.' }).nullish(),
-  /** Natural-language questions from the site's search bar (`cortex serve`: POST /api/ask), answered by the client's agent in read mode. Absent = off (the route spends tokens). model: default the client's cheapest (claude: haiku, codex: gpt-6-luna), otherwise `model`. */
-  site_ask: z.strictObject({ model: str("site_ask.model") }, { error: '"site_ask" must be an object (model), or null.' }).nullish(),
+  /**
+   * Natural-language questions from the site's search bar (`cortex serve`: POST /api/ask), answered by an agent in read mode.
+   * Absent = off (the route spends tokens). client: default the global one; model: default the client's cheapest (claude:
+   * haiku, codex: gpt-6-luna), otherwise the global `model` when the client is the global one; effort: none sent by default;
+   * base_url (openai client): default $CORTEX_ASK_BASE_URL, else as the openai client. $CORTEX_ASK_API_KEY only goes to $CORTEX_ASK_BASE_URL.
+   */
+  site_ask: z.strictObject({
+    client: z.enum(CLIENT_NAMES, { error: (i) => `unknown site_ask.client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
+    base_url: str("site_ask.base_url"), model: str("site_ask.model"), effort: str("site_ask.effort"),
+  }, { error: '"site_ask" must be an object (client, base_url, model, effort), or null.' }).nullish(),
   /** Judge: a small System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url as `embed`; model: default `d3-mini`. */
   judge: z.strictObject({ base_url: str("judge.base_url"), model: str("judge.model") }, { error: '"judge" must be an object (base_url, model), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
@@ -70,9 +78,13 @@ export const CONFIG_KEYS = Object.keys(SHAPE) as (keyof typeof SHAPE)[];
 
 /** Schema of cortex.json; null means « not set ». */
 export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
-  const allowed: readonly string[] | undefined = c.client ? (EFFORTS as Partial<Record<Client, readonly string[]>>)[c.client] : undefined;
-  if (c.effort && allowed && !allowed.includes(c.effort))
-    ctx.addIssue({ code: "custom", path: ["effort"], message: `invalid effort "${c.effort}" for ${c.client} (${allowed.join(", ")}).`, input: c.effort });
+  const check = (path: string[], effort?: string | null, client?: Client | null) => {
+    const allowed: readonly string[] | undefined = client ? (EFFORTS as Partial<Record<Client, readonly string[]>>)[client] : undefined;
+    if (effort && allowed && !allowed.includes(effort))
+      ctx.addIssue({ code: "custom", path, message: `invalid ${path.join(".")} "${effort}" for ${client} (${allowed.join(", ")}).`, input: effort });
+  };
+  check(["effort"], c.effort, c.client);
+  check(["site_ask", "effort"], c.site_ask?.effort, c.site_ask?.client ?? c.client);
 });
 
 /** Content of a valid cortex.json as the schema reads it (null = « not set »). */
@@ -91,6 +103,8 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   const r = ConfigSchema.safeParse(c);
   if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
+  if (r.data.site_ask?.client === "openai" && !r.data.site_ask.model && r.data.client !== "openai")
+    return [{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }];
   return !r.data.client && (r.data.model || r.data.effort || r.data.base_url)
     ? [{ level: "warning", msg: "model/effort/base_url without a client: ignored by the agnostic mode ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
 }

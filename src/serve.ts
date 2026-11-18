@@ -26,8 +26,25 @@ export type AskFn = (root: string, question: string) => Promise<string>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
-/** The model that answers the site's questions (also shown on the site, next to the answer). */
-export const askModel = (cfg: Config) => cfg.site_ask?.model ?? (cfg.client && CHEAP[cfg.client]) ?? cfg.model;
+/** The client that answers the site's questions: `site_ask.client`, else the global one. */
+export const askClient = (cfg: Config) => cfg.site_ask?.client ?? cfg.client;
+/** The model that answers the site's questions (also shown on the site, next to the answer); the global one only for the global client. */
+export const askModel = (cfg: Config) => {
+  const client = askClient(cfg);
+  return cfg.site_ask?.model ?? (client && CHEAP[client]) ?? (client === cfg.client ? cfg.model : undefined);
+};
+
+/**
+ * Backend settings of the site's questions: site_ask's client, model and effort over the global ones (the global effort is
+ * for compiling: not sent). The server: `site_ask.base_url`, else $CORTEX_ASK_BASE_URL, else the openai client's. Secret:
+ * environment only, as $OPENAI_API_KEY: $CORTEX_ASK_API_KEY only goes to $CORTEX_ASK_BASE_URL (or a site_ask.base_url equal
+ * to it), never to a URL only cortex.json names, since a cloned wiki could point it at any host.
+ */
+export function askSetup(cfg: Config): { cfg: Config; ep?: { url: string; key?: string } } {
+  const own = cfg.site_ask?.base_url, envUrl = process.env.CORTEX_ASK_BASE_URL, named = own ?? envUrl;
+  const ep = named ? { url: named.replace(/\/+$/, ""), key: !own || own === envUrl ? process.env.CORTEX_ASK_API_KEY : undefined } : undefined;
+  return { cfg: { ...cfg, client: askClient(cfg), model: askModel(cfg), effort: cfg.site_ask?.effort ?? undefined }, ep };
+}
 
 /**
  * The answer as the site shows it: sanitized HTML (wiki links relative to /search/) with its footnotes appended as a
@@ -48,14 +65,14 @@ const MAX_QUESTION = 500;
  */
 export const agentAsk: AskFn = async (root, question) => {
   const cfg = await openWiki(root).config();
-  const model = askModel(cfg);
   // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
   const find = (any: boolean) => search(root, question, { in: "wiki", limit: 8, any }).catch(() => []);
   const all = await find(false);
   const hits = all.length ? all : await find(true);
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, hits: hits.map((h) => `/${h.path} « ${h.title} »`) });
   const { backendFor } = await import("./backends");
-  return (await backendFor(root, { ...cfg, model, effort: undefined })).run(root, prompt, "read");
+  const ask = askSetup(cfg);
+  return (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read");
 };
 
 export { commitAndPush, pullRebase };
@@ -157,7 +174,7 @@ export async function serve(root: string, o: ServeOpts) {
       if (url.pathname === "/api/ask") {
         // opt-in (the route spends tokens), and only through an SDK client: the agnostic CLI ignores the model and may keep its own tools
         const askCfg = await openWiki(root).config();
-        if (!askCfg.site_ask || !askCfg.client) return new Response(null, { status: 404 });
+        if (!askCfg.site_ask || !askClient(askCfg)) return new Response(null, { status: 404 });
         if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its ask button
         if (req.method !== "POST") return new Response(null, { status: 405 });
         // a browser always sends Origin on a POST fetch: no Origin is a script, not the site
@@ -170,7 +187,7 @@ export async function serve(root: string, o: ServeOpts) {
         try {
           const md = await (o.ask ?? agentAsk)(root, q.trim());
           const paths = new Set((await openWiki(root).pages()).map((p) => p.path));
-          return Response.json({ ...askAnswer(md, paths), model: askModel(askCfg) ?? askCfg.client });
+          return Response.json({ ...askAnswer(md, paths), model: askModel(askCfg) ?? askClient(askCfg) });
         } catch (e) {
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });

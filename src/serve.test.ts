@@ -121,5 +121,32 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
     expect(html).toContain(`<li id="fn-n">D'après <a href="../wiki/concepts/idee/">Idée</a>.</li>`);
     expect(cited).toEqual(["concepts/idee"]);
     expect(model).toBe("haiku");
+    // site_ask's own client opens the route without a global one, and its model is the one shown
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ site_ask: { client: "openai", model: "glm" } }));
+    expect((await fetch(at, { method: "HEAD" })).status).toBe(204);
+    expect(((await (await post({ q: "encore" })).json()) as { model: string }).model).toBe("glm");
   } finally { server.stop(true); }
 }, 120_000);
+
+test("site_ask: its own client, model and effort; $CORTEX_ASK_API_KEY only to $CORTEX_ASK_BASE_URL", async () => {
+  const { askSetup, askModel, askClient } = await import("./serve");
+  const env = { u: process.env.CORTEX_ASK_BASE_URL, k: process.env.CORTEX_ASK_API_KEY };
+  try {
+    delete process.env.CORTEX_ASK_BASE_URL; process.env.CORTEX_ASK_API_KEY = "sk-ask";
+    // no site_ask client: the global one, its cheapest model, no effort (the global effort is for compiling)
+    expect(askSetup({ client: "claude", model: "opus", effort: "high", site_ask: {} })).toEqual({ cfg: { client: "claude", model: "haiku", effort: undefined, site_ask: {} }, ep: undefined });
+    // another client: its own model, never the global one; none set = undefined (lint warns)
+    expect(askModel({ client: "claude", model: "haiku", site_ask: { client: "openai" } })).toBeUndefined();
+    const own = { client: "claude" as const, site_ask: { client: "openai" as const, model: "z-ai/glm-5.3-flash", effort: "low" } };
+    expect(askClient(own)).toBe("openai");
+    expect(askSetup(own).cfg).toMatchObject({ client: "openai", model: "z-ai/glm-5.3-flash", effort: "low" });
+    // a base_url only cortex.json names gets no key
+    expect(askSetup({ ...own, site_ask: { ...own.site_ask, base_url: "https://evil.example/v1" } }).ep).toEqual({ url: "https://evil.example/v1", key: undefined });
+    // the environment names the server: the key goes there, from the environment alone or from a base_url equal to it
+    process.env.CORTEX_ASK_BASE_URL = "https://openrouter.ai/api/v1/";
+    expect(askSetup(own).ep).toEqual({ url: "https://openrouter.ai/api/v1", key: "sk-ask" });
+    expect(askSetup({ ...own, site_ask: { ...own.site_ask, base_url: "https://openrouter.ai/api/v1/" } }).ep?.key).toBe("sk-ask");
+  } finally {
+    for (const [k, v] of [["CORTEX_ASK_BASE_URL", env.u], ["CORTEX_ASK_API_KEY", env.k]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
+  }
+});

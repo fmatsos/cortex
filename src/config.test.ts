@@ -65,3 +65,12 @@ test("--model/--effort override cortex.json; a bare model keeps the opencode pro
     expect(withOverride({ client: "claude" })).toEqual({ client: "claude", model: "qwen-3.5", effort: "high" });
   } finally { Object.assign(override, { model: undefined, effort: undefined }); }
 });
+
+test("site_ask: client, base_url, model, effort; effort checked against site_ask's client, else the global one", async () => {
+  const { lintConfig } = await import("./config");
+  expect(lintConfig({ client: "claude", site_ask: { client: "openai", base_url: "https://x/v1", model: "m", effort: "low" } })).toEqual([]);
+  expect(lintConfig({ client: "claude", site_ask: { effort: "turbo" } })[0].msg).toContain("site_ask.effort");
+  expect(lintConfig({ client: "codex", site_ask: { client: "claude", effort: "ultra" } })[0].level).toBe("error");
+  expect(lintConfig({ client: "claude", site_ask: { client: "openai" } })).toEqual([{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }]);
+  expect(lintConfig({ site_ask: { temperature: 1 } })[0].level).toBe("error");
+});

@@ -182,7 +182,9 @@ test("openai: the API key is never sent to a base_url only cortex.json names", a
     await openai({ model: "m", base_url: url }).run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "q", "read");
     process.env.OPENAI_BASE_URL = url;
     await openai({ model: "m" }).run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "q", "read");
-    expect(auth).toEqual([null, "Bearer sk-test"]);
+    // a caller's own server and key (the site's questions) replace the cortex.json / environment pair
+    await openai({ model: "m", base_url: "http://unused.invalid/v1" }, { url, key: "sk-ask" }).run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "q", "read");
+    expect(auth).toEqual([null, "Bearer sk-test", "Bearer sk-ask"]);
   } finally {
     server.stop(true);
     for (const [k, v] of [["OPENAI_API_KEY", env.key], ["OPENAI_BASE_URL", env.base]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
@@ -236,8 +238,14 @@ test("elide: preventive decision — estimate above 80% of the budget elides the
 
 test("openai: cache_prompt is sent, except to api.openai.com", async () => {
   const { cache } = await import("./backends/openai");
-  expect(cache({ base_url: "http://localhost:8080/v1" })).toEqual({ cache_prompt: true });
-  expect(cache({ base_url: "https://api.openai.com/v1" })).toEqual({});
+  expect(cache("http://localhost:8080/v1")).toEqual({ cache_prompt: true });
+  expect(cache("https://api.openai.com/v1")).toEqual({});
+});
+
+test("openai: OpenRouter always gets the cheapest provider that supports every parameter; other servers nothing", async () => {
+  const { route } = await import("./backends/openai");
+  expect(route("https://openrouter.ai/api/v1")).toEqual({ provider: { sort: "price", require_parameters: true } });
+  expect(route("http://192.168.1.96:8080/v1")).toEqual({});
 });
 
 test("elide: old page bodies in the model's own write calls go too, the last two calls stay", async () => {
