@@ -66,6 +66,7 @@ export const LIMITS = {
   /** Ingest: characters of the raw source the judge reads (it reads them once per candidate page). */
   routeChars: 1500,
   /** Ingest: the judge answers « yes » to « does the source bring something to this page? » at or above this (a hint to the agent: cheaper to be wrong than for a new-page check). */
+  // default for d3-mini (best F1 0.68 at 0.53 on 1290 routing questions of a real wiki); Jev 1.13: 0.83 at 0.64, set judge.route_yes
   routeYes: 0.5,
   /** Journal entries shown by `cortex log` without `--limit`. */
   logEntries: 20,

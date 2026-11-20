@@ -20,6 +20,8 @@ export const EFFORTS = {
 export type Effort<C extends keyof typeof EFFORTS> = (typeof EFFORTS)[C][number];
 
 const str = (k: string) => z.string({ error: `"${k}" must be a string or null.` }).nullish();
+const prob = (k: string) => { const error = `"${k}" must be a number between 0 and 1, or null.`; return z.number({ error }).min(0, { error }).max(1, { error }).nullish(); };
+const count = (k: string) => { const error = `"${k}" must be an integer of at least 1, or null.`; return z.number({ error }).int({ error }).min(1, { error }).nullish(); };
 const template = (k: NamingKey) => str(k).superRefine((v, ctx) => {
   const e = v && checkTemplate(k, v);
   if (e) ctx.addIssue({ code: "custom", message: e, input: v });
@@ -62,8 +64,17 @@ const SHAPE = {
   review: z.boolean({ error: '"review" must be true, false or null.' }).nullish(),
   /** Draft status. Absent = off: the site shows draft pages as stable and offers no draft filter. */
   drafts: z.boolean({ error: '"drafts" must be true, false or null.' }).nullish(),
-  /** Judge: a small System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url as `embed`; model: default `d3-mini`. */
-  judge: z.strictObject({ base_url: str("judge.base_url"), model: str("judge.model") }, { error: '"judge" must be an object (base_url, model), or null.' }).nullish(),
+  /**
+   * Judge: a System One model (TypeSafe's hosted Jev, or d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers
+   * yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url: default $CORTEX_JUDGE_BASE_URL, else
+   * as `embed`; model: default $CORTEX_JUDGE_MODEL, else `d3-mini`. Thresholds and sizes (they depend on the model): each one
+   * default $CORTEX_JUDGE_<NAME>, else limits.ts (judge.ts JUDGE_SETTINGS).
+   */
+  judge: z.strictObject({
+    base_url: str("judge.base_url"), model: str("judge.model"),
+    route_yes: prob("judge.route_yes"), dup_yes: prob("judge.dup_yes"),
+    route_candidates: count("judge.route_candidates"), dup_candidates: count("judge.dup_candidates"), route_chars: count("judge.route_chars"),
+  }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({

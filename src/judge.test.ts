@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { lintConfig } from "./config";
 import { refresh } from "./embed";
 import { judge, judgeConfig } from "./judge";
+import { LIMITS } from "./limits";
 import { newPageCtx } from "./naming";
 import { openWiki } from "./context";
 import { routeCandidates } from "./agent";
@@ -59,6 +60,38 @@ test("judge config: absent = off, defaults, same base_url rule as embed, strict 
   expect(await judgeConfig(root)).toMatchObject({ url: "http://elsewhere/v1", model: "d3-mini", key: undefined });
   await Bun.write(join(root, "cortex.json"), JSON.stringify({ base_url: "http://elsewhere/v1/", judge: { base_url: "http://j/v1", model: "x" } }));
   expect(await judgeConfig(root)).toMatchObject({ url: "http://j/v1", model: "x" });
+  const env = { u: process.env.CORTEX_JUDGE_BASE_URL, k: process.env.CORTEX_JUDGE_API_KEY };
+  try { // $CORTEX_JUDGE_API_KEY only to $CORTEX_JUDGE_BASE_URL
+    process.env.CORTEX_JUDGE_BASE_URL = "https://api.typesafe.ai/v1/"; process.env.CORTEX_JUDGE_API_KEY = "sk-judge";
+    await Bun.write(join(root, "cortex.json"), JSON.stringify({ base_url: "http://elsewhere/v1/", judge: { model: "jev-1.13.0" } }));
+    expect(await judgeConfig(root)).toMatchObject({ url: "https://api.typesafe.ai/v1", key: "sk-judge", model: "jev-1.13.0" });
+    await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { base_url: "https://api.typesafe.ai/v1" } }));
+    expect((await judgeConfig(root))?.key).toBe("sk-judge");
+    await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { base_url: "http://evil/v1" } }));
+    expect(await judgeConfig(root)).toMatchObject({ url: "http://evil/v1", key: undefined });
+  } finally {
+    for (const [k, v] of [["CORTEX_JUDGE_BASE_URL", env.u], ["CORTEX_JUDGE_API_KEY", env.k]] as const) v === undefined ? delete process.env[k] : process.env[k] = v;
+  }
+});
+
+test("judge settings: cortex.json, else $CORTEX_JUDGE_<NAME>, else limits.ts; an invalid env value is ignored", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-judge-")); roots.push(root);
+  const names = ["CORTEX_JUDGE_MODEL", "CORTEX_JUDGE_ROUTE_YES", "CORTEX_JUDGE_DUP_YES", "CORTEX_JUDGE_ROUTE_CANDIDATES", "CORTEX_JUDGE_ROUTE_CHARS"];
+  const saved = names.map((k) => process.env[k]);
+  try {
+    for (const k of names) delete process.env[k];
+    await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: {} }));
+    expect(await judgeConfig(root)).toMatchObject({ model: "d3-mini", routeYes: LIMITS.routeYes, dupYes: LIMITS.dupJudge, routeCandidates: LIMITS.routeCandidates, dupCandidates: LIMITS.dupCandidates, routeChars: LIMITS.routeChars });
+    Object.assign(process.env, { CORTEX_JUDGE_MODEL: "jev-1.13.0", CORTEX_JUDGE_ROUTE_YES: "0.65", CORTEX_JUDGE_DUP_YES: "1.5", CORTEX_JUDGE_ROUTE_CANDIDATES: "3.5", CORTEX_JUDGE_ROUTE_CHARS: "4000" });
+    expect(await judgeConfig(root)).toMatchObject({ model: "jev-1.13.0", routeYes: 0.65, dupYes: LIMITS.dupJudge, routeCandidates: LIMITS.routeCandidates, routeChars: 4000 });
+    await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { model: "m", route_yes: 0.4, dup_candidates: 7 } }));
+    expect(await judgeConfig(root)).toMatchObject({ model: "m", routeYes: 0.4, dupCandidates: 7, routeChars: 4000 });
+  } finally {
+    names.forEach((k, i) => saved[i] === undefined ? delete process.env[k] : process.env[k] = saved[i]);
+  }
+  expect(lintConfig({ judge: { route_yes: 0.5, route_chars: 2000 } })).toEqual([]);
+  expect(lintConfig({ judge: { route_yes: 2 } })[0].level).toBe("error");
+  expect(lintConfig({ judge: { dup_candidates: 0 } })[0].level).toBe("error");
   expect(lintConfig({ judge: { model: "m", base_url: null } })).toEqual([]);
   expect(lintConfig({ judge: { nope: 1 } })[0].level).toBe("error");
 });

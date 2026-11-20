@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { openWiki, type Wiki } from "./context";
 import { nearest } from "./embed";
-import { clip, judge } from "./judge";
+import { clip, judge, judgeConfig } from "./judge";
 import { serializeDoc, slugify } from "./lib";
 import { LIMITS } from "./limits";
 import { expand, TYPE_DIRS, type PageType } from "./template";
@@ -30,9 +30,10 @@ export function nearTitle(a: string, b: string): boolean {
  * to complete instead) or only warn about; nothing when embeddings are off or no page is close.
  */
 async function nearDuplicate(root: string, pages: { path: string; fm: Record<string, unknown> }[], type: string, title: string, description: string): Promise<{ refuse: boolean; near: { path: string; title: string; score: number }[] } | undefined> {
-  const hits = await nearest(root, `${title}\n${description}`, LIMITS.dupCandidates * 5, false);
+  const jc = await judgeConfig(root), n = jc?.dupCandidates ?? LIMITS.dupCandidates, yes = jc?.dupYes ?? LIMITS.dupJudge;
+  const hits = await nearest(root, `${title}\n${description}`, n * 5, false);
   const byPath = new Map(pages.map((d) => [d.path, d]));
-  const near = (hits ?? []).filter((h) => byPath.get(h.path)?.fm.type === type).slice(0, LIMITS.dupCandidates)
+  const near = (hits ?? []).filter((h) => byPath.get(h.path)?.fm.type === type).slice(0, n)
     .map((h) => ({ ...h, title: String(byPath.get(h.path)!.fm.title ?? h.path), description: String(byPath.get(h.path)!.fm.description ?? "") }));
   if (!near.length) return;
   const criteria = Object.fromEntries([...near.map((n, i) => [`p${i + 1}`, `\`candidates[${i}]\` is the same subject as \`new_page\``]), ["none", "none of the candidates: `new_page` is a different subject, even if related"]]);
@@ -41,8 +42,8 @@ async function nearDuplicate(root: string, pages: { path: string; fm: Record<str
   }))?.dup;
   if (a?.type === "choice") {
     const picked = near[Number(a.choice.slice(1)) - 1];
-    if (picked && a.probabilities[a.choice] >= LIMITS.dupJudge) return { refuse: true, near: [picked] };
-    if (!picked && a.probabilities.none >= LIMITS.dupJudge) return; // judged different from all of them
+    if (picked && a.probabilities[a.choice] >= yes) return { refuse: true, near: [picked] };
+    if (!picked && a.probabilities.none >= yes) return; // judged different from all of them
     return { refuse: false, near: near.filter((n) => n.score >= LIMITS.dupWarn) };
   }
   if (near[0].score >= LIMITS.dupCosine) return { refuse: true, near: near.filter((n) => n.score >= LIMITS.dupCosine) };

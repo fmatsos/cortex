@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { rawId, toResource, type Page, type RawSource } from "./doc";
 import { nearest } from "./embed";
-import { clip, judge, JUDGE } from "./judge";
+import { clip, judge, judgeConfig, JUDGE } from "./judge";
 import { openWiki, type Wiki } from "./context";
 import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
@@ -209,14 +209,16 @@ async function prepareSource(w: Wiki, d: RawSource, by: string, at: Date): Promi
  * source brings something to, as `/path « title »` for the compile prompt. Empty when embeddings or the judge are off or down.
  */
 export async function routeCandidates(w: Wiki, d: RawSource): Promise<string[]> {
-  const text = clip(`${d.fm.title ?? ""}\n${d.body}`.trim(), LIMITS.routeChars);
-  const hits = await nearest(w.root, text, LIMITS.routeCandidates * 3, false);
+  const jc = await judgeConfig(w.root);
+  if (!jc) return [];
+  const text = clip(`${d.fm.title ?? ""}\n${d.body}`.trim(), jc.routeChars);
+  const hits = await nearest(w.root, text, jc.routeCandidates * 3, false);
   if (!hits) return [];
   const byPath = new Map((await w.pages()).map((p) => [p.path, p]));
-  const near = hits.map((h) => byPath.get(h.path)).filter((p) => p && (p.fm.type === "Concept" || p.fm.type === "Entity")).slice(0, LIMITS.routeCandidates) as Page[];
+  const near = hits.map((h) => byPath.get(h.path)).filter((p) => p && (p.fm.type === "Concept" || p.fm.type === "Entity")).slice(0, jc.routeCandidates) as Page[];
   const noul = (i: number) => ({ type: "noul" as const, instructions: `Does \`source\` bring information that belongs on the page \`pages[${i}]\` (a new fact, figure, example or nuance for it)?` });
   const a = await judge(w.root, { source: text, pages: near.map((p) => ({ title: p.fm.title, description: clip(String(p.fm.description ?? ""), 200) })) }, Object.fromEntries(near.map((_, i) => [`p${i}`, noul(i)])), JUDGE.longTimeoutMs);
-  return near.filter((_, i) => { const x = a?.[`p${i}`]; return x?.type === "noul" && x.noul >= LIMITS.routeYes; }).map((p) => `/${p.path} « ${p.fm.title} »`);
+  return near.filter((_, i) => { const x = a?.[`p${i}`]; return x?.type === "noul" && x.noul >= jc.routeYes; }).map((p) => `/${p.path} « ${p.fm.title} »`);
 }
 
 /**
