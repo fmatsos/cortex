@@ -1,22 +1,30 @@
-import { site } from "#lib/server/data.js";
+import { dataFile, site } from "#lib/server/data.js";
 import { searchSeed } from "#lib/server/search-seed.js";
-import { TYPES } from "#lib/type-meta.js";
+import { withIds } from "#lib/log-view.js";
+import type { GraphData } from "#lib/types.js";
 
-const PREVIEW = 5; // pages shown per collection; "See all" opens the filtered view of /search/
+const POOL = 30; // candidates for the featured page and « did you know »: the browser picks among them by day
+const NEWS = 5;
+const HUBS = 6;
 
-// The home page stays bounded whatever the size of the wiki: a preview per collection (title, French alphabetical order),
-// the exact count, and what it takes to start a search. Favorites are found in the search index, on the browser side.
+/**
+ * Home page in the manner of an encyclopedia's front page, bounded whatever the size of the wiki: search first, then a
+ * featured page, « did you know », the latest log entries, the most linked pages and the tags. The daily picks are done in
+ * the browser (the prerendered page stays the same from one export to the next, the picks change every day without a rebuild).
+ */
 export const load = () => {
-	const pages = site().pages;
+	const { pages, log } = site();
+	const degree = new Map((JSON.parse(dataFile("graph.json")) as GraphData).nodes.map((n) => [n.id, n.degree]));
+	const deg = (id: string) => degree.get(id) ?? 0;
+	const byDegree = [...pages].sort((a, b) => deg(b.id) - deg(a.id) || a.title.localeCompare(b.title, "fr"));
+	const card = (p: (typeof pages)[number]) => ({ id: p.id, type: p.type, title: p.title, description: p.description, tags: p.tags.slice(0, 4), links: deg(p.id) });
 	return {
 		seed: searchSeed(),
-		collections: TYPES.map((t) => {
-			const all = pages.filter((p) => p.type === t.type).sort((a, b) => a.title.localeCompare(b.title, "fr"));
-			return {
-				type: t.type,
-				count: all.length,
-				preview: all.slice(0, PREVIEW).map(({ id, type, title, description, status, verified, needsReview, partial }) => ({ id, type, title, description, status, verified: !!verified, needsReview, partial })),
-			};
-		}).filter((c) => c.count),
+		// featured: a well-linked synthesis or concept with a description
+		featured: byDegree.filter((p) => (p.type === "Synthesis" || p.type === "Concept") && p.description).slice(0, POOL).map(card),
+		// did you know: concepts and entities described in one sentence
+		facts: byDegree.filter((p) => (p.type === "Concept" || p.type === "Entity") && p.description).slice(0, POOL * 2).map(({ id, title, description }) => ({ id, title, description })),
+		news: withIds(log.slice(0, NEWS)).map(({ id, at, kind, pages }) => ({ id, at, kind, pages: pages.slice(0, 3) })),
+		hubs: byDegree.filter((p) => p.type !== "Source").slice(0, HUBS).map(card),
 	};
 };

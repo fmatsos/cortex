@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features } from "#lib/features.js";
 	import Icon from "#lib/components/icon.svelte";
 	import { fold } from "#lib/fold.js";
 	import type { IconName } from "#lib/icons.js";
@@ -28,11 +29,13 @@
 
 	type Row = { key: Op["key"]; value: string; label: string; count: number; icon: IconName; color?: string };
 	const typeRows = $derived<Row[]>(TYPES.map((t) => ({ key: "type", value: t.type, label: t.plural, count: facets.type[t.type] ?? 0, icon: t.icon, color: typeColor(t.type) })));
-	const statusRows = $derived<Row[]>(Object.entries(STATUS_META).map(([s, m]) => ({ key: "status", value: s, label: m.label, count: facets.status[s] ?? 0, icon: m.icon })));
+	const statusRows = $derived<Row[]>(Object.entries(STATUS_META).filter(([s]) => features.drafts || s !== "draft").map(([s, m]) => ({ key: "status", value: s, label: m.label, count: facets.status[s] ?? 0, icon: m.icon })));
 	const flagRows = $derived<Row[]>([
 		{ key: "is", value: "fav", label: tr("favs.title"), count: facets.flags.fav, icon: "star" },
-		{ key: "is", value: "unverified", label: tr("facets.unverified"), count: facets.flags.unverified, icon: "unverified" },
-		{ key: "is", value: "review", label: tr("facets.review"), count: facets.flags.review, icon: "needs-review" },
+		...(features.review ? [
+			{ key: "is", value: "unverified", label: tr("facets.unverified"), count: facets.flags.unverified, icon: "unverified" },
+			{ key: "is", value: "review", label: tr("facets.review"), count: facets.flags.review, icon: "needs-review" },
+		] satisfies Row[] : []),
 		{ key: "is", value: "partial", label: tr("facets.partial"), count: facets.flags.partial, icon: "warning" },
 	]);
 </script>

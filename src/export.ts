@@ -235,7 +235,10 @@ export function graphLinks(directed: Set<string>): GraphData["links"] {
 export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn) {
   const root = w.root;
   // UI language of the site; the texts the export writes into the pages (callout titles, missing links…) follow it too
-  const locale = resolveLocale(await w.config().then((c) => c.language, () => undefined));
+  const cfg = await w.config().catch(() => ({} as Awaited<ReturnType<Wiki["config"]>>));
+  const locale = resolveLocale(cfg.language);
+  // optional notions (cortex.json): off, their data does not reach the site
+  const features = { review: !!cfg.review, drafts: !!cfg.drafts };
   setLocale(locale);
   const all = await w.pages();
   for (const e of w.errors.pages) say(`page skipped, invalid frontmatter: ${e.path} (${e.msg})`);
@@ -269,8 +272,9 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
     return {
       id: pageId(d.path), type: String(fm.type ?? ""), title: String(fm.title ?? pageId(d.path)),
       description: String(fm.description ?? ""), tags: (fm.tags ?? []).map(String),
-      status: String(fm.status ?? "draft"), verified: stamp(fm.verified), generated: stamp(fm.generated),
-      stale_after: isoDate(fm.stale_after), needsReview: pageState(fm).needsReview, partial,
+      status: features.drafts || (fm.status ?? "draft") !== "draft" ? String(fm.status ?? "draft") : "stable",
+      verified: features.review ? stamp(fm.verified) : undefined, generated: stamp(fm.generated),
+      stale_after: isoDate(fm.stale_after), needsReview: features.review && pageState(fm).needsReview, partial,
       html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
       backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
       related: related(docs, d.path, graph0).slice(0, LIMITS.relatedPages).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),
@@ -290,7 +294,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
     links: edges,
   };
 
-  const data: SiteData = { locale, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
+  const data: SiteData = { locale, features, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
   return { data, graph, search: buildSearch(pages) };
 }
 
@@ -366,7 +370,7 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
 
   // Vite and SvelteKit are only loaded here: the other commands stay as fast
   // version = fingerprint of the data AND the frontend: same wiki and same code, same site; either changes, the cache changes
-  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) };
+  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_FEATURES: JSON.stringify(data.features), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) };
   // The build is process-global (env, cwd, console) and shares site/.svelte-kit: one at a time per machine.
   const unlock = lockBuild();
   // The build reads these from the environment (SvelteKit's forked workers reload vite.config.ts): set for the build only, then restored.

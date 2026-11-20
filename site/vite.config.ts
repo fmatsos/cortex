@@ -9,7 +9,8 @@ const out = process.env.CORTEX_SITE_OUT ?? "build";
 
 export default defineConfig({
   // UI language of the prerendered site: `language` of cortex.json, resolved by `cortex export` (en by default)
-  define: { __CORTEX_LOCALE__: JSON.stringify(process.env.CORTEX_SITE_LANG ?? "en") },
+  // optional notions (cortex.json `review`, `drafts`): off unless `cortex export` turns them on
+  define: { __CORTEX_LOCALE__: JSON.stringify(process.env.CORTEX_SITE_LANG ?? "en"), __CORTEX_FEATURES__: process.env.CORTEX_SITE_FEATURES ?? '{"review":false,"drafts":false}' },
   plugins: [
     tailwindcss(),
     sveltekit({

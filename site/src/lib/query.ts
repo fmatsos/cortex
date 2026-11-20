@@ -1,4 +1,5 @@
 import { fold } from "./fold";
+import { features } from "./features";
 import { DICTS, getLocale, LOCALES, t, type Locale } from "./i18n/index";
 
 /**
@@ -42,8 +43,12 @@ const GROUP = /^(-?)\((.*)\)$/s;
 export const KEYS = ["tag", "type", "status", "is"] as const;
 /** Recognized values of each operator (except `tag`, free). */
 export const TYPE_VALUES = ["Concept", "Entity", "Synthesis", "Source"] as const;
-export const STATUS_VALUES = ["draft", "stable", "deprecated"] as const;
-export const IS_VALUES = ["fav", "verified", "unverified", "review", "partial"] as const;
+const ALL_STATUS = ["draft", "stable", "deprecated"] as const;
+const ALL_IS = ["fav", "verified", "unverified", "review", "partial"] as const;
+const REVIEW_IS: readonly string[] = ["verified", "unverified", "review"];
+/** Without the draft or review notion (cortex.json), their values are not offered nor recognized. */
+export const STATUS_VALUES = ALL_STATUS.filter((s) => features.drafts || s !== "draft");
+export const IS_VALUES = ALL_IS.filter((v) => features.review || !REVIEW_IS.includes(v));
 
 /**
  * How each operator and value is written: `query.word.<op|type|status|is>.<canonical>` in each dictionary (lib/i18n/*.json),

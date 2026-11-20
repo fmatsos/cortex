@@ -1,23 +1,38 @@
 <script lang="ts">
+	import { onMount } from "svelte";
 	import Icon from "#lib/components/icon.svelte";
+	import KindBadge from "#lib/components/kind-badge.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import PageList from "#lib/components/page-list.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
-	import { toRoute } from "#lib/links.js";
+	import { toPage, toRoute, toTag } from "#lib/links.js";
+	import { dayShort } from "#lib/log-view.js";
+	import type { IconName } from "#lib/icons.js";
 	import { type Engine, loadEngine } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeColor, typeIcon, typePlural } from "#lib/type-meta.js";
 	import { t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
+	const FACTS = 3;
 	const FAVS_SHOWN = 6;
 	const urlOf = (q: string) => `${toRoute("/search")}?q=${encodeURIComponent(q)}`;
 
 	// Favorites are specific to this browser: they are found in the search index (loaded only if there are any)
 	let engine = $state<Engine>();
 	$effect(() => { if (favs.ids.length && !engine) loadEngine().then((e) => (engine = e), () => {}); });
+	// daily picks: the export day in the prerendered page, today's once in the browser (they change without a rebuild)
+	let today = $state<number>();
+	onMount(() => { today = Math.floor(Date.now() / 864e5); });
+	const day = $derived(today ?? Math.floor(Date.parse(data.footer.generatedAt) / 864e5));
+	const featured = $derived(data.featured.length ? data.featured[day % data.featured.length] : undefined);
+	const facts = $derived.by(() => {
+		const pool = data.facts.filter((f) => f.id !== featured?.id);
+		const start = pool.length ? (day * FACTS) % pool.length : 0;
+		return [...pool.slice(start), ...pool.slice(0, start)].slice(0, FACTS);
+	});
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
@@ -74,21 +89,87 @@
 	</section>
 {/if}
 
-<!-- preview bounded per collection, whatever the size of the wiki; the full view is the filtered search (in slices) -->
-<div class="mt-10 grid gap-6 lg:grid-cols-2 2xl:grid-cols-4">
-	{#each data.collections as c (c.type)}
-		<section aria-labelledby="h-{c.type}" class="bg-muted/40 rounded-lg border p-4">
-			<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-				<h2 id="h-{c.type}" class="anchor-target flex items-center gap-2 text-xl font-semibold">
-					<Icon name={typeIcon(c.type)} size={24} style="color: {typeColor(c.type)}" />
-					{typePlural(c.type)} <span class="text-muted-foreground text-sm font-normal">({c.count})</span>
-				</h2>
-				{#if c.count > c.preview.length}
-					<a href={urlOf(`type:${c.type.toLowerCase()}`)} aria-label={t("home.seeAll.label", { what: typePlural(c.type).toLowerCase(), count: c.count })} class="text-link link-content inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline pointer-coarse:min-h-11">{t("home.seeAll")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
-				{/if}
-			</div>
-			<PageList pages={c.preview} filter={false} showType={false} />
-		</section>
+<!-- encyclopedia-style front page: kinds of pages, then featured, news, did you know, central pages, portals -->
+<ul class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("home.types")}>
+	{#each data.seed.types.filter((x) => x.count) as x (x.type)}
+		<li><a href={urlOf(`type:${x.type.toLowerCase()}`)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
+			<Icon name={typeIcon(x.type)} size={20} style="color: {typeColor(x.type)}" />{typePlural(x.type)}<span class="text-muted-foreground ml-auto text-sm">{x.count}</span>
+		</a></li>
 	{/each}
+</ul>
+
+{#snippet head(id: string, icon: IconName, label: string)}
+	<h2 {id} class="flex items-center gap-2 text-lg font-semibold"><Icon name={icon} size={20} class="text-muted-foreground" />{label}</h2>
+{/snippet}
+
+<div class="mt-6 grid gap-6 lg:grid-cols-[3fr_2fr]">
+	{#if featured}
+		<section aria-labelledby="h-featured" class="bg-muted/40 rounded-lg border p-4">
+			{@render head("h-featured", "star", t("home.featured"))}
+			<a href={toPage(featured.id)} class="text-link link-content mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight underline-offset-4 hover:underline">
+				<Icon name={typeIcon(featured.type)} size={24} style="color: {typeColor(featured.type)}" />{featured.title}
+			</a>
+			<p class="mt-2">{featured.description}</p>
+			<p class="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+				{#each featured.tags as tag (tag)}<span>#{tag}</span>{/each}
+				<span>{t("home.links", { count: featured.links })}</span>
+				<a href={toPage(featured.id)} class="text-link link-content ml-auto inline-flex min-h-9 items-center gap-1 underline-offset-4 hover:underline">{t("home.featured.read")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+			</p>
+		</section>
+	{/if}
+
+	{#if data.news.length}
+		<section aria-labelledby="h-news" class="rounded-lg border p-4">
+			{@render head("h-news", "journal", t("home.news"))}
+			<ul class="mt-3 space-y-3">
+				{#each data.news as e (e.id)}
+					<li class="text-sm">
+						<a href="{toRoute('/log')}#{e.id}" class="text-muted-foreground flex items-center gap-2 hover:underline"><KindBadge kind={e.kind} /><time datetime={e.at}>{dayShort(e.at.slice(0, 10))}</time></a>
+						{#if e.pages.length}
+							<span class="mt-1 block">{#each e.pages as l, i (l.id)}{#if i}, {/if}<a href={toPage(l.id)} class="text-link link-content underline-offset-4 hover:underline">{l.title}</a>{/each}</span>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+			<a href={toRoute("/log")} class="text-link link-content mt-3 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.news.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+		</section>
+	{/if}
+
+	{#if facts.length}
+		<section aria-labelledby="h-facts" class="rounded-lg border p-4">
+			{@render head("h-facts", "note", t("home.facts"))}
+			<ul class="mt-3 list-disc space-y-2 pl-5">
+				{#each facts as f (f.id)}
+					<li><a href={toPage(f.id)} class="text-link link-content font-medium underline-offset-4 hover:underline">{f.title}</a>{t("common.colon")}{f.description}</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	{#if data.hubs.length}
+		<section aria-labelledby="h-hubs" class="rounded-lg border p-4">
+			{@render head("h-hubs", "graph", t("home.hubs"))}
+			<ul class="mt-3">
+				{#each data.hubs as h (h.id)}
+					<li><a href={toPage(h.id)} class="hover:bg-muted flex min-h-9 items-center gap-2 rounded-md px-1 pointer-coarse:min-h-11">
+						<Icon name={typeIcon(h.type)} size={16} style="color: {typeColor(h.type)}" /><span class="text-link min-w-0 truncate">{h.title}</span>
+						<span class="text-muted-foreground ml-auto shrink-0 text-sm">{t("home.links", { count: h.links })}</span>
+					</a></li>
+				{/each}
+			</ul>
+			<a href={toRoute("/graph")} class="text-link link-content mt-2 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.hubs.graph")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+		</section>
+	{/if}
 </div>
 
+{#if data.seed.tags.length}
+	<section aria-labelledby="h-portals" class="mt-6 rounded-lg border p-4">
+		{@render head("h-portals", "tags", t("home.portals"))}
+		<ul class="touch-gap mt-3 flex flex-wrap gap-2">
+			{#each data.seed.tags as tg (tg.slug)}
+				<li><a href={toTag(tg.slug)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag}<span class="text-muted-foreground">{tg.count}</span></a></li>
+			{/each}
+		</ul>
+		<a href={toRoute("/tags")} class="text-link link-content mt-3 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.portals.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+	</section>
+{/if}

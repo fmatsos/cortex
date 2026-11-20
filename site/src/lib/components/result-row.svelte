@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features } from "#lib/features.js";
 	import { Badge } from "#lib/components/ui/badge/index.js";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import Icon from "#lib/components/icon.svelte";
@@ -34,9 +35,9 @@
 
 {#snippet trust()}
 	{#if showStatus}<StatusBadge status={doc.status!} />{/if}
-	{#if doc.needsReview}
+	{#if features.review && doc.needsReview}
 		<TrustIcon icon="needs-review" label={tr("row.review")} />
-	{:else if doc.verified === false}
+	{:else if features.review && doc.verified === false}
 		<TrustIcon icon="unverified" label={tr("page.neverReviewed")} />
 	{/if}
 	{#if doc.partial}<TrustIcon icon="warning" label={tr("row.partialSource")} />{/if}

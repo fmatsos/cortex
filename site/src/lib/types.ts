@@ -29,6 +29,7 @@ export type PageData = {
 export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; search: string };
 export type SiteData = {
   locale: "en" | "fr"; // UI language of the export (cortex.json `language`)
+  features: { review: boolean; drafts: boolean }; // optional notions (cortex.json `review`, `drafts`)
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
   log: LogEntryData[]; // most recent first

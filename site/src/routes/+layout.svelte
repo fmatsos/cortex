@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { features } from "#lib/features.js";
 	import "../app.css";
 	import { onMount } from "svelte";
 	import { afterNavigate } from "$app/navigation";
@@ -73,7 +74,8 @@
 
 <!-- DOM order = visual order (mark, navigation, search, theme) at all widths: tabbing follows the eye -->
 <header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
-	<div class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
+	<!-- relative: anchor of the header search panel, which spans the whole header width -->
+	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
 		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} variant="graph" /><CortexWordmark /></a>
 		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
@@ -83,7 +85,7 @@
 			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">{t("favs.title")}</span></a>
 		</nav>
 		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full lg:ml-auto lg:basis-auto lg:flex-1'}">
-			{#if !pageSearch}<SearchBox class="min-w-0 flex-1 lg:ml-auto lg:max-w-xl" />{/if}
+			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 lg:ml-auto lg:max-w-xl" />{/if}
 			<ThemeSwitch />
 			<LangSwitch />
 		</div>
@@ -105,7 +107,7 @@
 				<span class="text-xs">({t("footer.concepts", { count: f.concepts })}, {t("footer.entities", { count: f.entities })}, {t("footer.syntheses", { count: f.syntheses })}, {t("footer.sources", { count: f.sources })})</span></li>
 			<li><a href={toRoute("/graph")} class="hover:text-foreground">{t("footer.links", { count: f.links })}</a></li>
 			<li><a href={toRoute("/tags")} class="hover:text-foreground">{t("footer.tags", { count: f.tags })}</a></li>
-			<li><a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'verified'))}" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>
+			{#if features.review}<li><a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'verified'))}" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>{/if}
 			<li><a href={toRoute("/log")} class="hover:text-foreground">{t("footer.log", { count: f.log })}</a></li>
 		</ul>
 	</div>

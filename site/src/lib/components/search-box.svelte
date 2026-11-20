@@ -22,7 +22,8 @@
 	// The query is that of the shared state (`search.q`): the header field, the large home field and that of /search/ are
 	// a single search. variant "main": large page field; "header": compact header field.
 	// live: on the results page, where the full list is already displayed, the dropdown only offers suggestions.
-	let { variant = "header", live = false, class: className = "" }: { variant?: "header" | "main"; live?: boolean; class?: string } = $props();
+	// wide: the panel spans the nearest positioned ancestor (the site header) instead of the field
+	let { variant = "header", live = false, wide = false, class: className = "" }: { variant?: "header" | "main"; live?: boolean; wide?: boolean; class?: string } = $props();
 	const main = $derived(variant === "main");
 
 	let engine = $state<Engine>();
@@ -201,7 +202,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={wrap} class="relative {className}" {onfocusout} onkeydown={wrapKeys}>
+<div bind:this={wrap} class="{wide ? '' : 'relative'} {className}" {onfocusout} onkeydown={wrapKeys}>
 	<div class="relative">
 		<Icon name="search" size={main ? 24 : 20} class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
 		<Input
@@ -229,7 +230,7 @@
 	{#if open && (items.length || (!live && value.trim()))}
 		<!-- mousedown with no focus effect: the field keeps focus, so the panel does not close before the click -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="bg-popover text-popover-foreground absolute inset-x-0 z-50 mt-1.5 flex flex-col rounded-lg border p-1 shadow-lg" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
+		<div class="bg-popover text-popover-foreground absolute {wide ? 'inset-x-4 lg:inset-x-8' : 'inset-x-0'} z-50 mt-1.5 flex flex-col rounded-lg border p-1 shadow-lg" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
 			{#if !live}<FilterChips value={search.q} class="px-1.5 pt-1 pb-1.5" />{/if}
 			<ul id={listId} role="listbox" aria-label={t("palette.suggestions")} class="min-h-0 flex-1 scroll-pb-10 overflow-auto">
 				{#each items as item, i (item.key)}

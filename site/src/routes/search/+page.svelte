@@ -265,10 +265,10 @@
 					<ul class="mt-2 space-y-2 text-[0.9375rem]">
 						<li class="flex items-center gap-3"><Icon name="operator-tag" size={20} class="text-muted-foreground" /><code>#tag</code> <span class="text-muted-foreground">{t("search.or")}</span> <code>tag:{t("search.operators.name")}</code></li>
 						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code>{token("type", "Concept")}</code> <span class="text-muted-foreground">{valueWords("type")}</span></li>
-						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>{token("status", "draft")}</code> {#each IS_VALUES as v (v)}<code>{token("is", v)}</code> {/each}</li>
+						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>{token("status", "deprecated")}</code> {#each IS_VALUES as v (v)}<code>{token("is", v)}</code> {/each}</li>
 						<li class="flex items-center gap-3"><Icon name="operator-phrase" size={20} class="text-muted-foreground" /><code>"{t("search.operators.phrase")}"</code></li>
 						<li class="flex items-center gap-3"><Icon name="operator-exclude" size={20} class="text-muted-foreground" /><code>-{t("search.operators.word")}</code> <code>-#tag</code> <span class="text-muted-foreground">{t("search.operators.exclude")}</span></li>
-						<li class="flex flex-wrap items-center gap-3"><Icon name="search" size={20} class="text-muted-foreground" /><code>(#a {t("query.word.or")} #b) {token("status", "draft")}</code> <code>-(…)</code> <span class="text-muted-foreground">{t("search.operators.or")}</span></li>
+						<li class="flex flex-wrap items-center gap-3"><Icon name="search" size={20} class="text-muted-foreground" /><code>(#a {t("query.word.or")} #b) {token("status", "deprecated")}</code> <code>-(…)</code> <span class="text-muted-foreground">{t("search.operators.or")}</span></li>
 					</ul>
 					<p class="text-muted-foreground mt-3 text-sm">{t("search.operators.help")}</p>
 				</section>

@@ -58,6 +58,10 @@ const SHAPE = {
     client: z.enum(CLIENT_NAMES, { error: (i) => `unknown site_ask.client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
     base_url: str("site_ask.base_url"), model: str("site_ask.model"), effort: str("site_ask.effort"),
   }, { error: '"site_ask" must be an object (client, base_url, model, effort), or null.' }).nullish(),
+  /** Review notion (verified pages, « to review again », « mark as reviewed »). Absent = off: the site shows none of it. */
+  review: z.boolean({ error: '"review" must be true, false or null.' }).nullish(),
+  /** Draft status. Absent = off: the site shows draft pages as stable and offers no draft filter. */
+  drafts: z.boolean({ error: '"drafts" must be true, false or null.' }).nullish(),
   /** Judge: a small System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url as `embed`; model: default `d3-mini`. */
   judge: z.strictObject({ base_url: str("judge.base_url"), model: str("judge.model") }, { error: '"judge" must be an object (base_url, model), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
