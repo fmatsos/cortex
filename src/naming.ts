@@ -39,7 +39,7 @@ async function nearDuplicate(root: string, pages: { path: string; fm: Record<str
   const criteria = Object.fromEntries([...near.map((n, i) => [`p${i + 1}`, `\`candidates[${i}]\` is the same subject as \`new_page\``]), ["none", "none of the candidates: `new_page` is a different subject, even if related"]]);
   const a = (await judge(root, { new_page: { type, title, description: clip(description, 500) }, candidates: near.map((n) => ({ title: n.title, description: clip(n.description, 500) })) }, {
     dup: { type: "choice", instructions: "Is `new_page` the same subject as one of the `candidates`, so that its content belongs on that existing page instead of a new page?", criteria },
-  }))?.dup;
+  }, undefined, `duplicate check of « ${title} » against ${near.map((n, i) => `p${i + 1} ${n.title}`).join(" | ")}`))?.dup;
   if (a?.type === "choice") {
     const picked = near[Number(a.choice.slice(1)) - 1];
     if (picked && a.probabilities[a.choice] >= yes) return { refuse: true, near: [picked] };

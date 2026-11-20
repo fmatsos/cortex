@@ -217,7 +217,7 @@ export async function routeCandidates(w: Wiki, d: RawSource): Promise<string[]> 
   const byPath = new Map((await w.pages()).map((p) => [p.path, p]));
   const near = hits.map((h) => byPath.get(h.path)).filter((p) => p && (p.fm.type === "Concept" || p.fm.type === "Entity")).slice(0, jc.routeCandidates) as Page[];
   const noul = (i: number) => ({ type: "noul" as const, instructions: `Does \`source\` bring information that belongs on the page \`pages[${i}]\` (a new fact, figure, example or nuance for it)?` });
-  const a = await judge(w.root, { source: text, pages: near.map((p) => ({ title: p.fm.title, description: clip(String(p.fm.description ?? ""), 200) })) }, Object.fromEntries(near.map((_, i) => [`p${i}`, noul(i)])), JUDGE.longTimeoutMs);
+  const a = await judge(w.root, { source: text, pages: near.map((p) => ({ title: p.fm.title, description: clip(String(p.fm.description ?? ""), 200) })) }, Object.fromEntries(near.map((_, i) => [`p${i}`, noul(i)])), JUDGE.longTimeoutMs, `routing « ${d.fm.title ?? rawId(d.path)} » over ${near.map((p, i) => `p${i} ${p.fm.title}`).join(" | ")}`);
   return near.filter((_, i) => { const x = a?.[`p${i}`]; return x?.type === "noul" && x.noul >= jc.routeYes; }).map((p) => `/${p.path} « ${p.fm.title} »`);
 }
 

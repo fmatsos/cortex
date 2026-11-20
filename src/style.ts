@@ -13,5 +13,7 @@ export const paint = { ok: out("green"), warn: out("yellow"), error: out("red"),
 
 /** Error line on stderr: red ✗, then the message. */
 export const fail = (msg: string) => console.error(`${err("red")("✗")} ${msg}`);
+/** Trace line on stderr, dimmed: what happened, for logs (never the command's output). */
+export const note = (msg: string) => console.error(err("dim")(msg));
 /** Warning line on stderr: yellow marker (! by default), then the message. */
 export const warn = (msg: string, mark = "!") => console.error(`${err("yellow")(mark)} ${msg}`);

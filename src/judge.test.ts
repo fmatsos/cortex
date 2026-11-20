@@ -99,13 +99,21 @@ test("judge settings: cortex.json, else $CORTEX_JUDGE_<NAME>, else limits.ts; an
 test("judge: POST <base>/systemone with model, state and questions; answers by id; a malformed answer or a down server = undefined, then left alone", async () => {
   const s = fake(), root = await wiki(s.port!);
   verdict = () => ({ a: { type: "noul", noul: 0.9 } });
-  expect(await judge(root, { x: 1 }, { a: { type: "noul", instructions: "Is it?" } })).toEqual({ a: { type: "noul", noul: 0.9 } });
-  expect(calls[0].body).toEqual({ model: "d3-mini", state: { x: 1 }, questions: { a: { type: "noul", instructions: "Is it?" } } });
-  verdict = () => ({ a: { type: "choice", choice: "x" } }); // not what was asked
-  expect(await judge(root, "s", { a: { type: "noul", instructions: "?" } })).toBeUndefined();
-  const n = calls.length;
-  expect(await judge(root, "s", { a: { type: "noul", instructions: "?" } })).toBeUndefined();
-  expect(calls.length).toBe(n); // cooldown: the server is not called again
+  const logged: string[] = [], error = console.error;
+  console.error = (m: string) => { logged.push(String(m)); };
+  try {
+    expect(await judge(root, { x: 1 }, { a: { type: "noul", instructions: "Is it?" } }, undefined, "test call")).toEqual({ a: { type: "noul", noul: 0.9 } });
+    expect(calls[0].body).toEqual({ model: "d3-mini", state: { x: 1 }, questions: { a: { type: "noul", instructions: "Is it?" } } });
+    verdict = () => ({ a: { type: "choice", choice: "x" } }); // not what was asked
+    expect(await judge(root, "s", { a: { type: "noul", instructions: "?" } })).toBeUndefined();
+    const n = calls.length;
+    expect(await judge(root, "s", { a: { type: "noul", instructions: "?" } })).toBeUndefined();
+    expect(calls.length).toBe(n); // cooldown: the server is not called again
+  } finally { console.error = error; }
+  // one log line per call: what, model, server, answers; then the failure and the skipped call
+  expect(logged[0]).toMatch(/^judge: test call, d3-mini at localhost:\d+, 1 question, [\d.]+ s, \d+ tokens: a 0\.90$/);
+  expect(logged.some((l) => /judge: judge, .*: failed \(.*no usable answer/.test(l))).toBe(true);
+  expect(logged.at(-1)).toMatch(/: skipped \(server down a moment ago\)$/);
   s.stop(true);
 });
 

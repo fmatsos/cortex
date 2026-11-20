@@ -1,6 +1,6 @@
 import { endpoint, loadConfig } from "./config";
 import { LIMITS } from "./limits";
-import { warn } from "./style";
+import { note, warn } from "./style";
 
 // --- Judge: a System One model (d3-mini behind llama.cpp's `POST <base_url>/systemone`, TypeSafe's request format) that
 // answers questions about one `state`: noul = probability of yes, choice = probabilities over named options. Off unless
@@ -77,9 +77,13 @@ const downUntil = new Map<string, number>(); // by server: a long-lived `cortex 
  * undefined when it is not available: no `judge` config, server down or slow (one warning, then left alone for `downMs`),
  * unreadable answer.
  */
-export async function judge(root: string, state: unknown, questions: Record<string, Question>, timeoutMs: number = JUDGE.timeoutMs): Promise<Record<string, Answer> | undefined> {
+export async function judge(root: string, state: unknown, questions: Record<string, Question>, timeoutMs: number = JUDGE.timeoutMs, what = "judge"): Promise<Record<string, Answer> | undefined> {
   const cfg = await judgeConfig(root);
-  if (!cfg || !Object.keys(questions).length || Date.now() < (downUntil.get(cfg.url) ?? 0)) return;
+  const n = Object.keys(questions).length;
+  if (!cfg || !n) return;
+  const call = `judge: ${what}, ${cfg.model} at ${host(cfg.url)}, ${n} question${n > 1 ? "s" : ""}`;
+  if (Date.now() < (downUntil.get(cfg.url) ?? 0)) { note(`${call}: skipped (server down a moment ago)`); return; }
+  const t0 = performance.now();
   try {
     const res = await fetch(`${cfg.url}/systemone`, {
       method: "POST",
@@ -88,17 +92,25 @@ export async function judge(root: string, state: unknown, questions: Record<stri
       signal: AbortSignal.timeout(timeoutMs), timeout: false,
     });
     if (!res.ok) throw new Error(`${cfg.url} answered ${res.status}`);
-    const answers = ((await res.json()) as { answers?: Record<string, Answer> }).answers;
+    const body = (await res.json()) as { answers?: Record<string, Answer>; usage?: { input_tokens?: number } };
+    const answers = body.answers;
     for (const [id, q] of Object.entries(questions)) {
       const a = answers?.[id];
       if (a?.type !== q.type || (a.type === "noul" ? typeof a.noul !== "number" : !a.probabilities)) throw new Error(`${cfg.url}: no usable answer for a ${q.type} question`);
     }
+    note(`${call}, ${secs(t0)}${body.usage?.input_tokens != null ? `, ${body.usage.input_tokens} tokens` : ""}: ${Object.entries(answers!).map(([id, a]) => `${id} ${brief(a)}`).join(", ")}`);
     return answers;
   } catch (e) {
+    note(`${call}, ${secs(t0)}: failed (${(e as Error).message})`);
     downUntil.set(cfg.url, Date.now() + JUDGE.downMs);
     if (!warned) { warned = true; warn(`judge: ${(e as Error).message}. Going on without it.`); }
   }
 }
+
+// --- One log line per call on stderr (CI logs; stdout stays the command's output, and cortex mcp's protocol)
+const host = (url: string) => { try { return new URL(url).host; } catch { return url; } };
+const secs = (t0: number) => `${((performance.now() - t0) / 1000).toFixed(2)} s`;
+const brief = (a: Answer) => a.type === "noul" ? a.noul.toFixed(2) : `${a.choice} (${(a.probabilities[a.choice] ?? 0).toFixed(2)})`;
 
 /** The state text cut to what the model takes. */
 export const clip = (s: string, n: number = JUDGE.stateChars) => s.length > n ? `${s.slice(0, n)}…` : s;
