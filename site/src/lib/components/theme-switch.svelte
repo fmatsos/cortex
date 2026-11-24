@@ -10,7 +10,7 @@
 </script>
 
 <label class="text-muted-foreground flex items-center gap-1.5 text-sm {className}">
-	<span class="sr-only sm:not-sr-only">{t("theme.label")}</span>
+	<span class="sr-only @xl:not-sr-only">{t("theme.label")}</span>
 	<span class="relative flex items-center">
 		<Icon name={ICON[theme.mode]} size={16} class="text-muted-foreground pointer-events-none absolute left-2" />
 		<select

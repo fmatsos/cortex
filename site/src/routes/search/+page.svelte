@@ -9,11 +9,9 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { askable, diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
+	import { diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
 	import { type Engine, facetCounts, loadEngine, search as run } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
-	import { type AskError, asker, MAX_QUESTION } from "#lib/ask-state.svelte.js";
-	import { Button } from "#lib/components/ui/button/index.js";
 	import { typeIcon, typePlural } from "#lib/type-meta.js";
 	import { t } from "#lib/i18n/index.js";
 
@@ -39,21 +37,6 @@
 	const urlOf = (query: string) => `${toRoute("/search")}?q=${encodeURIComponent(query)}`;
 	const titleOf = (id: string) => engine?.docs.find((d) => d.id === id)?.title ?? t("search.thePage");
 
-	// Natural-language question (cortex serve with site_ask): shared state (ask-state), so a request survives a visit to a
-	// cited page and the palette knows when one is pending; only an explicit action sends a question (it spends tokens)
-	onMount(() => asker.probe());
-	const shownQ = $derived(asker.pending ?? asker.error?.q ?? asker.last?.q);
-	const showAsk = $derived(asker.api && !!((text && askable(text)) || shownQ));
-	const canAsk = $derived(!!text && askable(text) && !asker.pending && text !== shownQ);
-	const citedDocs = $derived(asker.last && engine ? asker.last.cited.map((id) => engine!.docs.find((d) => d.id === id)).filter((d) => !!d) : []);
-	const askErrorText = (e: AskError) => t(`ask.error.${e.kind}`, { max: MAX_QUESTION });
-	// announced outside the busy region: start, then answer ready or failure (the answer itself is not read out)
-	let askAnnounced = $state("");
-	$effect(() => { askAnnounced = asker.pending ? t("ask.status.pending", { q: asker.pending }) : asker.error ? askErrorText(asker.error) : ""; });
-	let wasPending = false;
-	$effect(() => { if (asker.pending) wasPending = true; else if (wasPending && asker.last && !asker.error) { wasPending = false; askAnnounced = t("ask.status.ready"); } });
-	const another = () => { search.q = ""; search.focus(); };
-
 	const load = () => { failed = false; loadEngine().then((e) => (engine = e), () => (failed = true)); };
 	onMount(load);
 	// Filters: on large screens they are always expanded (left column), on small screens in a collapsible block
@@ -69,9 +52,6 @@
 		const url = nav.to?.url;
 		const p = url?.searchParams.get("q") ?? "";
 		if (url?.searchParams.has("q") || nav.type === "popstate") { if (p !== search.q.trim()) search.q = p; }
-		// ?ask=1 (the palette's "Ask" item): asked once, then dropped from the URL so a reload does not spend tokens again; a
-		// question already pending stays the one shown (the palette offers no ask meanwhile)
-		if (url?.searchParams.get("ask") === "1" && p.trim()) { asker.ask(p); void goto(urlOf(p.trim()), { shallow: true, replace: true, keepFocus: true, noScroll: true }); }
 		ready = true;
 	});
 	// typing updates the URL in place (without a history entry)
@@ -106,53 +86,6 @@
 <SearchBox variant="main" live class="mt-4" />
 <FilterChips bind:value={search.q} class="mt-3" />
 
-{#if showAsk}
-	<section aria-labelledby="ask-h" class="bg-muted/40 mt-6 rounded-lg border px-4 py-4 sm:px-5">
-		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-			<h2 id="ask-h" class="flex items-center gap-2 text-lg font-semibold"><Icon name="kind-query" size={20} />{t("ask.title")}</h2>
-			<label class="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 text-sm pointer-coarse:min-h-11">
-				<input type="checkbox" class="size-4" checked={asker.auto} onchange={(e) => asker.setAuto(e.currentTarget.checked)} />{t("ask.auto")}
-			</label>
-		</div>
-		{#if canAsk}
-			<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-				<Button size="sm" class="pointer-coarse:min-h-11" onclick={() => asker.ask(text)}><Icon name="kind-query" size={16} />{t("ask.action")}</Button>
-				<span class="text-muted-foreground text-sm">{t("ask.hint")}</span>
-			</div>
-		{/if}
-		<div aria-busy={!!asker.pending}>
-			{#if shownQ}<p class="mt-3 font-medium break-words">« {shownQ} »</p>{/if}
-			{#if asker.pending}
-				<p class="text-muted-foreground mt-1 flex items-center gap-2 text-sm"><Icon name="retry" size={16} class="motion-safe:animate-spin" />{t("ask.waiting")}</p>
-				<!-- placeholder of the answer to come; the pulse stops when the visitor asks for reduced motion -->
-				<div class="mt-3 space-y-2" aria-hidden="true">
-					{#each ["w-11/12", "w-full", "w-4/5", "w-2/3"] as w (w)}<div class="bg-muted-foreground/15 h-3 rounded motion-safe:animate-pulse {w}"></div>{/each}
-				</div>
-			{:else if asker.error}
-				<div class="bg-warning-background text-warning-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
-					<Icon name="error" size={20} />
-					<span class="min-w-48 flex-1">{askErrorText(asker.error)}</span>
-					{#if asker.error.kind === "invalid"}
-						<button type="button" class="inline-flex min-h-8 items-center gap-1 rounded-md border border-current px-2.5 pointer-coarse:min-h-11" onclick={() => search.focus()}>{t("ask.edit")}</button>
-					{:else if asker.error.kind !== "off"}
-						<button type="button" class="inline-flex min-h-8 items-center gap-1 rounded-md border border-current px-2.5 pointer-coarse:min-h-11" onclick={() => asker.ask(asker.error!.q)}><Icon name="retry" size={16} />{t("common.retry")}</button>
-					{/if}
-				</div>
-			{:else if asker.last}
-				<p class="text-muted-foreground mt-1 flex items-start gap-2 text-sm"><Icon name="generated" size={16} class="mt-0.5 shrink-0" />{t("ask.ai", { model: asker.last.model ?? "IA" })}</p>
-				<div class="wiki mt-3">{@html asker.last.html}</div>
-				{#if citedDocs.length}
-					<h3 class="mt-5 text-base font-semibold">{t("ask.cited")}</h3>
-					<ul class="divide-border mt-1 divide-y">
-						{#each citedDocs as d (d.id)}<li class="py-3"><ResultRow doc={d} href={toPage(d.id)} /></li>{/each}
-					</ul>
-				{/if}
-				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={another}><Icon name="search" size={16} />{t("ask.another")}</button>
-			{/if}
-		</div>
-	</section>
-{/if}
-<p class="sr-only" role="status">{askAnnounced}</p>
 
 <div class="mt-6 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
 	<aside aria-label={t("search.filters.label")}>
@@ -169,8 +102,7 @@
 	</aside>
 
 	<section aria-labelledby="pages-h" class="min-w-0">
-		<!-- named once the answer block is there: its counters and empty state are about the matching pages, not the question -->
-		<h2 id="pages-h" class={showAsk ? "mb-1 text-lg font-semibold" : "sr-only"}>{showAsk ? t("search.pagesTitle") : t("search.resultsLabel")}</h2>
+		<h2 id="pages-h" class="sr-only">{t("search.resultsLabel")}</h2>
 		<!-- visible counter (not announced on every keystroke); the announcement is in the status region below -->
 		<p class="text-muted-foreground min-h-6 text-sm">
 			{#if !text}

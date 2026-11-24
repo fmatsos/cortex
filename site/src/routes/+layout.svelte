@@ -18,6 +18,8 @@
 	import ThemeSwitch from "#lib/components/theme-switch.svelte";
 	import LangSwitch from "#lib/components/lang-switch.svelte";
 	import { toRoute } from "#lib/links.js";
+	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
+	import { assistant } from "#lib/assistant.svelte.js";
 
 	let { children, data } = $props();
 	const f = $derived(data.footer);
@@ -28,7 +30,7 @@
 	let header = $state<HTMLElement | null>(null);
 
 	// favorites, search history, theme and language: specific to this browser (localStorage)
-	onMount(() => { theme.init(); lang.init(); search.init(); return favs.init(); });
+	onMount(() => { theme.init(); lang.init(); search.init(); assistant.probe(); return favs.init(); });
 
 	// Real height of the sticky header → offset of anchors and of the skip link (never two assumed heights)
 	$effect(() => {
@@ -48,6 +50,11 @@
 		if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey)) {
 			e.preventDefault();
 			search.focus();
+		}
+		// Ctrl+I (Cmd+I): the assistant, also from a text field
+		else if (assistant.api && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "i") {
+			e.preventDefault();
+			assistant.setOpen(!assistant.open);
 		}
 	}
 	// the home page starts again from an empty search; /search/ resumes its own from the URL
@@ -73,19 +80,26 @@
 <a href="#main-content" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">{t("layout.skip")}</a>
 
 <!-- DOM order = visual order (mark, navigation, search, theme) at all widths: tabbing follows the eye -->
-<header bind:this={header} class="bg-background/90 sticky top-0 z-40 border-b backdrop-blur">
+<header bind:this={header} class="bg-background/90 @container sticky top-0 z-40 border-b backdrop-blur">
+	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
-	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 lg:px-8 lg:flex-nowrap lg:gap-x-6">
+	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
 		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} variant="graph" /><CortexWordmark /></a>
 		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}
-				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only sm:not-sr-only">{t(label)}</span></a>
+				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only @xl:not-sr-only">{t(label)}</span></a>
 			{/each}
-			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only sm:not-sr-only">{t("favs.title")}</span></a>
+			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only @xl:not-sr-only">{t("favs.title")}</span></a>
 		</nav>
-		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full lg:ml-auto lg:basis-auto lg:flex-1'}">
-			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 lg:ml-auto lg:max-w-xl" />{/if}
+		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full @5xl:ml-auto @5xl:basis-auto @5xl:flex-1'}">
+			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
+			{#if assistant.api}
+				<!-- icon only: beside the docked panel the header has less room than the viewport width says -->
+				<button type="button" id="assistant-toggle" class="hover:bg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11 {assistant.open ? 'bg-muted' : ''}"
+					aria-label={t("assistant.title")} aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" title="{t('assistant.title')} (Ctrl I)"
+					onclick={() => assistant.setOpen(!assistant.open)}><Icon name="kind-query" size={20} /></button>
+			{/if}
 			<ThemeSwitch />
 			<LangSwitch />
 		</div>
@@ -114,6 +128,7 @@
 </footer>
 
 <OfflineStatus />
+{#if assistant.api}<AssistantPanel />{/if}
 {/key}
 <style>
 	.nav-link {
