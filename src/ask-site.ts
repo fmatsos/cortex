@@ -93,7 +93,8 @@ export function pagesPart(core: Core | undefined, hits: string[]): string {
   if (!core.retained.length && !core.related.length) return prompt("ask-site-none", {});
   const docs = core.documents.map((d) => `### /${d.path} « ${d.title} » (relevance ${d.relevance})\n\n${d.text}`).join("\n\n");
   return [
-    prompt("ask-site-core", {}),
+    // nothing retained, only related pages: no "given in full" without documents, the agent reads and searches
+    core.documents.length ? prompt("ask-site-core", {}) : prompt("ask-site-none-retained", {}),
     docs,
     core.unread.length ? `${prompt("ask-site-unread", {})} ${list(core.unread)}` : "",
     core.related.length ? `${prompt("ask-site-related", {})} ${list(core.related)}` : "",

@@ -27,6 +27,9 @@ test("pagesPart: retained pages in full, none judged relevant, or the search hit
   expect(part).toContain("### /wiki/a.md « wiki/a.md » (relevance 0.8)\n\nTexte A");
   expect(part).toContain("Related, less certain");
   expect(pagesPart(coreOf([], { retained: 0.5, related: 0.3 }), [])).toContain("judged none of the pages");
+  const onlyRelated = pagesPart(coreOf([{ page: page("wiki/d.md"), relevance: 0.4 }], { retained: 0.5, related: 0.3 }), []);
+  expect(onlyRelated).not.toContain("given in full");
+  expect(onlyRelated).toContain("no page of the wiki certain to answer");
   expect(pagesPart(undefined, ["/wiki/x.md « X »"])).toContain("best first: /wiki/x.md « X »");
 });
 

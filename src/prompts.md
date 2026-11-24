@@ -46,6 +46,9 @@ Answer from the wiki only, never filling a gap with a guess. Give the most compl
 ## ask-site-blocks
 render_blocks prepares display blocks that the site draws inside the answer. Any answer longer than a short paragraph uses it: one to three blocks, where the content has that shape: values that differ by case (a table, or facts for a single case); one variant per tool or per case, each a few paragraphs long (tabs); an ordered process (steps); a limit, an exception, a contradiction between pages or an open point (one callout, tone warning); the two to five pages that carry the answer (pages, one sentence each: it is not a list of sources, the site lists them under the answer). Once your reading is done, and before writing any of the answer, call render_blocks once with every block; then write the answer once, from top to bottom, with each block's name ({{bloc-1}}) on its own line where it belongs. A block replaces the prose it holds: never repeat its content and never refer to it ("ci-dessus", "le tableau suivant"); keep plain Markdown for short lists and explanations. Every label and text of a block is in the wiki's language.
 
+## ask-site-blocks-missing
+Your answer is longer than a short paragraph but uses no display block. Call render_blocks now with one to three blocks that fit this answer (a table, steps, facts, tabs, a callout, the key pages), then write the whole answer again from the start, with each block's name on its own line where it belongs, without repeating the blocks' content in the prose.
+
 ## ask-site-history
 Earlier turns of this conversation (the new question may build on them):
 
@@ -54,6 +57,9 @@ Pages found by the site's search (meaning and words), best first: {{hits}}. Read
 
 ## ask-site-none
 The system judged none of the pages the search found relevant to this question. Search once or twice more with other key terms (cortex search with 2 or 3 terms, never the whole question) before saying the wiki does not cover it.
+
+## ask-site-none-retained
+The system judged no page of the wiki certain to answer this question. Read the related pages below when they matter, and search with other key terms (cortex search with 2 or 3 terms, never the whole question) before saying the wiki does not cover it.
 
 ## ask-site-core
 Pages the system retained for this question, most relevant first, given in full: base the answer on them and cite each one that bears on it; read or search only for what they leave open (cortex search with 2 or 3 key terms, never the whole question).

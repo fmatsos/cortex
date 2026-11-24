@@ -4,8 +4,12 @@ import type { Report } from "../print";
 export type Mode = "write" | "read";
 export type { Config };
 
-/** What the command will check once the agent is done: one line per miss, empty when the work is complete. */
-export type Check = () => Promise<string[]>;
+/**
+ * What the command will check once the agent is done (`answer`: its final text): one line per miss, empty when the work is
+ * complete. `prompt` words the send-back when the misses are not lint errors (the openai client sends them back in the same
+ * conversation).
+ */
+export type Check = ((answer?: string) => Promise<string[]>) & { prompt?: (misses: string[]) => string };
 
 /**
  * A tool of one run only, beside the cortex pack (the site's questions: render_blocks). Its arguments are checked against

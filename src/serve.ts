@@ -3,10 +3,10 @@ import { join, resolve, sep } from "node:path";
 import { openWiki } from "./context";
 import { exportSite } from "./export";
 import { answerSegments, blockRegistry } from "./answer-blocks";
-import { EXTRA_TOOLS } from "./backends/backend";
+import { EXTRA_TOOLS, type Check } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
-import { askSitePrompt, scopePrefix } from "./prompts";
+import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./prompts";
 import { historyPart, lastQuestion, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
@@ -92,7 +92,9 @@ export const agentAsk: AskFn = async (root, question, history) => {
   const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history), blocks: !!blocks });
   const { backendFor } = await import("./backends");
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [blocks.tool]);
+  // a long answer written without any block goes back once more to the model, in the same conversation (openai client)
+  const laidOut: Check | undefined = blocks && Object.assign(async (answer = "") => (!blocks.used() && answer.length > LIMITS.askBlocksAfterChars ? ["no display block"] : []), { prompt: () => askSitePromptPart("ask-site-blocks-missing", {}) });
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [blocks.tool]);
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 

@@ -86,4 +86,6 @@ export const LIMITS = {
   /** Site question: earlier turns of the conversation sent with the question, and characters kept of each earlier answer. */
   askHistoryTurns: 8,
   askHistoryChars: 4000,
+  /** Site question: an answer longer than this written without any display block is sent back once to be laid out. */
+  askBlocksAfterChars: 600,
 } as const;

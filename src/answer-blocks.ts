@@ -51,7 +51,7 @@ export function blockRegistry() {
   };
   /** The final answer, each name replaced by its block, the unnamed blocks at the end. */
   const assemble = (md: string) => (md.replace(PLACEHOLDER, (_, id: string) => take(id)) + [...blocks.keys()].map(take).join("")).trim();
-  return { tool, assemble };
+  return { tool, assemble, used: () => blocks.size > 0 };
 }
 
 /** A block as plain Markdown: what the history carries, and what is shown when a fence does not parse. */
