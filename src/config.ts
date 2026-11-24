@@ -74,7 +74,8 @@ const SHAPE = {
     base_url: str("judge.base_url"), model: str("judge.model"),
     route_yes: prob("judge.route_yes"), dup_yes: prob("judge.dup_yes"),
     route_candidates: count("judge.route_candidates"), dup_candidates: count("judge.dup_candidates"), route_chars: count("judge.route_chars"),
-  }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars), or null.' }).nullish(),
+    ask_retained: prob("judge.ask_retained"), ask_related: prob("judge.ask_related"), ask_candidates: count("judge.ask_candidates"),
+  }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars, ask_retained, ask_related, ask_candidates), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({

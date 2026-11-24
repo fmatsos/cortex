@@ -31,10 +31,13 @@ export const JUDGE_SETTINGS = {
   route_candidates: { limit: "routeCandidates", min: 1, max: Infinity, int: true },
   dup_candidates: { limit: "dupCandidates", min: 1, max: Infinity, int: true },
   route_chars: { limit: "routeChars", min: 1, max: Infinity, int: true },
+  ask_retained: { limit: "askRetained", min: 0, max: 1, int: false },
+  ask_related: { limit: "askRelated", min: 0, max: 1, int: false },
+  ask_candidates: { limit: "askCandidates", min: 1, max: Infinity, int: true },
 } as const;
 export type JudgeSettingName = keyof typeof JUDGE_SETTINGS;
 
-export type JudgeConfig = { url: string; key?: string; model: string; routeYes: number; dupYes: number; routeCandidates: number; dupCandidates: number; routeChars: number };
+export type JudgeConfig = { url: string; key?: string; model: string; routeYes: number; dupYes: number; routeCandidates: number; dupCandidates: number; routeChars: number; askRetained: number; askRelated: number; askCandidates: number };
 
 const warnedEnv = new Set<string>();
 function setting(name: JudgeSettingName, own: number | null | undefined): number {
@@ -64,6 +67,7 @@ export async function judgeConfig(root: string): Promise<JudgeConfig | undefined
     routeYes: setting("route_yes", j.route_yes), dupYes: setting("dup_yes", j.dup_yes),
     routeCandidates: setting("route_candidates", j.route_candidates), dupCandidates: setting("dup_candidates", j.dup_candidates),
     routeChars: setting("route_chars", j.route_chars),
+    askRetained: setting("ask_retained", j.ask_retained), askRelated: setting("ask_related", j.ask_related), askCandidates: setting("ask_candidates", j.ask_candidates),
   };
   if (env && (!own || own === env)) return { url: env, key: process.env.CORTEX_JUDGE_API_KEY, ...settings };
   return { ...endpoint(c, j.base_url ?? undefined), ...settings };

@@ -72,4 +72,18 @@ export const LIMITS = {
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */
   snippetTokens: 12,
+  /** Site question: wiki pages the search offers the judge, each judged alone against the question. */
+  askCandidates: 16,
+  /** Site question: a page the judge rates at or above this is retained (given in full to the agent, listed under the answer). */
+  // first calibration on Jev, on another corpus (2026-11-22): the documents a right answer cites score 0.73 to 0.97, the breaks fall between 0.57 and 0.27; not calibrated on a wiki yet
+  askRetained: 0.5,
+  /** Site question: at or above this, below askRetained, a page is related (named to the agent, listed apart). */
+  askRelated: 0.3,
+  /** Site question: characters of the judged page the judge reads (title and description come first). */
+  askJudgeChars: 2500,
+  /** Site question: characters of retained pages given in full; the retained pages beyond it are only named. */
+  askReadingChars: 40_000,
+  /** Site question: earlier turns of the conversation sent with the question, and characters kept of each earlier answer. */
+  askHistoryTurns: 8,
+  askHistoryChars: 4000,
 } as const;

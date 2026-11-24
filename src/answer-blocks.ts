@@ -1,0 +1,131 @@
+import { z } from "zod";
+import type { ExtraTool } from "./backends/backend";
+import { pageId } from "./doc";
+import { render } from "./export";
+
+// --- Display blocks of a site answer (cortex serve, POST /api/ask): the agent prepares them with render_blocks, then names
+// each one ({{bloc-1}}) where it belongs in its Markdown. They travel inside the answer as a ```cortex-ui fence (the
+// history keeps them), and the server turns the answer into segments the site draws with its own components.
+
+const text = (what: string) => z.string().min(1).describe(`${what}, Markdown, links to wiki pages allowed`);
+const title = z.string().min(1).optional().describe("short heading of the block");
+
+export const BLOCK = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("callout"), tone: z.enum(["info", "warning", "success", "danger"]), title, text: text("the message") })
+    .describe("a warning, an exception, a limit or an open point"),
+  z.object({ type: z.literal("table"), title, columns: z.array(z.string().min(1)).min(1).max(6), rows: z.array(z.array(z.string())).min(1).max(40) })
+    .describe("values that differ by case: one row per case, as many cells as columns (cells are Markdown)"),
+  z.object({ type: z.literal("steps"), title, items: z.array(z.object({ title: z.string().min(1), text: text("detail of the step").optional() })).min(2).max(12) })
+    .describe("an ordered process"),
+  z.object({ type: z.literal("tabs"), tabs: z.array(z.object({ label: z.string().min(1), text: text("content of the tab") })).min(2).max(6) })
+    .describe("one variant per tab (per tool, per case), each a few paragraphs"),
+  z.object({ type: z.literal("facts"), title, items: z.array(z.object({ label: z.string().min(1), value: z.string().min(1) })).min(1).max(12) })
+    .describe("key values: a figure, a date, a name, each short"),
+  z.object({ type: z.literal("pages"), title, items: z.array(z.object({ path: z.string().regex(/^\/wiki\/.+\.md$/).describe("/wiki/….md"), summary: z.string().min(1).describe("one sentence: what this page brings to the answer") })).min(1).max(8) })
+    .describe("the two to five pages that carry the answer, one sentence each"),
+]);
+export type Block = z.infer<typeof BLOCK>;
+
+const LANG = "cortex-ui";
+const FENCE = new RegExp("```" + LANG + "\\n([\\s\\S]*?)\\n```", "g");
+const PLACEHOLDER = /\{\{\s*(bloc-\d+)\s*\}\}/g;
+
+/** Blocks as they travel in the answer text; a backtick is escaped so no text can close the fence. */
+const fence = (b: Block) => `\n\n\`\`\`${LANG}\n${JSON.stringify(b).replaceAll("`", "\\u0060")}\n\`\`\`\n\n`;
+
+/**
+ * The blocks one answer prepared, and the render_blocks tool that fills it. Each block is drawn once, where the answer names
+ * it; a block the answer never names closes it, so nothing prepared is lost.
+ */
+export function blockRegistry() {
+  const blocks = new Map<string, Block>(), placed = new Set<string>();
+  const take = (id: string) => (blocks.has(id) && !placed.has(id) ? (placed.add(id), fence(blocks.get(id)!)) : "");
+  const tool: ExtraTool = {
+    name: "render_blocks",
+    description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Returns one name per block ({{bloc-1}}); then write the answer and put each name on its own line where its block belongs.",
+    schema: z.object({ blocks: z.array(BLOCK).min(1).max(6) }),
+    run: async ({ blocks: list }: { blocks: Block[] }) => {
+      const names = list.map((b) => { const id = `bloc-${blocks.size + 1}`; blocks.set(id, b); return `{{${id}}} (${b.type})`; });
+      return `Prepared: ${names.join(", ")}. Write the answer now and put each name on its own line where its block belongs; never repeat a block's content in the prose.`;
+    },
+  };
+  /** The final answer, each name replaced by its block, the unnamed blocks at the end. */
+  const assemble = (md: string) => (md.replace(PLACEHOLDER, (_, id: string) => take(id)) + [...blocks.keys()].map(take).join("")).trim();
+  return { tool, assemble };
+}
+
+/** A block as plain Markdown: what the history carries, and what is shown when a fence does not parse. */
+export function blockMarkdown(b: Block): string {
+  const head = "title" in b && b.title ? `**${b.title}**\n\n` : "";
+  switch (b.type) {
+    case "callout": return `> ${head.trim() ? `${head.trim()} ` : ""}${b.text.replace(/\n/g, "\n> ")}`;
+    case "table": return `${head}| ${b.columns.join(" | ")} |\n|${b.columns.map(() => " --- |").join("")}\n${b.rows.map((r) => `| ${r.join(" | ")} |`).join("\n")}`;
+    case "steps": return `${head}${b.items.map((s, i) => `${i + 1}. **${s.title}**${s.text ? ` ${s.text}` : ""}`).join("\n")}`;
+    case "tabs": return b.tabs.map((t) => `**${t.label}**\n\n${t.text}`).join("\n\n");
+    case "facts": return `${head}${b.items.map((f) => `- **${f.label}** : ${f.value}`).join("\n")}`;
+    case "pages": return `${head}${b.items.map((p) => `- [${p.path}](${p.path}) : ${p.summary}`).join("\n")}`;
+  }
+}
+
+/** The blocks of a fence, or undefined when it is not what the site draws. */
+function parse(json: string): Block | undefined {
+  try { const r = BLOCK.safeParse(JSON.parse(json)); return r.success ? r.data : undefined; } catch { return undefined; }
+}
+
+/** The answer with its blocks as Markdown (history sent to the agent). */
+export const flattenBlocks = (md: string) => md.replace(FENCE, (all, json: string) => { const b = parse(json); return b ? blockMarkdown(b) : all; });
+
+/** A block whose text fields are sanitized HTML (wiki links resolved as in the prose), ready for the site's components. */
+export type DrawnBlock =
+  | { type: "callout"; tone: string; title?: string; html: string }
+  | { type: "table"; title?: string; columns: string[]; rows: string[][] }
+  | { type: "steps"; title?: string; items: { title: string; html: string }[] }
+  | { type: "tabs"; tabs: { label: string; html: string }[] }
+  | { type: "facts"; title?: string; items: { label: string; html: string }[] }
+  | { type: "pages"; title?: string; items: { id: string; title: string; html: string }[] };
+export type Segment = { html: string } | { block: DrawnBlock };
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/**
+ * The answer as the site draws it: prose segments (sanitized HTML, wiki links relative to the site root, footnotes listed at
+ * the end) and blocks. Labels are escaped; text fields go through the same rendering as the prose. A page of a `pages`
+ * block that does not exist is dropped. `titles`: wiki path → page title.
+ */
+export function answerSegments(md: string, titles: Map<string, string>): Segment[] {
+  const paths = new Set(titles.keys());
+  const html = (s: string) => render(s, "", paths).html;
+  const inline = (s: string) => html(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
+  const blocks: DrawnBlock[] = [];
+  const draw = (b: Block): DrawnBlock | undefined => {
+    const t = "title" in b && b.title ? { title: esc(b.title) } : {};
+    switch (b.type) {
+      case "callout": return { type: "callout", tone: b.tone, ...t, html: html(b.text) };
+      case "table": return { type: "table", ...t, columns: b.columns.map(inline), rows: b.rows.map((r) => b.columns.map((_, i) => inline(r[i] ?? ""))) };
+      case "steps": return { type: "steps", ...t, items: b.items.map((s) => ({ title: esc(s.title), html: s.text ? html(s.text) : "" })) };
+      case "tabs": return { type: "tabs", tabs: b.tabs.map((x) => ({ label: esc(x.label), html: html(x.text) })) };
+      case "facts": return { type: "facts", ...t, items: b.items.map((f) => ({ label: esc(f.label), html: inline(f.value) })) };
+      case "pages": {
+        const items = b.items.map((p) => ({ path: p.path.slice(1), summary: p.summary })).filter((p) => paths.has(p.path))
+          .map((p) => ({ id: pageId(p.path), title: esc(titles.get(p.path)!), html: inline(p.summary) }));
+        return items.length ? { type: "pages", ...t, items } : undefined;
+      }
+    }
+  };
+  // each block becomes a marker paragraph, so the prose is rendered once (its footnotes numbered across the whole answer)
+  const prose = md.replace(FENCE, (all, json: string) => {
+    const b = parse(json), d = b && draw(b);
+    if (!d) return b ? "" : `\n\n${all}\n\n`;
+    blocks.push(d);
+    return `\n\nCORTEXBLOCK${blocks.length - 1}\n\n`;
+  });
+  const r = render(prose, "", paths);
+  const notes = r.notes.length ? `<hr><ol class="ask-notes">${r.notes.map((n) => `<li id="fn-${n.id}">${n.html}</li>`).join("")}</ol>` : "";
+  const parts = (r.html + notes).split(/<p>CORTEXBLOCK(\d+)<\/p>/);
+  const out: Segment[] = [];
+  parts.forEach((p, i) => {
+    if (i % 2) out.push({ block: blocks[+p]! });
+    else if (p.trim()) out.push({ html: p });
+  });
+  return out;
+}

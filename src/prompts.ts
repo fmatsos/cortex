@@ -46,9 +46,9 @@ export function askPrompt(o: { agentFile: string; question: string; file?: boole
   return `${prompt("ask", vars)} ${prompt(o.file ? "ask-file" : "ask-read", vars)}`;
 }
 
-/** Site question (cortex serve): read-only, short Markdown, the search hits given up front to save the cheap model some turns. */
-export const askSitePrompt = (o: { question: string; hits: string[]; language?: string }) =>
-  prompt("ask-site", { question: o.question, hits: o.hits.length ? o.hits.join("; ") : "none", language: lang(o.language) });
+/** Site question (cortex serve): read-only; `pages` and `history` are built by ask-site.ts (the pages up front save the cheap model some turns). */
+export const askSitePrompt = (o: { question: string; pages: string; history?: string; blocks?: boolean; language?: string }) =>
+  prompt("ask-site", { question: o.question, pages: o.pages, history: o.history ?? "", blocks: o.blocks ? prompt("ask-site-blocks", {}) : "", language: lang(o.language) }).replace(/\n{3,}/g, "\n\n");
 
 /** `instructions` string of the MCP server, in the wiki language. */
 export const mcpInstructions = (language?: string) => prompt("mcp-instructions", { language: lang(language) });

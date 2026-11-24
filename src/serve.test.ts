@@ -88,14 +88,15 @@ test("inboxCommitMessage: English subject, one line per source in the body", asy
   expect(inboxCommitMessage(["A (01a) ← partage-1.md", "B (01b) ← https://x/y"])).toBe("inbox: add sources from inbox\n\n- A (01a) ← partage-1.md\n- B (01b) ← https://x/y");
 });
 
-test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer with links relative to /search/", async () => {
+test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer with links relative to the site root", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
   mkdirSync(join(root, "wiki/concepts"), { recursive: true });
   writeFileSync(join(root, "cortex.json"), "{}");
   writeFileSync(join(root, "wiki/concepts/idee.md"), `---\ntype: Concept\ntitle: "Idée"\nstatus: draft\n---\n\nCorps.\n`);
   let release!: () => void;
+  const seen: unknown[] = [];
   const gate = new Promise<void>((r) => (release = r));
-  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q) => { await gate; return `${q} : voir [Idée](/wiki/concepts/idee.md).[^n] [Absente](/wiki/concepts/nope.md)<script>alert(1)</script>\n\n[^n]: D'après [Idée](/wiki/concepts/idee.md).\n`; } });
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q, history) => { await gate; seen.push(history); return { md: `${q} : voir [Idée](/wiki/concepts/idee.md).[^n] [Absente](/wiki/concepts/nope.md)<script>alert(1)</script>\n\n[^n]: D'après [Idée](/wiki/concepts/idee.md).\n`, core: q === "encore" ? { retained: [{ id: "concepts/idee", path: "wiki/concepts/idee.md", title: "Idée", relevance: 0.9 }], related: [], documents: [], unread: [] } : undefined }; } });
   try {
     const at = `http://localhost:${server.port}/api/ask`, origin = `http://localhost:${server.port}`;
     const post = (body: unknown, headers: Record<string, string> = { origin }) => fetch(at, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
@@ -113,18 +114,25 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
     release();
     const r = await first;
     expect(r.status).toBe(200);
-    const { html, cited, model } = (await r.json()) as { html: string; cited: string[]; model: string };
-    expect(html).toContain('href="../wiki/concepts/idee/"');
+    const { segments, cited, model, md, retained } = (await r.json()) as { segments: { html?: string }[]; cited: string[]; model: string; md: string; retained: string[] };
+    const html = segments.map((s) => s.html ?? "").join("");
+    expect(md).toStartWith("pourquoi : voir [Idée]"); // the site sends it back as history
+    expect(retained).toEqual([]); // no judge: no page retained by code
+    expect(html).toContain('href="wiki/concepts/idee/"'); // relative to the site root: the assistant resolves it wherever it is open
     expect(html).not.toContain("<script");
     // the footnote keeps its target and its link; only existing pages are listed as cited, once
     expect(html).toContain('href="#fn-n"');
-    expect(html).toContain(`<li id="fn-n">D'après <a href="../wiki/concepts/idee/">Idée</a>.</li>`);
+    expect(html).toContain(`<li id="fn-n">D'après <a href="wiki/concepts/idee/">Idée</a>.</li>`);
     expect(cited).toEqual(["concepts/idee"]);
     expect(model).toBe("haiku");
     // site_ask's own client opens the route without a global one, and its model is the one shown
     writeFileSync(join(root, "cortex.json"), JSON.stringify({ site_ask: { client: "openai", model: "glm" } }));
     expect((await fetch(at, { method: "HEAD" })).status).toBe(204);
-    expect(((await (await post({ q: "encore" })).json()) as { model: string }).model).toBe("glm");
+    const history = [{ role: "user", text: "pourquoi" }, { role: "assistant", text: "parce que" }, { role: "system", text: "x" }, { role: "user", text: 3 }];
+    const again = (await (await post({ q: "encore", history })).json()) as { model: string; retained: string[] };
+    expect(again.model).toBe("glm");
+    expect(again.retained).toEqual(["concepts/idee"]);
+    expect(seen.at(-1)).toEqual(history.slice(0, 2)); // malformed turns dropped
   } finally { server.stop(true); }
 }, 120_000);
 

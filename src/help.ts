@@ -17,7 +17,7 @@ export const HELP = `cortex — second brain
   cortex serve [--port <n>] [--sync]            (serves the site, pages can be marked reviewed from it as $CORTEX_REVIEWER,
                                                and the phone share target under /share/ (shares → inbox/ → sources);
                                                --sync: git pull before, commit and push after; default port 8080;
-                                               site_ask in cortex.json: questions in natural language from the search bar)
+                                               site_ask in cortex.json: the site's assistant, questions about the wiki)
   cortex share                                 (the share target alone, without serve: each share committed to inbox/ and
                                                pushed to the checkout's git remote, any host; env SHARE_PORT)
   cortex ls [--type T] [--json]                (the wiki pages, by title)

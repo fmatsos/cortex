@@ -261,3 +261,21 @@ test("elide: old page bodies in the model's own write calls go too, the last two
   expect(args[2].body).toBe(big);
   expect(elide(m)).toBe(false);
 });
+
+test("openai: a run's extra tool is offered with its JSON schema and runs beside the pack", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  const { blockRegistry } = await import("./answer-blocks");
+  const r = blockRegistry();
+  const call = { id: "1", type: "function", function: { name: "render_blocks", arguments: JSON.stringify({ blocks: [{ type: "facts", items: [{ label: "A", value: "1" }] }] }) } };
+  const answers = [{ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call] } }, { finish_reason: "stop", message: { role: "assistant", content: "Voici.\n\n{{bloc-1}}" } }];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [answers[seen.length - 1]] }); } });
+  try {
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [r.tool]);
+    const tool = seen[0].tools.find((t: any) => t.function.name === "render_blocks");
+    expect(tool.function.parameters.properties.blocks.type).toBe("array");
+    expect(seen[1].messages.at(-1).content).toContain("{{bloc-1}} (facts)");
+    expect(r.assemble(out)).toContain('```cortex-ui\n{"type":"facts"');
+  } finally { server.stop(true); }
+});

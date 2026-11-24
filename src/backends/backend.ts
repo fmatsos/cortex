@@ -7,12 +7,31 @@ export type { Config };
 /** What the command will check once the agent is done: one line per miss, empty when the work is complete. */
 export type Check = () => Promise<string[]>;
 
+/**
+ * A tool of one run only, beside the cortex pack (the site's questions: render_blocks). Its arguments are checked against
+ * `schema` before `run`; a mismatch goes back to the model as text, so it can correct the call.
+ */
+export type ExtraTool = { name: string; description: string; schema: import("zod").ZodObject; run: (args: any) => Promise<string> };
+
+/** Runs one extra tool call: the schema first, its errors as text for the model. */
+export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
+  const r = t.schema.safeParse(args);
+  if (!r.success) return `invalid arguments: ${r.error.issues.slice(0, 5).map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}. Fix them and call ${t.name} again.`;
+  try { return await t.run(r.data); } catch (e) { return `error: ${(e as Error).message}`; }
+}
+
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */
   interactive(prompt: string): string[];
-  /** Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool call). */
-  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check): Promise<string>;
+  /**
+   * Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool
+   * call). `extra`: tools of this run only; the openai and claude clients offer them, the others ignore them (`EXTRA_TOOLS`).
+   */
+  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check, extra?: ExtraTool[]): Promise<string>;
 }
+
+/** The clients that offer a run's extra tools to the model. */
+export const EXTRA_TOOLS = new Set(["openai", "claude"]);
 
 export const split = (s: string) => s.split(/\s+/).filter(Boolean);
 

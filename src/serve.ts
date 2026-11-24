@@ -1,10 +1,14 @@
 import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { openWiki } from "./context";
-import { exportSite, render } from "./export";
+import { exportSite } from "./export";
+import { answerSegments, blockRegistry } from "./answer-blocks";
+import { EXTRA_TOOLS } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
 import { askSitePrompt, scopePrefix } from "./prompts";
+import { historyPart, lastQuestion, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
+import { LIMITS } from "./limits";
 import { search } from "./search";
 import { refresh } from "./embed";
 import { inbox } from "./inbox";
@@ -21,8 +25,8 @@ import { commitAndPush, pullRebase } from "./sync";
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
  */
 export type ServeOpts = { port: number; sync: boolean; reviewer: string; say?: (m: string) => void; ask?: AskFn };
-/** A site question → the agent's Markdown answer (injectable for tests). */
-export type AskFn = (root: string, question: string) => Promise<string>;
+/** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
+export type AskFn = (root: string, question: string, history: Turn[]) => Promise<{ md: string; core?: Core }>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
@@ -47,32 +51,49 @@ export function askSetup(cfg: Config): { cfg: Config; ep?: { url: string; key?: 
 }
 
 /**
- * The answer as the site shows it: sanitized HTML (wiki links relative to /search/) with its footnotes appended as a
- * list (their `#fn-<id>` targets), and the ids of the wiki pages it cites, for the site to list them with their real
- * status: the trust signals never depend on what the model chose to write.
+ * The answer as the site shows it: segments of sanitized HTML (wiki links relative to the site root, which the assistant
+ * resolves wherever it is open) and display blocks (answer-blocks.ts), and the ids of the wiki pages it cites, for the site
+ * to list them with their real status: the trust signals never depend on what the model chose to write. `titles`: path → title.
  */
-export function askAnswer(md: string, paths: Set<string>) {
-  const { html, notes } = render(md, "search/", paths);
-  const list = notes.length ? `<hr><ol class="ask-notes">${notes.map((n) => `<li id="fn-${n.id}">${n.html}</li>`).join("")}</ol>` : "";
-  const cited = [...new Set([...md.matchAll(/\]\(\/?(wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]).filter((p) => paths.has(p)))].map(pageId);
-  return { html: html + list, cited };
+export function askAnswer(md: string, titles: Map<string, string>) {
+  const cited = [...new Set([...md.matchAll(/\]\(\/?(wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]).filter((p) => titles.has(p)))].map(pageId);
+  return { segments: answerSegments(md, titles), cited };
 }
 const MAX_QUESTION = 500;
+/** An earlier answer comes back as the site received it: long, but bounded (ask-site.ts cuts it again for the prompt). */
+const MAX_TURN = 40_000;
+
+/** The earlier turns the site sent, the malformed ones dropped. */
+export function turnsOf(value: unknown): Turn[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-LIMITS.askHistoryTurns).flatMap((t) => {
+    const { role, text } = (t ?? {}) as Record<string, unknown>;
+    return (role === "user" || role === "assistant") && typeof text === "string" && text.trim() ? [{ role, text: text.slice(0, MAX_TURN) }] : [];
+  });
+}
 
 /**
- * `POST /api/ask`: the client's agent in read mode, on a cheap model, with the site search's hits (BM25 fused with the
- * embeddings when `embed` is on) given up front. Not `askCtx`: no tree hashing, and process.env stays untouched.
+ * `POST /api/ask`: the client's agent in read mode, on a cheap model. With a judge, the pages it retained for the question
+ * are given in full (ask-site.ts); without one, the site search's hits (BM25 fused with the embeddings when `embed` is on).
+ * Not `askCtx`: no tree hashing, and process.env stays untouched.
  */
-export const agentAsk: AskFn = async (root, question) => {
+export const agentAsk: AskFn = async (root, question, history) => {
   const cfg = await openWiki(root).config();
-  // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
-  const find = (any: boolean) => search(root, question, { in: "wiki", limit: 8, any }).catch(() => []);
-  const all = await find(false);
-  const hits = all.length ? all : await find(true);
-  const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, hits: hits.map((h) => `/${h.path} « ${h.title} »`) });
-  const { backendFor } = await import("./backends");
+  const core = await relevantPages(root, question, lastQuestion(history));
+  let hits: string[] = [];
+  if (!core) {
+    // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
+    const find = (any: boolean) => search(root, question, { in: "wiki", limit: 8, any }).catch(() => []);
+    const all = await find(false);
+    hits = (all.length ? all : await find(true)).map((h) => `/${h.path} « ${h.title} »`);
+  }
   const ask = askSetup(cfg);
-  return (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read");
+  // display blocks through a tool: only the clients that take a run's own tools (the others answer in plain Markdown)
+  const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
+  const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history), blocks: !!blocks });
+  const { backendFor } = await import("./backends");
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [blocks.tool]);
+  return { md: blocks ? blocks.assemble(md) : md, core };
 };
 
 export { commitAndPush, pullRebase };
@@ -179,15 +200,18 @@ export async function serve(root: string, o: ServeOpts) {
         if (req.method !== "POST") return new Response(null, { status: 405 });
         // a browser always sends Origin on a POST fetch: no Origin is a script, not the site
         if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
-        const q = await req.json().then((b: { q?: unknown }) => b?.q, () => undefined);
+        const body = await req.json().then((b: { q?: unknown; history?: unknown }) => b ?? {}, () => ({} as { q?: unknown; history?: unknown }));
+        const q = body.q;
         if (typeof q !== "string" || !q.trim() || q.length > MAX_QUESTION) return Response.json({ error: `expected { q } (1 to ${MAX_QUESTION} characters)` }, { status: 400 });
         if (asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
         asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
         try {
-          const md = await (o.ask ?? agentAsk)(root, q.trim());
-          const paths = new Set((await openWiki(root).pages()).map((p) => p.path));
-          return Response.json({ ...askAnswer(md, paths), model: askModel(askCfg) ?? askClient(askCfg) });
+          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history));
+          const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
+          // the pages under the answer: retained and related are chosen by code (the judge), never by what the model wrote
+          const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];
+          return Response.json({ ...askAnswer(md, titles), md, retained: ids(core?.retained), related: ids(core?.related), model: askModel(askCfg) ?? askClient(askCfg) });
         } catch (e) {
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });

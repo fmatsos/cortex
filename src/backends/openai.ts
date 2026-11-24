@@ -1,4 +1,5 @@
-import { interactiveWith, type Backend, type Config } from "./backend";
+import { interactiveWith, runExtra, type Backend, type Config } from "./backend";
+import { z } from "zod";
 import { LIMITS } from "../limits";
 import { callTool, toolPack } from "./tools";
 import { endpoint } from "../config";
@@ -25,6 +26,12 @@ export const cache = (url: string) => (new URL(url).hostname === "api.openai.com
 export const route = (url: string) =>
   new URL(url).hostname === "openrouter.ai" ? { provider: { sort: "price", require_parameters: true } } : {};
 
+/** A zod schema as tool parameters: `anyOf` rather than `oneOf`, no `$schema` (what every OpenAI-compatible server reads). */
+const jsonSchema = (schema: z.ZodType) => {
+  const { $schema: _, ...rest } = JSON.parse(JSON.stringify(z.toJSONSchema(schema)).replaceAll('"oneOf":', '"anyOf":'));
+  return rest;
+};
+
 /** What the model is told when its tool calls were cut by the output limit: nothing ran, write in smaller parts. */
 const CUT = `Your last answer exceeded the output limit (${LIMITS.llmMaxTokens} tokens) and was cut: none of its tool calls ran. ` +
   "Send fewer calls at once, and write a long page in parts: WritePage with the start, then Append for the rest.";
@@ -37,10 +44,11 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
   return {
     // no CLI to start: interactive only through $CORTEX_AGENT
     interactive: interactiveWith(() => { throw new Error("the openai client runs in batch only: use --batch (or set $CORTEX_AGENT)."); }),
-    async run(root, prompt, mode, report, check) {
+    async run(root, prompt, mode, report, check, extra = []) {
       if (!cfg.model) throw new Error(`the openai client needs a model: cortex config set model <name>.`);
       const { schemaText } = await import("../schema");
-      const tools = toolPack(mode).map((t) => ({ type: "function", function: t }));
+      const tools = [...toolPack(mode), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
+      const own = new Map(extra.map((t) => [t.name, t]));
       const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
       const { url, key } = ep;
       let fixes = 0, cuts = 0, text = ""; // text: the parts of a final answer cut by the output limit
@@ -88,7 +96,8 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         for (const c of msg.tool_calls) {
           let args: Record<string, any>;
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
-          const content = await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }));
+          const x = own.get(c.function.name);
+          const content = x ? await runExtra(x, args) : await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }));
           messages.push({ role: "tool", tool_call_id: c.id, content });
         }
       }

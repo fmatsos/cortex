@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { isUnder } from "../paths";
-import { cli, flag, interactiveWith, load, type Backend, type Config, type Mode } from "./backend";
+import { cli, flag, interactiveWith, load, runExtra, type Backend, type Config, type Mode } from "./backend";
 import type { Effort } from "../config";
 import { toLabel, toRegex, usage } from "./policy";
 
@@ -9,7 +9,7 @@ import { toLabel, toRegex, usage } from "./policy";
 export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
-    async run(root, prompt, mode, report) {
+    async run(root, prompt, mode, report, _check, extra = []) {
       const { query, createSdkMcpServer, tool } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
       const { callTool, toolPack, zodShape } = await import("./tools");
@@ -17,7 +17,8 @@ export default function claude(cfg: Config): Backend {
       const refused = (reason: string) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" });
       // the cortex tool pack, in process: the same tools as every backend; Claude Code's own tools are off
       const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: toolPack(mode).map((t) =>
-        tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused) }] }))) });
+        tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused) }] })))
+        .concat(extra.map((t) => tool(t.name, t.description, t.schema.shape as any, async (args: unknown) => ({ content: [{ type: "text" as const, text: await runExtra(t, args) }] })))) });
       let out: string | undefined;
       for await (const m of query({
         prompt,
