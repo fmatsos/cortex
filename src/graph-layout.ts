@@ -3,7 +3,7 @@ import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import type { GraphData } from "../site/src/lib/types";
 import { collator } from "./text";
-import { islandRadius, packIslands } from "../site/src/lib/graph-pack";
+import { islandRadius, packIslands, UNLINKED } from "../site/src/lib/graph-pack";
 
 type InputNode = Omit<GraphData["nodes"][number], "x" | "y" | "community">;
 type Input = { nodes: InputNode[]; links: GraphData["links"] };
@@ -66,6 +66,9 @@ export function layoutGraph(input: Input): GraphData {
       membership.set(peer, n.id); pending.push(peer);
     }
   }
+  // Pages with no link at all share one island (labelled in the browser) rather than scattering single-page islands.
+  const unlinked = nodes.filter((n) => graph.degree(n.id) === 0);
+  if (unlinked.length > 1) for (const n of unlinked) membership.set(n.id, UNLINKED);
   if (graph.size) forceAtlas2.assign(graph, {
     iterations: 240, getEdgeWeight: "weight",
     settings: { linLogMode: true, outboundAttractionDistribution: true, scalingRatio: 12, gravity: 0.08, slowDown: 4, barnesHutOptimize: true, barnesHutTheta: 0.6 },
@@ -92,7 +95,7 @@ export function layoutGraph(input: Input): GraphData {
     const tags = new Map<string, number>();
     for (const n of members) for (const tag of n.tags) tags.set(tag, (tags.get(tag) ?? 0) + 1);
     const dominant = [...tags].sort((a, b) => b[1] * Math.log(1 + nodes.length / tagCounts.get(b[0])!) - a[1] * Math.log(1 + nodes.length / tagCounts.get(a[0])!) || compare(a[0], b[0]));
-    communities.push({ id, label: dominant.length ? dominant.slice(0, 2).map(([t]) => t.replaceAll("-", " ")).join(" · ") : reps[0].title, size: members.length, representatives: reps.map((n) => n.id), x: center.x, y: center.y });
+    communities.push({ id, label: id === UNLINKED ? "" : dominant.length ? dominant.slice(0, 2).map(([t]) => t.replaceAll("-", " ")).join(" · ") : reps[0].title, size: members.length, representatives: reps.map((n) => n.id), x: center.x, y: center.y });
   }
   return { nodes: nodes.map((n) => ({ ...n, degree: graph.degree(n.id), ...positions.get(n.id)!, community: membership.get(n.id)! })).sort((a, b) => collator.compare(a.title, b.title) || collator.compare(a.id, b.id)), links, communities };
 }

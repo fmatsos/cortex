@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { layoutGraph } from "./graph-layout";
-import { packIslands } from "../site/src/lib/graph-pack";
+import { packIslands, UNLINKED } from "../site/src/lib/graph-pack";
 import { graphLinks } from "./export";
 
 const node = (id: string, type = "Concept") => ({ id, title: id, description: "", type, tags: ["topic"], degree: 0 });
@@ -40,9 +40,17 @@ test("graph layout: empty and singleton wiki, all-Source wiki", () => {
   for (const nodes of [[node("only")], [node("s1", "Source"), node("s2", "Source")]]) {
     const graph = layoutGraph({ nodes, links: [] });
     expect(graph.nodes).toHaveLength(nodes.length);
-    expect(graph.communities).toHaveLength(nodes.length);
+    expect(graph.communities).toHaveLength(1); // one page alone keeps its island, several unlinked pages share one
     expect(graph.nodes.every((n) => Number.isFinite(n.x + n.y))).toBe(true);
   }
+});
+
+test("graph layout: unlinked pages share one island, linked pages keep theirs", () => {
+  const graph = layoutGraph({ nodes: [node("a"), node("b"), node("u1"), node("u2", "Source"), node("u3")], links: graphLinks(new Set(["a\tb"])) });
+  const community = (id: string) => graph.nodes.find((n) => n.id === id)!.community;
+  expect(new Set(["u1", "u2", "u3"].map(community))).toEqual(new Set([UNLINKED]));
+  expect(community("a")).not.toBe(UNLINKED);
+  expect(graph.communities.find((c) => c.id === UNLINKED)?.size).toBe(3);
 });
 
 test("packIslands follows the frame ratio: a wide frame gets a wider layout than a square one", () => {

@@ -1,5 +1,8 @@
 /** Shelf packing of the community islands (pure, shared by the export and the browser). */
 
+/** Community id shared by the pages with no link at all: one island instead of one per page. */
+export const UNLINKED = "~unlinked";
+
 export const islandRadius = (size: number) => 45 + Math.sqrt(size) * 27;
 const GAP = 65;
 
