@@ -259,7 +259,7 @@
 	{#if open && (items.length || (!live && value.trim()))}
 		<!-- mousedown with no focus effect: the field keeps focus, so the panel does not close before the click -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="bg-popover text-popover-foreground absolute {wide ? 'inset-x-4 lg:inset-x-8' : 'inset-x-0'} z-50 mt-1.5 flex flex-col rounded-lg border p-1 shadow-lg" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
+		<div class="bg-popover text-popover-foreground absolute {wide ? 'inset-x-4 lg:inset-x-8' : 'inset-x-0'} border-input shadow-overlay z-50 mt-1.5 flex flex-col rounded-lg border p-1" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
 			{#if !live}<FilterChips value={search.q} class="px-1.5 pt-1 pb-1.5" />{/if}
 			<ul id={listId} role="listbox" aria-label={t("palette.suggestions")} class="min-h-0 flex-1 scroll-pb-10 overflow-auto">
 				{#each items as item, i (item.key)}

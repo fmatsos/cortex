@@ -45,6 +45,7 @@
 	--note-foreground: #645128;
 	--warning-background: #f6e7de;
 	--warning-foreground: #863e25;
+	--shadow-overlay: 0 1px 2px rgb(27 33 32 / 0.08), 0 8px 24px rgb(27 33 32 / 0.14);
 	--radius: 0px;
 	--trust-verified: var(--kind-add);
 	--trust-unverified: var(--muted-foreground);
@@ -101,5 +102,6 @@
 		--note-foreground: #e8d7ac;
 		--warning-background: #3c2921;
 		--warning-foreground: #f2bf9d;
+		--shadow-overlay: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px rgb(0 0 0 / 0.5);
 	}
 }

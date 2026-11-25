@@ -43,9 +43,9 @@ test("light and dark define the same tokens", () => {
   expect(Object.keys(tokens.light).length).toBeGreaterThan(30);
 });
 
-test("colors are sRGB hex, every reference resolves, no alias cycle", () => {
+test("colors are sRGB hex (shadows are box-shadow lists), every reference resolves, no alias cycle", () => {
   for (const set of [tokens.light, tokens.dark, tokens.print]) {
-    for (const [k, v] of Object.entries(set)) expect(v, k).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const [k, v] of Object.entries(set)) expect(v, k).toMatch(k.startsWith("--shadow-") ? /^0 \d+px \d+px rgb\([\d ]+ \/ [\d.]+\)(, 0 \d+px \d+px rgb\([\d ]+ \/ [\d.]+\))*$/ : /^#[0-9a-f]{6}$/i);
   }
   const all = { ...tokens.shared, ...tokens.light, ...tokens.aliases };
   for (const [k, v] of Object.entries(tokens.aliases)) {

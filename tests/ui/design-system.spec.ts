@@ -49,27 +49,37 @@ test("both palettes are shown, with contrast ratios computed from the tokens", a
 });
 
 // Every rendered element of the page's main (the closed menu included), SVG internals excepted: the four computed radii
-// are 0 and nothing casts a shadow. Computed, not read from the source, so a portal or a stylesheet cannot slip through.
+// are 0 and nothing casts a shadow, except the floating layers (popover, menu, dialog, and the static sample marked
+// data-floating), which carry --shadow-overlay. Computed, not read from the source, so a portal or a stylesheet cannot slip through.
+const FLOATING = '[popover], dialog, [role="menu"], [role="dialog"], [data-floating]';
 test("no element of the page has a radius or a shadow", async ({ page }) => {
   await page.goto(URL);
-  const bad = await page.evaluate((pending) => {
+  const bad = await page.evaluate(([pending, floating]) => {
     const out: { sel: string; radius: string; shadow: string; pending: boolean }[] = [];
     const corners = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"] as const;
     for (const el of document.querySelectorAll("main *")) {
       if (el.closest("svg")) continue;
       const s = getComputedStyle(el);
       const radius = corners.map((c) => s[c]).filter((v) => v !== "0px").join(" ");
-      const shadow = s.boxShadow !== "none" ? s.boxShadow : "";
+      const shadow = s.boxShadow !== "none" && !el.matches(floating) ? s.boxShadow : "";
       if (!radius && !shadow) continue;
       out.push({ sel: `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.split(" ").join(".") : ""}`, radius, shadow, pending: pending.some((p) => el.matches(p)) });
     }
     return { sampled: document.querySelectorAll("main *").length, out };
-  }, PENDING_SQUARE);
+  }, [PENDING_SQUARE, FLOATING] as const);
   expect(bad.sampled).toBeGreaterThan(500);
   expect(bad.out.filter((o) => !o.pending), "elements with a radius or a shadow").toEqual([]);
   expect(bad.out.filter((o) => o.shadow), "shadows").toEqual([]);
   // the known gap: remove the entry (and this assertion) when the chip is square
   expect(bad.out.filter((o) => o.pending).length, "PENDING_SQUARE entries are still round: drop the fixed ones").toBeGreaterThan(0);
+});
+
+test("the floating layer sample and the menu carry the overlay shadow, the cards stay flat", async ({ page }) => {
+  await page.goto(URL);
+  const shadow = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).boxShadow);
+  expect(await shadow("[data-floating]")).not.toBe("none");
+  expect(await shadow('[data-slot="dropdown-menu-content"]')).not.toBe("none");
+  expect(await shadow('[data-slot="card"]')).toBe("none");
 });
 
 test("the focus ring is a 2 px rectangle offset by 2 px", async ({ page }) => {

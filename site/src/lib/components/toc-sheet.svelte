@@ -20,7 +20,7 @@
 	<button
 		type="button"
 		popovertarget="toc-sheet"
-		class="bg-card text-foreground hover:bg-muted border-input fixed right-3 bottom-3 z-30 inline-flex h-11 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border px-4 text-sm font-medium shadow-md print:hidden"
+		class="bg-card text-foreground hover:bg-muted border-input shadow-overlay fixed right-3 bottom-3 z-30 inline-flex h-11 max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border px-4 text-sm font-medium print:hidden"
 	>
 		<Icon name="toc" size={20} />
 		<span>{tr("page.toc")}</span>
@@ -47,10 +47,10 @@
 		max-height: 70dvh;
 		overflow-y: auto;
 		border: 0;
-		border-top: 1px solid var(--border);
+		border-top: 1px solid var(--input);
 		border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 		padding: 1rem 1rem 1.25rem;
-		box-shadow: 0 -8px 24px color-mix(in oklch, var(--foreground) 18%, transparent);
+		box-shadow: var(--shadow-overlay);
 	}
 	.toc-sheet:popover-open {
 		display: block;

@@ -83,12 +83,12 @@
 </section>
 
 {#if favs.ids.length}
-	<section id="favorites" aria-labelledby="h-favorites" class="mt-6">
+	<section id="favorites" aria-labelledby="h-favorites" class="mt-6 flex flex-col">
 		<h2 id="h-favorites" class="anchor-target flex items-center gap-2 text-xl font-semibold"><Icon name="favorites" size={24} class="text-favorite" />{t("favs.title")} <span class="text-muted-foreground text-sm font-normal">{t("favs.count", { count: favs.ids.length })}</span></h2>
 		{#if engine}
 			<PageList pages={favDocs.slice(0, FAVS_SHOWN)} filter={false} showFav />
 			{#if favDocs.length > FAVS_SHOWN}
-				<a href={urlOf("is:fav")} class="text-link link-content mt-2 inline-flex min-h-9 items-center underline underline-offset-4">{t("favs.seeAll", { count: favDocs.length })}</a>
+				<a href={urlOf("is:fav")} class="text-link link-content mt-2 inline-flex min-h-9 items-center self-end underline underline-offset-4">{t("favs.seeAll", { count: favDocs.length })}</a>
 			{/if}
 		{:else}
 			<p class="text-muted-foreground mt-2 text-sm">{t("favs.loading")}</p>
@@ -110,13 +110,14 @@
 	<h2 {id} class="flex items-center gap-2 text-lg font-semibold"><Icon name={icon} size={20} class="text-muted-foreground" />{label}</h2>
 {/snippet}
 
-<div class="mt-6 grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+<div class="mt-6 grid items-stretch gap-6 lg:grid-cols-[3fr_2fr]">
 	{#if featured.length}
-		<section aria-labelledby="h-featured" class="bg-muted/40 border p-4">
+		<section aria-labelledby="h-featured" class="bg-muted/40 flex h-full flex-col border p-4">
 			{@render head("h-featured", "star", t("home.featured"))}
-			<ul class="divide-border mt-3 divide-y">
+			<!-- the entries share the height of the section (equal rows between the 1 px rules), whatever the column beside it holds -->
+			<ul class="divide-border mt-3 flex flex-1 flex-col divide-y">
 				{#each featured as f (f.id)}
-					<li class="py-3 first:pt-0 last:pb-0">
+					<li class="flex flex-1 flex-col justify-center py-3">
 						<a href={toPage(f.id)} class="text-link link-content flex items-start gap-2 text-lg leading-snug font-semibold tracking-tight underline-offset-4 hover:underline">
 							<Icon name={typeIcon(f.type)} size={20} class="mt-0.5 shrink-0" style="color: {typeColor(f.type)}" /><span class="min-w-0">{f.title}</span>
 						</a>
@@ -132,7 +133,7 @@
 	{/if}
 
 	{#if data.news.length}
-		<section aria-labelledby="h-news" class="border p-4">
+		<section aria-labelledby="h-news" class="flex h-full flex-col border p-4">
 			{@render head("h-news", "journal", t("home.news"))}
 			<!-- timeline: one fixed column for the kind badges (same width, left aligned), the date beside it, the pages under the date -->
 			<ul class="divide-border mt-3 divide-y">
@@ -148,14 +149,14 @@
 					</li>
 				{/each}
 			</ul>
-			<a href={toRoute("/log")} class="text-link link-content mt-3 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.news.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+			<a href={toRoute("/log")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.news.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 		</section>
 	{/if}
 
 	{#if facts.length}
-		<section aria-labelledby="h-facts" class="rounded-lg border p-4">
+		<section aria-labelledby="h-facts" class="flex h-full flex-col rounded-lg border p-4">
 			{@render head("h-facts", "note", t("home.facts"))}
-			<ul class="mt-3 list-disc space-y-2 pl-5">
+			<ul class="mt-3 flex flex-1 list-disc flex-col justify-between gap-2 pl-5">
 				{#each facts as f (f.id)}
 					<li><a href={toPage(f.id)} class="text-link link-content font-medium underline-offset-4 hover:underline">{f.title}</a>{t("common.colon")}{f.description}</li>
 				{/each}
@@ -164,29 +165,29 @@
 	{/if}
 
 	{#if data.hubs.length}
-		<section aria-labelledby="h-hubs" class="rounded-lg border p-4">
+		<section aria-labelledby="h-hubs" class="flex h-full flex-col rounded-lg border p-4">
 			{@render head("h-hubs", "graph", t("home.hubs"))}
-			<ul class="mt-3">
+			<ul class="mt-3 flex flex-1 flex-col">
 				{#each data.hubs as h (h.id)}
-					<li><a href={toPage(h.id)} class="hover:bg-muted flex min-h-9 items-center gap-2 rounded-md px-1 pointer-coarse:min-h-11">
+					<li class="flex flex-1"><a href={toPage(h.id)} class="hover:bg-muted flex min-h-9 flex-1 items-center gap-2 rounded-md px-1 pointer-coarse:min-h-11">
 						<Icon name={typeIcon(h.type)} size={16} style="color: {typeColor(h.type)}" /><span class="text-link min-w-0 truncate">{h.title}</span>
 						<span class="text-muted-foreground ml-auto shrink-0 text-sm">{t("home.links", { count: h.links })}</span>
 					</a></li>
 				{/each}
 			</ul>
-			<a href={toRoute("/graph")} class="text-link link-content mt-2 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.hubs.graph")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+			<a href={toRoute("/graph")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-2 text-sm underline-offset-4 hover:underline">{t("home.hubs.graph")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 		</section>
 	{/if}
 </div>
 
 {#if data.seed.tags.length}
-	<section aria-labelledby="h-portals" class="mt-6 rounded-lg border p-4">
+	<section aria-labelledby="h-portals" class="mt-6 flex flex-col rounded-lg border p-4">
 		{@render head("h-portals", "tags", t("home.portals"))}
 		<ul class="touch-gap mt-3 flex flex-wrap gap-2">
 			{#each data.seed.tags as tg (tg.slug)}
 				<li><a href={toTag(tg.slug)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag}<span class="text-muted-foreground">{tg.count}</span></a></li>
 			{/each}
 		</ul>
-		<a href={toRoute("/tags")} class="text-link link-content mt-3 inline-flex min-h-9 items-center gap-1 text-sm underline-offset-4 hover:underline">{t("home.portals.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
+		<a href={toRoute("/tags")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.portals.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 	</section>
 {/if}

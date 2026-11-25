@@ -86,10 +86,10 @@
 		width: min(24rem, calc(100vw - 1rem));
 		max-height: 60dvh;
 		overflow-y: auto;
-		border: 1px solid var(--border);
+		border: 1px solid var(--input);
 		border-radius: var(--radius-lg);
 		padding: 0.9rem 1rem;
-		box-shadow: 0 8px 24px color-mix(in oklch, var(--foreground) 22%, transparent);
+		box-shadow: var(--shadow-overlay);
 	}
 	.cp:popover-open {
 		display: block;

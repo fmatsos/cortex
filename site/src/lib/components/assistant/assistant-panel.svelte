@@ -205,6 +205,11 @@
 	.assistant:not(:modal) {
 		width: var(--assistant-width, 28rem);
 	}
+	/* the modal drawer floats over the page: shadow and a stronger edge; the docked panel stays flat */
+	.assistant:modal {
+		border-left-color: var(--input);
+		box-shadow: var(--shadow-overlay);
+	}
 	.assistant::backdrop {
 		background: color-mix(in oklch, var(--foreground) 30%, transparent);
 	}
