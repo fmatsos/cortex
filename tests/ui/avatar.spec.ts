@@ -85,8 +85,8 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const waiting = page.locator("#assistant-panel article svg.folio");
     await expect(waiting).toHaveAttribute("data-state", "pending");
     await expect(waiting).toHaveAttribute("aria-hidden", "true");
-    // pending moves only when motion is welcome; the cursor steps, it does not glide
-    await expect.poll(() => running(page)).toBe(still ? 0 : 2);
+    // pending moves only when motion is welcome (header button, panel head, waiting turn); the cursor steps, it does not glide
+    await expect.poll(() => running(page)).toBe(still ? 0 : 3);
     if (!still) expect(await waiting.locator(".cursor").evaluate((el) => getComputedStyle(el).animationTimingFunction)).toMatch(/^steps\(1/);
     // the state text stays in the panel
     await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);

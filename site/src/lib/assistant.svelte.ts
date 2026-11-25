@@ -34,6 +34,8 @@ class Assistant {
 	open = $state(false);
 	turns = $state<Turn[]>([]);
 	draft = $state("");
+	/** Bumped when the panel must take focus on its question field (entry points outside the panel). */
+	focusSeq = $state(0);
 	private probed = false;
 	private next = 1;
 
@@ -60,11 +62,21 @@ class Assistant {
 
 	setOpen(open: boolean) { this.open = open; this.save(); }
 
+	/** Opens the panel with `question` as the draft, ready to confirm with Enter: never sent. Empty: opens, keeps the draft. */
+	prefill(question: string) {
+		const q = question.trim();
+		if (q) this.draft = q;
+		this.open = true;
+		this.focusSeq++;
+		this.save();
+	}
+
 	/** Sends a question; false when it is not sent (empty, another one pending, too long: then the turn says why). */
 	ask(question: string): boolean {
 		const q = question.trim();
 		if (!q || this.pending) return false;
 		this.open = true;
+		this.focusSeq++;
 		const turn: Turn = { id: this.next++, q, pending: q.length <= MAX_QUESTION, error: q.length > MAX_QUESTION ? "invalid" : undefined };
 		// the earlier turns that got an answer: what the agent needs to understand a follow-up
 		const history = this.turns.flatMap((t) => (t.answer ? [{ role: "user", text: t.q }, { role: "assistant", text: t.answer.md }] : []));

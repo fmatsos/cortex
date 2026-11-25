@@ -20,6 +20,8 @@
 	import { toRoute } from "#lib/links.js";
 	import { ensureSymbols } from "#lib/icons.js";
 	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
+	import AssistantAvatar from "#lib/components/assistant/assistant-avatar.svelte";
+	import { Button } from "#lib/components/ui/button/index.js";
 	import { assistant } from "#lib/assistant.svelte.js";
 
 	let { children, data } = $props();
@@ -96,16 +98,22 @@
 			{/each}
 			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only @xl:not-sr-only">{t("favs.title")}</span></a>
 		</nav>
-		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full @5xl:ml-auto @5xl:basis-auto @5xl:flex-1'}">
-			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
+		<div class="flex flex-wrap items-center gap-2 @5xl:flex-nowrap {pageSearch ? 'ml-auto' : 'basis-full @5xl:ml-auto @5xl:basis-auto @5xl:flex-1'}">
+			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-[1_1_12rem] @5xl:flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
 			{#if assistant.api}
-				<!-- icon only: beside the docked panel the header has less room than the viewport width says -->
-				<button type="button" id="assistant-toggle" class="bg-card border-input hover:bg-background inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11 {assistant.open ? 'bg-background' : ''}"
-					aria-label={t("assistant.title")} aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" title="{t('assistant.title')} (Ctrl I)"
-					onclick={() => assistant.setOpen(!assistant.open)}><Icon name="kind-query" size={20} /></button>
+				<!-- label from the header's own width (@container): beside the docked panel the header has less room than the viewport
+				     says; narrow, only the avatar stays and the label stays as the accessible name -->
+				<Button id="assistant-toggle" variant="outline" class="gap-2 px-2 @6xl:px-3 [&_svg:not([class*='size-'])]:size-5" aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" title="{t('assistant.title')} (Ctrl I)"
+					onclick={() => assistant.setOpen(!assistant.open)}>
+					<AssistantAvatar state={assistant.pending ? "pending" : "idle"} size={20} /><span class="sr-only @6xl:not-sr-only">{t("assistant.title")}</span>
+				</Button>
 			{/if}
-			<ThemeSwitch />
-			<LangSwitch />
+			<!-- preferences: apart from the search and the assistant by a rule, or on a line of their own when the header is narrow -->
+			<div class="flex flex-wrap items-center gap-2">
+				{#if assistant.api}<span class="bg-border mr-1 hidden h-5 w-px shrink-0 @xl:block" aria-hidden="true"></span>{/if}
+				<ThemeSwitch />
+				<LangSwitch />
+			</div>
 		</div>
 	</div>
 </header>
@@ -119,6 +127,7 @@
 		<p>
 			<a href={toRoute("/")} class="text-foreground font-semibold tracking-tight">Cortex</a>
 			{#if f}<span aria-hidden="true">&nbsp;·&nbsp;</span>{t("footer.generated")} <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>{/if}
+			<span aria-hidden="true">&nbsp;·&nbsp;</span><a href={toRoute("/design-system")} class="hover:text-foreground">{t("footer.designSystem")}</a>
 		</p>
 		<!-- the layout data is absent on the static 404 fallback (no __data.json): the stats are skipped there -->
 		{#if f}<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label={t("footer.stats")}>

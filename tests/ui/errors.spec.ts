@@ -13,6 +13,8 @@ const errorPage = async (page: import("@playwright/test").Page) => {
   await expect(page.locator("#error-title")).toBeVisible();
   await expect(page.locator("#error-title")).not.toBeEmpty();
   await expect(page.getByRole("main").getByRole("combobox")).toBeVisible();
+  // the footer link to the style guide does not depend on the layout data (absent on the 404 fallback)
+  await expect(page.getByRole("contentinfo").getByRole("link", { name: "Design system" })).toHaveAttribute("href", /design-system\/$/);
   for (const to of ["tags/", "log/", "graph/", "/"]) {
     await expect(page.getByRole("main").locator(`a[href$="${to}"]`).first()).toBeVisible();
   }
