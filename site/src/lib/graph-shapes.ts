@@ -12,11 +12,11 @@ export const shapeOf = (type: string): Shape => SHAPE_OF[type] ?? "circle";
 export const SHAPE_LABEL: Record<Shape, string> = { get circle() { return t("shape.circle"); }, get square() { return t("shape.square"); }, get diamond() { return t("shape.diamond"); }, get triangle() { return t("shape.triangle"); } };
 
 /** Radius factor: at comparable area, a square or triangle inscribed in the same radius would look smaller than a circle. */
-const SCALE: Record<Shape, number> = { circle: 1, square: 0.9, diamond: 1.2, triangle: 1.25 };
+export const SHAPE_SCALE: Record<Shape, number> = { circle: 1, square: 0.9, diamond: 1.2, triangle: 1.25 };
 
 /** Vertices of the polygon of a shape centered at (cx, cy) for a radius r; `null` for the circle (drawn by an arc). */
 export function shapePoints(shape: Shape, cx: number, cy: number, r: number): Pt[] | null {
-	const k = r * SCALE[shape];
+	const k = r * SHAPE_SCALE[shape];
 	switch (shape) {
 		case "circle": return null;
 		case "square": return [[cx - k, cy - k], [cx + k, cy - k], [cx + k, cy + k], [cx - k, cy + k]];

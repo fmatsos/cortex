@@ -1,11 +1,4 @@
-/** Pure graph logic (tested by bun test): bounded node size and collision-free label selection. */
-
-/** Radius of a node in screen pixels: proportional to the zoom, but bounded to stay readable, whatever the zoom. */
-export const screenRadius = (degree: number, k: number) =>
-	Math.min(14, Math.max((2.5 + Math.sqrt(degree) * 1.7) * k, 2.5 + Math.sqrt(degree) * 0.5));
-
-/** Maximum number of labels: proportional to the visible area, and growing with the zoom (never more than 150). */
-export const labelBudget = (w: number, h: number, k: number) => Math.min(150, Math.ceil(((w * h) / 14000) * Math.max(1, k)));
+/** Pure graph logic (tested by bun test): truncation and collision-free label selection. */
 
 /**
  * Shortens `text` so that it fits in `maxWidth` pixels (UI18): cuts at the last length that fits, followed by "…".
@@ -21,7 +14,7 @@ export function truncateToWidth(text: string, maxWidth: number, measure: (s: str
 	return lo > 0 ? `${text.slice(0, lo).trimEnd()}…` : "…";
 }
 
-export type Rect ={ x: number; y: number; w: number; h: number; force?: boolean };
+export type Rect = { x: number; y: number; w: number; h: number; force?: boolean };
 
 const CELL = 96;
 

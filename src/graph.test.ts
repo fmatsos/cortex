@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import { truncateToWidth } from "../site/src/lib/graph-labels";
 import {
-  AMBIENT_MAX_LINKS, buildView, createTimer, particleCount, reconcileSelection, relationIndex, relationsOf, resolveFocus, searchNodes, simLinks,
+  buildView, focusNodes, gestureNodes, reconcileSelection, relationIndex, relationsOf, resolveFocus, searchNodes,
   type GNode,
 } from "../site/src/lib/graph-model";
 import { shapeOf, shapePoints, starPoints, svgPoints } from "../site/src/lib/graph-shapes";
 
-const node = (id: string, type = "Concept", tags: string[] = [], title = id): GNode => ({ id, title, description: "", type, tags, degree: 99 });
+const node = (id: string, type = "Concept", tags: string[] = [], title = id): GNode => ({ id, title, description: "", type, tags, degree: 99, x: 0, y: 0, community: "test" });
 const NODES = [
   node("concepts/a", "Concept", ["benchmark", "llm"], "Context rot"),
   node("concepts/b", "Concept", ["llm"], "Context engineering"),
@@ -78,7 +78,7 @@ test("relationsOf : cite / cité par, et un lien réciproque compte dans les deu
   expect(relationsOf("sources/e", LINKS)).toEqual({ cites: [], citedBy: [] });
 });
 
-test("relationsOf : accepte des extrémités devenues des objets (force-graph)", () => {
+test("relationsOf : accepte des extrémités représentées par des objets", () => {
   expect(relationsOf("a", [{ source: { id: "a" }, target: { id: "b" } }])).toEqual({ cites: ["b"], citedBy: [] });
 });
 
@@ -90,26 +90,6 @@ test("relationIndex : mêmes relations que relationsOf, pour toutes les pages", 
     expect([...idx.get(n.id)!.cites].sort()).toEqual([...r.cites].sort());
     expect([...idx.get(n.id)!.citedBy].sort()).toEqual([...r.citedBy].sort());
   }
-});
-
-test("simLinks : un lien réciproque reçoit un jumeau inverse, les autres gardent leur sens", () => {
-  const out = simLinks(LINKS);
-  expect(out).toHaveLength(5);
-  expect(out.filter((l) => l.twin)).toEqual([{ source: "entities/c", target: "concepts/b", twin: true }]);
-  expect(out[0]).toEqual({ source: "concepts/a", target: "concepts/b" }); // source → target: the direction of the particles
-  expect(out.find((l) => l.source === "sources/d" && l.target === "concepts/a")).toBeDefined();
-  expect(out.find((l) => l.source === "concepts/a" && l.target === "sources/d")).toBeUndefined();
-});
-
-test("particleCount : voisinage en valeur, ambiance, mouvement réduit, pause", () => {
-  const base = { calm: false, paused: false, hot: false, dim: false, linkCount: 10 };
-  expect(particleCount({ ...base, hot: true })).toBe(3);
-  expect(particleCount(base)).toBe(1);
-  expect(particleCount({ ...base, dim: true })).toBe(0); // a neighborhood is isolated: the rest goes quiet
-  expect(particleCount({ ...base, linkCount: AMBIENT_MAX_LINKS + 1 })).toBe(0);
-  expect(particleCount({ ...base, linkCount: AMBIENT_MAX_LINKS + 1, hot: true })).toBe(3);
-  expect(particleCount({ ...base, calm: true, hot: true })).toBe(0); // prefers-reduced-motion
-  expect(particleCount({ ...base, paused: true, hot: true })).toBe(0);
 });
 
 // --- UX32: node search and ?focus= ---
@@ -134,39 +114,6 @@ test("resolveFocus : id connu, normalisé ; inconnu ; absent", () => {
   expect(resolveFocus("?focus=concepts/zzz", NODES)).toEqual({ id: null, asked: "concepts/zzz" });
   expect(resolveFocus("?focus=", NODES)).toEqual({ id: null, asked: null });
   expect(resolveFocus("", NODES)).toEqual({ id: null, asked: null });
-});
-
-// --- UI06 / UX34: a single deferred refit, cancelable ---
-
-test("createTimer : reprogrammer annule le précédent ; cancel l'annule ; l'échéance s'exécute une fois", () => {
-  const pending = new Map<number, () => void>();
-  let next = 1;
-  const set = (fn: () => void) => { pending.set(next, fn); return next++; };
-  const clear = (h: number) => { pending.delete(h); };
-  const t = createTimer(set, clear);
-  const ran: string[] = [];
-  t.schedule(() => ran.push("a"), 700);
-  t.schedule(() => ran.push("b"), 700);
-  expect(pending.size).toBe(1);
-  expect(t.pending).toBe(true);
-  t.cancel(); // manual interaction or unmount
-  expect(pending.size).toBe(0);
-  expect(t.pending).toBe(false);
-  t.cancel(); // no effect
-  t.schedule(() => ran.push("c"), 700);
-  [...pending.values()][0]();
-  expect(ran).toEqual(["c"]);
-  expect(t.pending).toBe(false);
-});
-
-test("createTimer : avec de vraies minuteries, l'annulation empêche l'exécution", async () => {
-  const t = createTimer();
-  let n = 0;
-  t.schedule(() => n++, 5);
-  t.cancel();
-  t.schedule(() => n++, 5);
-  await Bun.sleep(30);
-  expect(n).toBe(1);
 });
 
 // --- UI18: title truncated to the width ---
@@ -222,4 +169,25 @@ test("graph-view : l'effet de filtrage n'appelle apply() que sous untrack, avec 
   const effect = src.match(/\$effect\(\(\) => \{[\s\S]*?\n\t\}\);/)![0];
   expect(effect).toContain("untrack(() => apply?.(v))");
   expect(effect).not.toMatch(/\bsel\b/);
+});
+
+test("focusNodes: camera limits hubs without removing any visible relations", () => {
+  const center = node("center");
+  const peers = Array.from({ length: 50 }, (_, i) => ({ ...node(`n${i}`), x: i + 1 }));
+  const view = buildView({ nodes: [center, ...peers], links: peers.map((p) => ({ source: center.id, target: p.id })) }, { off: new Set(), tag: "" });
+  expect(focusNodes(center.id, view)).toHaveLength(31);
+  expect(focusNodes(center.id, view).at(-1)!.x).toBe(30);
+  expect(view.links).toHaveLength(50);
+  expect(focusNodes("missing", view)).toEqual([]);
+});
+
+test("gestureNodes: bounded landmarks preserve the focus and communities without changing the scope", () => {
+  const nodes = Array.from({ length: 2000 }, (_, i) => ({ ...node(`n${i}`), degree: i % 80, community: `c${i % 65}` }));
+  const view = { nodes, links: [], ids: new Set(nodes.map((n) => n.id)) };
+  const focus = new Set(["n0", "n100", "missing"]), kept = gestureNodes(view, focus);
+  expect(kept.size).toBe(120);
+  expect(kept.has("n0") && kept.has("n100")).toBe(true);
+  expect(kept.has("missing")).toBe(false);
+  expect(new Set(nodes.filter((n) => kept.has(n.id)).map((n) => n.community)).size).toBe(65);
+  expect(view.nodes).toHaveLength(2000);
 });

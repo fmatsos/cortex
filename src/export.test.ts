@@ -113,6 +113,8 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   expect(graph.links).toHaveLength(3); // a-b (links in both directions: a single edge), a-c, s-a
   expect(graph.links.filter((l: any) => [l.source, l.target].sort().join() === "concepts/a,concepts/b")).toHaveLength(1);
   expect(graph.links.some((l: any) => l.target === "concepts/absent")).toBe(false);
+  expect(graph.nodes.every((n: any) => Number.isFinite(n.x) && Number.isFinite(n.y) && graph.communities.some((c: any) => c.id === n.community))).toBe(true);
+  expect(graph.communities.reduce((sum: number, c: any) => sum + c.size, 0)).toBe(4);
 
   const idx = JSON.parse(html("search-index.json"));
   const s = idx.docs.find((d: any) => d.id === "sources/s");
