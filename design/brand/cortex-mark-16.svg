@@ -1,31 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32" role="img" aria-labelledby="t">
   <title id="t">Cortex</title>
-  <!-- Master drawing of the Cortex mark, 16-unit grid (favicon and sizes under 24 px): the same silhouette as cortex-mark.svg reduced to six nodes, three ink ones and the three of the prefrontal cluster in the accent colour, a stub below the bottom node for the stem. Nodes 2.3 units across (front 2.5), links 1, no element touches. Butt ends, mitered joins, no curved link. Idle composition. Source of truth for the data: assistant-avatar.svelte. -->
+  <!-- Idle brain graph, front facing right. Geometry: OPTICS.tiny in assistant-avatar.svelte. -->
   <style>
     svg { color: #1b2120; --primary: #245849 }
     @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
-    .links { fill: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter }
+    .links { fill: none; stroke-width: 0.65; stroke-linecap: butt; stroke-linejoin: miter }
   </style>
   <g class="links" stroke="currentColor">
-    <path d="M2 7L6 2"/>
-    <path d="M6 2L10 1.5L12.5 4"/>
-    <path d="M2 7L2 10.5L4.5 12.5L7.5 12.5"/>
-    <path d="M7.5 12.5L11 12.5L13.5 11L14 8.5"/>
-    <path d="M7.5 12.5L7.5 15"/>
-    <path d="M6 2L9.5 8"/>
+    <polyline points="1.5,7 2.5,4.5 4.5,2.5 7.5,2"/>
+    <polyline points="7.5,2 9.5,2.5 11.5,3.5"/>
+    <polyline points="1.5,7 1.5,8.5 2,9.5 3,10.5"/>
+    <polyline points="3,10.5 4,12.5 4.5,14.5 7,11.5"/>
+    <polyline points="3,10.5 7,11.5"/>
+    <polyline points="7,11.5 9,11 10,10.5 10.5,9.5"/>
+    <polyline points="1.5,7 10.5,9.5"/>
   </g>
   <g class="links" stroke="var(--primary)">
-    <path d="M12.5 4L14 8.5"/>
-    <path d="M9.5 8L14 8.5"/>
+    <polyline points="11.5,3.5 13.5,5 14.5,7"/>
+    <polyline points="14.5,7 13.5,9 12,9.5 10.5,9.5"/>
+    <polyline points="11.5,3.5 10.5,9.5"/>
+    <polyline points="10.5,9.5 14.5,7"/>
   </g>
   <g fill="currentColor">
-    <circle cx="2" cy="7" r="1.15"/>
-    <circle cx="6" cy="2" r="1.15"/>
-    <circle cx="7.5" cy="12.5" r="1.15"/>
+    <circle cx="1.5" cy="7" r="0.65"/>
+    <circle cx="7.5" cy="2" r="0.65"/>
+    <circle cx="3" cy="10.5" r="0.65"/>
+    <circle cx="7" cy="11.5" r="0.65"/>
   </g>
   <g fill="var(--primary)">
-    <circle cx="12.5" cy="4" r="1.25"/>
-    <circle cx="14" cy="8.5" r="1.25"/>
-    <circle cx="9.5" cy="8" r="1.25"/>
+    <circle cx="11.5" cy="3.5" r="0.7"/>
+    <circle cx="14.5" cy="7" r="0.7"/>
+    <circle cx="10.5" cy="9.5" r="0.7"/>
   </g>
 </svg>

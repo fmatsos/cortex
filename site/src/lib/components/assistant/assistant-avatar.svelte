@@ -1,46 +1,39 @@
 <script module lang="ts">
 	export type AvatarState = "idle" | "pending" | "answer" | "error";
 
-	// One drawing at every size: a brain in side profile (front facing right) drawn as a knowledge graph. Eight round nodes
-	// (five ink ones, the last of them the stem, and the three of the prefrontal cluster in the accent colour) joined by straight
-	// links; the outer links draw the silhouette, three inner links tie the back to the cluster. There are two optical sizes of
-	// the same drawing, never two drawings: `mark` on a 32-unit grid (from 24 px, one unit is one pixel at 32 px) and `tiny` on a
-	// 16-unit grid (under 24 px, also the favicon) that keeps the silhouette and the cluster and drops what no longer fits.
-	// Nodes are small filled circles (the brand mark's one exception to the square system), links stay straight.
-	//
-	// vb: grid; sw: link width; r: ink node radius; rf: front node radius; grow: front node radius once answered;
-	// nodes: centres; front: the nodes of the prefrontal cluster (accent colour); links: polylines, a point is a node index or
-	// a [x, y] bend, f marks a link of the cluster; path: the nodes the pending signal walks through, from the back of the brain
-	// into the cluster; cut: the two nodes of the straight link that breaks in the error state, gap: length of the break along
-	// that link, rb: radius of the dot in the break.
-	// Clear space, checked in the review sheet at 8x: at 32 px at least 2.5 units between any node and any link that does not
-	// end on it, or any other node (the tightest place is the stem, 2.5 below the bottom node); at 16 px at least 2 units
-	// at rest and 1.3 once the cluster has grown.
+	// Side-profile brain, front facing right. The contour and triangulation follow the brand reference.
+	// One 32-unit drawing from 24 px up; the 16-unit favicon drops the central hub and stem node.
+	// All coordinates are on half units. Filled circles are the brand's exception to the square UI.
+	// p: node indices or contour bends; f: accent link; cut/gap/rb: broken link and error dot;
+	// path: connected nodes followed by the pending signal; grow: answered front-node radius.
 	type Pt = number | [number, number];
 	type Link = { p: Pt[]; f?: true };
 	type Optic = { vb: number; sw: number; r: number; rf: number; grow: number; gap: number; rb: number; cut: [number, number]; nodes: [number, number][]; front: number[]; links: Link[]; path: number[] };
 	export const OPTICS: Record<"mark" | "tiny", Optic> = {
-		// 0 back, 1 top-back, 2 top, 3 bottom (the stem hangs from it), 4 stem; 5 front-top, 6 front, 7 inside the cluster
+		// 0 back, 1 upper back, 2 crown, 3 temporal back, 4 hub, 5 temporal bottom, 6 stem;
+		// 7 frontal top, 8 frontal hub, 9 frontal tip, 10 frontal bottom.
 		mark: {
-			vb: 32, sw: 1.3, r: 1.5, rf: 1.75, grow: 2.25, gap: 7, rb: 1.5, cut: [1, 7], path: [1, 7, 6], front: [5, 6, 7],
-			nodes: [[3.5, 14.5], [9.5, 6.5], [18.5, 4], [15.5, 24.5], [15, 30], [26, 8], [29.5, 16], [21, 15]],
+			vb: 32, sw: 0.65, r: 1.25, rf: 1.3, grow: 1.6, gap: 4, rb: 0.65, cut: [1, 4], path: [0, 4, 8, 9], front: [7, 8, 9, 10],
+			nodes: [[2.5, 14], [6.5, 7], [15.5, 3.5], [5.5, 20.5], [12, 13], [13.5, 22], [11, 27], [23.5, 6], [19, 9.5], [29.5, 13], [21, 18]],
 			links: [
-				{ p: [0, 1] }, { p: [1, 2] }, { p: [2, 5] },
-				{ p: [0, [4, 20], [8, 24], 3] }, { p: [3, [21.5, 24], [27, 20.5], 6] }, { p: [3, 4] },
-				{ p: [1, 7] },
-				{ p: [5, 6], f: true }, { p: [7, 5], f: true }, { p: [7, 6], f: true },
+				{ p: [0, [3.5, 10], 1] }, { p: [1, [10.5, 4.5], 2] }, { p: [2, [19.5, 4.5], 7] },
+				{ p: [0, [2.5, 17], [3.5, 18.5], 3] }, { p: [3, [7.5, 23.5], [10.5, 24.5], 6] }, { p: [6, 5] },
+				{ p: [5, [15, 22.5], [18.5, 21.5], [20, 20.5], 10] },
+				{ p: [1, 4] }, { p: [2, 4] }, { p: [0, 4] }, { p: [3, 4] }, { p: [3, 5] }, { p: [4, 10] },
+				{ p: [7, [27.5, 9], 9], f: true }, { p: [9, [28, 16.5], [25.5, 18], 10], f: true },
+				{ p: [4, 8], f: true }, { p: [8, 7], f: true }, { p: [8, 9], f: true }, { p: [8, 10], f: true }, { p: [10, 9], f: true },
 			],
 		},
-		// 0 back, 1 top, 2 bottom (a stub below it is the stem); 3 front-top, 4 front, 5 inside the cluster. One inner link fewer
-		// than the mark (the cluster is a chain, not a triangle) and no stubs when the break opens: the gap swallows the link.
+		// 0 back, 1 crown, 2 temporal back, 3 temporal bottom; 4 frontal top, 5 tip, 6 frontal bottom.
 		tiny: {
-			vb: 16, sw: 1, r: 1.15, rf: 1.25, grow: 1.6, gap: 5.6, rb: 0.85, cut: [1, 5], path: [1, 5, 4], front: [3, 4, 5],
-			nodes: [[2, 7], [6, 2], [7.5, 12.5], [12.5, 4], [14, 8.5], [9.5, 8]],
+			vb: 16, sw: 0.65, r: 0.65, rf: 0.7, grow: 0.85, gap: 4.5, rb: 0.45, cut: [0, 6], path: [0, 6, 5], front: [4, 5, 6],
+			nodes: [[1.5, 7], [7.5, 2], [3, 10.5], [7, 11.5], [11.5, 3.5], [14.5, 7], [10.5, 9.5]],
 			links: [
-				{ p: [0, 1] }, { p: [1, [10, 1.5], 3] },
-				{ p: [0, [2, 10.5], [4.5, 12.5], 2] }, { p: [2, [11, 12.5], [13.5, 11], 4] }, { p: [2, [7.5, 15]] },
-				{ p: [1, 5] },
-				{ p: [3, 4], f: true }, { p: [5, 4], f: true },
+				{ p: [0, [2.5, 4.5], [4.5, 2.5], 1] }, { p: [1, [9.5, 2.5], 4] },
+				{ p: [0, [1.5, 8.5], [2, 9.5], 2] }, { p: [2, [4, 12.5], [4.5, 14.5], 3] },
+				{ p: [2, 3] }, { p: [3, [9, 11], [10, 10.5], 6] }, { p: [0, 6] },
+				{ p: [4, [13.5, 5], 5], f: true }, { p: [5, [13.5, 9], [12, 9.5], 6], f: true },
+				{ p: [4, 6], f: true }, { p: [6, 5], f: true },
 			],
 		},
 	};
@@ -49,7 +42,7 @@
 <script lang="ts">
 	// The assistant's avatar and the brand mark (master drawings: design/brand/cortex-mark.svg and cortex-mark-16.svg).
 	// Decorative: the state is told by the panel's text. Colours come from the tokens (currentColor, --primary, --destructive).
-	// Butt ends, mitered joins, no curved link.
+	// Butt ends, mitered joins, straight links.
 	//
 	//   idle      still
 	//   pending   a signal steps along the links from the back of the brain into the cluster; only while pending
@@ -62,13 +55,11 @@
 	const optic = $derived(size < 24 ? "tiny" : "mark");
 	const o = $derived(OPTICS[optic]);
 	const at = (p: Pt): [number, number] => (typeof p === "number" ? o.nodes[p] : p);
-	const d = (l: Link) => l.p.map((p, i) => `${i ? "L" : "M"}${at(p).join(" ")}`).join("");
+	const points = (l: Link) => l.p.map((p) => at(p).join(",")).join(" ");
 	const broken = (l: Link) => l.p.length === 2 && l.p[0] === o.cut[0] && l.p[1] === o.cut[1];
 	const ink = $derived(o.links.filter((l) => !l.f));
 	const front = $derived(o.links.filter((l) => l.f));
 	const isFront = (i: number) => o.front.includes(i);
-	// large sizes thin the links a little: the same nodes, a finer line
-	const sw = $derived(size >= 64 ? o.sw * 0.8 : size >= 40 ? o.sw * 0.9 : o.sw);
 
 	// the pending signal rests on each node of the path and on one or two points between them (up to eight resting places)
 	const stops = $derived.by(() => {
@@ -82,7 +73,7 @@
 		while (all.length < 8) all.push(all[all.length - 1]);
 		return all;
 	});
-	const vars = $derived(stops.map(([x, y], i) => `--x${i}:${x}px;--y${i}:${y}px`).join(";") + `;--sx:${stops[2][0]}px;--sy:${stops[2][1]}px;--sw:${sw};--grow:${o.grow / o.rf}`);
+	const vars = $derived(stops.map(([x, y], i) => `--x${i}:${x}px;--y${i}:${y}px`).join(";") + `;--sx:${stops[1][0]}px;--sy:${stops[1][1]}px;--sw:${o.sw};--grow:${o.grow / o.rf}`);
 
 	// the broken link: two stubs and, between them, the break mark
 	const brk = $derived.by(() => {
@@ -97,11 +88,11 @@
 
 <svg class="folio" data-state={state} data-optic={optic} viewBox="0 0 {o.vb} {o.vb}" width={size} height={size} focusable="false" aria-hidden="true" style={vars}>
 	<g class="links ink">
-		{#each ink as l, i (i)}{#if state !== "error" || !broken(l)}<path d={d(l)} />{/if}{/each}
-		{#if state === "error"}<path d="M{brk.a.join(" ")}L{brk.s1.join(" ")}M{brk.s2.join(" ")}L{brk.b.join(" ")}" />{/if}
+		{#each ink as l, i (i)}{#if state !== "error" || !broken(l)}<polyline points={points(l)} />{/if}{/each}
+		{#if state === "error"}<polyline points="{brk.a.join(",")} {brk.s1.join(",")}" /><polyline points="{brk.s2.join(",")} {brk.b.join(",")}" />{/if}
 	</g>
 	<g class="links front">
-		{#each front as l, i (i)}<path d={d(l)} />{/each}
+		{#each front as l, i (i)}<polyline points={points(l)} />{/each}
 	</g>
 	<g class="nodes ink">
 		{#each o.nodes as [x, y], i (i)}
@@ -113,7 +104,7 @@
 			{#if isFront(i)}<circle class="nf" cx={x} cy={y} r={o.rf} />{/if}
 		{/each}
 	</g>
-	{#if state === "pending"}<circle class="signal" cx="0" cy="0" r={o.r} />{/if}
+	{#if state === "pending"}<circle class="signal" cx="0" cy="0" r={o.rb} />{/if}
 	{#if state === "error"}<circle class="break" cx={brk.m[0]} cy={brk.m[1]} r={o.rb} />{/if}
 </svg>
 
@@ -165,7 +156,7 @@
 
 	@media (prefers-reduced-motion: no-preference) {
 		[data-state="pending"] .signal {
-			animation: walk 4s step-end infinite;
+			animation: walk 4s steps(1, end) infinite;
 		}
 		[data-state="answer"] .nf {
 			animation: settle 0.5s steps(2, end) both;
