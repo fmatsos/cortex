@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { openWiki, type Wiki } from "./context";
-import { nearest } from "./embed";
+import { embedProfile, nearest } from "./embed";
 import { clip, judge, judgeConfig } from "./judge";
 import { serializeDoc, slugify } from "./lib";
 import { LIMITS } from "./limits";
@@ -32,6 +32,7 @@ export function nearTitle(a: string, b: string): boolean {
 async function nearDuplicate(root: string, pages: { path: string; fm: Record<string, unknown> }[], type: string, title: string, description: string): Promise<{ refuse: boolean; near: { path: string; title: string; score: number }[] } | undefined> {
   const jc = await judgeConfig(root), n = jc?.dupCandidates ?? LIMITS.dupCandidates, yes = jc?.dupYes ?? LIMITS.dupJudge;
   const hits = await nearest(root, `${title}\n${description}`, n * 5, false);
+  const dups = (await embedProfile(root))?.dups ?? { cosine: LIMITS.dupCosine, warn: LIMITS.dupWarn };
   const byPath = new Map(pages.map((d) => [d.path, d]));
   const near = (hits ?? []).filter((h) => byPath.get(h.path)?.fm.type === type).slice(0, n)
     .map((h) => ({ ...h, title: String(byPath.get(h.path)!.fm.title ?? h.path), description: String(byPath.get(h.path)!.fm.description ?? "") }));
@@ -44,10 +45,10 @@ async function nearDuplicate(root: string, pages: { path: string; fm: Record<str
     const picked = near[Number(a.choice.slice(1)) - 1];
     if (picked && a.probabilities[a.choice] >= yes) return { refuse: true, near: [picked] };
     if (!picked && a.probabilities.none >= yes) return; // judged different from all of them
-    return { refuse: false, near: near.filter((n) => n.score >= LIMITS.dupWarn) };
+    return { refuse: false, near: near.filter((n) => n.score >= dups.warn) };
   }
-  if (near[0].score >= LIMITS.dupCosine) return { refuse: true, near: near.filter((n) => n.score >= LIMITS.dupCosine) };
-  return { refuse: false, near: near.filter((n) => n.score >= LIMITS.dupWarn) };
+  if (near[0].score >= dups.cosine) return { refuse: true, near: near.filter((n) => n.score >= dups.cosine) };
+  return { refuse: false, near: near.filter((n) => n.score >= dups.warn) };
 }
 
 /**

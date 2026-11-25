@@ -2,7 +2,10 @@
   "compilerOptions": {
     "target": "ESNext", "module": "Preserve", "moduleResolution": "bundler",
     "strict": true, "noEmit": true, "skipLibCheck": true, "types": ["bun"],
-    "paths": { "#payload": ["./build/payload.ts"] } // written by scripts/build.sh; declared in src/assets.d.ts when absent
+    "paths": {
+      "#payload": ["./build/payload.ts"], "#native": ["./build/native.ts"], // written by scripts/build.sh; declared in src/assets.d.ts when absent
+      "sharp": ["./src/stubs/sharp.ts"] // transformers.js loads it for images only: the binary carries this stub instead
+    }
   },
   "exclude": ["node_modules", "site"] // le site a son propre tsconfig ; seuls les modules qu'export.ts importe sont vérifiés ici
 }

@@ -163,7 +163,7 @@ Fix what is mechanical. **Propose** to the human what needs judgment (merge, dep
 ```
 cortex add <url|file|-> [--note "why I keep this"] [--dry-run]         # → raw/, status: pending, Add entry in the journal
 cortex inbox [--dry-run]                                             # add on inbox/ (urls.txt, files), then empties it
-cortex search "<terms>" [--in wiki|raw] [--json] [--limit N]         # BM25, wiki first
+cortex search "<terms>" [--in wiki|raw] [--json] [--limit N]         # hybrid (words, title typos, meaning if configured), wiki first
 cortex index                                                         # regenerates wiki/index.md and wiki/log.md
 cortex new <Source|Concept|Entity|Synthesis> "<title>"               # creates the page (draft) per page_path, prints its path
 cortex log [--limit N] [--json] [--kind k]                           # reads the journal, newest first

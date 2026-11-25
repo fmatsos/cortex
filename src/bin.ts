@@ -1,11 +1,13 @@
 // Entry point of the distributed builds only (scripts/build.sh): the compiled binary and the cortex.js bundle.
 // Embeds the sources tarball (base64, so the bundle stays one file too), records the distribution, then runs the CLI.
+import native from "#native";
 import payload from "#payload";
 import pkg from "../package.json";
 
 declare const CORTEX_DIST_BUILD: "binary" | "bundle"; // set by `bun build --define`
 
 globalThis.CORTEX_PAYLOAD = payload;
+globalThis.CORTEX_NATIVE = native; // the sqlite-vec extension and the ONNX runtime of this platform, when the build carries them (src/native.ts)
 globalThis.CORTEX_DIST = CORTEX_DIST_BUILD;
 // cortex.js runs on the user's bun: refuse an older one with a clear message rather than a cryptic failure later
 if (!Bun.semver.satisfies(Bun.version, pkg.engines.bun)) {
