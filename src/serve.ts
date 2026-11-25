@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
+import type { Subprocess } from "bun";
 import { openWiki } from "./context";
-import { exportSite } from "./export";
 import { answerSegments, blockRegistry } from "./answer-blocks";
 import { EXTRA_TOOLS, type Check } from "./backends/backend";
 import { pageId } from "./doc";
@@ -22,14 +23,24 @@ import { loadConfig } from "./config";
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
  * `sync`, the wiki is a git checkout kept in step with its remote: pull before a write, commit and push after it,
  * and `POST /api/sync` (loopback only: the CI, after its own push) pulls and rebuilds. The site is rebuilt after
- * every change into the other of two folders, then swapped; requests keep the previous build meanwhile.
+ * every change into the other of two folders, then swapped; requests keep the previous build meanwhile. The build (Vite and the
+ * prerender: seconds of CPU) runs in a child `cortex export`, never in this process, so the server stays responsive; a complete
+ * build left by a previous run is served at once on start (`.cortex/serve/<a|b>.done` marks it complete), the rebuild follows.
  * It also serves the phone share target under /share/ (scripts/share-server.ts): a share is written to `inbox/`
  * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
  * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
  * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
  */
-export type ServeOpts = { port: number; sync: boolean; reviewer: string; say?: (m: string) => void; ask?: AskFn };
+export type ServeOpts = {
+  port: number; sync: boolean; reviewer: string; say?: (m: string) => void; ask?: AskFn;
+  /** The command that exports the site into `out` (a child process; exit 0 = the site is complete). Default: this very cortex, `export --out`. */
+  exportCmd?: (root: string, out: string) => string[];
+  /** Quiet time before a rebuild starts, so the requests of one burst (sync, inbox, review) share one build. Default 300 ms. */
+  settleMs?: number;
+  /** The page embeddings' refresh (injectable for tests). Default: embed.ts. */
+  embeddings?: (root: string) => Promise<{ embedded: number; removed: number } | undefined>;
+};
 /** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
 export type AskFn = (root: string, question: string, history: Turn[]) => Promise<{ md: string; core?: Core }>;
 
@@ -125,29 +136,111 @@ export function fileFor(dir: string, pathname: string): string | undefined {
   for (const c of [f, f + ".html", join(f, "index.html")]) if (existsSync(c) && statSync(c).isFile()) return c;
 }
 
+/**
+ * A build folder is complete once its marker exists: `<dir>.done`, a sibling (never served), written by `serve` after the export
+ * child exited with 0 and removed before the folder is emptied for the next build. A folder without it (a build running, killed or
+ * failed) is never served.
+ */
+export const markerOf = (dir: string) => `${dir}.done`;
+export function markComplete(dir: string) {
+  const tmp = `${markerOf(dir)}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ at: new Date().toISOString() }));
+  renameSync(tmp, markerOf(dir)); // atomic: the marker is whole or absent
+}
+/** When a complete build ended (ms since the epoch), undefined when the folder is not a complete one. */
+export function completedAt(dir: string): number | undefined {
+  try {
+    const at = Date.parse(JSON.parse(readFileSync(markerOf(dir), "utf8")).at);
+    return Number.isFinite(at) && existsSync(join(dir, "index.html")) ? at : undefined;
+  } catch { return undefined; }
+}
+
+/** The export children running now: killed when this process stops, so none keeps `site/.export.lock` or writes into a folder of the next run. */
+const children = new Set<Subprocess>();
+let hooked = false;
+function hookExit() {
+  if (hooked) return;
+  hooked = true;
+  process.on("exit", () => children.forEach((c) => c.kill()));
+  for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) process.once(sig, () => process.exit(code));
+}
+/** Longest an export may take before it is killed (a stuck build must not hold the single build slot for ever). */
+const EXPORT_TIMEOUT_MS = 15 * 60_000;
+
+/** The child that exports the site: the cortex running this code (the sources, or the sources a binary unpacked; `BUN_BE_BUN` is inherited in the latter). */
+export const exportArgv = (_root: string, out: string) => [process.execPath, join(import.meta.dir, "cortex.ts"), "export", "--out", out];
+
+/** Runs `argv` with `root` as the wiki; resolves on exit 0, rejects with the end of its output otherwise (or when it is killed). */
+async function runChild(root: string, argv: string[], onStart: (c: Subprocess) => void): Promise<void> {
+  hookExit();
+  const child = Bun.spawn(argv, { env: { ...process.env, CORTEX_ROOT: root }, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: EXPORT_TIMEOUT_MS });
+  children.add(child); onStart(child);
+  try {
+    const [out, err, code] = await Promise.all([new Response(child.stdout as ReadableStream).text(), new Response(child.stderr as ReadableStream).text(), child.exited]);
+    if (code === 0) return;
+    const tail = `${err}\n${out}`.trim().split("\n").slice(-6).join("\n");
+    throw new Error(`export exited with ${child.signalCode ?? `code ${code}`}${tail ? `:\n${tail}` : ""}`);
+  } finally { children.delete(child); }
+}
+
 export async function serve(root: string, o: ServeOpts) {
   const say = o.say ?? console.log;
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
-  let current: string | undefined, next = 0;
+  const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
+  // the newest complete build of a previous run is served at once; the other folder is where the next build goes
+  const done = dirs.map((d) => completedAt(d)), previous = done[0] === undefined && done[1] === undefined ? undefined : (done[1] ?? -1) > (done[0] ?? -1) ? 1 : 0;
+  let current: string | undefined = previous === undefined ? undefined : dirs[previous], next = previous === undefined ? 0 : 1 - previous;
   // one change at a time (pull, write, commit, push): git and the files are shared
   let queue: Promise<unknown> = Promise.resolve();
   const serial = <T>(f: () => Promise<T> | T): Promise<T> => { const r = queue.then(f); queue = r.catch(() => {}); return r; };
-  // rebuilds coalesce: changes made during a build are picked up by one more build
-  let building: Promise<void> | undefined, dirty = false;
-  const rebuild = (): Promise<void> => {
-    dirty = true;
+
+  // Rebuilds: one build at a time, in a child process, and one slot of waiting. A request made while a build runs, or while the
+  // quiet time before it lasts, joins the next build: any number of requests give one build, plus one if they came during it.
+  // Callers do not wait (`void rebuild()`): a response means "accepted", the site is swapped in once the build ends.
+  let building: Promise<void> | undefined, dirty = false, requests = 0, stopped = false, exporter: Subprocess | undefined;
+  const asked = (n: number) => (n === 1 ? "1 request" : `${n} requests merged into one build`);
+  const rebuild = (now = false): Promise<void> => {
+    dirty = true; requests++;
     return building ??= (async () => {
       try {
-        while (dirty) {
+        for (let first = true; dirty && !stopped; first = false) {
+          if (!(now && first)) await Bun.sleep(settleMs);
+          if (stopped) break;
           dirty = false;
-          const out = dirs[next]!;
-          // the page embeddings (embed in cortex.json): incremental, for the site's questions and the related pages; never blocks the build
-          await refresh(root).catch((e) => say(`embeddings: ${(e as Error).message}`));
-          rmSync(out, { recursive: true, force: true });
-          try { await exportSite(root, out, () => {}); current = out; next = 1 - next; say(`site rebuilt (${out})`); }
-          catch (e) { say(`export failed: ${(e as Error).message}`); }
+          const out = dirs[next]!, n = requests, t0 = performance.now(), took = () => `${((performance.now() - t0) / 1000).toFixed(1)} s`;
+          requests = 0;
+          rmSync(markerOf(out), { force: true }); // first: a folder being emptied is never taken for a complete one
+          await rm(out, { recursive: true, force: true });
+          try {
+            await runChild(root, exportCmd(root, out), (c) => (exporter = c));
+            if (!existsSync(join(out, "index.html"))) throw new Error("the export wrote no index.html");
+            markComplete(out);
+            current = out; next = 1 - next;
+            say(`site rebuilt in ${took()} (${out}), ${asked(n)}`);
+            void reindex(); // after the swap: the site never waits for the embeddings
+          } catch (e) { if (!stopped) say(`export failed after ${took()}, the previous site stays (${asked(n)}): ${(e as Error).message}`); }
+          finally { exporter = undefined; }
         }
       } finally { building = undefined; }
+    })();
+  };
+
+  // the page embeddings (embed in cortex.json): incremental, for the site's questions and the related pages. Its own slot, apart from
+  // the build: a first index of a large wiki takes minutes and delays neither the swap nor the next build. Failure: a line, nothing else.
+  let indexing: Promise<void> | undefined, indexDirty = false;
+  const reindex = (): Promise<void> => {
+    indexDirty = true;
+    return indexing ??= (async () => {
+      try {
+        while (indexDirty && !stopped) {
+          indexDirty = false;
+          const t0 = performance.now();
+          try {
+            const r = await embeddings(root);
+            if (r && (r.embedded || r.removed)) say(`embeddings: ${r.embedded} embedded, ${r.removed} page(s) removed (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+          } catch (e) { say(`embeddings: ${(e as Error).message}`); }
+        }
+      } finally { indexing = undefined; }
     })();
   };
   const pull = () => o.sync && pullRebase(root);
@@ -169,10 +262,13 @@ export async function serve(root: string, o: ServeOpts) {
     void ingest(); // the phone gets its answer now; the source is fetched and committed in the background
   };
 
-  pull();
-  await rebuild();
-  void ingest(); // entries left by a previous run
-  if (!current) throw new Error("the first export failed: nothing to serve.");
+  // no complete build: the first one is awaited, as nothing can be served before it
+  if (!current) {
+    pull();
+    await rebuild(true);
+    if (!current) throw new Error("the first export failed: nothing to serve.");
+    void ingest(); // entries left by a previous run
+  }
 
   const accounts = accountRoute({
     root, say, config: () => loadConfig(root),
@@ -252,7 +348,7 @@ export async function serve(root: string, o: ServeOpts) {
         try { await serial(pull); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
         void rebuild();
         void ingest();
-        return Response.json({ ok: true });
+        return Response.json({ ok: true }); // pulled; the rebuild is queued, not finished (the site is swapped when it ends)
       }
       if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
       const f = fileFor(current!, url.pathname);
@@ -261,7 +357,14 @@ export async function serve(root: string, o: ServeOpts) {
       return new Response(existsSync(nf) ? Bun.file(nf) : "Not found", { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
     },
   });
-  say(`cortex serve: http://localhost:${server.port}${o.sync ? " (sync: pull before, commit and push after each review)" : ""}`);
+  say(`cortex serve: http://localhost:${server.port}${o.sync ? " (sync: pull before, commit and push after each review)" : ""}${previous === undefined ? "" : ` (serving the build of ${new Date(done[previous]!).toISOString()} while the site is rebuilt)`}`);
+  if (previous !== undefined) {
+    // started on a previous build: what changed since (the remote, the inbox, the binary itself) is picked up in the background
+    void serial(pull).catch((e) => say(`pull: ${(e as Error).message}`)).then(() => { void rebuild(true); void ingest(); });
+  }
   void searchInfo().then((i) => say(`search: SQLite ${i.sqlite} (${i.library}), sqlite-vec ${i.knn ? i.vec : "not loaded (nearest neighbours in JS)"}`), () => {});
+  // stopping the server stops the export child too (it holds site/.export.lock)
+  const stop = server.stop.bind(server);
+  server.stop = (force?: boolean) => { stopped = true; exporter?.kill(); return stop(force); };
   return server;
 }
