@@ -84,11 +84,10 @@
 		</Button>
 	{/if}
 	{#if original}
-		<Button href={original.url} rel="noopener noreferrer" size="sm">
+		<Button href={original.url} rel="noopener noreferrer" size="sm" title={original.domain || original.url}>
 			<Icon name="external-link" size={16} />
 			{t("actions.readOriginal")}
-			{#if original.domain}<span class="font-normal opacity-90">({original.domain})</span>{/if}
-			<span class="sr-only"> — {t("common.externalLink")}</span>
+			<span class="sr-only"> ({original.domain}) — {t("common.externalLink")}</span>
 		</Button>
 	{/if}
 

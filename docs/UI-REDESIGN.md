@@ -14,6 +14,8 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 - **Marque : le graphe-cerveau** (concept 5), un cerveau de profil dessiné comme un graphe de connaissances (nœuds carrés, liens droits, groupe préfrontal en vert), remplace le folio indexé comme marque et comme avatar (C08b).
 - **Exception ronde pour la marque** : les nœuds du graphe-cerveau sont de petits disques pleins (plus de carrés) dans toutes ses variantes ; ce n'est une exception qu'à la marque. Sous 40 px, un glyphe dessiné à la main (silhouette en une polyligne fermée, trois nœuds préfrontaux) remplace le graphe, et les points d'entrée de l'assistant (en-tête, champ de recherche, palette) prennent l'icône `assistant` (trois étincelles) ; l'avatar reste dans le panneau (C08c).
 - **Ombre pour les couches flottantes** : menus, fenêtres contextuelles, palette, notification et tiroir modal de l'assistant prennent `--shadow-overlay` et un contour `--input` ; les surfaces de la page restent plates (T03).
+- **Icônes de marque** : `favicon.svg` (site et `assets/logo/`) est le maître 16 unités ; les PNG (favicons, apple-touch, 192, 512, 512 sombre, logo 912x256) sont rendus à la main depuis `design/brand/cortex-mark.svg` avec Chrome headless (Playwright, `channel: 'chrome'`), marque à 70 % du côté sur fond opaque pour les icônes carrées, et committés ; à refaire si la marque change (C09).
+- **Pleine largeur pour la prose** : le texte des articles occupe toute la largeur de la colonne `article` (plus de mesure à 70ch) ; les actions d'une page tiennent sur une ligne, la source originale passe en `title` du bouton.
 
 # Partie I : revue complète
 
