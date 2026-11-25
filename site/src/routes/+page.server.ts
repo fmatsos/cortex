@@ -1,15 +1,17 @@
 import { dataFile, site } from "#lib/server/data.js";
 import { searchSeed } from "#lib/server/search-seed.js";
 import { withIds } from "#lib/log-view.js";
+import { briefs } from "#lib/news.js";
 import type { GraphData } from "#lib/types.js";
 
 const POOL = 30; // candidates for the featured pages and « did you know »: the browser picks among them by day
-const NEWS = 5;
+const NEWS = 3; // briefs on the home page
+const CANDIDATES = 12; // recent entries a brief is built from: a merged pair takes two, NEWS briefs need at most 2 * NEWS
 const HUBS = 6;
 
 /**
  * Home page in the manner of an encyclopedia's front page, bounded whatever the size of the wiki: search first, then
- * featured pages, « did you know », the latest log entries, the most linked pages and the tags. The daily picks are done in
+ * featured pages, « did you know », the latest log briefs, the most linked pages and the tags. The daily picks are done in
  * the browser (the prerendered page stays the same from one export to the next, the picks change every day without a rebuild).
  */
 export const load = () => {
@@ -24,11 +26,8 @@ export const load = () => {
 		featured: byDegree.filter((p) => (p.type === "Synthesis" || p.type === "Concept") && p.description).slice(0, POOL).map(card),
 		// did you know: concepts and entities described in one sentence
 		facts: byDegree.filter((p) => (p.type === "Concept" || p.type === "Entity") && p.description).slice(0, POOL * 2).map(({ id, title, description }) => ({ id, title, description })),
-		// the pages an entry touched; an entry that touched none (a source added) shows the page of its source, when it has one
-		news: withIds(log.slice(0, NEWS)).map(({ id, at, kind, pages, sources }) => ({
-			id, at, kind,
-			pages: (pages.length ? pages : sources.flatMap((s) => (s.page ? [s.page] : []))).slice(0, 3),
-		})),
+		// the latest briefs: identifiers before any grouping (same anchors as /log), then a source added and compiled the same day is one brief
+		news: briefs(withIds(log).slice(0, CANDIDATES), NEWS),
 		hubs: byDegree.filter((p) => p.type !== "Source").slice(0, HUBS).map(card),
 	};
 };

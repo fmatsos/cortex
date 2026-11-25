@@ -5,7 +5,7 @@ import { filterTags, readTagsParams, sortTags, tagsQuery, type Tag } from "../si
 import { fold } from "../site/src/lib/fold";
 import type { LogEntryData } from "../site/src/lib/types";
 
-const entry = (at: string, kind: string, text: string): LogEntryData => ({ at, kind, html: text, pages: [], sources: [], search: fold(`${kind} ${text}`) });
+const entry = (at: string, kind: string, text: string): LogEntryData => ({ at, kind, html: text, pages: [], sources: [], sourceRefs: [], counts: null, search: fold(`${kind} ${text}`) });
 const LOG = [
 	entry("2026-11-04T10:00:00+01:00", "ingest", "Créé concepts/context-rot, mis à jour Chroma"),
 	entry("2026-11-04T09:00:00+01:00", "add", "Source ajoutée : article sur la fenêtre de contexte"),

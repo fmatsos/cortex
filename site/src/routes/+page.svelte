@@ -1,20 +1,19 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import Icon from "#lib/components/icon.svelte";
-	import KindBadge from "#lib/components/kind-badge.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
+	import HomeNews from "#lib/components/home-news.svelte";
 	import PageList from "#lib/components/page-list.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { toPage, toRoute, toTag } from "#lib/links.js";
 	import { pickDaily } from "#lib/daily-pick.js";
-	import { dayShort } from "#lib/log-view.js";
 	import type { IconName } from "#lib/icons.js";
 	import { type Engine, loadEngine } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeColor, typeIcon, typePlural } from "#lib/type-meta.js";
-	import { intlLocale, t } from "#lib/i18n/index.js";
+	import { t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const FACTS = 3;
@@ -36,11 +35,6 @@
 		const start = pool.length ? (day * FACTS) % pool.length : 0;
 		return [...pool.slice(start), ...pool.slice(0, start)].slice(0, FACTS);
 	});
-	// a page list read as one sentence: separators come from the locale, every title stays a link
-	const pageParts = (pages: { id: string; title: string }[]) => {
-		let i = 0; // elements come back in order: two pages may share a title
-		return new Intl.ListFormat(intlLocale(), { type: "unit", style: "long" }).formatToParts(pages.map((p) => p.title)).map((part) => (part.type === "element" ? { page: pages[i++]! } : { text: part.value }));
-	};
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
@@ -123,7 +117,7 @@
 						</a>
 						<p class="mt-1 line-clamp-2 text-sm">{f.description}</p>
 						<p class="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
-							{#each f.tags as tag (tag)}<span>#{tag}</span>{/each}
+							{#each f.tags as tag (tag)}<a href={toTag(tag)} class="hover:text-foreground underline-offset-4 hover:underline">#{tag}</a>{/each}
 							<span>{t("home.links", { count: f.links })}</span>
 						</p>
 					</li>
@@ -135,20 +129,7 @@
 	{#if data.news.length}
 		<section aria-labelledby="h-news" class="flex h-full flex-col border p-4">
 			{@render head("h-news", "journal", t("home.news"))}
-			<!-- timeline: one fixed column for the kind badges (same width, left aligned), the date beside it, the pages under the date -->
-			<ul class="divide-border mt-3 divide-y">
-				{#each data.news as e (e.id)}
-					<li class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-3 text-sm first:pt-0 last:pb-0">
-						<a href="{toRoute('/log')}#{e.id}" class="text-muted-foreground col-span-2 grid grid-cols-subgrid items-center hover:underline">
-							<span class="[&>[data-slot=badge]]:w-full [&>[data-slot=badge]]:justify-start flex"><KindBadge kind={e.kind} /></span>
-							<time datetime={e.at}>{dayShort(e.at.slice(0, 10))}</time>
-						</a>
-						{#if e.pages.length}
-							<p class="col-start-2 leading-snug [overflow-wrap:anywhere]">{#each pageParts(e.pages) as part}{#if "page" in part}<a href={toPage(part.page.id)} class="text-link link-content underline-offset-4 hover:underline">{part.page.title}</a>{:else}{part.text}{/if}{/each}</p>
-						{/if}
-					</li>
-				{/each}
-			</ul>
+			<HomeNews news={data.news} />
 			<a href={toRoute("/log")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.news.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 		</section>
 	{/if}
@@ -185,7 +166,7 @@
 		{@render head("h-portals", "tags", t("home.portals"))}
 		<ul class="touch-gap mt-3 flex flex-wrap gap-2">
 			{#each data.seed.tags as tg (tg.slug)}
-				<li><a href={toTag(tg.slug)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag}<span class="text-muted-foreground">{tg.count}</span></a></li>
+				<li><a href={toTag(tg.tag)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag}<span class="text-muted-foreground">{tg.count}</span></a></li>
 			{/each}
 		</ul>
 		<a href={toRoute("/tags")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.portals.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>

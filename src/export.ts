@@ -203,6 +203,15 @@ function pageMarkdown(root: string, path: string, raw: RawReader): string {
 }
 
 /**
+ * Counts of the automatic compile entry (`compiled: N page(s) created, M updated.`, written by src/agent.ts): only that exact
+ * text is read, any other text (typed by hand, older formats) gives `null` rather than a guessed figure.
+ */
+export function compileCounts(text: string): { created: number; updated: number } | null {
+  const m = /^compiled: (\d+) page\(s\) created, (\d+) updated\.$/.exec(text);
+  return m ? { created: +m[1]!, updated: +m[2]! } : null;
+}
+
+/**
  * Journal: wiki/log.jsonl as structured entries (most recent first). The text is rendered as inline HTML; the cited
  * pages become links (missing page: ignored), the sources the wiki Source page that cites them (raw/ is not published).
  */
@@ -218,6 +227,10 @@ function renderLog(root: string, entries: LogEntry[], paths: Set<string>, byPath
     const pages = (e.pages ?? []).filter((p) => byPath.has(p)).map((p) => link(byPath.get(p)!));
     return {
       at: e.at, kind: e.kind, html, pages,
+      // free text of the kinds with no structured summary, as plain text (home page brief); add and ingest are told by their sources and counts
+      ...(e.kind !== "add" && e.kind !== "ingest" && { text: unesc(html.replace(/<[^>]+>/g, "")).trim() }), // inline html: dropping the tags keeps the spacing of the sentence
+      counts: e.kind === "ingest" ? compileCounts(e.text) : null,
+      sourceRefs: sources, // every source of the entry, including those the text already names (`sources` below is for the log page)
       sources: sources.filter((s) => !e.text.includes(`\`${s.id}\``)), // an id already named in the text is not repeated under the entry
       // everything the entry displays, folded like the search (no accents, lowercase): the browser only has to fold the query
       search: fold([e.kind, plain(html), ...pages.map((p) => p.title), ...sources.map((s) => `${s.id} ${s.page?.title ?? ""}`)].join(" ")),

@@ -55,8 +55,9 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   await exportSite(root, out, () => {});
 
   const html = (p: string) => readFileSync(join(out, p), "utf8");
-  for (const p of ["index.html", "graph/index.html", "log/index.html", "tags/index.html", "tags/alpha/index.html", "search/index.html", "wiki/concepts/a/index.html", "wiki/concepts/b/index.html", "wiki/entities/c/index.html", "wiki/sources/s/index.html"])
+  for (const p of ["index.html", "graph/index.html", "log/index.html", "tags/index.html", "search/index.html", "wiki/concepts/a/index.html", "wiki/concepts/b/index.html", "wiki/entities/c/index.html", "wiki/sources/s/index.html"])
     expect(existsSync(join(out, p))).toBe(true);
+  expect(existsSync(join(out, "tags/alpha/index.html"))).toBe(false); // tags lead to the search, no page per tag
   const a = html("wiki/concepts/a/index.html");
   expect(a).toContain('href="../b/#x"'); // link rewritten, relative
   expect(a).toContain('href="../../entities/c/"');
@@ -85,7 +86,11 @@ test("export: static site, rewritten links, linked notes, raw/ not published, se
   const log = JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).log;
   expect(log.map((e: any) => [e.at.slice(0, 10), e.kind])).toEqual([["2026-11-04", "add"], ["2026-11-04", "ingest"], ["2026-11-03", "update"]]);
   expect(log[1].pages).toEqual([{ id: "concepts/a", title: "Alpha", type: "Concept" }]); // the missing page is dropped
-  expect(log[1].sources).toEqual([]); // the id is already named in the text
+  expect(log[1].sources).toEqual([]); // the id is already named in the text…
+  expect(log[1].sourceRefs).toEqual([{ id: "01a1a5c9-5e80-7075-ae13-aab03b0a8697", page: { id: "sources/s", title: "Source un", type: "Source" } }]); // …but the entry keeps its full source references
+  expect(log[0].sourceRefs).toEqual(log[0].sources); // none named in the text: the same list
+  expect(log.map((e: any) => e.counts)).toEqual([null, null, null]); // no counts read from a free text
+  expect(log.map((e: any) => e.text)).toEqual([undefined, undefined, "Un lien et gras."]); // plain text only for the kinds told by their text
   expect(log[1].html).toContain('<a href="../wiki/sources/s/"><code>01a1a5c9-5e80-7075-ae13-aab03b0a8697</code></a>');
   expect(log[0].sources).toEqual([{ id: "01a1a5c9-5e80-7075-ae13-aab03b0a8697", page: { id: "sources/s", title: "Source un", type: "Source" } }, { id: "01a1a5c9-5e80-7075-ae13-0000000000ff" }]);
   expect(log[2].html).toBe('Un <a href="../wiki/concepts/a/">lien</a> et <strong>gras</strong>.');
@@ -195,4 +200,11 @@ test("export: the frontend fingerprint follows static/ (favicon, fonts) and the 
     expect(seen.has(fp)).toBe(false); // every change gives a new fingerprint
     seen.add(fp);
   }
+});
+
+test("compileCounts: only the exact automatic text gives counts, anything else is unknown", async () => {
+  const { compileCounts } = await import("./export");
+  expect(compileCounts("compiled: 1 page(s) created, 3 updated.")).toEqual({ created: 1, updated: 3 });
+  expect(compileCounts("compiled: 0 page(s) created, 0 updated.")).toEqual({ created: 0, updated: 0 });
+  for (const text of ["5 sources compilées → créé sources/ ×5", "compiled: 1 page(s) created, 3 updated. Extra", "Note: compiled: 1 page(s) created, 3 updated.", "compiled: 1 page created, 3 updated.", "compiled: x page(s) created, 3 updated.", ""]) expect(compileCounts(text)).toBeNull();
 });

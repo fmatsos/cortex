@@ -71,32 +71,68 @@ test("featured pages: the same day gives the same picks after a reload", async (
   expect(await links()).toEqual(first);
 });
 
-test("news: badges share one width and one left edge, dates line up", async ({ page }) => {
+// News: an editorial timeline, an ordered list of days holding an ordered list of briefs, one sentence per brief.
+test("news: no kind badge, an ordered list of days with a dated heading, briefs as ordered lists", async ({ page }) => {
   await page.goto("/");
   const news = section(page, NEWS);
   await expect(news.getByRole("heading", { level: 2, name: NEWS })).toBeVisible();
-  const badges = news.locator('[data-slot="badge"]');
-  const n = await badges.count();
-  expect(n).toBeGreaterThan(0);
-  const boxes = await badges.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, w: r.width }; }));
-  expect(new Set(boxes.map((b) => Math.round(b.w))).size, "one badge width").toBe(1);
-  expect(new Set(boxes.map((b) => Math.round(b.x))).size, "one left edge").toBe(1);
-  const dates = await news.locator("time").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
-  expect(new Set(dates).size, "one date column").toBe(1);
+  await expect(news.locator('[data-slot="badge"]'), "no kind badge in the news block").toHaveCount(0);
+  const days = news.locator("ol > li > h3");
+  const nd = await days.count();
+  expect(nd).toBeGreaterThan(0);
+  expect(await days.locator("time[datetime]").count(), "a <time datetime> per day heading").toBe(nd);
+  for (const d of await days.locator("time").evaluateAll((els) => els.map((e) => e.getAttribute("datetime")))) expect(d).toMatch(/^\d{4}-\d\d-\d\d$/);
+  // 3 briefs at most, each one a list item of a nested ordered list
+  const briefs = news.locator("ol ol > li");
+  const n = await briefs.count();
+  expect(n).toBeGreaterThanOrEqual(1);
+  expect(n).toBeLessThanOrEqual(3);
+  expect(await news.locator("ol ol").evaluateAll((els) => els.every((e) => e.tagName === "OL" && e.parentElement?.tagName === "LI"))).toBe(true);
+  // the vertical rule and the square markers are decorative
+  expect(await briefs.locator("> span[aria-hidden=true]").count(), "one hidden marker per brief").toBe(n);
+  // square system: no radius, no shadow on the block
+  const style = await news.evaluate((el) => { const c = getComputedStyle(el); return { r: c.borderTopLeftRadius, s: c.boxShadow }; });
+  expect(style).toEqual({ r: "0px", s: "none" });
 });
 
-test("news: pages of an entry are separated with spaces and stay links", async ({ page }) => {
+test("news: one sentence per brief, times are links to the log entry, no 00:00 invented", async ({ page }) => {
   await page.goto("/");
-  const lists = section(page, NEWS).locator("li > p");
-  const count = await lists.count();
-  for (let i = 0; i < count; i++) {
-    const p = lists.nth(i);
-    const links = await p.locator("a").count();
-    const text = (await p.textContent()) ?? "";
-    expect(text.trim()).not.toBe("");
-    if (links > 1) expect(text, "separators between titles").toMatch(/[^,]+, [^,]|[^·]+ · [^·]| (et|and) /);
-    expect(text, "no comma glued to the next title").not.toMatch(/,\S/);
+  const briefs = section(page, NEWS).locator("ol ol > li");
+  const n = await briefs.count();
+  for (let i = 0; i < n; i++) {
+    const li = briefs.nth(i);
+    const sentence = ((await li.locator("> p").first().textContent()) ?? "").replace(/\s+/g, " ").trim();
+    expect(sentence, "ends like a sentence").toMatch(/[.»]$/);
+    expect(sentence, "starts with the verb of the kind").toMatch(/^(Source|Compil|Mise à jour|Contrôle|Question|Updat|Check|Compiled)/);
+    const first = sentence.split(" : ")[0]!;
+    expect(first.length, sentence).toBeGreaterThan(3);
+    // a count is never invented: « N pages créées / mises à jour » (read from the log) or « N pages référencées »
+    expect(sentence).not.toMatch(/undefined|NaN|\{|\}/);
+    const meta = li.locator("> p").nth(1);
+    const link = meta.locator("a").first();
+    expect(await link.getAttribute("href")).toMatch(/\/log\/?#e-\d{8}-/);
+    for (const dt of await meta.locator("time").evaluateAll((els) => els.map((e) => e.getAttribute("datetime")))) expect(dt).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d/); // a time only when the log has one
   }
+});
+
+test("news: pages of a brief are separated with spaces and stay links", async ({ page }) => {
+  await page.goto("/");
+  const metas = section(page, NEWS).locator("ol ol > li > p:nth-of-type(2)");
+  const count = await metas.count();
+  for (let i = 0; i < count; i++) {
+    const text = ((await metas.nth(i).textContent()) ?? "").replace(/\s+/g, " ");
+    expect(text, "no comma glued to the next title").not.toMatch(/,\S/);
+    expect(await metas.nth(i).locator("a").count()).toBeGreaterThanOrEqual(1);
+  }
+});
+
+test("news: sentences are 16 px, meta lines 14 px, day headings in the sans family", async ({ page }) => {
+  await page.goto("/");
+  const news = section(page, NEWS);
+  const px = (sel: string, prop: string) => news.locator(sel).first().evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
+  expect(await px("ol ol > li > p:nth-of-type(1)", "font-size")).toBe("16px");
+  expect(await px("ol ol > li > p:nth-of-type(2)", "font-size")).toBe("14px");
+  expect(await px("ol > li > h3", "font-family")).toContain("Source Sans 3");
 });
 
 test("no horizontal overflow of the home page at 390", async ({ page }) => {
