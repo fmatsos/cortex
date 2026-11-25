@@ -100,9 +100,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await expect(avatar.locator(".halo")).toHaveCSS("opacity", "0.12");
       const [fill, query, primary] = await avatar.locator(".signal").evaluate((el) => {
         const probe = (v: string) => { const d = document.createElement("i"); d.style.color = `var(${v})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
-        return [getComputedStyle(el).fill, probe("--kind-query"), probe("--primary")];
+        return [getComputedStyle(el).fill, probe("--signal"), probe("--primary")];
       });
-      expect(fill, "the signal takes the assistant question colour, not the green of the front nodes").toBe(query);
+      expect(fill, "the signal takes its own ochre (--signal), not the green of the front nodes").toBe(query);
       expect(fill).not.toBe(primary);
       const position = await signalPosition(avatar);
       if (still) {

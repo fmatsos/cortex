@@ -522,7 +522,7 @@
 			</table>
 		</div>
 		<p class="{cap} mt-3 max-w-3xl">
-			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un point violet (couleur des questions), entouré d'un halo léger, parcourt au hasard les liens intérieurs du cerveau ; immobile au milieu d'un lien en mouvement réduit et sous 24 px. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un point à la couleur de destruction.
+			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un point ocre (<code class="font-mono">--signal</code>), entouré d'un halo léger, parcourt au hasard les liens intérieurs du cerveau ; immobile au milieu d'un lien en mouvement réduit et sous 24 px. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un point à la couleur de destruction.
 			Avec <code class="font-mono">prefers-reduced-motion: reduce</code>, rien ne bouge : chaque état est une composition fixe distincte (en attente, le signal reste à mi-chemin). L'animation ne porte jamais seule l'information, le texte de statut reste dans le panneau.
 			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> Votre système demande actuellement : {reduced ? "mouvement réduit" : "animations permises"}.</span>{/if}
 		</p>
