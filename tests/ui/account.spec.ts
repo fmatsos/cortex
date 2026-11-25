@@ -262,16 +262,15 @@ test.describe("account page", () => {
     await expect(resume).toHaveAttribute("title", /Resume the conversation « Alpha question »/);
   });
 
-  test("Resume and Export wait for phase C, Export of a journey for phase D: focusable, named, inert", async ({ page }) => {
+  test("without the assistant (no /api/ask) Resume is inert, Export of a conversation works; Export of a journey waits for phase D", async ({ page }) => {
     await mockApi(page, newMock({ me: ADA }));
     await page.goto("/account/");
     const conversations = page.getByRole("region", { name: "Conversations" });
-    for (const name of [/^Resume the conversation « Alpha question »$/, /^Export the conversation « Alpha question » as Markdown$/]) {
-      const btn = conversations.getByRole("button", { name });
-      await expect(btn).toHaveAttribute("aria-disabled", "true");
-      await expect(btn).toHaveAttribute("title", /Available soon/);
-      await btn.click({ force: true }); // aria-disabled: Playwright would wait for it to be enabled
-    }
+    const resume = conversations.getByRole("button", { name: /^Resume the conversation « Alpha question »$/ });
+    await expect(resume).toHaveAttribute("aria-disabled", "true");
+    await expect(resume).toHaveAttribute("title", /Available soon/);
+    await resume.click({ force: true }); // aria-disabled: Playwright would wait for it to be enabled
+    await expect(conversations.getByRole("button", { name: /^Export the conversation « Alpha question » as Markdown$/ })).not.toHaveAttribute("aria-disabled", "true");
     const exportJourney = page.getByRole("region", { name: /^(Journeys|Voyages)$/ }).getByRole("button", { name: /^Export the journey « Alpha to Beta »$/ });
     await expect(exportJourney).toHaveAttribute("aria-disabled", "true");
     await exportJourney.click({ force: true });

@@ -1,9 +1,12 @@
 <script lang="ts">
-	import { onMount, tick } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 	import { afterNavigate } from "$app/navigation";
 	import Icon from "#lib/components/icon.svelte";
 	import AssistantAvatar, { type AvatarState } from "./assistant-avatar.svelte";
 	import AnswerBlock from "./answer-block.svelte";
+	import AssistantDialogs from "./assistant-dialogs.svelte";
+	import { AssistantFlow } from "./assistant-flow.svelte.js";
+	import AssistantHeader from "./assistant-header.svelte";
 	import { assistant, MAX_QUESTION, type Turn } from "#lib/assistant.svelte.js";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
 	import { toPage, toRoute } from "#lib/links.js";
@@ -87,6 +90,15 @@
 			area.setSelectionRange(area.value.length, area.value.length);
 		});
 	});
+	// save, export, new conversation, resume: what the header's buttons do (assistant-flow.svelte.ts)
+	const flow = new AssistantFlow(() => void tick().then(() => area?.focus()));
+	// a conversation chosen on the account page: read it here, ask before replacing an unsaved one
+	$effect(() => {
+		const id = assistant.resumeRequest;
+		if (!id) return;
+		assistant.resumeRequest = null;
+		untrack(() => void flow.resume(id));
+	});
 	const close = () => { assistant.setOpen(false); document.getElementById("assistant-toggle")?.focus(); };
 	// a page opened from an answer: the drawer covered it, so it closes; the docked panel stays beside it
 	afterNavigate((nav) => { if (nav.type !== "enter" && assistant.open && !docked) assistant.setOpen(false); });
@@ -157,16 +169,7 @@
 			onpointerdown={onDown} onpointermove={onMove} onpointerup={onUp} onpointercancel={onUp} onlostpointercapture={onUp} ondblclick={() => set(DEFAULT)} onkeydown={onHandleKey}></div>
 	{/if}
 	<div class="flex h-full flex-col">
-		<header class="flex items-center gap-2 border-b px-4 py-2">
-			<AssistantAvatar state={avatar} size={32} />
-			<h2 id="assistant-title" class="flex-1 text-base font-semibold">{t("assistant.title")}</h2>
-			{#if assistant.turns.length}
-				<button type="button" class="hover:bg-muted inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm disabled:opacity-50 pointer-coarse:min-h-11" disabled={assistant.pending} onclick={() => { assistant.clear(); area?.focus(); }}>
-					<Icon name="kind-add" size={16} />{t("assistant.new")}
-				</button>
-			{/if}
-			<button type="button" class="hover:bg-muted inline-flex size-9 items-center justify-center rounded-md pointer-coarse:size-11" aria-label={t("assistant.close")} onclick={close}><Icon name="clear" size={20} /></button>
-		</header>
+		<AssistantHeader {flow} {avatar} onclose={close} />
 
 		<div bind:this={list} class="min-h-0 flex-1 space-y-8 overflow-y-auto p-4" aria-busy={assistant.pending}>
 			{#if !assistant.turns.length}
@@ -211,7 +214,7 @@
 								{/each}
 							</ul>
 						{/each}
-						<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs"><Icon name="generated" size={16} class="shrink-0" />{t("assistant.ai", { model: turn.answer.model ?? "IA" })}</p>
+						<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs"><Icon name="generated" size={16} class="shrink-0" />{turn.answer.model ? t("assistant.ai", { model: turn.answer.model }) : t("assistant.ai.unknown")}</p>
 					{/if}
 				</article>
 			{/each}
@@ -231,6 +234,8 @@
 		</form>
 	</div>
 </dialog>
+
+<AssistantDialogs {flow} />
 
 <style>
 	/* owner: the answer prose reads at the size of the question (text-sm, 14 px), headings scaled to it */

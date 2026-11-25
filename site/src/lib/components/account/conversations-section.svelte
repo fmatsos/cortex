@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { account } from "#lib/account.svelte.js";
+	import { assistant } from "#lib/assistant.svelte.js";
 	import { ApiError } from "#lib/api.js";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { conversationActions, exportConversation, listConversations, removeConversation, renameConversation, resumeConversation, type ConversationSummary } from "#lib/conversations.js";
@@ -17,7 +18,7 @@
 	const DEBOUNCE_MS = 250;
 	const uid = $props.id();
 	let items = $state<ConversationSummary[]>([]);
-	let loading = $state(true), failed = $state(false);
+	let loading = $state(true), failed = $state(false), exportFailed = $state(false);
 	let q = $state(""), searched = $state(""); // typed / used for the list on screen
 	let seq = 0, timer: ReturnType<typeof setTimeout>, ctl: AbortController | undefined;
 	let section: { focusHeading: () => void } | undefined;
@@ -28,7 +29,7 @@
 		ctl?.abort();
 		ctl = new AbortController();
 		const mine = ++seq;
-		loading = true; failed = false;
+		loading = true; failed = false; exportFailed = false;
 		try {
 			const list = await listConversations(query, ctl.signal);
 			if (mine !== seq) return;
@@ -44,12 +45,18 @@
 	const typed = () => { clearTimeout(timer); timer = setTimeout(() => void load(q), DEBOUNCE_MS); };
 
 	const status = $derived(
-		loading || failed ? ""
+		exportFailed ? t("assistant.export.failed")
+		: loading || failed ? ""
 		: searched && !items.length ? t("account.conversations.noMatch", { q: searched })
 		: items.length || searched ? t("account.conversations.count", { count: items.length }) : "",
 	);
 	const sort = (list: ConversationSummary[]) => [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-	const canResume = !!conversationActions.resume, canExport = !!conversationActions.export;
+	// resuming needs the assistant's panel (a server that answers questions); the export only needs the account
+	const canResume = $derived(assistant.api && !!conversationActions.resume), canExport = !!conversationActions.export;
+	async function exportOne(id: string) {
+		exportFailed = false;
+		try { await exportConversation(id); } catch (e) { if (e instanceof ApiError && e.status === 401) account.expire(); else exportFailed = true; }
+	}
 </script>
 
 <ListSection bind:this={section} heading={t("account.conversations")} icon="conversation" {status} {loading} {failed} empty={!items.length && !searched} emptyTitle={t("account.conversations.empty.title")} emptyText={t("account.conversations.empty.text")} onretry={() => load(q)}>
@@ -64,7 +71,7 @@
 			{#snippet meta()}{t("account.exchanges", { count: c.exchanges })} · {t("account.updated", { date: day(c.updated_at) })}{/snippet}
 			{#snippet actions()}
 				<RowAction icon="play" label={t("account.conversation.resume", { title: c.title })} unavailable={!canResume} onclick={() => void resumeConversation(c.id)} />
-				<RowAction icon="download" label={t("account.conversation.export", { title: c.title })} unavailable={!canExport} onclick={() => void exportConversation(c.id)} />
+				<RowAction icon="download" label={t("account.conversation.export", { title: c.title })} unavailable={!canExport} onclick={() => void exportOne(c.id)} />
 				<RowAction icon="rename" label={t("account.conversation.rename", { title: c.title })} onclick={() => { renaming = c; renameOpen = true; }} />
 				<RowAction icon="trash" destructive label={t("account.conversation.remove", { title: c.title })} onclick={() => { removing = c; removeOpen = true; }} />
 			{/snippet}
@@ -76,12 +83,14 @@
 	const target = renaming;
 	if (!target) return;
 	const saved = await renameConversation(target.id, title);
+	assistant.renamed(target.id, saved.title); // the assistant may hold this very conversation
 	items = sort(items.map((c) => (c.id === target.id ? { ...c, title: saved.title, updated_at: saved.updated_at } : c)));
 }} />
 <ConfirmDialog bind:open={removeOpen} heading={t("account.conversation.removeTitle")} text={t("account.conversation.removeText", { title: removing?.title ?? "" })} confirm={t("account.remove.confirm")} failure={t("account.remove.failed")} onconfirm={async () => {
 	const target = removing;
 	if (!target) return;
 	await removeConversation(target.id);
+	assistant.forget(target.id);
 	items = items.filter((c) => c.id !== target.id);
 	refocus = true; // the page behind a modal is inert: the focus moves once the dialog is closed
 }} onclose={() => { if (refocus) { refocus = false; section?.focusHeading(); } }} />

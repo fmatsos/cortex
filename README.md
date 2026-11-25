@@ -327,6 +327,7 @@ The routes (JSON; `401` without a session on `/api/me*`, `/api/conversations*`, 
 | `GET /api/conversations?q=` | `{ conversations: [{ id, title, exchanges, created_at, updated_at }] }`, newest first, `q` filters titles and questions |
 | `POST /api/conversations` | `{ title?, turns: [{ question, answer, pages?, at? }] }`: 1 to 200 exchanges, 1,000,000 characters at most, title up to 120 (default: the first question) |
 | `GET`, `PUT`, `DELETE /api/conversations/:id` | `PUT` takes `{ title?, turns? }` |
+| `POST /api/ask/render` | `{ answers: [Markdown] }` (up to 200, 1,000,000 characters in all; same origin only, needs `site_ask`) → `{ answers: [{ segments, cited }] }`: the saved answers drawn again as `/api/ask` draws them, so the panel can resume a conversation (no model involved) |
 | `GET /api/journeys`, `POST /api/journeys` | `{ title?, route: [page ids] }`: 1 to 500 ids, default title « Voyage : <first page> → <last page> » |
 | `GET`, `PUT`, `DELETE /api/journeys/:id` | `PUT` takes `{ title?, route? }` |
 
