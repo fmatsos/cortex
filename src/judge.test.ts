@@ -208,6 +208,29 @@ test("site question: each page judged alone, retained and related by threshold, 
   } finally { server.stop(true); }
 });
 
+test("site question: a page sharing only some words with the question is a candidate, with or without vectors pushing other pages", async () => {
+  const { relevantPages } = await import("./ask-site");
+  const server = fake();
+  try {
+    const question = "Peut-on faire tourner un modèle sur une vieille carte graphique ?";
+    for (const withVectors of [false, true]) {
+      const root = mkdtempSync(join(tmpdir(), "cortex-judge-")); roots.push(root);
+      const base_url = `http://localhost:${server.port}/v1`;
+      await Bun.write(join(root, "cortex.json"), JSON.stringify({ ...(withVectors ? { embed: { base_url, dims: 3 } } : {}), judge: { base_url, ask_candidates: 4 } }));
+      // the fake vectors are all equal: the semantic ranking falls back to index order, so the fillers (a-*) fill the candidates
+      for (let i = 0; i < 6; i++) await Bun.write(join(root, `wiki/concepts/a-${i}.md`), page(`Sonde ${i}`, "Une sonde spatiale."));
+      await Bun.write(join(root, "wiki/concepts/z-gtx.md"), page("Qwen3.6 35B sur une GTX 1070", "Faire tourner un modèle de langage sur une vieille carte."));
+      if (withVectors) await refresh(root);
+      verdict = () => ({ relevant: { type: "noul", noul: 0.1 } });
+      calls = [];
+      await relevantPages(root, question);
+      const judged = calls.map((c) => c.body.state.page.title);
+      expect(judged).toContain("Qwen3.6 35B sur une GTX 1070");
+      expect(judged.length).toBeLessThanOrEqual(4);
+    }
+  } finally { server.stop(true); }
+});
+
 test("site question: one failed call no longer cancels the batch (the judged pages count), scores persist in .cortex/judge.db", async () => {
   const { relevantPages } = await import("./ask-site");
   const server = fake();
