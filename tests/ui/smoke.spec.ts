@@ -13,6 +13,7 @@ test("home", async ({ page }) => {
   const res = await page.goto("/");
   expect(res?.status()).toBe(200);
   await landmarks(page);
+  await expect(page.getByRole("contentinfo").getByRole("link", { name: "Design system" })).toHaveAttribute("href", /design-system\/$/);
 });
 
 test("a wiki article", async ({ page }) => {

@@ -40,6 +40,15 @@
 		if (want && !d.open) { if (modal) d.showModal(); else d.show(); void tick().then(() => area?.focus()); }
 		document.documentElement.style.setProperty("--assistant-width", want && docked ? WIDTH : "0px");
 	});
+	// entry points outside the panel (search field, palette): focus the question, caret at the end of a prefilled text
+	$effect(() => {
+		if (!assistant.focusSeq) return;
+		void tick().then(() => tick()).then(() => {
+			if (!area) return;
+			area.focus();
+			area.setSelectionRange(area.value.length, area.value.length);
+		});
+	});
 	const close = () => { assistant.setOpen(false); document.getElementById("assistant-toggle")?.focus(); };
 	// a page opened from an answer: the drawer covered it, so it closes; the docked panel stays beside it
 	afterNavigate((nav) => { if (nav.type !== "enter" && assistant.open && !docked) assistant.setOpen(false); });

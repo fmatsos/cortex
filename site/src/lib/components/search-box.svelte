@@ -3,6 +3,8 @@
 	import { goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import Icon from "#lib/components/icon.svelte";
+	import AssistantAvatar from "#lib/components/assistant/assistant-avatar.svelte";
+	import { Button } from "#lib/components/ui/button/index.js";
 	import ResultRow from "#lib/components/result-row.svelte";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { favs } from "#lib/favs.svelte.js";
@@ -104,15 +106,18 @@
 			if (!live) out.push(...commands);
 			return out;
 		}
-		// search and questions are apart: Enter searches; a query phrased as a question offers the assistant (choosing this item
-		// sends it there); while an answer is on its way, the item only opens the assistant
-		if (assistant.api && questionLike(q)) out.push({
-			key: "ask", kind: "ask", group: t("assistant.title"), icon: "kind-query",
-			html: esc(assistant.pending ? t("assistant.open") : t("assistant.askThis")), snippet: esc(`« ${q} »`),
+		// search and questions are apart: Enter searches; the assistant is offered as one more item (choosing it opens the panel with
+		// the text as a draft, nothing is sent). A phrase that reads as a question gets it first; any other text gets it after the
+		// suggestions, so ArrowDown still lands on the search first (Ctrl+Enter reaches the assistant from the field in both cases).
+		const ask: Item | undefined = assistant.api ? {
+			key: "ask", kind: "ask", group: t("assistant.title"),
+			html: esc(t("assistant.askThis")), snippet: esc(`« ${q} »`),
 			sub: assistant.pending ? t("assistant.busy") : undefined,
-			run: () => { open = false; if (assistant.pending) assistant.setOpen(true); else assistant.ask(q); },
-		});
-		if (!engine) return out;
+			run: () => toAssistant(),
+		} : undefined;
+		const askFirst = !!ask && questionLike(q);
+		if (ask && askFirst) out.push(ask);
+		if (!engine) { if (ask && !askFirst) out.push(ask); return out; }
 		const { filters, terms, titles } = suggest(engine, value, has);
 		out.push(...filters.map(filter));
 		for (const term of terms) out.push({ key: `t:${term}`, kind: "term", group: t("palette.terms"), icon: "search", html: esc(term), run: () => { setValue(term); active = -1; input?.focus(); } });
@@ -128,10 +133,21 @@
 		for (const h of hits) page(h.doc, h.title, h.snippet);
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((w) => fold(c.html).includes(w))) out.push(c);
+		if (ask && !askFirst) out.push(ask);
 		// always visible access (sticky footer) to the full list, with its exact total
 		if (total > 0) out.push({ key: "all", kind: "all", html: esc(t("palette.all", { q })), sub: t("common.pages", { count: total }), run: () => submit() });
 		return out;
 	});
+
+	/** The assistant, opened on the typed text as a draft (never sent: the visitor confirms with Enter in the panel). */
+	const toAssistant = () => { open = false; active = -1; assistant.prefill(value); };
+	/** Ctrl/Cmd+Enter: the typed text goes to the assistant right away (one question at a time: a pending one only gets the draft). */
+	const askNow = () => {
+		const q = value.trim();
+		open = false;
+		active = -1;
+		if (assistant.pending) assistant.prefill(q); else assistant.ask(q);
+	};
 
 	/** Opens a page; the query goes with it (`?q=`) so that the article highlights and offers the found passage. */
 	function open_(d: SearchDoc, newTab?: boolean) {
@@ -166,6 +182,8 @@
 	const cur = $derived(items[act]);
 
 	function onkeydown(e: KeyboardEvent) {
+		// Ctrl/Cmd+Enter takes the raw typed text to the assistant, even over a highlighted suggestion
+		if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.isComposing && assistant.api && value.trim()) { e.preventDefault(); askNow(); return; }
 		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 			if (!items.length) return;
 			e.preventDefault();
@@ -200,7 +218,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div bind:this={wrap} class="{wide ? '' : 'relative'} {className}" {onfocusout} onkeydown={wrapKeys}>
-	<div class="relative">
+	<div class={main ? "flex items-center gap-2" : ""}>
+	<div class="relative {main ? 'min-w-0 flex-1' : ''}">
 		<Icon name="search" size={main ? 24 : 20} class="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
 		<Input
 			bind:ref={input}
@@ -216,13 +235,27 @@
 			aria-activedescendant={act >= 0 ? `${listId}-${act}` : undefined}
 			autocomplete="off"
 			spellcheck="false"
-			class="pr-14 pl-10 {main ? 'h-12 pl-12 text-base md:text-base pointer-coarse:h-12' : ''}"
+			class="{!main && assistant.api ? 'pr-10' : 'pr-14'} pl-10 {main ? 'h-12 pl-12 text-base md:text-base pointer-coarse:h-12' : ''}"
 			onfocus={() => { if (!engine) warm(); open = true; }}
 			{onkeydown}
 		/>
-		{#if !value}
+		<!-- the compact field with the assistant button has no room for the hint (the shortcut itself still works) -->
+		{#if !value && (main || !assistant.api)}
 			<kbd class="text-muted-foreground pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border px-1.5 text-xs sm:block pointer-coarse:hidden">{mod} K</kbd>
 		{/if}
+		{#if assistant.api && !main}
+			<!-- inside the compact field: the text typed so far goes to the assistant as a draft -->
+			<Button variant="ghost" size="icon-xs" class="absolute inset-y-0 right-1 my-auto [&_svg:not([class*='size-'])]:size-4" aria-label={t("assistant.askThis")} title="{t('assistant.askThis')} ({t('assistant.askSend', { key: mod })})" aria-keyshortcuts="Control+Enter Meta+Enter" onclick={toAssistant}>
+				<AssistantAvatar size={16} />
+			</Button>
+		{/if}
+	</div>
+	{#if assistant.api && main}
+		<!-- beside the large field there is room for the label; narrow screens keep the avatar, the name stays -->
+		<Button variant="outline" class="h-12 shrink-0 px-3" title="{t('assistant.askThis')} ({t('assistant.askSend', { key: mod })})" aria-keyshortcuts="Control+Enter Meta+Enter" onclick={toAssistant}>
+			<AssistantAvatar size={16} /><span class="sr-only sm:not-sr-only">{t("assistant.askThis")}</span>
+		</Button>
+	{/if}
 	</div>
 	{#if open && (items.length || (!live && value.trim()))}
 		<!-- mousedown with no focus effect: the field keeps focus, so the panel does not close before the click -->
@@ -241,12 +274,13 @@
 							{#if item.kind === "ask"}
 								<!-- short action label, the question on its own lines (never cut to one line on a phone) -->
 								<span class="flex items-start gap-2">
-									<Icon name="kind-query" size={16} class="text-muted-foreground mt-0.5 shrink-0" />
-									<span class="min-w-0">
+									<AssistantAvatar size={16} />
+									<span class="min-w-0 flex-1">
 										<span class="font-medium">{@html item.html}</span>
 										<span class="text-muted-foreground line-clamp-2 block break-words">{@html item.snippet}</span>
 										{#if item.sub}<span class="text-muted-foreground block text-xs">{item.sub}</span>{/if}
 									</span>
+									<kbd class="text-muted-foreground hidden shrink-0 rounded border px-1 text-xs sm:block pointer-coarse:hidden">{t("assistant.askKey", { key: mod })}</kbd>
 								</span>
 							{:else if item.doc}
 								<ResultRow compact selected={sel} doc={item.doc} titleHtml={item.html} snippetHtml={item.snippet} />
@@ -268,7 +302,7 @@
 							{#if sel}
 								<div class="text-muted-foreground flex basis-full flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1.5 text-sm">
 									<span><kbd class="rounded border px-1">↵</kbd> {t("palette.key.open")}</span>
-									<span><kbd class="rounded border px-1">{mod} ↵</kbd> {t("palette.key.newTab")}</span>
+									{#if !assistant.api}<span><kbd class="rounded border px-1">{mod} ↵</kbd> {t("palette.key.newTab")}</span>{/if}
 									<span><kbd class="rounded border px-1">Alt F</kbd> {t("palette.key.fav")}</span>
 									<button type="button" tabindex="-1" class="hover:text-foreground inline-flex min-h-6 items-center gap-1" onclick={() => copy(item.doc!)}><Icon name="copy-link" size={16} /><kbd class="rounded border px-1">Alt C</kbd> {t("palette.key.copy")}</button>
 								</div>
