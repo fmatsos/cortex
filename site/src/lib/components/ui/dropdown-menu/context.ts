@@ -27,4 +27,4 @@ export const useRadio = () => getContext<RadioContext>(RADIO);
 
 /** Shared look of an interactive row: square, flat, the focus ring drawn inside the menu so its edge never clips it. */
 export const itemClass =
-	"relative flex min-h-9 w-full cursor-default items-center gap-2 rounded-none px-2 py-1.5 text-left text-sm select-none pointer-coarse:min-h-11 hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+	"relative flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-none px-2 py-1.5 text-left text-sm select-none pointer-coarse:min-h-11 hover:bg-muted hover:text-foreground focus:bg-muted focus:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";

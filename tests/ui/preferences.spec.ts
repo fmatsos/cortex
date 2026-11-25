@@ -52,6 +52,24 @@ test.describe("menu", () => {
     await expect(btn).toBeFocused();
   });
 
+  test("the open menu floats over the page: a drop shadow, a strong edge, a pointer on every action", async ({ page }) => {
+    await page.goto("/graph");
+    await trigger(page).click();
+    await expect(menu(page)).toBeVisible();
+    const look = await menu(page).evaluate((el) => {
+      // resolve a token to a computed colour through a probe element
+      const color = (token: string) => { const d = document.createElement("div"); d.style.color = `var(${token})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
+      const s = getComputedStyle(el);
+      return { shadow: s.boxShadow, border: s.borderTopColor, input: color("--input"), faint: color("--border") };
+    });
+    expect(look.shadow).not.toBe("none");
+    expect(look.border, "the edge uses --input").toBe(look.input);
+    expect(look.border, "not the faint --border").not.toBe(look.faint);
+    // every action shows a pointer; labels are not actions
+    for (const item of await menu(page).getByRole("menuitemradio").all()) expect(await item.evaluate((el) => getComputedStyle(el).cursor)).toBe("pointer");
+    expect(await menu(page).locator('[data-slot="dropdown-menu-label"]').first().evaluate((el) => getComputedStyle(el).cursor)).not.toBe("pointer");
+  });
+
   test("a click outside closes it", async ({ page }) => {
     await page.goto("/graph");
     await trigger(page).click();

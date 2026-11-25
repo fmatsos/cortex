@@ -4,6 +4,9 @@ import { expect, test } from "./helpers";
 // the featured pool may hold fewer than three pages, and the log may have no entry with several pages.
 const FEATURED = /^(Pages à la une|Featured pages)$/;
 const NEWS = /^(Actualité du wiki|Wiki news)$/;
+const FACTS = /^(Le saviez-vous \?|Did you know\?)$/;
+const HUBS = /^(Pages centrales|Central pages)$/;
+const PORTALS = /^(Portails|Portals)$/;
 
 const section = (page: import("@playwright/test").Page, name: RegExp) => page.getByRole("region", { name });
 
@@ -22,9 +25,41 @@ test("featured pages: up to three distinct entries, listed under the plural head
   expect(n).toBeLessThanOrEqual(3);
   const hrefs = await featured.locator("li > a").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
   expect(new Set(hrefs).size, "distinct pages").toBe(n);
-  // the section follows its content: no stretched empty space under the last entry
-  const box = (await featured.boundingBox())!, last = (await items.last().boundingBox())!;
-  expect(box.y + box.height - (last.y + last.height)).toBeLessThan(40);
+});
+
+// The two sections of a row share one height (the shorter one spreads its content), and the link that closes a section sits
+// at its bottom right, whatever the section holds.
+test.describe("home rows at 1440", () => {
+  test.skip(({ isMobile }) => isMobile, "two-column layout: desktop project only");
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const heights = (page: import("@playwright/test").Page, names: RegExp[]) =>
+    Promise.all(names.map(async (n) => (await section(page, n).count() ? (await section(page, n).boundingBox())!.height : undefined)));
+
+  for (const [label, a, b] of [["featured and news", FEATURED, NEWS], ["facts and central pages", FACTS, HUBS]] as const) {
+    test(`${label} have the same height`, async ({ page }) => {
+      await page.goto("/");
+      const [ha, hb] = await heights(page, [a, b]);
+      test.skip(ha === undefined || hb === undefined, "one of the two sections is absent from this wiki");
+      expect(Math.abs(ha! - hb!), `${ha} vs ${hb}`).toBeLessThanOrEqual(1);
+    });
+  }
+
+  test("the link closing a section is right-aligned at its bottom", async ({ page }) => {
+    await page.goto("/");
+    let seen = 0;
+    for (const [name, link] of [[NEWS, /^(Tout le journal|The whole log)/], [HUBS, /^(Voir le graphe|See the graph)/], [PORTALS, /^(Tous les tags|All tags)/]] as const) {
+      const sec = section(page, name);
+      if (!(await sec.count())) continue;
+      seen++;
+      const box = (await sec.boundingBox())!, a = (await sec.getByRole("link", { name: link }).boundingBox())!;
+      // content edge: 1 px border + 16 px padding
+      expect(Math.abs(box.x + box.width - 17 - (a.x + a.width)), `${name} link right edge`).toBeLessThanOrEqual(2);
+      // bottom: the link's own padding and 1 px border + 16 px padding
+      expect(box.y + box.height - (a.y + a.height), `${name} link at the bottom`).toBeLessThanOrEqual(17 + 2);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
 });
 
 test("featured pages: the same day gives the same picks after a reload", async ({ page }) => {

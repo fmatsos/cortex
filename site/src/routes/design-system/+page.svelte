@@ -250,7 +250,7 @@
 	<!-- 3. shapes -->
 	<section aria-labelledby="h-formes" id="formes" class="mt-14">
 		<h2 id="h-formes" class={h2}>Formes</h2>
-		<p class="{cap} mt-3 max-w-3xl">Rayon 0 partout, bordures de 1 px, aucune ombre. Les surfaces se distinguent par le fond, le contour et l'ordre de superposition. Seuls les symboles gardent la courbe qui les rend reconnaissables.</p>
+		<p class="{cap} mt-3 max-w-3xl">Rayon 0 partout, bordures de 1 px, aucune ombre sur les surfaces de la page. Elles se distinguent par le fond, le contour et l'ordre de superposition ; seules les couches flottantes portent une ombre (voir plus bas). Seuls les symboles gardent la courbe qui les rend reconnaissables.</p>
 		<h3 class={h3}>Rayons</h3>
 		<ul class="flex flex-wrap gap-4">
 			{#each Object.entries(RADII) as [r, cls] (r)}
@@ -267,6 +267,12 @@
 			<span>Séparateur horizontal</span><Separator class="flex-1" />
 			<span>vertical</span><Separator orientation="vertical" class="h-6" />
 			<span>fin</span>
+		</div>
+		<h3 class={h3}>Couches flottantes et ombre portée</h3>
+		<p class="{cap} max-w-3xl">Exception à l'absence d'ombre, réservée aux couches qui flottent au-dessus de la page : menus, fenêtres contextuelles, palette de recherche, notification, tiroir modal de l'assistant. Elles prennent le fond <code class="font-mono">--popover</code>, un contour de 1 px en <code class="font-mono">--input</code> (plus net que <code class="font-mono">--border</code>) et l'ombre <code class="font-mono">--shadow-overlay</code>, plus dense en sombre. Les cartes et le contenu de la page restent plats. Le menu de la section Composants l'applique à l'ouverture.</p>
+		<div class="{box} mt-3 grid gap-6 sm:grid-cols-2">
+			<div class="bg-card border p-3 text-sm">Surface de la page : plate, contour <code class="font-mono">--border</code>, sans ombre</div>
+			<div class="bg-popover text-popover-foreground border-input shadow-overlay border p-3 text-sm" data-floating>Couche flottante : <code class="font-mono">shadow-overlay</code>, contour <code class="font-mono">--input</code></div>
 		</div>
 		<h3 class={h3}>Anneau de focus</h3>
 		<div class="{box} flex flex-wrap items-center gap-6">
@@ -418,7 +424,7 @@
 					<DropdownMenu.Item variant="destructive"><Icon name="clear" size={16} />Effacer l'historique</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<span class={cap}>Choix courant : <code class="font-mono">{theme}</code>. Clic, Entrée, Espace ou flèche bas pour ouvrir ; flèches, Origine, Fin pour parcourir ; Échap pour fermer.</span>
+			<span class={cap}>Choix courant : <code class="font-mono">{theme}</code>. Clic, Entrée, Espace ou flèche bas pour ouvrir ; flèches, Origine, Fin pour parcourir ; Échap pour fermer. Le menu est une couche flottante (ombre portée) et chaque action montre le curseur main.</span>
 		</div>
 
 		<h3 id="c-tabs" class={h3}>Tabs</h3>

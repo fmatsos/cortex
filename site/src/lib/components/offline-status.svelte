@@ -239,4 +239,4 @@
 
 <!-- always in the DOM: an `aria-live` region must exist before its text changes. The visual toast repeats it, hidden from assistive technology -->
 <div aria-live="polite" class="sr-only">{announce}</div>
-<div bind:this={toastEl} popover="manual" aria-hidden="true" class="bg-background text-muted-foreground pointer-events-none fixed inset-auto bottom-3 left-3 m-0 w-fit max-w-[calc(100vw-1.5rem)] overflow-visible rounded-none border px-2.5 py-1 text-xs print:hidden">{toastText}</div>
+<div bind:this={toastEl} popover="manual" aria-hidden="true" class="bg-popover border-input shadow-overlay text-muted-foreground pointer-events-none fixed inset-auto bottom-3 left-3 m-0 w-fit max-w-[calc(100vw-1.5rem)] overflow-visible rounded-none border px-2.5 py-1 text-xs print:hidden">{toastText}</div>

@@ -84,7 +84,7 @@
 	aria-labelledby="{menu.id}-trigger"
 	aria-orientation="vertical"
 	tabindex="-1"
-	class={cn("dropdown-menu-content bg-popover text-popover-foreground border-border m-0 max-h-[min(24rem,calc(100dvh-1rem))] w-max min-w-40 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-none border p-1 outline-none", className)}
+	class={cn("dropdown-menu-content bg-popover text-popover-foreground border-input shadow-overlay m-0 max-h-[min(24rem,calc(100dvh-1rem))] w-max min-w-40 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-none border p-1 outline-none", className)}
 	style="inset:auto;margin:4px 0 0;position-anchor:--{menu.id};top:anchor(bottom);{align === 'end' ? 'right:anchor(right)' : 'left:anchor(left)'};position-try-fallbacks:flip-block;{fallback}"
 	onbeforetoggle={beforetoggle}
 	ontoggle={toggle}

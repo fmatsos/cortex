@@ -127,6 +127,8 @@
 	--color-note-foreground: var(--note-foreground);
 	--color-warning-background: var(--warning-background);
 	--color-warning-foreground: var(--warning-foreground);
+	/* floating layers only (menus, popovers, palettes, toasts, the modal drawer): the one exception to "no shadow" */
+	--shadow-overlay: var(--shadow-overlay);
 	/* square design: every radius is 0 (the doc's Part II); --radius itself comes from the tokens */
 	--radius-xs: 0px;
 	--radius-sm: 0px;

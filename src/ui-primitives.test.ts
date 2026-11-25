@@ -71,13 +71,16 @@ test("dropdown menu: trigger and popover menu are wired by id, items carry their
   expect(link.hasAttribute("href")).toBe(false);
 });
 
-test("dropdown menu: square, flat, no dependency (no radius or shadow utility, no bits-ui)", () => {
+test("dropdown menu: square, one overlay shadow on the floating menu only, no dependency (no radius, no other shadow utility, no bits-ui)", () => {
   const files = ["dropdown-menu-content", "dropdown-menu-item", "dropdown-menu-radio-item", "dropdown-menu-label"].map((f) => readFileSync(join(UI, "dropdown-menu", `${f}.svelte`), "utf8"));
   const ctx = readFileSync(join(UI, "dropdown-menu/context.ts"), "utf8");
   for (const src of [...files, ctx]) {
-    expect(src).not.toMatch(/\brounded-(?!none)\S*|\bshadow-\S+|bits-ui/);
+    expect(src).not.toMatch(/\brounded-(?!none)\S*|\bshadow-(?!overlay\b)\S+|bits-ui/);
   }
   expect(files[0]).toContain("rounded-none");
+  expect(files[0]).toContain("shadow-overlay"); // the menu floats over the page
+  for (const src of [...files.slice(1), ctx]) expect(src).not.toContain("shadow-overlay"); // rows stay flat
+  expect(ctx).toContain("cursor-pointer"); // every action row shows the hand
 });
 
 test("tabs: tablist, tabs and panels reference each other; only the selected tab is tabbable", async () => {
