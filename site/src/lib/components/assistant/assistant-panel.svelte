@@ -188,7 +188,7 @@
 				<article data-turn={turn.id} class="scroll-mt-4" aria-label={turn.q}>
 					<p class="bg-muted ml-8 rounded-lg px-3 py-2 text-sm break-words">{turn.q}</p>
 					{#if turn.pending}
-						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><AssistantAvatar state="pending" size={48} /><span>{t("assistant.waiting")}</span></div>
+						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><AssistantAvatar state="pending" size={40} /><span>{t("assistant.waiting")}</span></div>
 					{:else if turn.error}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
 							<Icon name="error" size={20} />
@@ -233,6 +233,18 @@
 </dialog>
 
 <style>
+	/* owner: the answer prose reads at the size of the question (text-sm, 14 px), headings scaled to it */
+	.assistant :global(.wiki) {
+		font-size: 0.875rem;
+		line-height: 1.65;
+	}
+	.assistant :global(.wiki h2) {
+		font-size: 1.15em;
+	}
+	.assistant :global(.wiki h3),
+	.assistant :global(.wiki h4) {
+		font-size: 1em;
+	}
 	.assistant {
 		position: fixed;
 		inset: 0 0 0 auto;
