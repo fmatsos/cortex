@@ -24,10 +24,10 @@
 	// Favorites are specific to this browser: they are found in the search index (loaded only if there are any)
 	let engine = $state<Engine>();
 	$effect(() => { if (favs.ids.length && !engine) loadEngine().then((e) => (engine = e), () => {}); });
-	// daily picks: the export day in the prerendered page, today's once in the browser (they change without a rebuild)
+	// daily picks: the day of the last log entry in the prerendered page (so that it only changes with the wiki), today's once in the browser (they change without a rebuild)
 	let today = $state<number>();
 	onMount(() => { today = Math.floor(Date.now() / 864e5); });
-	const day = $derived(today ?? Math.floor(Date.parse(data.footer.generatedAt) / 864e5));
+	const day = $derived(today ?? data.day);
 	const featured = $derived(pickDaily(data.featured, day, FEATURED));
 	const facts = $derived.by(() => {
 		const shown = new Set(featured.map((f) => f.id));

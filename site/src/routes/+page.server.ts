@@ -21,6 +21,8 @@ export const load = () => {
 	const byDegree = [...pages].sort((a, b) => deg(b.id) - deg(a.id) || a.title.localeCompare(b.title, "fr"));
 	const card = (p: (typeof pages)[number]) => ({ id: p.id, type: p.type, title: p.title, description: p.description, tags: p.tags.slice(0, 4), links: deg(p.id) });
 	return {
+		// day of the prerendered picks: the newest log entry's (not the export's, which would change the page at every rebuild)
+		day: log.length ? Math.floor(Date.parse(log[0]!.at) / 864e5) || 0 : 0,
 		seed: searchSeed(),
 		// featured pool: well-linked syntheses and concepts with a description
 		featured: byDegree.filter((p) => (p.type === "Synthesis" || p.type === "Concept") && p.description).slice(0, POOL).map(card),

@@ -3,7 +3,9 @@
 	import "../app.css";
 	import { onMount } from "svelte";
 	import { afterNavigate } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import { page } from "$app/state";
+	import type { Footer } from "#lib/types.js";
 	import { favs } from "#lib/favs.svelte.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { parseQuery, token, wantsFav } from "#lib/query.js";
@@ -25,11 +27,13 @@
 	import { registerJourneyActions } from "#lib/journeys.js";
 	import AuthNotice from "#lib/components/auth-notice.svelte";
 
-	let { children, data } = $props();
+	let { children } = $props();
 	// what the account page can do with a saved conversation (resume in the panel, export) and journey (export): before its first render
 	registerConversationActions();
 	registerJourneyActions();
-	const f = $derived(data.footer);
+	// export date and figures: read from `footer.json` once the page is shown, not written into every page (see routes/footer.json).
+	// Absent while loading and on failure (offline with no copy, static 404 fallback): the footer then only keeps its links.
+	let f = $state<Footer>();
 	const fmtDate = (d: string) => {
 		const at = new Date(d);
 		return t("footer.dateTime", { date: at.toLocaleDateString(intlLocale(), { day: "numeric", month: "long", year: "numeric" }), time: at.toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" }) });
@@ -38,7 +42,11 @@
 
 	// favorites, search history, theme and language: specific to this browser (localStorage); an account, when the server has
 	// one, then keeps theme, language and favorites (account.init reads the stores, so it comes after them)
-	onMount(() => { theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init(); return stop; });
+	onMount(() => {
+		theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init();
+		fetch(resolve("/footer.json")).then((r) => (r.ok ? r.json() : undefined)).then((v: Footer | undefined) => { f = v; }, () => {});
+		return stop;
+	});
 
 	// Real height of the sticky header → offset of anchors and of the skip link (never two assumed heights)
 	$effect(() => {
