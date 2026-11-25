@@ -245,6 +245,33 @@ restrict,pty,command="CORTEX_ROOT=/srv/cortex/cli /usr/local/bin/cortex remote-e
 
 Commands run one at a time per checkout. A failed or interrupted command never loses what it wrote. When a push conflicts, the commit goes to a `cortex/pending-…` branch of the remote. See [docs/REMOTE-PLAN.md](docs/REMOTE-PLAN.md).
 
+### Two ways to publish the site
+
+The site is one SvelteKit app, fully prerendered: no page is rendered on a server. Two commands publish it, and the browser works out which one it is talking to.
+
+- **`cortex export`** writes the static site to `.cortex/site` (or `--out`). Drop the folder on any file host: neither Bun nor Cortex runs there.
+- **`cortex serve [--port N] [--sync]`** (needs `$CORTEX_REVIEWER`, port `8080` by default) builds the same site with the same `exportSite`, serves it itself, and adds the `/api/*` routes (assistant, accounts, conversations, journeys, `verify`, `sync`) and the phone share target under `/share/`. It rebuilds after every change it makes or is told about (a review, an inbox or share entry, `POST /api/sync`), into the other of two folders (`.cortex/serve/a` and `b`), then swaps: requests keep the previous build until the new one is ready. With `--sync`, the wiki is a git checkout: it pulls before a write, commits and pushes after it.
+
+The browser only asks what is there. A missing `/api/auth/methods` (404 on a static host) or an empty provider list means no accounts; a `HEAD /api/ask` that does not answer `204` means no assistant; `/api/verify` is probed the same way. What is missing is hidden, so the same site works in both modes.
+
+| Feature | `cortex export` | `cortex serve` |
+|---|---|---|
+| Pages, graph and map, journeys (a route from page to page) | yes | yes |
+| Keyword search with operators, in the browser | yes | yes |
+| Offline reading (service worker) | yes | yes |
+| Export a journey as Markdown | yes | yes |
+| Preferences and favorites | this browser (`localStorage`) | this browser, or synchronised with your account (`auth`) |
+| Assistant | no | with `site_ask` |
+| Accounts, saved conversations and journeys | no | with `auth` |
+| « Mark as reviewed » | no | with `review` |
+| Phone share target (`/share/`) | no | yes |
+| Git sync of the wiki | no | with `--sync` |
+| Rebuilt on change | no (run `export` again) | yes |
+
+In `serve`, every dynamic feature turns on only when its key is in `cortex.json`: a `serve` with neither `site_ask` nor `auth` behaves like the static site, plus the automatic rebuild.
+
+Choose `export` to publish on a host you do not run yourself, or when nothing needs to write back. Choose `serve` when the site should follow the wiki on its own, or when you want the assistant, accounts, reviews or the share target.
+
 ### User accounts
 
 `cortex serve` can keep a personal space for each person who signs in: preferences (theme, language, favorites), saved assistant conversations (resume, export as Markdown, delete) and saved graph journeys. Cortex never handles a password: it sends the browser to an identity provider and takes back an identity `(provider, subject)`. Without a sign-in the site works as before (preferences stay in the browser), and the static site (`cortex export`) has no `/api/*` at all, so the front end simply shows no account menu there.
