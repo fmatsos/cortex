@@ -7,8 +7,10 @@
  * and `g`. Corners are right angles: no `rx`, no arc used only to round a corner. Curves survive only where they
  * define the symbol (lens, moon, globe, sun, clock, refresh arcs, bulb, wifi). A dot is a real 2x2 filled square
  * (`DOT`, `fill="currentColor" stroke="none"`), never a zero-length segment. A status container is a square frame.
- * The sprite of all the bodies is `icon-sprite.svelte` (one `<symbol>` per name, mounted once by the layout); `icon.svelte`
- * draws an instance (`<use>`); `iconSvg()` renders a standalone SVG string (tests).
+ * The sprite is per page: `hooks.server.ts` scans each prerendered document for the `<use href="#cx-NAME">` it holds and
+ * writes only those `<symbol>`s (`spriteMarkup()`); in the browser `ensureSymbols()` adds the missing ones (icons that
+ * appear later, exported callouts) from the same `symbolMarkup()`. `icon.svelte` draws an instance (`<use>`);
+ * `iconSvg()` renders a standalone SVG string (tests).
  */
 
 const STAR = `<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>`;
@@ -123,8 +125,54 @@ export function iconSvg(name: IconName, { size = 20, filled = false, label }: Ic
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="${strokeFor(size)}" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="2" focusable="false" ${a11y}>${ICONS[name]}</svg>`;
 }
 
-/** Id of an icon's `<symbol>` in the embedded sprite (`icon-sprite.svelte`). */
+/** Id of an icon's `<symbol>` in the embedded sprite. */
 export const symbolId = (name: IconName) => `cx-${name}`;
+
+/** Id of the embedded sprite element (the zero-size `<svg>` that holds the `<symbol>`s). */
+export const SPRITE_ID = "cx-sprite";
+const isIconName = (name: string): name is IconName => Object.hasOwn(ICONS, name);
+
+/** One `<symbol>`: the single place its markup is written, for the build-time sprite and the client alike. */
+export const symbolMarkup = (name: IconName) => `<symbol id="${symbolId(name)}" viewBox="0 0 24 24">${ICONS[name]}</symbol>`;
+
+/**
+ * The icon names a piece of HTML references through `<use href="#cx-NAME">`, in pack order, each once. Unknown names are
+ * ignored. Matches a literal attribute only: an escaped one inside a serialized data payload (`href=\"#cx-...`) is not.
+ */
+export function referencedIcons(html: string): IconName[] {
+	const seen = new Set<string>();
+	for (const m of html.matchAll(/\bhref=(["'])#cx-([\w-]+)\1/g)) seen.add(m[2]);
+	return ICON_NAMES.filter((n) => seen.has(n));
+}
+
+/**
+ * The zero-size, out-of-flow sprite holding exactly the given symbols (`""` for none). Never `display: none`: some
+ * browsers then fail to resolve `<use href="#...">`. The stroke contract is on each instance (`icon.svelte`), not here.
+ * Unknown names are ignored.
+ */
+export function spriteMarkup(names: Iterable<string>): string {
+	const wanted = new Set(names);
+	const known = ICON_NAMES.filter((n) => wanted.has(n));
+	if (!known.length) return "";
+	return `<svg xmlns="http://www.w3.org/2000/svg" id="${SPRITE_ID}" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">${known.map(symbolMarkup).join("")}</svg>`;
+}
+
+/** Adds the `<symbol>` of `name` to the document's sprite (created when absent) unless it is already there. */
+export function ensureSymbol(name: string, doc: Document = document): void {
+	if (!isIconName(name) || doc.getElementById(symbolId(name))) return;
+	const sprite = doc.getElementById(SPRITE_ID);
+	if (sprite) sprite.insertAdjacentHTML("beforeend", symbolMarkup(name));
+	else doc.body.insertAdjacentHTML("afterbegin", spriteMarkup([name]));
+}
+
+/**
+ * Makes every `<use href="#cx-NAME">` under `root` resolvable: adds the missing symbols to the sprite. Covers what the
+ * build-time scan cannot see (HTML injected with `{@html}` after a client navigation, icons rendered later).
+ */
+export function ensureSymbols(root: ParentNode = document): void {
+	const doc = (root as Node).nodeType === 9 ? (root as Document) : (root as Node).ownerDocument!;
+	for (const u of root.querySelectorAll('use[href^="#cx-"]')) ensureSymbol(u.getAttribute("href")!.slice(4), doc);
+}
 
 /**
  * The icon as a sprite reference: a small `<svg>` whose `<use>` points at the symbol of the embedded sprite. The stroke

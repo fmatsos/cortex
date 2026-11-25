@@ -11,7 +11,6 @@
 	import { lang } from "#lib/lang.svelte.js";
 	import { intlLocale, t } from "#lib/i18n/index.js";
 	import Icon from "#lib/components/icon.svelte";
-	import IconSprite from "#lib/components/icon-sprite.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
@@ -19,6 +18,7 @@
 	import ThemeSwitch from "#lib/components/theme-switch.svelte";
 	import LangSwitch from "#lib/components/lang-switch.svelte";
 	import { toRoute } from "#lib/links.js";
+	import { ensureSymbols } from "#lib/icons.js";
 	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
 	import { assistant } from "#lib/assistant.svelte.js";
 
@@ -59,7 +59,10 @@
 		}
 	}
 	// the home page starts again from an empty search; /search/ resumes its own from the URL
-	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; });
+	// and the icon sprite gets the symbols of HTML injected with {@html} (exported callouts): the build-time scan only
+	// covers the document the visitor landed on, not the pages reached by client navigation (also fires on the first
+	// load, which covers the 404 shell)
+	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; ensureSymbols(); });
 
 	const nav = [
 		["/search", "search", "nav.search"],
@@ -76,9 +79,6 @@
 </script>
 
 <svelte:window onkeydown={globalKeys} />
-
-<!-- the one icon sprite: outside the language {#key} so a language change does not rebuild it -->
-<IconSprite />
 
 {#key lang.current}
 <a href="#main-content" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">{t("layout.skip")}</a>
