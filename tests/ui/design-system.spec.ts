@@ -33,10 +33,10 @@ test("every icon of the pack is shown and every use resolves to its symbol", asy
 test("both palettes are shown, with contrast ratios computed from the tokens", async ({ page }) => {
   await page.goto(URL);
   const light = page.locator('[data-panel="light"]'), dark = page.locator('[data-panel="dark"]');
-  expect(await light.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(250, 247, 240)");
+  expect(await light.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(255, 255, 255)");
   expect(await dark.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(23, 28, 27)");
   // the figures documented in docs/UI-REDESIGN.md
-  await expect(light.locator('[data-token="--foreground"]')).toContainText("13,47:1");
+  await expect(light.locator('[data-token="--foreground"]')).toContainText("16,34:1");
   await expect(dark.locator('[data-token="--foreground"]')).toContainText("13,92:1");
   await expect(light.locator('[data-token="--primary-foreground"]')).toContainText("8,18:1");
   await expect(dark.locator('[data-token="--primary-foreground"]')).toContainText("8,50:1");

@@ -149,7 +149,11 @@ pair("--graph-edge-active", "--graph-background", 3); // highlighted relations
 pair("--ring", "--background", 3); // focus ring
 pair("--ring", "--card", 3);
 pair("--link", "--background", 3);
-// header band: its own surface, with the nav links, the current-page mark, the fields and the controls it hosts
+// header band: its own surface, with the nav links, the current-page mark, the fields and the controls it hosts.
+// The light page is a flat white (the owner's "V2 Blanc neutre"): cards and page share one colour, and surfaces are
+// separated by 1 px rules rather than by a tint. So the band is told apart by its bottom rule, which must therefore be a
+// real boundary (3:1 against the band and the page), not a faint hairline.
+// The band itself is only 1.06:1 against the page, which is why no surface-ratio assertion is kept for it.
 pair("--header-foreground", "--header"); // wordmark, nav labels
 pair("--muted-foreground", "--header"); // inactive nav links
 pair("--primary", "--header", 3); // current-page rule of the nav
@@ -157,9 +161,9 @@ pair("--foreground", "--card"); // header search field and selects (bg-card) tex
 pair("--muted-foreground", "--card"); // their placeholder and icons
 pair("--input", "--header", 3); // border of the header fields and selects
 pair("--ring", "--header", 3); // focus ring on the band
-pair("--header-border", "--header", 3); // bottom rule of the header
+pair("--header-border", "--header", 3); // bottom rule of the header (the only cue separating it from the page)
 pair("--header-border", "--background", 3); // ... against the page it separates from
-text("la bande d'en-tête se distingue de la page (surface)", tok("--header"), tok("--background"), 1.1);
+pair("--header-border", "--card", 3); // ... and against the cards, which share the page colour in the light theme
 
 const rows = Object.entries(THEMES).flatMap(([theme, t]) =>
   specs.map((s) => ({ thème: theme, paire: s.name, ratio: Math.round(contrast(s.fg(t, theme === "sombre"), s.bg(t, theme === "sombre")) * 100) / 100, seuil: s.min })),
