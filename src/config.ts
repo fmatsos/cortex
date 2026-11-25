@@ -102,9 +102,9 @@ const SHAPE = {
   drafts: z.boolean({ error: '"drafts" must be true, false or null.' }).nullish(),
   /**
    * Judge: a System One model (TypeSafe's hosted Jev, or d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers
-   * yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url: default $CORTEX_JUDGE_BASE_URL, else
-   * as `embed`; model: default $CORTEX_JUDGE_MODEL, else `d3-mini`. Thresholds and sizes (they depend on the model): each one
-   * default $CORTEX_JUDGE_<NAME>, else limits.ts (judge.ts JUDGE_SETTINGS). `*_related` must not exceed `*_retained`.
+   * yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url: default $CORTEX_JEV_BASE_URL, else
+   * as `embed`; model: default $CORTEX_JEV_MODEL, else `d3-mini`. Thresholds and sizes (they depend on the model): each one
+   * default $CORTEX_JEV_<NAME>, else limits.ts (judge.ts JUDGE_SETTINGS). `*_related` must not exceed `*_retained`.
    */
   judge: z.strictObject({
     base_url: str("judge.base_url"), model: str("judge.model"),

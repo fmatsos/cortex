@@ -305,8 +305,8 @@ test("config: search thresholds validated (0 to 1, related not above retained), 
   expect(lintConfig({ judge: { nope: 1 } })[0]!.msg).toContain("search_candidates");
   const root = await wiki({ judge: { search_retained: 0.2 } }, 1);
   expect(await judgeConfig(root)).toMatchObject({ searchRetained: 0.2, searchRelated: 0.2, searchCandidates: 20, concurrency: 6 });
-  process.env.CORTEX_JUDGE_SEARCH_CANDIDATES = "7";
-  try { expect(await judgeConfig(root)).toMatchObject({ searchCandidates: 7 }); } finally { delete process.env.CORTEX_JUDGE_SEARCH_CANDIDATES; }
+  process.env.CORTEX_JEV_SEARCH_CANDIDATES = "7";
+  try { expect(await judgeConfig(root)).toMatchObject({ searchCandidates: 7 }); } finally { delete process.env.CORTEX_JEV_SEARCH_CANDIDATES; }
 });
 
 test("score cache: old scores and the oldest beyond the cap are forgotten when it opens; an unwritable folder falls back to memory", async () => {

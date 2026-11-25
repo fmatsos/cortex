@@ -22,7 +22,7 @@ export const JUDGE = {
 export type Question = { type: "noul"; instructions: string } | { type: "choice"; instructions: string; criteria: Record<string, string> };
 export type Answer = { type: "noul"; noul: number } | { type: "choice"; choice: string; confidence: number; probabilities: Record<string, number> };
 /**
- * The judge's tunable settings (they depend on the model): `judge.<name>` in cortex.json, else $CORTEX_JUDGE_<NAME> (for CI
+ * The judge's tunable settings (they depend on the model): `judge.<name>` in cortex.json, else $CORTEX_JEV_<NAME> (for CI
  * workflows), else the default of limits.ts. An invalid environment value is ignored with a warning.
  */
 export const JUDGE_SETTINGS = {
@@ -44,12 +44,38 @@ export type JudgeSettingName = keyof typeof JUDGE_SETTINGS;
 export type JudgeConfig = { url: string; key?: string; model: string; routeYes: number; dupYes: number; routeCandidates: number; dupCandidates: number; routeChars: number; askRetained: number; askRelated: number; askCandidates: number; searchRetained: number; searchRelated: number; searchCandidates: number; concurrency: number };
 
 const warnedEnv = new Set<string>();
+const toldOld = new Set<string>();
+/**
+ * The only reader of the judge's environment: $CORTEX_JEV_<SUFFIX>, else the deprecated $CORTEX_JUDGE_<SUFFIX> (still written
+ * by older deployments), which warns once per variable. The new name wins when both are set; an empty value counts as unset.
+ * `old` says which name answered (the URL / key pairing in apiKey needs it).
+ */
+export function jevEnv(suffix: string): { value: string; name: string; old: boolean } | undefined {
+  const nu = `CORTEX_JEV_${suffix}`, was = `CORTEX_JUDGE_${suffix}`;
+  const v = process.env[nu]?.trim();
+  if (v) return { value: v, name: nu, old: false };
+  const o = process.env[was]?.trim();
+  if (!o) return;
+  if (!toldOld.has(was)) { toldOld.add(was); warn(`$${was} is deprecated, use $${nu}.`); }
+  return { value: o, name: was, old: true };
+}
+
+/**
+ * The key for the URL that $CORTEX_JEV_BASE_URL or $CORTEX_JUDGE_BASE_URL gave (`urlIsOld`: it came from the old name). A new
+ * key goes to whichever URL won. An old key goes to the old URL, or to the new one only when no old URL is set: the pair an
+ * older deployment wrote stays together, and a key is never sent to a URL it was not written for.
+ */
+function apiKey(urlIsOld: boolean): string | undefined {
+  if (!urlIsOld && !process.env.CORTEX_JEV_API_KEY?.trim() && process.env.CORTEX_JUDGE_BASE_URL?.trim()) return;
+  return jevEnv("API_KEY")?.value;
+}
+
 function setting(name: JudgeSettingName, own: number | null | undefined): number {
   const s = JUDGE_SETTINGS[name];
   if (own != null) return own;
-  const env = `CORTEX_JUDGE_${name.toUpperCase()}`, raw = process.env[env]?.trim();
-  if (raw) {
-    const v = Number(raw);
+  const e = jevEnv(name.toUpperCase());
+  if (e) {
+    const { name: env, value: raw } = e, v = Number(raw);
     if (Number.isFinite(v) && v >= s.min && v <= s.max && (!s.int || Number.isInteger(v))) return v;
     if (!warnedEnv.has(env)) { warnedEnv.add(env); warn(`$${env}="${raw}" ignored: expected ${s.int ? "an integer" : "a number"} ${s.max === 1 ? "between 0 and 1" : `of at least ${s.min}`}.`); }
   }
@@ -57,17 +83,18 @@ function setting(name: JudgeSettingName, own: number | null | undefined): number
 }
 
 /**
- * The effective `judge` settings, undefined when the feature is off. Server: `judge.base_url`, else $CORTEX_JUDGE_BASE_URL
- * (a hosted System One such as TypeSafe's Jev), else the same rule as `embed`. $CORTEX_JUDGE_API_KEY only goes to
- * $CORTEX_JUDGE_BASE_URL (or a `judge.base_url` equal to it), as $CORTEX_ASK_API_KEY for `site_ask`. Model: `judge.model`,
- * else $CORTEX_JUDGE_MODEL, else d3-mini. The other settings: JUDGE_SETTINGS.
+ * The effective `judge` settings, undefined when the feature is off. Server: `judge.base_url`, else $CORTEX_JEV_BASE_URL
+ * (a hosted System One such as TypeSafe's Jev), else the same rule as `embed`. $CORTEX_JEV_API_KEY only goes to
+ * $CORTEX_JEV_BASE_URL (or a `judge.base_url` equal to it), as $CORTEX_ASK_API_KEY for `site_ask`. Model: `judge.model`,
+ * else $CORTEX_JEV_MODEL, else d3-mini. The other settings: JUDGE_SETTINGS. The old $CORTEX_JUDGE_* names are read when the
+ * new one is absent (jevEnv, one warning per variable); see apiKey for the old key.
  */
 export async function judgeConfig(root: string): Promise<JudgeConfig | undefined> {
   const c = await loadConfig(root).catch(() => undefined);
   if (!c?.judge) return;
-  const j = c.judge, own = j.base_url?.replace(/\/+$/, ""), env = process.env.CORTEX_JUDGE_BASE_URL?.replace(/\/+$/, "");
+  const j = c.judge, own = j.base_url?.replace(/\/+$/, ""), eu = jevEnv("BASE_URL"), env = eu?.value.replace(/\/+$/, "");
   const settings = {
-    model: j.model ?? (process.env.CORTEX_JUDGE_MODEL?.trim() || "d3-mini"),
+    model: j.model ?? (jevEnv("MODEL")?.value || "d3-mini"),
     routeYes: setting("route_yes", j.route_yes), dupYes: setting("dup_yes", j.dup_yes),
     routeCandidates: setting("route_candidates", j.route_candidates), dupCandidates: setting("dup_candidates", j.dup_candidates),
     routeChars: setting("route_chars", j.route_chars),
@@ -77,7 +104,7 @@ export async function judgeConfig(root: string): Promise<JudgeConfig | undefined
   };
   // the environment bypasses the lint of cortex.json: a related bar above the retained one is lowered to it
   settings.searchRelated = Math.min(settings.searchRelated, settings.searchRetained);
-  if (env && (!own || own === env)) return { url: env, key: process.env.CORTEX_JUDGE_API_KEY, ...settings };
+  if (env && (!own || own === env)) return { url: env, key: apiKey(eu!.old), ...settings };
   return { ...endpoint(c, j.base_url ?? undefined), ...settings };
 }
 
