@@ -105,18 +105,20 @@ export type Row = { doc: SearchDoc; hit: ServerHit };
 
 /**
  * The server's hits as the site's pages, in the server's order. A hit the site's index does not know (the wiki changed since the
- * export) is left out. `is:fav` is the browser's own list, which the server ignores: it is applied here, on that operator only
- * (the phrases and exclusions were already checked by the server, on its own text).
+ * export) is left out. `is:fav` is the browser's own list, which the server ignores (it strips it, groups included, so its hits are a
+ * superset): the hits are then checked against the whole Boolean structure of the query with the site's own matcher (`(a is:fav)`,
+ * `a OR is:fav`, `-is:fav`), on the page's metadata and favorites. Only the top-level free words, phrases and exclusions are left to the
+ * server (it checked them on its own text); the ones inside a group are checked here, on the site's text, as the local search does.
  */
 export function rows(e: Engine, p: Parsed, res: Hybrid, isFav: (id: string) => boolean): Row[] {
 	const idx = indexOf(e);
-	const fav = res.ignored.includes("is:fav") ? { ...p, words: [], phrases: [], exclude: [], groups: [], ops: p.ops.filter((o) => o.key === "is" && o.value === "fav") } : undefined;
+	const fav = res.ignored.includes("is:fav") ? { ...p, words: [], phrases: [], exclude: [] } : undefined;
 	const out: Row[] = [];
 	for (const hit of res.hits) {
 		const i = idx.get(hit.id);
 		if (i === undefined) continue;
 		const doc = e.docs[i];
-		if (fav && !matches(doc, fav, isFav, "")) continue;
+		if (fav && !matches(doc, fav, isFav, e.hay[i])) continue;
 		out.push({ doc, hit });
 	}
 	return out;
