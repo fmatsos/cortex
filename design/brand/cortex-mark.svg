@@ -1,35 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="96" height="96" role="img" aria-labelledby="t">
   <title id="t">Cortex</title>
-  <!-- Master drawing of the Cortex mark: a brain in side profile, front facing right, drawn as a knowledge graph. Eight round nodes (the brand mark's one exception to the square system): five ink ones, the last of them the stem, and the three of the prefrontal cluster in the accent colour, joined by straight links; the outer links draw the silhouette, three inner links tie the back to the cluster. 32-unit grid: at 32 px one unit is one pixel, nodes 3 units across (front nodes 3.5), links 1.3, at least 2 units clear between any node and any other link or node. Butt ends, mitered joins, no curved link. Idle composition. The same geometry from 24 px up (the links thin a little from 40 px); under 24 px see cortex-mark-16.svg. Source of truth for the data: assistant-avatar.svelte. -->
+  <!-- Idle brain graph, front facing right. Geometry: OPTICS.mark in assistant-avatar.svelte. -->
   <style>
     svg { color: #1b2120; --primary: #245849 }
     @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
-    .links { fill: none; stroke-width: 1.3; stroke-linecap: butt; stroke-linejoin: miter }
+    .links { fill: none; stroke-width: 0.65; stroke-linecap: butt; stroke-linejoin: miter }
   </style>
   <g class="links" stroke="currentColor">
-    <path d="M3.5 14.5L9.5 6.5"/>
-    <path d="M9.5 6.5L18.5 4"/>
-    <path d="M18.5 4L26 8"/>
-    <path d="M3.5 14.5L4 20L8 24L15.5 24.5"/>
-    <path d="M15.5 24.5L21.5 24L27 20.5L29.5 16"/>
-    <path d="M15.5 24.5L15 30"/>
-    <path d="M9.5 6.5L21 15"/>
+    <polyline points="2.5,14 3.5,10 6.5,7"/>
+    <polyline points="6.5,7 10.5,4.5 15.5,3.5"/>
+    <polyline points="15.5,3.5 19.5,4.5 23.5,6"/>
+    <polyline points="2.5,14 2.5,17 3.5,18.5 5.5,20.5"/>
+    <polyline points="5.5,20.5 7.5,23.5 10.5,24.5 11,27"/>
+    <polyline points="11,27 13.5,22"/>
+    <polyline points="13.5,22 15,22.5 18.5,21.5 20,20.5 21,18"/>
+    <polyline points="6.5,7 12,13"/>
+    <polyline points="15.5,3.5 12,13"/>
+    <polyline points="2.5,14 12,13"/>
+    <polyline points="5.5,20.5 12,13"/>
+    <polyline points="5.5,20.5 13.5,22"/>
+    <polyline points="12,13 21,18"/>
   </g>
   <g class="links" stroke="var(--primary)">
-    <path d="M26 8L29.5 16"/>
-    <path d="M21 15L26 8"/>
-    <path d="M21 15L29.5 16"/>
+    <polyline points="23.5,6 27.5,9 29.5,13"/>
+    <polyline points="29.5,13 28,16.5 25.5,18 21,18"/>
+    <polyline points="12,13 19,9.5"/>
+    <polyline points="19,9.5 23.5,6"/>
+    <polyline points="19,9.5 29.5,13"/>
+    <polyline points="19,9.5 21,18"/>
+    <polyline points="21,18 29.5,13"/>
   </g>
   <g fill="currentColor">
-    <circle cx="3.5" cy="14.5" r="1.5"/>
-    <circle cx="9.5" cy="6.5" r="1.5"/>
-    <circle cx="18.5" cy="4" r="1.5"/>
-    <circle cx="15.5" cy="24.5" r="1.5"/>
-    <circle cx="15" cy="30" r="1.5"/>
+    <circle cx="2.5" cy="14" r="1.25"/>
+    <circle cx="6.5" cy="7" r="1.25"/>
+    <circle cx="15.5" cy="3.5" r="1.25"/>
+    <circle cx="5.5" cy="20.5" r="1.25"/>
+    <circle cx="12" cy="13" r="1.25"/>
+    <circle cx="13.5" cy="22" r="1.25"/>
+    <circle cx="11" cy="27" r="1.25"/>
   </g>
   <g fill="var(--primary)">
-    <circle cx="26" cy="8" r="1.75"/>
-    <circle cx="29.5" cy="16" r="1.75"/>
-    <circle cx="21" cy="15" r="1.75"/>
+    <circle cx="23.5" cy="6" r="1.3"/>
+    <circle cx="19" cy="9.5" r="1.3"/>
+    <circle cx="29.5" cy="13" r="1.3"/>
+    <circle cx="21" cy="18" r="1.3"/>
   </g>
 </svg>

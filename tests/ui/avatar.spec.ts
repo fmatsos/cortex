@@ -102,13 +102,15 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     release();
     await expect(head).toHaveAttribute("data-state", "answer");
     await expect(head.locator(".signal")).toHaveCount(0);
-    // the front nodes grow once and stay larger than at rest
+    // all four front nodes animate once, then stay larger than at rest
+    await expect(head.locator(".nf")).toHaveCount(4);
+    expect(await head.locator(".nf").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationIterationCount))).toEqual(Array(4).fill("1"));
     await expect(head.locator(".nf").first()).toHaveCSS("transform", /^matrix\(1\.[1-9]/);
     await expect.poll(() => running(page), "the front nodes grow once, then everything is still").toBe(0);
   });
 }
 
-test("one drawing from 24 px up: eight round nodes, three of them in the accent colour", async ({ page }) => {
+test("one drawing from 24 px up: eleven round nodes, four of them in the accent colour", async ({ page }) => {
   await page.goto("/design-system/");
   const optics = await page.locator("svg.folio").evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute("width")}:${e.getAttribute("data-optic")}:${e.getAttribute("viewBox")}`))]);
   expect(optics).toEqual(expect.arrayContaining(["24:mark:0 0 32 32", "48:mark:0 0 32 32", "96:mark:0 0 32 32"]));
@@ -116,25 +118,33 @@ test("one drawing from 24 px up: eight round nodes, three of them in the accent 
   expect(optics.filter((o) => Number(o.split(":")[0]) >= 24).every((o) => o.includes(":mark:"))).toBe(true);
   for (const width of [24, 48, 96]) {
     const mark = page.locator(`svg.folio[width="${width}"][data-state="idle"]`).first();
-    await expect(mark.locator(".nodes.ink circle")).toHaveCount(5);
-    await expect(mark.locator(".nodes.front circle")).toHaveCount(3);
+    await expect(mark.locator(".nodes.ink circle")).toHaveCount(7);
+    await expect(mark.locator(".nodes.front circle")).toHaveCount(4);
     await expect(mark.locator("rect")).toHaveCount(0);
-    await expect(mark.locator(".links path")).toHaveCount(10);
+    await expect(mark.locator(".links polyline")).toHaveCount(20);
   }
-  // nodes are 3 units across (front ones 3.5), links straight in butt ends
+  // small filled circles on thin straight links, with the same geometry at every main size
   const mark = page.locator('svg.folio[width="48"][data-state="idle"]').first();
-  expect(await mark.locator(".nodes.ink circle").evaluateAll((els) => els.map((e) => e.getAttribute("r")))).toEqual(Array(5).fill("1.5"));
-  expect(await mark.locator(".nodes.front circle").evaluateAll((els) => els.map((e) => e.getAttribute("r")))).toEqual(Array(3).fill("1.75"));
+  expect(await mark.locator(".nodes.ink circle").evaluateAll((els) => els.map((e) => e.getAttribute("r")))).toEqual(Array(7).fill("1.25"));
+  expect(await mark.locator(".nodes.front circle").evaluateAll((els) => els.map((e) => e.getAttribute("r")))).toEqual(Array(4).fill("1.3"));
+  await expect(mark.locator(".links").first()).toHaveCSS("stroke-width", "0.65px");
+  const drawings = await page.locator('svg.folio[data-optic="mark"][data-state="idle"]').evaluateAll((els) =>
+    els.map((el) => [...el.querySelectorAll("polyline")].map((line) => line.getAttribute("points")).join("|")));
+  expect(new Set(drawings).size, "the same geometry at every main size").toBe(1);
 });
 
 test("the 16-unit master of the mark (favicon, under 24 px) keeps the silhouette and the cluster with fewer nodes", () => {
   const read = (f: string) => readFileSync(new URL(`../../design/brand/${f}`, import.meta.url), "utf8");
   const big = read("cortex-mark.svg"), small = read("cortex-mark-16.svg");
   const count = (svg: string, fill: string) => (svg.split(`<g fill="${fill}">`)[1]?.split("</g>")[0].match(/<circle/g) ?? []).length;
-  expect([count(big, "currentColor"), count(big, "var(--primary)")]).toEqual([5, 3]);
-  expect([count(small, "currentColor"), count(small, "var(--primary)")]).toEqual([3, 3]);
+  expect([count(big, "currentColor"), count(big, "var(--primary)")]).toEqual([7, 4]);
+  expect([count(small, "currentColor"), count(small, "var(--primary)")]).toEqual([4, 3]);
   expect(big).toContain('viewBox="0 0 32 32"');
   expect(small).toContain('viewBox="0 0 16 16"');
+  expect((big.match(/<polyline/g) ?? []).length).toBe(20);
+  expect((small.match(/<polyline/g) ?? []).length).toBe(11);
+  expect((small.match(/r="0.65"/g) ?? []).length).toBe(4);
+  expect((small.match(/r="0.7"/g) ?? []).length).toBe(3);
 });
 
 test("a failed question puts the avatar in its error composition, still", async ({ page }) => {
@@ -144,6 +154,8 @@ test("a failed question puts the avatar in its error composition, still", async 
   const head = panel.locator("header svg.folio");
   await expect(head).toHaveAttribute("data-state", "error");
   await expect(head.locator(".break")).toHaveCount(1);
+  await expect(head.locator(".break")).toHaveAttribute("r", "0.65");
+  await expect(head.locator(".links polyline")).toHaveCount(21);
   await expect(head.locator(".signal")).toHaveCount(0);
   expect(await running(page)).toBe(0);
   await expect(panel.locator("[role=status]")).toHaveText(/./);
