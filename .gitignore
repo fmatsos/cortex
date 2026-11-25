@@ -3,3 +3,6 @@ site/.svelte-kit/
 .cortex/
 site/.export.lock
 build/
+.playwright/
+test-results/
+playwright-report/
