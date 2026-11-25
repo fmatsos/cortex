@@ -10,11 +10,13 @@
 
 	// Offline mode status. It owns the service worker state and gives its menu section to the caller (the preferences menu):
 	// the state (preparing, available, failed + retry), the kept version, the connection and the full download of the wiki.
-	// Important changes (state, connection, download) are announced in an `aria-live` region and shown for a few seconds in
-	// a small toast; the toast stays while the visitor is offline or a download runs. No permanent floating button.
+	// Every change (state, connection, download) is announced in an `aria-live` region. Only what the visitor triggers
+	// (a download) or a real connection change is also shown, for a few seconds, in a small toast; the toast stays while the
+	// visitor is offline or a download runs. A state found at load (offline mode ready, installation failed) is for screen
+	// readers only: it must not stay on screen. No permanent floating button.
 	let { children }: { children?: Snippet<[{ section: Snippet; refresh: () => void; offline: boolean; attention: boolean }]> } = $props();
 	const KEY = storageKey("offline-ready");
-	const MESSAGE_MS = 6000;
+	const MESSAGE_MS = 4000;
 
 	let offline = $state(false);
 	let supported = $state(true); // service worker available (secure context, recent browser)
@@ -23,6 +25,7 @@
 	let waiting = $state(false); // a new version is installed and waits for the tabs to close
 	let sw = $state<OfflineState>();
 	let announce = $state(""); // temporary message, read by screen readers
+	let note = $state(""); // the part of it that is also shown in the toast
 	let toastEl = $state<HTMLElement | null>(null);
 	let registration: ServiceWorkerRegistration | undefined;
 	// an active service worker that does not answer `status` (pre-panel version) has finished installing: it is ready
@@ -53,10 +56,11 @@
 	const icon = $derived<IconName>(offline ? "offline" : phase === "ready" ? "offline-ready" : phase === "preparing" ? "retry" : phase === "error" ? "error" : "offline");
 
 	let timer: ReturnType<typeof setTimeout>;
-	function say(message: string) {
+	function say(message: string, visual = true) {
 		announce = message;
+		note = visual ? message : "";
 		clearTimeout(timer);
-		timer = setTimeout(() => (announce = ""), MESSAGE_MS);
+		timer = setTimeout(() => (announce = note = ""), MESSAGE_MS);
 	}
 
 	const post = (message: { type: "status" | "download-all" | "cancel" }) => {
@@ -88,9 +92,9 @@
 					if (localStorage.getItem(KEY) === e.data.version) return;
 					localStorage.setItem(KEY, e.data.version);
 				} catch { /* storage unavailable: announced on every load */ }
-				say(t("offline.ready"));
+				say(t("offline.ready"), false);
 			}
-		} else if (e.data.phase === "error" && !wasFailed) say(t("offline.failed"));
+		} else if (e.data.phase === "error" && !wasFailed) say(t("offline.failed"), false);
 	}
 
 	function track(worker: ServiceWorker | null | undefined, reg: ServiceWorkerRegistration) {
@@ -118,7 +122,7 @@
 
 	onMount(() => {
 		offline = !navigator.onLine;
-		if (offline) say(t("offline.offline"));
+		if (offline) say(t("offline.offline"), false); // the toast already shows the offline state
 		const sync = (e: Event) => { offline = e.type === "offline"; say(offline ? t("offline.offline") : t("offline.backOnline")); };
 		addEventListener("online", sync);
 		addEventListener("offline", sync);
@@ -157,10 +161,10 @@
 	const attention = $derived(offline || phase === "error");
 	const running = $derived(download?.state === "running");
 
-	// The visual toast: the announcement, else the download progress, else the offline notice. It lives in the top layer
+	// The visual toast: the user-triggered note, else the download progress, else the offline notice. It lives in the top layer
 	// (`popover="manual"`): the header is a size container, which would otherwise make it the anchor of a fixed element.
 	const toastText = $derived(
-		announce ||
+		note ||
 		(running && download ? t("offline.downloading", { percent: t("common.percent", { n: percent(download.done, download.total) }), size: formatBytes(download.bytes) }) : "") ||
 		(offline ? t("offline.offline") : ""),
 	);

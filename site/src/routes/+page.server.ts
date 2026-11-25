@@ -3,13 +3,13 @@ import { searchSeed } from "#lib/server/search-seed.js";
 import { withIds } from "#lib/log-view.js";
 import type { GraphData } from "#lib/types.js";
 
-const POOL = 30; // candidates for the featured page and « did you know »: the browser picks among them by day
+const POOL = 30; // candidates for the featured pages and « did you know »: the browser picks among them by day
 const NEWS = 5;
 const HUBS = 6;
 
 /**
- * Home page in the manner of an encyclopedia's front page, bounded whatever the size of the wiki: search first, then a
- * featured page, « did you know », the latest log entries, the most linked pages and the tags. The daily picks are done in
+ * Home page in the manner of an encyclopedia's front page, bounded whatever the size of the wiki: search first, then
+ * featured pages, « did you know », the latest log entries, the most linked pages and the tags. The daily picks are done in
  * the browser (the prerendered page stays the same from one export to the next, the picks change every day without a rebuild).
  */
 export const load = () => {
@@ -20,11 +20,15 @@ export const load = () => {
 	const card = (p: (typeof pages)[number]) => ({ id: p.id, type: p.type, title: p.title, description: p.description, tags: p.tags.slice(0, 4), links: deg(p.id) });
 	return {
 		seed: searchSeed(),
-		// featured: a well-linked synthesis or concept with a description
+		// featured pool: well-linked syntheses and concepts with a description
 		featured: byDegree.filter((p) => (p.type === "Synthesis" || p.type === "Concept") && p.description).slice(0, POOL).map(card),
 		// did you know: concepts and entities described in one sentence
 		facts: byDegree.filter((p) => (p.type === "Concept" || p.type === "Entity") && p.description).slice(0, POOL * 2).map(({ id, title, description }) => ({ id, title, description })),
-		news: withIds(log.slice(0, NEWS)).map(({ id, at, kind, pages }) => ({ id, at, kind, pages: pages.slice(0, 3) })),
+		// the pages an entry touched; an entry that touched none (a source added) shows the page of its source, when it has one
+		news: withIds(log.slice(0, NEWS)).map(({ id, at, kind, pages, sources }) => ({
+			id, at, kind,
+			pages: (pages.length ? pages : sources.flatMap((s) => (s.page ? [s.page] : []))).slice(0, 3),
+		})),
 		hubs: byDegree.filter((p) => p.type !== "Source").slice(0, HUBS).map(card),
 	};
 };

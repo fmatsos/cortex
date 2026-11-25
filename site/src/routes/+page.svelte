@@ -8,15 +8,17 @@
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { toPage, toRoute, toTag } from "#lib/links.js";
+	import { pickDaily } from "#lib/daily-pick.js";
 	import { dayShort } from "#lib/log-view.js";
 	import type { IconName } from "#lib/icons.js";
 	import { type Engine, loadEngine } from "#lib/search-client.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeColor, typeIcon, typePlural } from "#lib/type-meta.js";
-	import { t } from "#lib/i18n/index.js";
+	import { intlLocale, t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const FACTS = 3;
+	const FEATURED = 3;
 	const FAVS_SHOWN = 6;
 	const urlOf = (q: string) => `${toRoute("/search")}?q=${encodeURIComponent(q)}`;
 
@@ -27,12 +29,18 @@
 	let today = $state<number>();
 	onMount(() => { today = Math.floor(Date.now() / 864e5); });
 	const day = $derived(today ?? Math.floor(Date.parse(data.footer.generatedAt) / 864e5));
-	const featured = $derived(data.featured.length ? data.featured[day % data.featured.length] : undefined);
+	const featured = $derived(pickDaily(data.featured, day, FEATURED));
 	const facts = $derived.by(() => {
-		const pool = data.facts.filter((f) => f.id !== featured?.id);
+		const shown = new Set(featured.map((f) => f.id));
+		const pool = data.facts.filter((f) => !shown.has(f.id));
 		const start = pool.length ? (day * FACTS) % pool.length : 0;
 		return [...pool.slice(start), ...pool.slice(0, start)].slice(0, FACTS);
 	});
+	// a page list read as one sentence: separators come from the locale, every title stays a link
+	const pageParts = (pages: { id: string; title: string }[]) => {
+		let i = 0; // elements come back in order: two pages may share a title
+		return new Intl.ListFormat(intlLocale(), { type: "unit", style: "long" }).formatToParts(pages.map((p) => p.title)).map((part) => (part.type === "element" ? { page: pages[i++]! } : { text: part.value }));
+	};
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
@@ -102,31 +110,40 @@
 	<h2 {id} class="flex items-center gap-2 text-lg font-semibold"><Icon name={icon} size={20} class="text-muted-foreground" />{label}</h2>
 {/snippet}
 
-<div class="mt-6 grid gap-6 lg:grid-cols-[3fr_2fr]">
-	{#if featured}
-		<section aria-labelledby="h-featured" class="bg-muted/40 rounded-lg border p-4">
+<div class="mt-6 grid items-start gap-6 lg:grid-cols-[3fr_2fr]">
+	{#if featured.length}
+		<section aria-labelledby="h-featured" class="bg-muted/40 border p-4">
 			{@render head("h-featured", "star", t("home.featured"))}
-			<a href={toPage(featured.id)} class="text-link link-content mt-3 flex items-center gap-2 text-2xl font-semibold tracking-tight underline-offset-4 hover:underline">
-				<Icon name={typeIcon(featured.type)} size={24} style="color: {typeColor(featured.type)}" />{featured.title}
-			</a>
-			<p class="mt-2">{featured.description}</p>
-			<p class="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-				{#each featured.tags as tag (tag)}<span>#{tag}</span>{/each}
-				<span>{t("home.links", { count: featured.links })}</span>
-				<a href={toPage(featured.id)} class="text-link link-content ml-auto inline-flex min-h-9 items-center gap-1 underline-offset-4 hover:underline">{t("home.featured.read")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
-			</p>
+			<ul class="divide-border mt-3 divide-y">
+				{#each featured as f (f.id)}
+					<li class="py-3 first:pt-0 last:pb-0">
+						<a href={toPage(f.id)} class="text-link link-content flex items-start gap-2 text-lg leading-snug font-semibold tracking-tight underline-offset-4 hover:underline">
+							<Icon name={typeIcon(f.type)} size={20} class="mt-0.5 shrink-0" style="color: {typeColor(f.type)}" /><span class="min-w-0">{f.title}</span>
+						</a>
+						<p class="mt-1 line-clamp-2 text-sm">{f.description}</p>
+						<p class="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
+							{#each f.tags as tag (tag)}<span>#{tag}</span>{/each}
+							<span>{t("home.links", { count: f.links })}</span>
+						</p>
+					</li>
+				{/each}
+			</ul>
 		</section>
 	{/if}
 
 	{#if data.news.length}
-		<section aria-labelledby="h-news" class="rounded-lg border p-4">
+		<section aria-labelledby="h-news" class="border p-4">
 			{@render head("h-news", "journal", t("home.news"))}
-			<ul class="mt-3 space-y-3">
+			<!-- timeline: one fixed column for the kind badges (same width, left aligned), the date beside it, the pages under the date -->
+			<ul class="divide-border mt-3 divide-y">
 				{#each data.news as e (e.id)}
-					<li class="text-sm">
-						<a href="{toRoute('/log')}#{e.id}" class="text-muted-foreground flex items-center gap-2 hover:underline"><KindBadge kind={e.kind} /><time datetime={e.at}>{dayShort(e.at.slice(0, 10))}</time></a>
+					<li class="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-3 text-sm first:pt-0 last:pb-0">
+						<a href="{toRoute('/log')}#{e.id}" class="text-muted-foreground col-span-2 grid grid-cols-subgrid items-center hover:underline">
+							<span class="[&>[data-slot=badge]]:w-full [&>[data-slot=badge]]:justify-start flex"><KindBadge kind={e.kind} /></span>
+							<time datetime={e.at}>{dayShort(e.at.slice(0, 10))}</time>
+						</a>
 						{#if e.pages.length}
-							<span class="mt-1 block">{#each e.pages as l, i (l.id)}{#if i}, {/if}<a href={toPage(l.id)} class="text-link link-content underline-offset-4 hover:underline">{l.title}</a>{/each}</span>
+							<p class="col-start-2 leading-snug [overflow-wrap:anywhere]">{#each pageParts(e.pages) as part}{#if "page" in part}<a href={toPage(part.page.id)} class="text-link link-content underline-offset-4 hover:underline">{part.page.title}</a>{:else}{part.text}{/if}{/each}</p>
 						{/if}
 					</li>
 				{/each}
