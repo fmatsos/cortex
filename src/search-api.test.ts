@@ -88,6 +88,27 @@ test("an OR branch without free text (`lasagnes OR type:source`) also lists the 
   expect((await ids(root, "lasagnes OR #nope"))).toEqual(["concepts/lasagnes", "entities/garfield"]); // a branch that no page satisfies adds nothing
 });
 
+test("top-level free words are checked beside a group: `chat (lasagnes OR type:source)` is « chat » AND the group, case and accents ignored", async () => {
+  const root = await wiki();
+  // without the check, the Lasagnes page (no « chat ») came with the words' hits of the group
+  expect((await ids(root, "chat (lasagnes OR type:source)")).sort()).toEqual(["entities/garfield", "sources/src"]);
+  expect((await ids(root, "CHÂT (lasagnes OR type:source)")).sort()).toEqual(["entities/garfield", "sources/src"]);
+  expect((await ids(root, "chat -(#animal OR type:source)")).sort()).toEqual(["entities/garfield"]); // the negated group is Boolean too
+  expect((await ids(root, "chat")).length).toBeGreaterThan(0); // a plain word query keeps the hybrid behaviour
+});
+
+test("removing is:fav never makes a negated group stricter: `chat -(lasagnes is:fav)` keeps the lasagnes pages for the browser to judge", async () => {
+  const root = await wiki();
+  const r = await searchSite(root, "chat -(lasagnes is:fav)");
+  expect(r.body.ignored).toEqual(["is:fav"]);
+  expect((r.body.hits as SearchHit[]).map((h) => h.id).sort()).toEqual(["concepts/chat", "concepts/chien", "entities/garfield", "sources/src"]); // garfield mentions lasagnes
+  expect(withoutFav(parseQuery("-(alpha is:fav)")).parsed.groups).toEqual([]);
+  expect(withoutFav(parseQuery("-(a OR b -(c is:fav))")).parsed.groups).toEqual([]); // nested: the outer negated group holds is:fav
+  expect(withoutFav(parseQuery("-(alpha OR beta)")).removed).toBe(false);
+  expect(withoutFav(parseQuery("-(alpha OR beta)")).parsed.groups).toHaveLength(1); // no is:fav: untouched
+  expect(withoutFav(parseQuery("alpha OR -(beta is:fav)")).parsed.groups[0]!.alts).toHaveLength(2); // an alternative emptied by the drop stays
+});
+
 test("is:fav belongs to the browser: ignored, said so, never excluding anything; empty and oversized queries are refused", async () => {
   const root = await wiki();
   const r = await searchSite(root, "chat is:fav -is:fav (is:fav OR #pet)");

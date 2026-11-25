@@ -63,11 +63,17 @@ export function plainText(md: string): string {
  */
 export function withoutFav(p: Parsed): { parsed: Parsed; removed: boolean } {
   let removed = false;
+  const isFav = (o: Parsed["ops"][number]) => o.key === "is" && o.value === "fav";
+  const hasFav = (x: Parsed): boolean => x.ops.some(isFav) || x.groups.some((g) => g.alts.some(hasFav));
   const strip = (x: Parsed): Parsed => ({
     ...x,
-    ops: x.ops.filter((o) => (o.key === "is" && o.value === "fav" ? ((removed = true), false) : true)),
+    ops: x.ops.filter((o) => (isFav(o) ? ((removed = true), false) : true)),
     groups: x.groups.flatMap((g) => {
-      const alts = g.alts.map((a) => ({ before: isEmpty(a), a: strip(a) })).filter((x) => x.before || !isEmpty(x.a)).map((x) => x.a);
+      // `-(alpha is:fav)` cannot be evaluated here, and `-(alpha)` would drop every alpha page: a negated group that holds is:fav is
+      // dropped whole (less strict), the browser applies it with the whole query on the hits
+      if (g.neg && g.alts.some(hasFav)) return ((removed = true), []);
+      // (an alternative left empty by such a drop asks for nothing: it stays, so the group is not made stricter either)
+      const alts = g.alts.map((a) => ({ before: isEmpty(a) || a.groups.some((h) => h.neg && h.alts.some(hasFav)), a: strip(a) })).filter((x) => x.before || !isEmpty(x.a)).map((x) => x.a);
       return alts.length ? [{ ...g, alts }] : [];
     }),
   });
@@ -140,7 +146,11 @@ export async function searchSite(root: string, q: string, opts: SearchOpts = {})
   const doc = (p: Page) => docs.get(p.path) ?? docs.set(p.path, docOf(p, features, partials)).get(p.path)!;
   // the folded text of a page is only made when a phrase, an exclusion or a group needs it (a filter on tags lists a large wiki without reading its pages)
   const needsText = parsed.phrases.length > 0 || parsed.exclude.length > 0 || parsed.groups.length > 0;
-  const ok = (p: Page) => matches(doc(p), parsed, () => false, needsText ? undefined : "");
+  // With a group the query is Boolean and read literally, as the site's local search does: the top-level free words must be in the
+  // page too (`chien (a OR b)` is « chien » AND the group). `matches` checks the words of an alternative, so the query is one alternative.
+  // Without a group the words only feed the hybrid search, and a hit found by meaning alone stays (README, `GET /api/search`).
+  const strict = parsed.words.length > 0 && parsed.groups.length > 0 ? { ...parsed, words: [], phrases: [], exclude: [], ops: [], groups: [{ neg: false, raw: q, alts: [parsed] }] } : parsed;
+  const ok = (p: Page) => matches(doc(p), strict, () => false, needsText ? undefined : "");
 
   type Found = { page: Page; match: SearchMatch; score: number; extract: string };
   /** The pages that pass the whole predicate, by title, listed as the site does a query with operators only. */
