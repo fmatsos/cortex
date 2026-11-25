@@ -176,3 +176,79 @@ test("the export child is this very cortex: the entry point under src/, run with
   const r = Bun.spawnSync([bun, entry, "--version"], { stdout: "pipe" });
   expect(r.stdout.toString().trim()).toBe(pkg.version);
 });
+
+// GET /api/status: the state of the build queue, as the site's small indicator reads it
+type Status = { building: boolean; since?: string; last?: { at: string; ok: boolean; ms: number } };
+const status = async (port: number) => { const r = await fetch(`http://localhost:${port}/api/status`); return { r, body: (await r.json()) as Status }; };
+const idle = async (port: number, ms = 15_000) => { const t = performance.now(); while ((await status(port)).body.building) { if (performance.now() - t > ms) throw new Error("still building"); await Bun.sleep(20); } };
+
+test("/api/status: idle after the first build, with how it went; never cached, no account", async () => {
+  const w = wiki();
+  const { port } = await start(w, { tag: "first" }); // the first build is awaited
+  const { r, body } = await status(port);
+  expect(r.status).toBe(200);
+  expect(r.headers.get("cache-control")).toBe("no-store");
+  expect(body.building).toBe(false);
+  expect(body.since).toBeUndefined();
+  expect(body.last).toMatchObject({ ok: true });
+  expect(Date.parse(body.last!.at)).toBeGreaterThan(0);
+  expect(body.last!.ms).toBeGreaterThanOrEqual(0);
+});
+
+test("/api/status: a build in its child is building (with since), then done once the new site is served", async () => {
+  const w = wiki();
+  leave(w.root, "a", "old");
+  const { port, rebuilt } = await start(w, { ms: 800, tag: "new" });
+  await until(() => w.builds() === 1); // the startup build is running
+  const during = (await status(port)).body;
+  expect(during.building).toBe(true);
+  expect(Date.parse(during.since!)).toBeLessThanOrEqual(Date.now());
+  expect(during.last).toBeUndefined(); // nothing finished since this process started
+  expect(await body(port)).toBe("old");
+  await until(() => rebuilt() === 1);
+  const after = (await status(port)).body;
+  expect(after.building).toBe(false);
+  expect(after.since).toBeUndefined();
+  expect(after.last).toMatchObject({ ok: true });
+  expect(after.last!.ms).toBeGreaterThanOrEqual(800);
+  expect(await body(port)).toBe("new"); // "not building" is only seen once the new site is served
+});
+
+test("/api/status: a request waiting for the quiet time, and a second build waiting behind the running one, are building too", async () => {
+  const w = wiki();
+  leave(w.root, "a", "old");
+  const { port, rebuilt } = await start(w, { ms: 500 }, { settleMs: 400 });
+  await until(() => rebuilt() === 1, 15_000); // startup build: quiet time, then 500 ms
+  expect((await status(port)).body.building).toBe(false);
+  await fetch(`http://localhost:${port}/api/sync`, { method: "POST" }); // accepted: nothing runs yet, the quiet time lasts 400 ms
+  expect(w.builds()).toBe(1);
+  expect((await status(port)).body.building).toBe(true); // waiting
+  await until(() => w.builds() === 2);
+  await fetch(`http://localhost:${port}/api/sync`, { method: "POST" }); // during the build: one more waits behind it
+  await until(() => rebuilt() === 2);
+  expect((await status(port)).body.building).toBe(true); // the first ended, the waiting one has not
+  await until(() => rebuilt() === 3, 20_000);
+  await idle(port, 5000);
+});
+
+test("/api/status: a failed build is reported (ok: false) and the previous site stays", async () => {
+  const w = wiki();
+  leave(w.root, "a", "old");
+  const { port, said } = await start(w, { mode: "fail" });
+  await until(() => said.some((m) => m.startsWith("export failed")));
+  await idle(port);
+  const { body: b } = await status(port);
+  expect(b.last).toMatchObject({ ok: false });
+  expect(await body(port)).toBe("old");
+});
+
+test("/api/status: HEAD is a 204 probe, other methods 405, both uncached", async () => {
+  const w = wiki();
+  const { port } = await start(w, { tag: "x" });
+  const head = await fetch(`http://localhost:${port}/api/status`, { method: "HEAD" });
+  expect(head.status).toBe(204);
+  expect(head.headers.get("cache-control")).toBe("no-store");
+  const post = await fetch(`http://localhost:${port}/api/status`, { method: "POST" });
+  expect(post.status).toBe(405);
+  expect(post.headers.get("cache-control")).toBe("no-store");
+});

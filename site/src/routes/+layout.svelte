@@ -26,6 +26,7 @@
 	import { registerConversationActions } from "#lib/assistant-session.js";
 	import { registerJourneyActions } from "#lib/journeys.js";
 	import AuthNotice from "#lib/components/auth-notice.svelte";
+	import BuildStatus from "#lib/components/build-status.svelte";
 
 	let { children } = $props();
 	// what the account page can do with a saved conversation (resume in the panel, export) and journey (export): before its first render
@@ -104,7 +105,12 @@
 	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
 	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
-		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={32} /><CortexWordmark /></a>
+		<!-- a rebuild of the site (cortex serve only): a dot hung beside the mark while it runs (out of the flow: the row never wraps
+		     differently), a reload offer under it when it ends -->
+		<div class="relative inline-flex">
+			<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={32} /><CortexWordmark /></a>
+			<BuildStatus />
+		</div>
 		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}
