@@ -2,20 +2,21 @@
 	import { type VariantProps, tv } from "tailwind-variants";
 
 	export const badgeVariants = tv({
+		// compact rectangle that reads as a label, not a control: no hover or focus look unless it is a link (see the component)
 		// metadata at 14 px (`size: "sm"` = 12 px, reserved for what is really secondary); instant state changes if motion is reduced
-		base: "min-h-6 gap-1.5 rounded-4xl border border-transparent px-2.5 py-0.5 text-sm leading-5 font-medium motion-safe:transition-colors has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&>svg]:size-4 group/badge inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none",
+		base: "min-h-6 gap-1.5 rounded-none border border-transparent px-2 py-0.5 text-sm leading-5 font-medium motion-safe:transition-colors has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:size-4 group/badge inline-flex w-fit shrink-0 items-center justify-center overflow-hidden whitespace-nowrap aria-invalid:border-destructive [&>svg]:pointer-events-none",
 		variants: {
 			variant: {
 				default: "bg-primary text-primary-foreground [a]:hover:bg-primary/90",
 				secondary: "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
-				destructive: "bg-destructive/10 [a]:hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 text-destructive dark:bg-destructive/20",
+				destructive: "border-destructive/40 bg-destructive/10 text-destructive [a]:hover:bg-destructive/20",
 				outline: "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
 				// low-stakes status (stable page): discreet, secondary text without background
 				stable: "border-border text-muted-foreground",
 				// state that calls for caution (draft, to review, outdated): the strongest prominence
 				caution: "border-warning-foreground/40 bg-warning-background text-warning-foreground font-semibold",
-				ghost: "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
-				link: "text-primary underline-offset-4 hover:underline",
+				ghost: "[a]:hover:bg-muted [a]:hover:text-muted-foreground",
+				link: "text-primary underline-offset-4 [a]:hover:underline",
 			},
 			size: {
 				default: "",
@@ -55,7 +56,7 @@
 	bind:this={ref}
 	data-slot="badge"
 	{href}
-	class={cn(badgeVariants({ variant, size }), href && "touch-target overflow-visible", className)}
+	class={cn(badgeVariants({ variant, size }), href && "touch-target overflow-visible focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring", className)}
 	{...restProps}
 >
 	{@render children?.()}
