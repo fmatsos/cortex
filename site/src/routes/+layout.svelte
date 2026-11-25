@@ -84,7 +84,7 @@
 <a href="#main-content" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">{t("layout.skip")}</a>
 
 <!-- DOM order = visual order (mark, navigation, search, theme) at all widths: tabbing follows the eye -->
-<header bind:this={header} class="bg-background/90 @container sticky top-0 z-40 border-b backdrop-blur">
+<header bind:this={header} class="bg-header text-header-foreground border-header-border @container sticky top-0 z-40 border-b">
 	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
 	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
@@ -100,7 +100,7 @@
 			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
 			{#if assistant.api}
 				<!-- icon only: beside the docked panel the header has less room than the viewport width says -->
-				<button type="button" id="assistant-toggle" class="hover:bg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11 {assistant.open ? 'bg-muted' : ''}"
+				<button type="button" id="assistant-toggle" class="bg-card border-input hover:bg-background inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11 {assistant.open ? 'bg-background' : ''}"
 					aria-label={t("assistant.title")} aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" title="{t('assistant.title')} (Ctrl I)"
 					onclick={() => assistant.setOpen(!assistant.open)}><Icon name="kind-query" size={20} /></button>
 			{/if}
@@ -144,6 +144,8 @@
 		text-underline-offset: 4px;
 		padding: 0.5rem 0.55rem;
 		border-radius: var(--radius-md);
+		/* reserved on every link so the current one only changes colour: no layout shift */
+		border-bottom: 2px solid transparent;
 	}
 	.nav-link:hover {
 		color: var(--foreground);
@@ -153,6 +155,7 @@
 		color: var(--foreground);
 		font-weight: 600;
 		text-decoration: underline;
+		border-bottom-color: var(--primary);
 	}
 	@media (pointer: coarse) {
 		.nav-link {

@@ -86,7 +86,7 @@ test("design carré : --radius et tous les rayons dérivés valent 0px", () => {
 
 test("l'impression force la palette claire (noir sur blanc) quel que soit le thème", () => {
   const print = vars(block('\t:root:not([data-theme="light"]),\n\t:root[data-theme="dark"],\n\t:root[data-theme="light"]'));
-  const BW = new Set(["--background", "--foreground", "--card", "--muted", "--muted-foreground", "--border", "--link", "--link-visited", "--mark", "--note-background", "--note-foreground", "--warning-background", "--warning-foreground"]);
+  const BW = new Set(["--background", "--foreground", "--header", "--header-foreground", "--header-border", "--card", "--muted", "--muted-foreground", "--border", "--link", "--link-visited", "--mark", "--note-background", "--note-foreground", "--warning-background", "--warning-foreground"]);
   for (const [k, v] of Object.entries(print)) if (!BW.has(k)) expect(v, `${k} en impression = palette claire`).toBe(LIGHT[k]);
   for (const k of ["--foreground", "--link"]) expect(contrast(toRgb(print[k]), toRgb(print["--background"]))).toBeGreaterThanOrEqual(7);
   expect(contrast(toRgb(print["--muted-foreground"]), toRgb(print["--background"]))).toBeGreaterThanOrEqual(7);
@@ -149,6 +149,17 @@ pair("--graph-edge-active", "--graph-background", 3); // highlighted relations
 pair("--ring", "--background", 3); // focus ring
 pair("--ring", "--card", 3);
 pair("--link", "--background", 3);
+// header band: its own surface, with the nav links, the current-page mark, the fields and the controls it hosts
+pair("--header-foreground", "--header"); // wordmark, nav labels
+pair("--muted-foreground", "--header"); // inactive nav links
+pair("--primary", "--header", 3); // current-page rule of the nav
+pair("--foreground", "--card"); // header search field and selects (bg-card) text
+pair("--muted-foreground", "--card"); // their placeholder and icons
+pair("--input", "--header", 3); // border of the header fields and selects
+pair("--ring", "--header", 3); // focus ring on the band
+pair("--header-border", "--header", 3); // bottom rule of the header
+pair("--header-border", "--background", 3); // ... against the page it separates from
+text("la bande d'en-tête se distingue de la page (surface)", tok("--header"), tok("--background"), 1.1);
 
 const rows = Object.entries(THEMES).flatMap(([theme, t]) =>
   specs.map((s) => ({ thème: theme, paire: s.name, ratio: Math.round(contrast(s.fg(t, theme === "sombre"), s.bg(t, theme === "sombre")) * 100) / 100, seuil: s.min })),

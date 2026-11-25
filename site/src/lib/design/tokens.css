@@ -2,22 +2,25 @@
 
 :root {
 	color-scheme: light dark;
-	--background: #f5f2eb;
+	--background: #faf7f0;
+	--header: #ece6d8;
+	--header-foreground: #252b2a;
+	--header-border: #7c8276;
 	--foreground: #252b2a;
-	--card: #fffcf6;
+	--card: #fffdf9;
 	--card-foreground: #252b2a;
-	--popover: #fffcf6;
+	--popover: #fffdf9;
 	--popover-foreground: #252b2a;
 	--primary: #245849;
 	--primary-foreground: #ffffff;
-	--secondary: #e7e4dc;
+	--secondary: #ebe7dd;
 	--secondary-foreground: #252b2a;
-	--muted: #e7e4dc;
+	--muted: #ebe7dd;
 	--muted-foreground: #525b57;
 	--accent: #dce9e3;
 	--accent-foreground: #22483d;
 	--destructive: #9b3033;
-	--border: #cfcec3;
+	--border: #d2cfc2;
 	--input: #7c8276;
 	--ring: #245849;
 	--link: #245849;
@@ -33,7 +36,7 @@
 	--kind-query: #71517f;
 	--kind-lint: #7c5a22;
 	--kind-update: #2c6664;
-	--graph-background: #fffcf6;
+	--graph-background: #fffdf9;
 	--graph-edge: #7c8276;
 	--graph-edge-active: #245849;
 	--graph-label: #252b2a;
@@ -56,6 +59,9 @@
 	:root:not([data-theme="light"]) {
 		color-scheme: dark;
 		--background: #171c1b;
+		--header: #27312d;
+		--header-foreground: #e9e7df;
+		--header-border: #7e9385;
 		--foreground: #e9e7df;
 		--card: #202725;
 		--card-foreground: #e9e7df;
@@ -101,6 +107,9 @@
 :root[data-theme="dark"] {
 	color-scheme: dark;
 	--background: #171c1b;
+	--header: #27312d;
+	--header-foreground: #e9e7df;
+	--header-border: #7e9385;
 	--foreground: #e9e7df;
 	--card: #202725;
 	--card-foreground: #e9e7df;
@@ -152,14 +161,17 @@
 	:root[data-theme="light"] {
 		color-scheme: light;
 		--background: #ffffff;
+		--header: #ffffff;
+		--header-foreground: #000000;
+		--header-border: #8a8a8a;
 		--foreground: #000000;
 		--card: #ffffff;
 		--card-foreground: #252b2a;
-		--popover: #fffcf6;
+		--popover: #fffdf9;
 		--popover-foreground: #252b2a;
 		--primary: #245849;
 		--primary-foreground: #ffffff;
-		--secondary: #e7e4dc;
+		--secondary: #ebe7dd;
 		--secondary-foreground: #252b2a;
 		--muted: #f0f0f0;
 		--muted-foreground: #333333;
@@ -182,7 +194,7 @@
 		--kind-query: #71517f;
 		--kind-lint: #7c5a22;
 		--kind-update: #2c6664;
-		--graph-background: #fffcf6;
+		--graph-background: #fffdf9;
 		--graph-edge: #7c8276;
 		--graph-edge-active: #245849;
 		--graph-label: #252b2a;
