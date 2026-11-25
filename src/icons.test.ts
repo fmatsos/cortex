@@ -14,7 +14,7 @@ const SITE = join(import.meta.dir, "../site/src");
 // The icons of the « Icon pack » section of the review: each name must exist.
 const WANTED = `home search graph tags journal favorites concept entity synthesis source draft stable deprecated verified unverified needs-review stale star
 copy-link copy-markdown success error sun moon system filter operator-tag operator-type operator-status operator-phrase operator-exclude recent clear toc
-chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated kind-query kind-lint kind-update zoom-in zoom-out
+chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated assistant kind-query kind-lint kind-update zoom-in zoom-out
 fit-view pause play close-selection list-view offline offline-ready retry new-tab language`.split(/\s+/);
 
 test("le pack contient toutes les icônes demandées, et seulement elles", () => {

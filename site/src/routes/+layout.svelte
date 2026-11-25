@@ -18,7 +18,6 @@
 	import { toRoute } from "#lib/links.js";
 	import { ensureSymbols } from "#lib/icons.js";
 	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
-	import AssistantAvatar from "#lib/components/assistant/assistant-avatar.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { assistant } from "#lib/assistant.svelte.js";
 
@@ -88,7 +87,7 @@
 	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
 	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
-		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} /><CortexWordmark /></a>
+		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={32} /><CortexWordmark /></a>
 		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}
@@ -101,10 +100,10 @@
 			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
 			{#if assistant.api}
 				<!-- label from the header's own width (@container): beside the docked panel the header has less room than the viewport
-				     says; narrow, only the avatar stays and the label stays as the accessible name -->
-				<Button id="assistant-toggle" variant="outline" class="gap-2 px-2 @6xl:px-3 [&_svg:not([class*='size-'])]:size-5" aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" title="{t('assistant.title')} (Ctrl I)"
+				     says; narrow, only the icon stays and the label stays as the accessible name -->
+				<Button id="assistant-toggle" variant="outline" class="gap-2 px-2 @6xl:px-3 [&_svg:not([class*='size-'])]:size-5" aria-expanded={assistant.open} aria-controls="assistant-panel" aria-keyshortcuts="Control+I Meta+I" aria-busy={assistant.pending || undefined} title="{t('assistant.title')} (Ctrl I)"
 					onclick={() => assistant.setOpen(!assistant.open)}>
-					<AssistantAvatar state={assistant.pending ? "pending" : "idle"} size={20} /><span class="sr-only @6xl:not-sr-only">{t("assistant.title")}</span>
+					<Icon name="assistant" size={20} class={assistant.pending ? "motion-safe:animate-pulse" : ""} /><span class="sr-only @6xl:not-sr-only">{t("assistant.title")}</span>
 				</Button>
 			{/if}
 			<PreferencesMenu />

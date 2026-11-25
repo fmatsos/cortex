@@ -88,6 +88,8 @@ export const ICONS = {
 	"kind-add": `${FRAME}<path d="M12 8v8M8 12h8"/>`,
 	"kind-ingest": TRAY,
 	generated: `<path d="m10.5 3 2 5 5 2-5 2-2 5-2-5-5-2 5-2zM18 15v6M15 18h6"/>`,
+	/** Sparkles of the assistant: three four-pointed stars, large, medium and small. */
+	assistant: `<path d="M9.5 7.5l2 5 5 2-5 2-2 5-2-5-5-2 5-2zM18 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1zM19 16l.75 2.25 2.25.75-2.25.75L19 22l-.75-2.25L16 19l2.25-.75z"/>`,
 	download: TRAY,
 	"kind-query": `<path d="M3 4h18M3 8h5"/><circle cx="13" cy="14" r="5"/><path d="m16.5 17.5 3.5 3.5"/>`,
 	"kind-lint": `<path d="m3 5.5 2 2 3-3M3 11.5l2 2 3-3M3 17.5l2 2 3-3M12 6h9M12 12h9M12 18h9"/>`,
