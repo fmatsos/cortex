@@ -251,7 +251,10 @@ test.describe("save", () => {
     await expect(state(page)).toHaveText("Saved");
     await button(page, CLOSE).click();
     await expect(panel(page)).toBeHidden();
-    await page.getByRole("link", { name: /Tags|Étiquettes/ }).first().click();
+    // narrow header: the links are inside the "Menu" disclosure
+    const menu = page.locator("nav.site-nav").getByRole("button", { name: /Menu/ });
+    if (await menu.isVisible()) await menu.click();
+    await page.locator("nav.site-nav").getByRole("link", { name: /Tags|Étiquettes/ }).click();
     await page.waitForURL(/\/tags\//);
     await page.locator("#assistant-toggle").click();
     await expect(panel(page).getByRole("article", { name: "Keep me?" })).toBeVisible();

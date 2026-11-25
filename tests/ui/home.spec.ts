@@ -23,7 +23,7 @@ test("featured pages: up to three distinct entries, listed under the plural head
   const n = await items.count();
   expect(n).toBeGreaterThanOrEqual(1);
   expect(n).toBeLessThanOrEqual(3);
-  const hrefs = await featured.locator("li > a").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+  const hrefs = await featured.locator("li > a").evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).href)); // resolved: the SSR markup is relative ("./wiki/"), the hydrated one is not
   expect(new Set(hrefs).size, "distinct pages").toBe(n);
 });
 
@@ -64,7 +64,7 @@ test.describe("home rows at 1440", () => {
 
 test("featured pages: the same day gives the same picks after a reload", async ({ page }) => {
   await page.goto("/");
-  const links = () => section(page, FEATURED).locator("li > a").evaluateAll((els) => els.map((e) => e.getAttribute("href")));
+  const links = () => section(page, FEATURED).locator("li > a").evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).href)); // resolved: the SSR markup is relative ("./wiki/"), the hydrated one is not
   if (!(await section(page, FEATURED).count())) return;
   const first = await links();
   await page.reload();

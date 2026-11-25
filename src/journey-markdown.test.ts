@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { relationIndex } from "../site/src/lib/graph-model";
 import { DICTS, translate, type Key, type Locale, type Vars } from "../site/src/lib/i18n/index";
-import { defaultJourneyTitle, journeyFilename, journeyMarkdown, stripFrontMatter, type JourneyPage } from "../site/src/lib/journey-markdown";
+import { defaultJourneyTitle, journeyFilename, journeyMarkdown, pathDraftMarkdown, stripFrontMatter, type JourneyPage } from "../site/src/lib/journey-markdown";
+import { parsePath } from "./reading-paths";
 import { journeyQuery } from "../site/src/lib/journeys";
 
 const SITE = "https://wiki.example.org/";
@@ -133,4 +134,29 @@ test("the account page opens a journey linked to its saved copy", () => {
 	const q = new URLSearchParams(journeyQuery(["a/b", "c"], "j1"));
 	expect(q.get("journey")).toBe("j1");
 	expect(q.get("route")).toBe("a/b,c");
+});
+
+test("path draft: front matter with an empty goal, one root-relative step per page (a page walked twice once), a first reason; read back by the path parser", () => {
+	const md = pathDraftMarkdown({ ...base, t: tr("en"), title: "My \"path\"", route: ["concepts/alpha", "concepts/beta", "entities/gamma", "concepts/beta", "syntheses/ghost"] });
+	expect(md).toBe([
+		"---",
+		'title: "My \\"path\\""',
+		'goal: ""',
+		"---",
+		"",
+		"1. [Alpha \\[draft\\]](/wiki/concepts/alpha.md): Alpha, the first idea.",
+		"2. [Beta](/wiki/concepts/beta.md): cites and is cited by step 1",
+		"3. [Gamma](/wiki/entities/gamma.md): is cited by step 2. Gamma entity",
+		"4. [syntheses/ghost](/wiki/syntheses/ghost.md)",
+		"",
+	].join("\n"));
+	const p = parsePath("my-path", md);
+	expect(p).toMatchObject({ title: 'My "path"', goal: "", problems: [] });
+	expect(p.steps.map((x) => [x.page, x.label, x.reason])).toEqual([
+		["wiki/concepts/alpha.md", "Alpha [draft]", "Alpha, the first idea."],
+		["wiki/concepts/beta.md", "Beta", "cites and is cited by step 1"],
+		["wiki/entities/gamma.md", "Gamma", "is cited by step 2. Gamma entity"],
+		["wiki/syntheses/ghost.md", "syntheses/ghost", ""],
+	]);
+	expect(pathDraftMarkdown({ ...base, t: tr("fr"), title: "", route: ["concepts/beta"] })).toContain('title: "Voyage"');
 });

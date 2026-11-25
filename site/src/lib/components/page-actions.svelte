@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { tick, untrack } from "svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import FavButton from "#lib/components/fav-button.svelte";
 	import Icon from "#lib/components/icon.svelte";
@@ -13,23 +13,27 @@
 	// region (UI13); on failure, the text is offered selected in a field for manual copy (UI12).
 	// "Mark as reviewed": only when the site is served by `cortex serve` (the HEAD probe answers; a static host has no
 	// /api/) and the page awaits a review. HEAD and POST: the service worker only handles GET, nothing is cached.
-	type Reviewed = { by: string; at: string };
+	// The answer belongs to the page it was launched for: `id` is captured at launch and handed back with the result, and
+	// a reply that arrives after a navigation to another page is never announced there (this component outlives the route change).
+	type Reviewed = { id: string; by: string; at: string };
 	let { id, md, original, reviewable = false, onreviewed }: { id: string; md: string; original?: { url: string; domain: string }; reviewable?: boolean; onreviewed?: (r: Reviewed) => void } = $props();
-	let api = $state(false), reviewing = $state(false);
+	let api = $state(false), reviewingId = $state<string | null>(null);
+	const reviewing = $derived(reviewingId === id);
 	$effect(() => { fetch("/api/verify", { method: "HEAD" }).then((r) => (api = r.status === 204), () => {}); });
 	const review = async () => {
-		reviewing = true;
+		const target = id;
+		reviewingId = target;
 		message = "";
 		try {
-			const r = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+			const r = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: target }) });
 			const b = await r.json().catch(() => ({}));
 			if (!r.ok) throw new Error(b.error ?? r.statusText);
-			onreviewed?.({ by: b.by, at: new Date().toISOString() });
+			onreviewed?.({ id: target, by: b.by, at: new Date().toISOString() });
 			await tick();
-			message = t("actions.reviewed");
+			if (target === id) message = t("actions.reviewed");
 		} catch (e) {
-			message = t("actions.reviewFailed", { error: (e as Error).message });
-		} finally { reviewing = false; }
+			if (target === id) message = t("actions.reviewFailed", { error: (e as Error).message });
+		} finally { if (reviewingId === target) reviewingId = null; }
 	};
 
 	type What = "link" | "md";
@@ -38,6 +42,8 @@
 	let manual = $state<{ what: What; text: string } | null>(null);
 	let field = $state<HTMLTextAreaElement>();
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// another page: what the previous one said (confirmation, failure, manual copy) does not follow
+	$effect.pre(() => { void id; untrack(() => { message = ""; manual = null; copied = ""; }); });
 
 	const copy = async (what: What) => {
 		const text = what === "link" ? shareUrl(location.href) : md;

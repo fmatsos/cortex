@@ -105,13 +105,14 @@ export class JourneyFlow {
 
 	// ---- export --------------------------------------------------------------------------------------------------------
 
-	async export() {
+	/** `format: "path"`: a draft of a reading path (goal and reasons left to write) instead of the journey. */
+	async export(format: "journey" | "path" = "journey") {
 		if (this.exporting || !this.ctx.route().length) return;
 		this.exporting = true;
 		const route = [...this.ctx.route()];
 		try {
-			const { partial } = await exportRoute({ route, title: this.saved?.title || this.defaultTitle, created: this.saved?.created_at, graph: this.ctx.graph() });
-			this.say(partial ? "error" : "ok", t(partial ? "journey.message.exportedPartial" : "journey.message.exported"));
+			const { partial } = await exportRoute({ route, title: this.saved?.title || this.defaultTitle, created: this.saved?.created_at, graph: this.ctx.graph(), format });
+			this.say(partial ? "error" : "ok", format === "path" ? t(partial ? "journey.message.draftExportedPartial" : "journey.message.draftExported") : t(partial ? "journey.message.exportedPartial" : "journey.message.exported"));
 		} catch { this.say("error", t("journey.export.failed")); } finally { this.exporting = false; }
 	}
 }

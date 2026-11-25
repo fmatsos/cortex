@@ -3,7 +3,6 @@
 	import { afterNavigate, goto } from "$app/navigation";
 	import ChipButton from "#lib/components/chip-button.svelte";
 	import Icon from "#lib/components/icon.svelte";
-	import { Badge } from "#lib/components/ui/badge/index.js";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { toRoute, toTag } from "#lib/links.js";
@@ -56,11 +55,17 @@
 	</div>
 </div>
 <p class="text-muted-foreground mt-3 text-sm" role="status">{shown.length === data.tags.length ? tr("tags.count", { count: data.tags.length }) : tr("tags.countOf", { shown: shown.length, count: data.tags.length })}, {tr("tags.sorted", { how: sentence ?? "" })}</p>
-<ul class="touch-gap mt-4 flex flex-wrap gap-2">
+<!-- rows, not a cloud: one tag per line, the count in its own column so the figures line up whatever the length of the name -->
+<ul class="border-border mt-4 max-w-2xl divide-y border-y">
 	{#each shown as t (t.slug)}
-		<li><Badge href={toTag(t.tag)} variant="secondary" class="h-7 px-3 text-sm">#{t.tag} <span class="text-muted-foreground tabular-nums">{t.count}</span></Badge></li>
+		<li>
+			<a href={toTag(t.tag)} class="hover:bg-muted focus-visible:outline-ring grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-2 py-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2">
+				<span class="text-link [overflow-wrap:anywhere]">#{t.tag}</span>
+				<span class="text-muted-foreground min-w-[3ch] text-right tabular-nums"><span aria-hidden="true">{t.count}</span><span class="sr-only">{tr("tags.pages", { count: t.count })}</span></span>
+			</a>
+		</li>
 	{:else}
-		<li class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+		<li class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-3 text-sm">
 			{tr("tags.noMatch", { q: q.trim() })}
 			<Button variant="outline" size="sm" onclick={clear}>
 				<Icon name="clear" size={16} />

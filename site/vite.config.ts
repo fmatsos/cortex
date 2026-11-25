@@ -10,7 +10,7 @@ const out = process.env.CORTEX_SITE_OUT ?? "build";
 export default defineConfig({
   // UI language of the prerendered site: `language` of cortex.json, resolved by `cortex export` (en by default)
   // optional notions (cortex.json `review`, `drafts`): off unless `cortex export` turns them on
-  define: { __CORTEX_LOCALE__: JSON.stringify(process.env.CORTEX_SITE_LANG ?? "en"), __CORTEX_FEATURES__: process.env.CORTEX_SITE_FEATURES ?? '{"review":false,"drafts":false}' },
+  define: { __CORTEX_LOCALE__: JSON.stringify(process.env.CORTEX_SITE_LANG ?? "en"), __CORTEX_CONTENT_LANG__: JSON.stringify(process.env.CORTEX_SITE_CONTENT_LANG ?? process.env.CORTEX_SITE_LANG ?? "en"), __CORTEX_FEATURES__: process.env.CORTEX_SITE_FEATURES ?? '{"review":false,"drafts":false}' },
   plugins: [
     tailwindcss(),
     sveltekit({
@@ -22,9 +22,9 @@ export default defineConfig({
       paths: { relative: true, base: process.env.CORTEX_SITE_BASE ?? "" }, // relative links and resources: works under any subpath
       prerender: {
         handleHttpError: "fail", handleMissingId: "ignore", // a broken anchor in a wiki link is harmless, a 404 is not
-        // tags are optional and a new wiki has no page: these routes may have no entry; any other unseen route is a bug
+        // tags and reading paths are optional and a new wiki has no page: these routes may have no entry; any other unseen route is a bug
         handleUnseenRoutes: ({ routes, message }) => {
-          if (routes.some((r) => r !== "/tags/[tag]" && r !== "/wiki/[...path]")) throw new Error(message);
+          if (routes.some((r) => r !== "/tags/[tag]" && r !== "/wiki/[...path]" && r !== "/paths/[slug]")) throw new Error(message);
         },
       },
     }),

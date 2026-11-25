@@ -180,11 +180,12 @@ function mark(text: string, rs: [number, number][] = [], from = 0, to = text.len
  * Results: filters, phrases and exclusions are resolved on the metadata and the text; free text goes through
  * the inverted index (exact word, prefix while typing, close word for a typo), title > description > tags > content.
  * Without free text, the pages that pass the filters are listed by title. `total`: exact number of pages, beyond `limit`.
+ * `skip`: pages left out of both the hits and the total (those the server's ranking already shows).
  */
-export function search(e: Engine, q: string, isFav: (id: string) => boolean, limit = 30): { hits: Hit[]; total: number } {
+export function search(e: Engine, q: string, isFav: (id: string) => boolean, limit = 30, skip?: ReadonlySet<string>): { hits: Hit[]; total: number } {
 	const p = parseQuery(q);
 	if (isEmpty(p)) return { hits: [], total: 0 };
-	const all = rank(e, p, isFav);
+	const all = skip?.size ? rank(e, p, isFav).filter((r) => !skip.has(r.doc.id)) : rank(e, p, isFav);
 	const phrases = allText(p).phrases, text_ = hasText(p);
 	return { total: all.length, hits: all.slice(0, limit).map(({ doc, hits }) => {
 		const text = doc.text, xs = ranges(text, hits, phrases);

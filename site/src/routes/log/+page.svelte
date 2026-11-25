@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { onMount, tick } from "svelte";
 	import { afterNavigate, goto } from "$app/navigation";
 	import ChipButton from "#lib/components/chip-button.svelte";
 	import Icon from "#lib/components/icon.svelte";
@@ -8,8 +8,9 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { toRoute } from "#lib/links.js";
+	import { toMaintenance } from "#lib/path-links.js";
 	import { archives, countBy, dayLabel, dayOf, dayShort, filterEntries, filterQuery, groupDays, isUnfiltered, type LogFilter, monthLabel, NO_FILTER, readFilter, withIds } from "#lib/log-view.js";
-	import { KINDS, kindColor, kindDescription, kindIcon } from "#lib/type-meta.js";
+	import { KINDS, kindColor, kindDescription, kindIcon, kindLabel } from "#lib/type-meta.js";
 	import { t } from "#lib/i18n/index.js";
 
 	const STEP = 20; // entries displayed per slice
@@ -41,6 +42,17 @@
 	const monthValue = $derived(f.month || f.day.slice(0, 7));
 	const dayGroups = $derived(
 		(f.month ? [f.month] : months.map((m) => m.month)).map((month) => ({ month, days: dayList.filter((d) => d.day.startsWith(month)) })).filter((g) => g.days.length),
+	);
+
+	// Filters other than the search field sit in one panel, closed on a phone so the entries come first: its summary names the
+	// choices in force. Open from the start where there is room (set once mounted: the prerendered page does not know the width).
+	let filtersOpen = $state(false);
+	onMount(() => { filtersOpen = matchMedia("(min-width: 40rem)").matches; });
+	const chosen = $derived(
+		[
+			f.kind && t("log.filters.kind", { value: kindLabel(f.kind) }),
+			f.day ? t("log.filters.day", { value: dayShort(f.day) }) : f.month && t("log.filters.period", { value: monthLabel(f.month) }),
+		].filter(Boolean).join(" · "),
 	);
 
 	const set = (next: Partial<LogFilter>) => {
@@ -80,70 +92,79 @@
 		void goto(`${toRoute("/log")}${query}`, { shallow: true, replace: true, keepFocus: true, noScroll: true });
 	});
 
-	const select = "border-input bg-card focus-visible:border-ring focus-visible:ring-ring/50 h-9 pointer-coarse:h-11 w-full rounded-md border px-2.5 text-sm outline-none focus-visible:ring-3";
+	const select = "border-input bg-card h-9 pointer-coarse:h-11 w-full rounded-md border px-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 </script>
 
 <svelte:head><title>{t("nav.log")} · Cortex</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">{t("nav.log")}</h1>
+<p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><a href={toRoute("/changes")} class="text-link link-content inline-flex min-h-6 items-center gap-1.5 underline underline-offset-4"><Icon name="recent" size={16} />{t("home.news.changes")}</a><a href={toMaintenance()} class="text-link link-content inline-flex min-h-6 items-center gap-1.5 underline underline-offset-4"><Icon name="stale" size={16} />{t("maint.title")}</a></p>
 
 {#if total}
-	<div class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-		<div>
-			<label for="log-search" class="mb-1 block text-sm font-medium">{t("log.search")}</label>
-			<Input id="log-search" bind:ref={search} type="search" placeholder={t("log.search.placeholder")} autocomplete="off" value={f.q} oninput={(e) => set({ q: e.currentTarget.value })} />
-		</div>
-		<div>
-			<label for="log-month" class="mb-1 block text-sm font-medium">{t("log.period")}</label>
-			<select id="log-month" class={select} value={monthValue} onchange={(e) => set({ month: e.currentTarget.value, day: "" })}>
-				<option value="">{t("log.period.all")}</option>
-				{#each months as m (m.month)}
-					<option value={m.month}>{monthLabel(m.month)} ({m.n})</option>
-				{/each}
-			</select>
-		</div>
-		<div>
-			<label for="log-day" class="mb-1 block text-sm font-medium">{t("log.day")}</label>
-			<select id="log-day" class={select} value={f.day} onchange={(e) => set({ day: e.currentTarget.value, month: "" })}>
-				<option value="">{t("log.day.all")}</option>
-				{#each dayGroups as g (g.month)}
-					<optgroup label={monthLabel(g.month)}>
-						{#each g.days as d (d.day)}
-							<option value={d.day}>{dayShort(d.day)} ({d.n})</option>
-						{/each}
-					</optgroup>
-				{/each}
-			</select>
-		</div>
+	<div class="mt-4 max-w-xl">
+		<label for="log-search" class="mb-1 block text-sm font-medium">{t("log.search")}</label>
+		<Input id="log-search" bind:ref={search} type="search" placeholder={t("log.search.placeholder")} autocomplete="off" value={f.q} oninput={(e) => set({ q: e.currentTarget.value })} />
 	</div>
 
-	<ul class="touch-gap mt-4 flex flex-wrap gap-2" aria-label={t("log.kindFilter")}>
-		<li>
-			<ChipButton pressed={f.kind === ""} onclick={() => set({ kind: "" })}>{t("log.kind.all")} <span class="text-muted-foreground">{kindTotal}</span></ChipButton>
-		</li>
-		{#each kindsShown as k (k.kind)}
-			<li>
-				<ChipButton pressed={f.kind === k.kind} describedby="type-{k.kind}" onclick={() => set({ kind: f.kind === k.kind ? "" : k.kind })}>
-					<Icon name={kindIcon(k.kind)} size={16} style="color: {kindColor(k.kind)}" />
-					{k.label} <span class="text-muted-foreground">{kindCounts.get(k.kind) ?? 0}</span>
-				</ChipButton>
-			</li>
-		{/each}
-	</ul>
-
-	<details class="group mt-3">
-		<summary class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 touch-target inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md text-sm focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
-			<Icon name="chevron-down" size={16} class="motion-safe:transition-transform group-open:rotate-180" />
-			{t("log.kinds.help")}
+	<details bind:open={filtersOpen} class="group mt-3">
+		<summary class="hover:bg-muted focus-visible:outline-ring touch-target -mx-2 flex min-h-6 cursor-pointer items-center gap-2 px-2 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+			<Icon name="chevron-down" size={16} class="shrink-0 motion-safe:transition-transform group-open:rotate-180" />
+			<span class="font-medium">{t("log.filters")}</span>
+			<span class="text-muted-foreground min-w-0 truncate">{chosen || t("log.filters.none")}</span>
 		</summary>
-		<dl class="mt-2 space-y-2 text-sm">
-			{#each KINDS as k (k.kind)}
-				<div class="grid items-baseline gap-x-3 gap-y-1 sm:grid-cols-[9.5rem_1fr]">
-					<dt><KindBadge kind={k.kind} /></dt>
-					<dd id="type-{k.kind}" class="text-muted-foreground">{kindDescription(k.kind)}</dd>
-				</div>
+		<div class="mt-3 grid gap-3 sm:max-w-xl sm:grid-cols-2">
+			<div>
+				<label for="log-month" class="mb-1 block text-sm font-medium">{t("log.period")}</label>
+				<select id="log-month" class={select} value={monthValue} onchange={(e) => set({ month: e.currentTarget.value, day: "" })}>
+					<option value="">{t("log.period.all")}</option>
+					{#each months as m (m.month)}
+						<option value={m.month}>{monthLabel(m.month)} ({m.n})</option>
+					{/each}
+				</select>
+			</div>
+			<div>
+				<label for="log-day" class="mb-1 block text-sm font-medium">{t("log.day")}</label>
+				<select id="log-day" class={select} value={f.day} onchange={(e) => set({ day: e.currentTarget.value, month: "" })}>
+					<option value="">{t("log.day.all")}</option>
+					{#each dayGroups as g (g.month)}
+						<optgroup label={monthLabel(g.month)}>
+							{#each g.days as d (d.day)}
+								<option value={d.day}>{dayShort(d.day)} ({d.n})</option>
+							{/each}
+						</optgroup>
+					{/each}
+				</select>
+			</div>
+		</div>
+
+		<ul class="touch-gap mt-3 flex flex-wrap gap-2" aria-label={t("log.kindFilter")}>
+			<li>
+				<ChipButton pressed={f.kind === ""} onclick={() => set({ kind: "" })}>{t("log.kind.all")} <span class="text-muted-foreground">{kindTotal}</span></ChipButton>
+			</li>
+			{#each kindsShown as k (k.kind)}
+				<li>
+					<ChipButton pressed={f.kind === k.kind} describedby="type-{k.kind}" onclick={() => set({ kind: f.kind === k.kind ? "" : k.kind })}>
+						<Icon name={kindIcon(k.kind)} size={16} style="color: {kindColor(k.kind)}" />
+						{k.label} <span class="text-muted-foreground">{kindCounts.get(k.kind) ?? 0}</span>
+					</ChipButton>
+				</li>
 			{/each}
-		</dl>
+		</ul>
+
+		<details class="group/help mt-3">
+			<summary class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 touch-target inline-flex min-h-6 cursor-pointer items-center gap-1 rounded-md text-sm focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
+				<Icon name="chevron-down" size={16} class="motion-safe:transition-transform group-open/help:rotate-180" />
+				{t("log.kinds.help")}
+			</summary>
+			<dl class="mt-2 space-y-2 text-sm">
+				{#each KINDS as k (k.kind)}
+					<div class="grid items-baseline gap-x-3 gap-y-1 sm:grid-cols-[9.5rem_1fr]">
+						<dt><KindBadge kind={k.kind} /></dt>
+						<dd id="type-{k.kind}" class="text-muted-foreground">{kindDescription(k.kind)}</dd>
+					</div>
+				{/each}
+			</dl>
+		</details>
 	</details>
 
 	<p class="text-muted-foreground mt-4 text-sm" role="status">

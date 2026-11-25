@@ -6,7 +6,8 @@
 	import { dayLabel, hourOf, type LogEntry } from "#lib/log-view.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { kindColor, kindLabel, typeColor, typeIcon } from "#lib/type-meta.js";
-	import { t as tr } from "#lib/i18n/index.js";
+	import { contentLang, t as tr } from "#lib/i18n/index.js";
+	import { lang } from "#lib/lang.svelte.js";
 
 	// A log entry: type, time, direct link, text (summary of a few lines then expandable detail if the text
 	// is long), references always visible. Without JavaScript, the text stays whole: the summary is only applied once mounted.
@@ -39,8 +40,8 @@
 
 <li id={entry.id} tabindex="-1" class="entry relative scroll-mt-24"
 	class:target>
-	<span class="bg-background absolute top-2 -left-[1.9rem] flex size-3 items-center justify-center rounded-full" aria-hidden="true">
-		<span class="size-2.5 rounded-full" style:background={kindColor(entry.kind)}></span>
+	<span class="bg-background absolute top-2 -left-[1.9rem] flex size-3 items-center justify-center" aria-hidden="true">
+		<span class="size-2.5" style:background={kindColor(entry.kind)}></span>
 	</span>
 	<div class="flex flex-wrap items-center gap-x-2 gap-y-1">
 		<KindBadge kind={entry.kind} />
@@ -53,9 +54,10 @@
 	<div
 		id={textId}
 		bind:this={box}
+		lang={contentLang}
 		class="wiki mt-1.5 text-[0.95rem] {mounted && !open ? 'clamped' : ''}"
 		onfocusin={() => { if (overflow) open = true; }}
-	><span class="sr-only">{kindLabel(entry.kind)} : </span>{@html entry.html}</div>
+	><span class="sr-only" lang={lang.current}>{kindLabel(entry.kind)} : </span>{@html entry.html}</div>
 	{#if overflow}
 		<Button variant="ghost" size="sm" class="-ml-2.5 mt-0.5" aria-expanded={open} aria-controls={textId} onclick={() => (open = !open)}>
 			{open ? tr("common.collapse") : tr("log.readMore")}
@@ -67,7 +69,7 @@
 			{#each entry.pages as p (p.id)}
 				<li class="flex items-center gap-1.5">
 					<Icon name={typeIcon(p.type)} size={16} style="color: {typeColor(p.type)}" />
-					<a href={toPage(p.id)} class="text-link underline-offset-4 hover:underline">{p.title}</a>
+					<a href={toPage(p.id)} lang={contentLang} class="text-link underline-offset-4 hover:underline">{p.title}</a>
 				</li>
 			{/each}
 			{#each entry.sources as s (s.id)}
@@ -75,9 +77,9 @@
 					<Icon name="source" size={16} class="text-muted-foreground" />
 					<span class="text-muted-foreground">{tr("type.Source")}</span>
 					{#if s.page}
-						<a href={toPage(s.page.id)} class="text-link underline-offset-4 hover:underline">{s.page.title}</a>
+						<a href={toPage(s.page.id)} lang={contentLang} class="text-link underline-offset-4 hover:underline">{s.page.title}</a>
 					{:else}
-						<code class="bg-muted rounded px-1.5 py-0.5 text-sm [overflow-wrap:anywhere]">{s.id}</code>
+						<code class="bg-muted px-1.5 py-0.5 text-sm [overflow-wrap:anywhere]">{s.id}</code>
 					{/if}
 				</li>
 			{/each}

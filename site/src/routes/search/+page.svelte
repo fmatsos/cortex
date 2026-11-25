@@ -10,7 +10,7 @@
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { activeValues, diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
-	import { type Engine, facetCounts, facetsOf, highlight, loadEngine, search as run } from "#lib/search-client.js";
+	import { type Engine, facetCounts, facetsOf, highlight, loadEngine, rank as localRank, search as run } from "#lib/search-client.js";
 	import { cachedHybrid, cachedJudged, hybrid, judged, probe, rows as serverRows, sections, worthAsking, type Hybrid, type Judged, type Row } from "#lib/server-search.js";
 	import type { SearchDoc } from "#lib/types.js";
 	import { search } from "#lib/search-state.svelte.js";
@@ -30,24 +30,28 @@
 	const q = $derived(search.q);
 	const text = $derived(q.trim());
 	const parsed = $derived(parseQuery(q));
-	const res = $derived(engine ? run(engine, q, favs.has, limit) : { hits: [], total: 0 });
 
-	// The server (`cortex serve`): on a validated search only, its hybrid results replace the local ones as soon as they come, then the
-	// judge's ranking groups them. Static site (no /api/search): none of this exists, the local results are the answer.
+	// The server (`cortex serve`): on a validated search only, its hybrid results take the top of the list as soon as they come, then the
+	// judge's ranking groups them. The server ranks at most SERVER_LIMIT pages and has no total: the local matches it did not return
+	// follow, in the site's own order, so that no match is ever lost. Static site (no /api/search): none of this exists, the local
+	// results are the answer.
 	type Server = { q: string; res: Hybrid; phase: "judging" | "judged" | "plain"; judged?: Judged };
 	let server = $state<Server>();
 	const srv = $derived(server && server.q === text && engine ? server : undefined);
 	const srvRows = $derived(srv ? serverRows(engine!, parsed, srv.res, favs.has) : []);
 	const onServer = $derived(!!srv && srvRows.length > 0);
+	const srvIds = $derived(new Set(srvRows.map((r) => r.doc.id)));
+	// the local matches the server's list does not hold: their exact total, and the slice displayed (`limit`)
+	const res = $derived(engine ? run(engine, q, favs.has, limit, onServer ? srvIds : undefined) : { hits: [], total: 0 });
+	const restDocs = $derived(engine && onServer ? localRank(engine, parsed, favs.has).map((r) => r.doc).filter((d) => !srvIds.has(d.id)) : []);
 	const grouped = $derived(onServer && srv?.phase === "judged" ? sections(srvRows) : undefined);
 	const judging = $derived(!!srv && srv.phase === "judging");
-	const total = $derived(onServer ? srvRows.length : res.total);
-	const shownServer = $derived(grouped ? srvRows : srvRows.slice(0, limit));
+	const total = $derived(onServer ? srvRows.length + res.total : res.total);
 	const localFacets = $derived(engine ? facetCounts(engine, q, favs.has) : undefined);
-	// the counters follow the displayed results; type and status, which a click replaces, keep the alternatives' counts while their operator is active
+	// the counters follow the displayed results (the server's rows and the rest); type and status, which a click replaces, keep the alternatives' counts while their operator is active
 	const facets = $derived.by(() => {
 		if (!engine || !onServer || !localFacets) return localFacets;
-		const f = facetsOf(srvRows.map((r) => r.doc), favs.has);
+		const f = facetsOf([...srvRows.map((r) => r.doc), ...restDocs], favs.has);
 		return { ...f, type: activeValues(parsed, "type").size ? localFacets.type : f.type, status: activeValues(parsed, "status").size ? localFacets.status : f.status };
 	});
 
@@ -56,6 +60,48 @@
 		const extract = r.hit.match === "filter" ? "" : r.hit.extract.length > 320 ? `${r.hit.extract.slice(0, 320)} …` : r.hit.extract;
 		return { doc: r.doc, titleHtml: highlight(r.doc.title, parsed), descriptionHtml: highlight(r.doc.description, parsed), snippetHtml: extract && extract !== r.doc.description ? highlight(extract, parsed) : "", note: r.hit.match === "semantic" ? t("search.match.semantic") : undefined };
 	};
+	// The folded groups ("Other results", "Other matches"): open by default only when nothing else would be visible; the visitor's own
+	// toggle wins over the default, and a new search forgets it.
+	let otherOpen = $state<boolean>();
+	let moreOpen = $state<boolean>();
+	const top = $derived(!!grouped && grouped.retained.length + grouped.related.length > 0);
+	const isOtherOpen = $derived(otherOpen ?? !top);
+	const isMoreOpen = $derived(moreOpen ?? (!grouped || (!top && !grouped.other.length)));
+
+	// Focus follows the page and the action, not the element: the ranking replaces the list (local, then hybrid, then groups), which
+	// destroys the focused link or star. Where focus was is remembered by page id and action, and restored once the new list is drawn,
+	// unfolding the group that now holds the page when needed.
+	type Spot = { id: string; action: string };
+	let results = $state<HTMLElement | null>(null);
+	let spot: Spot | undefined;
+	const spotOf = (el: Element | null): Spot | undefined => {
+		const row = el?.closest<HTMLElement>("[data-page]");
+		return row ? { id: row.dataset.page!, action: el!.closest<HTMLElement>("[data-row-action]")?.dataset.rowAction ?? "open" } : undefined;
+	};
+	const onFocusIn = (e: FocusEvent) => { spot = spotOf(e.target as Element); };
+	// focus that leaves the results for good forgets the spot; an element that was merely removed (the list changed) keeps it
+	const onFocusOut = (e: FocusEvent) => {
+		const el = e.target as Element;
+		setTimeout(() => { if (el.isConnected && !results?.contains(document.activeElement)) spot = undefined; });
+	};
+	const find = (w: Spot) => results?.querySelector<HTMLElement>(`[data-page="${CSS.escape(w.id)}"] [data-row-action="${w.action}"]`) ?? undefined;
+	async function restoreFocus(w: Spot) {
+		let el = find(w);
+		if (!el) return;
+		const closed = el.closest<HTMLDetailsElement>("details:not([open])");
+		if (closed) {
+			if (closed.dataset.group === "more") moreOpen = true; else otherOpen = true;
+			await tick();
+			el = find(w);
+		}
+		el?.focus();
+	}
+	$effect(() => {
+		void [srvRows, grouped, res.hits];
+		const w = spot, a = document.activeElement;
+		if (w && results && (!a || a === document.body)) untrack(() => void restoreFocus(w));
+	});
+
 	const tagSet = $derived(engine ? new Set(engine.docs.flatMap((d) => d.tags.map(fold))) : undefined);
 	const issues = $derived(diagnose(parsed, tagSet));
 	const noFav = $derived(wantsFav(parsed) && !favs.ids.length);
@@ -91,6 +137,7 @@
 	$effect(() => {
 		const v = search.validated.trim();
 		server = undefined;
+		otherOpen = moreOpen = undefined;
 		if (!v || !worthAsking(v)) return;
 		const ctl = new AbortController();
 		let final = false;
@@ -196,6 +243,10 @@
 			{/if}
 		</p>
 
+		{#if onServer && res.total > 0}
+			<p class="text-muted-foreground mt-1 text-sm" data-rank-scope>{t("search.rankScope", { count: srvRows.length })}</p>
+		{/if}
+
 		{#each issues as issue (issue.text)}
 			<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm">
 				<Icon name="warning" size={20} />
@@ -217,7 +268,7 @@
 
 		{#if text}
 			{#snippet item(v: View, href: string)}
-				<li class="py-4">
+				<li class="py-4" data-page={v.doc.id}>
 					<ResultRow doc={v.doc} {href} titleHtml={v.titleHtml} descriptionHtml={v.descriptionHtml} snippetHtml={v.snippetHtml} note={v.note} showFav onopen={() => search.remember(q)} />
 				</li>
 			{/snippet}
@@ -226,10 +277,12 @@
 					{#each rs as r (r.doc.id)}{@render item(viewOf(r), withPassage(toPage(r.doc.id), q))}{/each}
 				</ul>
 			{/snippet}
+			{#snippet localItem(h: { doc: SearchDoc; title: string; description: string; snippet: string })}
+				{@render item({ doc: h.doc, titleHtml: h.title, descriptionHtml: h.description, snippetHtml: h.snippet }, withPassage(toPage(h.doc.id), q))}
+			{/snippet}
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-			<div class="mt-2" aria-busy={judging} onclick={onRowClick}>
+			<div class="mt-2" aria-busy={judging} bind:this={results} onclick={onRowClick} onfocusin={onFocusIn} onfocusout={onFocusOut}>
 				{#if grouped}
-					{@const top = grouped.retained.length + grouped.related.length > 0}
 					{#if grouped.retained.length}
 						<section aria-labelledby="g-retained" class="mb-6">
 							<h3 id="g-retained" class="text-lg font-semibold">{t("search.group.retained")} <span class="text-muted-foreground text-base font-normal tabular-nums">{grouped.retained.length}</span></h3>
@@ -245,24 +298,34 @@
 					{#if !top}<p class="text-muted-foreground mb-3 text-[0.9375rem]">{t("search.group.noTop")}</p>{/if}
 					{#if grouped.other.length}
 						<!-- the rest is folded, never hidden for good: a disclosure with its count -->
-						<details open={!top} class="group rounded-lg border px-3" data-group="other">
+						<details open={isOtherOpen} ontoggle={(e) => { const o = e.currentTarget.open; if (o !== isOtherOpen) otherOpen = o; }} class="group rounded-lg border px-3" data-group="other">
 							<summary class="focus-visible:ring-ring/50 flex min-h-11 cursor-pointer items-center gap-2 text-base font-semibold focus-visible:ring-3">{t("search.group.other", { count: grouped.other.length })}<Icon name="chevron-down" size={16} class="text-muted-foreground ml-auto motion-safe:transition-transform group-open:rotate-180" /></summary>
 							{@render list(grouped.other)}
 						</details>
 					{/if}
 				{:else if onServer}
 					<ul class="divide-border divide-y">
-						{#each shownServer as r (r.doc.id)}{@render item(viewOf(r), withPassage(toPage(r.doc.id), q))}{/each}
+						{#each srvRows as r (r.doc.id)}{@render item(viewOf(r), withPassage(toPage(r.doc.id), q))}{/each}
 					</ul>
 				{:else}
 					<ul class="divide-border divide-y">
-						{#each res.hits as h (h.doc.id)}{@render item({ doc: h.doc, titleHtml: h.title, descriptionHtml: h.description, snippetHtml: h.snippet }, withPassage(toPage(h.doc.id), q))}{/each}
+						{#each res.hits as h (h.doc.id)}{@render localItem(h)}{/each}
 					</ul>
 				{/if}
+				{#if onServer && res.total > 0}
+					<!-- local matches beyond the server's ranked list (it returns at most SERVER_LIMIT pages and no total) -->
+					<details open={isMoreOpen} ontoggle={(e) => { const o = e.currentTarget.open; if (o !== isMoreOpen) moreOpen = o; }} class="group mt-4 rounded-lg border px-3" data-group="more">
+						<summary class="focus-visible:ring-ring/50 flex min-h-11 cursor-pointer items-center gap-2 text-base font-semibold focus-visible:ring-3">{t("search.group.more", { count: res.total })}<Icon name="chevron-down" size={16} class="text-muted-foreground ml-auto motion-safe:transition-transform group-open:rotate-180" /></summary>
+						<ul class="divide-border divide-y">
+							{#each res.hits as h (h.doc.id)}{@render localItem(h)}{/each}
+						</ul>
+						{#if res.total > res.hits.length}
+							<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-3 mb-3 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>{t("search.showMore", { shown: res.hits.length, total: res.total })}</button>
+						{/if}
+					</details>
+				{/if}
 			</div>
-			{#if onServer && !grouped && srvRows.length > shownServer.length}
-				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>{t("search.showMore", { shown: shownServer.length, total: srvRows.length })}</button>
-			{:else if !onServer && res.total > res.hits.length}
+			{#if !onServer && res.total > res.hits.length}
 				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>{t("search.showMore", { shown: res.hits.length, total: res.total })}</button>
 			{/if}
 			{#if engine && !total && !issues.length}
@@ -292,7 +355,7 @@
 					<h2 id="s-collections" class="text-lg font-semibold">{t("search.collections")}</h2>
 					<ul class="mt-2 flex flex-wrap gap-2">
 						{#each data.seed.types.filter((x) => x.count) as ty (ty.type)}
-							<li><a href={urlOf(token("type", ty.type))} class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm focus-visible:ring-3"><Icon name={typeIcon(ty.type)} size={16} />{typePlural(ty.type)} <span class="text-muted-foreground">{ty.count}</span></a></li>
+							<li><a href={urlOf(token("type", ty.type))} class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-11 items-center gap-2 border px-4 text-sm focus-visible:ring-3"><Icon name={typeIcon(ty.type)} size={16} />{typePlural(ty.type)} <span class="text-muted-foreground">{ty.count}</span></a></li>
 						{/each}
 					</ul>
 				</section>
@@ -301,7 +364,7 @@
 						<h2 id="s-tags" class="text-lg font-semibold">{t("search.frequentTags")}</h2>
 						<ul class="mt-2 flex flex-wrap gap-2">
 							{#each data.seed.tags as tg (tg.tag)}
-								<li><a href={urlOf(`#${tg.tag}`)} class="hover:bg-muted bg-secondary text-secondary-foreground focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag} <span class="text-muted-foreground">{tg.count}</span></a></li>
+								<li><a href={urlOf(`#${tg.tag}`)} class="hover:bg-muted bg-secondary text-secondary-foreground focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-1.5 border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11">#{tg.tag} <span class="text-muted-foreground">{tg.count}</span></a></li>
 							{/each}
 						</ul>
 					</section>

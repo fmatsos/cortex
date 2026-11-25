@@ -3,22 +3,25 @@
 	import type { RelatedEntry } from "#lib/article.js";
 	import { toPage } from "#lib/links.js";
 	import type { Link } from "#lib/types.js";
-	import { t as tr } from "#lib/i18n/index.js";
+	import { contentLang, t as tr } from "#lib/i18n/index.js";
 
 	// Side navigation column: the pages that cite this one (backlinks), then the pages to explore next.
-	// A destination appears only once; each related page carries its reasons as short icon chips.
+	// A destination appears only once; each related page carries its reasons: the tag icon (detail on hover), and as plain
+	// text under the title on touch screens, where there is no hover (C14). Screen readers get them once, as hidden text.
+	// The focus ring is the design system's opaque outline (app.css), never a translucent ring.
 	let { backlinks, related }: { backlinks: Link[]; related: RelatedEntry[] } = $props();
 
 	const SHOWN = 5; // ponytail: fixed threshold; beyond it, "Show all"
 	let allBack = $state(false), allRel = $state(false);
 	const back = $derived(allBack ? backlinks : backlinks.slice(0, SHOWN));
 	const rel = $derived(allRel ? related : related.slice(0, SHOWN));
+	const reasonText = (w: RelatedEntry["why"][number]) => (w.icon === "tags" ? tr("related.sharedTheme", { label: w.label }) : `${w.label}${w.detail ? `${tr("common.colon")}${w.detail}` : ""}`);
 </script>
 
 {#snippet row(l: Link, why: RelatedEntry["why"] = [])}
-	<a href={toPage(l.id)} class="hover:bg-muted focus-visible:ring-ring/50 group -mx-2 flex items-start gap-2 rounded-md px-2 py-1.5 focus-visible:ring-3 focus-visible:outline-none">
+	<a href={toPage(l.id)} class="hover:bg-muted group -mx-2 flex items-start gap-2 rounded-md px-2 py-1.5">
 		<span class="min-w-0">
-			<span class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
+			<span lang={contentLang} class="text-link group-hover:underline underline-offset-3 leading-snug">{l.title}</span>
 			<!-- reasons as discreet icons after the title: detail on hover, read in full by screen readers -->
 			<!-- only the tag icon is shown; the other reasons are still read by screen readers -->
 			{#each why as w (w.label)}
@@ -30,6 +33,10 @@
 					<span class="sr-only">, {w.label}{w.detail ? `${tr("common.colon")}${w.detail}` : ""}</span>
 				{/if}
 			{/each}
+			<!-- touch screens: the reasons in full, as text (the screen reader reads the hidden text above, not this copy) -->
+			{#if why.length}
+				<span class="text-muted-foreground mt-0.5 hidden text-xs leading-snug pointer-coarse:block" data-reasons aria-hidden="true">{why.map(reasonText).join(" · ")}</span>
+			{/if}
 		</span>
 	</a>
 {/snippet}

@@ -11,7 +11,7 @@
 	import { loadEngine, type Engine } from "#lib/search-client.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { typeIcon } from "#lib/type-meta.js";
-	import { t } from "#lib/i18n/index.js";
+	import { contentLang, t } from "#lib/i18n/index.js";
 
 	// The assistant, a panel of the shell (it survives navigation). From 1280 px it is docked on the right and the page
 	// shrinks beside it (a non-modal dialog: the page stays usable); below, a modal drawer over the page. One <dialog> for
@@ -201,7 +201,7 @@
 							{/if}
 						</div>
 					{:else if turn.answer}
-						<div class="mt-3 text-sm">
+						<div class="mt-3 text-sm" lang={contentLang}>
 							{#each turn.answer.segments as s, i (i)}
 								{#if "block" in s}<AnswerBlock block={s.block} {fix} />{:else}<div class="wiki">{@html fix(s.html)}</div>{/if}
 							{/each}
@@ -210,7 +210,7 @@
 							<h3 class="mt-4 text-sm font-semibold">{l.label}</h3>
 							<ul class="mt-1 space-y-1 text-sm">
 								{#each l.docs as d (d.id)}
-									<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" />{d.title}</a></li>
+									<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" /><span lang={contentLang}>{d.title}</span></a></li>
 								{/each}
 							</ul>
 						{/each}
@@ -223,7 +223,8 @@
 
 		<form class="border-t p-3" onsubmit={(e) => { e.preventDefault(); send(); }}>
 			<label for="assistant-q" class="sr-only">{t("assistant.label")}</label>
-			<div class="focus-within:ring-ring/50 flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:ring-3">
+			<!-- the field sits in a frame: the frame carries the design system's opaque 2 px outline (a translucent ring is under 3:1) -->
+			<div class="focus-within:outline-ring flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:outline-2 focus-within:outline-offset-2">
 				<textarea bind:this={area} id="assistant-q" rows="2" bind:value={assistant.draft} onkeydown={onKey} placeholder={t("assistant.placeholder")} aria-invalid={over} aria-describedby="assistant-hint"
 					class="max-h-40 min-h-11 flex-1 resize-none bg-transparent text-sm outline-none field-sizing-content"></textarea>
 				<button type="submit" class="bg-primary text-primary-foreground inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50 pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={assistant.pending || !assistant.draft.trim() || over}>
@@ -242,6 +243,11 @@
 	.assistant :global(.wiki) {
 		font-size: 0.875rem;
 		line-height: 1.65;
+	}
+	/* "Comfortable text" (header preferences menu, local): a larger body for the answers, same fonts and format */
+	:global(html[data-assistant-comfort]) .assistant :global(.wiki) {
+		font-size: 1.0625rem;
+		line-height: 1.75;
 	}
 	.assistant :global(.wiki h2) {
 		font-size: 1.15em;

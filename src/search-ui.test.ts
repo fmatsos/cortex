@@ -181,3 +181,11 @@ test("expressions : OR / OU / |, parenthèses imbriquées, groupe nié, ET impli
 	expect(diagnose(parseQuery("(type:truc OR #llm)"))[0].raws).toEqual(["type:truc"]);
 	expect(ids("(#llm")).toEqual(["a", "c"]); // unbalanced: the parenthesis is ignored
 });
+
+test("lignes de résultat : seuls les champs échappés par le moteur passent par {@html}, jamais la description de la page", async () => {
+	const src = await Bun.file(new URL("../site/src/lib/components/result-row.svelte", import.meta.url)).text();
+	const used = [...src.matchAll(/\{@html ([^}]+)\}/g)].map((m) => m[1].trim()).sort();
+	expect(used).toEqual(["descriptionHtml", "snippetHtml", "snippetHtml", "titleHtml"]);
+	// the page's own description is interpolated as text
+	expect(src).toContain("{doc.description}");
+});

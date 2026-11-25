@@ -2,6 +2,7 @@
 	import { features } from "#lib/features.js";
 	import Icon from "#lib/components/icon.svelte";
 	import { fold } from "#lib/fold.js";
+	import { toRoute } from "#lib/links.js";
 	import type { IconName } from "#lib/icons.js";
 	import { activeValues, parseQuery, clearOps, toggleFacet, type Op } from "#lib/query.js";
 	import type { Facets } from "#lib/search-client.js";
@@ -74,6 +75,7 @@
 	<section aria-labelledby="fc-state">
 		<h2 id="fc-state" class="text-muted-foreground mb-1 px-2 text-sm font-semibold">{tr("facets.state")}</h2>
 		{@render rows(flagRows)}
+		{#if features.review}<a href={toRoute("/review")} class="text-link hover:bg-muted mt-1 inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm underline underline-offset-4 pointer-coarse:min-h-11">{tr("review.open")}</a>{/if}
 	</section>
 	{#if facets.tags.length}
 		<section aria-labelledby="fc-tags">

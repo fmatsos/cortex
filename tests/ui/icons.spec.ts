@@ -2,9 +2,9 @@ import { expect, test } from "./helpers";
 import { ICON_NAMES } from "../../site/src/lib/icons";
 
 // The icon pack is Phosphor Light: filled shapes painted with currentColor, no stroke. Checked on the real rendered page.
-test("the header nav renders Phosphor Light icons: filled with currentColor, no stroke", async ({ page }) => {
+test("the header renders Phosphor Light icons: filled with currentColor, no stroke", async ({ page }) => {
   await page.goto("/");
-  const icon = page.getByRole("banner").locator("nav svg").first();
+  const icon = page.getByRole("banner").locator("svg:has(use):visible").first();
   await expect(icon).toBeVisible();
   const box = await icon.boundingBox();
   expect(box?.width ?? 0).toBeGreaterThan(0);
@@ -110,7 +110,7 @@ test("the search palette shows icons that resolve", async ({ page }) => {
 
 test("a header icon, drawn from the sprite, has a real size and is visible", async ({ page }) => {
   await page.goto(ARTICLE);
-  const icon = page.getByRole("banner").locator("nav svg").first();
+  const icon = page.getByRole("banner").locator("svg:has(use):visible").first();
   await expect(icon).toBeVisible();
   const box = await icon.boundingBox();
   expect(box?.width).toBeGreaterThan(0);
@@ -138,7 +138,7 @@ test("the 404 page builds its sprite on the client and renders its icons", async
   const res = await page.goto("/no/such/page/");
   expect(res?.status()).toBe(404);
   await expect(page.locator("#cx-search")).toHaveCount(1);
-  const icon = page.getByRole("banner").locator("nav svg").first();
+  const icon = page.getByRole("banner").locator("svg:has(use):visible").first();
   await expect(icon).toBeVisible();
   const box = await icon.boundingBox();
   expect(box?.width).toBeGreaterThan(0);

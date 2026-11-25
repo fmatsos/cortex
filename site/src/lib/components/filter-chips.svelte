@@ -14,7 +14,7 @@
 		{#each list as c (c.label)}
 			<li>
 				<!-- mousedown: the search field keeps focus (the palette stays open); Enter and Space go through click -->
-				<button type="button" class="touch-target bg-secondary text-secondary-foreground hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-7 items-center gap-1 rounded-full border px-2.5 text-sm focus-visible:ring-3" aria-label={tr("chips.remove", { label: c.label })} onmousedown={(e) => { e.preventDefault(); drop(c.raws); }} onclick={() => drop(c.raws)}>
+				<button type="button" class="touch-target bg-secondary text-secondary-foreground hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-7 items-center gap-1 border px-2.5 text-sm focus-visible:ring-3" aria-label={tr("chips.remove", { label: c.label })} onmousedown={(e) => { e.preventDefault(); drop(c.raws); }} onclick={() => drop(c.raws)}>
 					{c.label} <Icon name="clear" size={16} />
 				</button>
 			</li>

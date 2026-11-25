@@ -57,7 +57,7 @@
 		<ul class="touch-gap mt-4 flex flex-wrap items-center gap-2" aria-label={t("home.examples")}>
 			<li class="text-muted-foreground text-sm" aria-hidden="true">{t("home.try")}</li>
 			{#each data.seed.examples as ex (ex.q)}
-				<li><a href={urlOf(ex.q)} title={t(ex.hint)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-8 items-center rounded-full border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11"><code class="font-sans">{ex.q}</code><span class="sr-only">{t("common.colon")}{t(ex.hint)}</span></a></li>
+				<li><a href={urlOf(ex.q)} title={t(ex.hint)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 inline-flex min-h-8 items-center border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11"><code class="font-sans">{ex.q}</code><span class="sr-only">{t("common.colon")}{t(ex.hint)}</span></a></li>
 			{/each}
 		</ul>
 	{/if}

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import Icon from "#lib/components/icon.svelte";
 	import { hourOf, groupDays } from "#lib/log-view.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import type { Brief } from "#lib/news.js";
-	import { intlLocale, t } from "#lib/i18n/index.js";
+	import { contentLang, intlLocale, t } from "#lib/i18n/index.js";
 
 	// Home page news: days, and under each day one sentence per brief (what happened, from structured data: no kind badge,
 	// the verb tells the kind), then the time and the pages. The vertical rule and the square markers are decorative.
@@ -59,10 +60,10 @@
 					{@const hour = hourOf(b.at)}
 					<li class="relative">
 						<span class="bg-muted-foreground absolute top-2 -left-6 size-[7px]" aria-hidden="true"></span>
-						<p class="text-base leading-normal [overflow-wrap:anywhere] {b.text ? 'line-clamp-3' : ''}">{s.before}{#if b.source}<a href={toPage(b.source.id)} class="text-link link-content underline-offset-4 hover:underline">{b.source.title}</a>{s.after}{/if}</p>
+						<p class="text-base leading-normal [overflow-wrap:anywhere] {b.text ? 'line-clamp-3' : ''}">{s.before}{#if b.source}<a href={toPage(b.source.id)} lang={contentLang} class="text-link link-content underline-offset-4 hover:underline">{b.source.title}</a>{s.after}{/if}</p>
 						<p class="text-muted-foreground mt-0.5 text-sm leading-snug [overflow-wrap:anywhere]">
 							<a href={entry(b)} class="link-content hover:underline underline-offset-4">{#if hour}<time datetime={b.at} class="tabular-nums">{hour}</time><span class="sr-only">{t("common.colon")}{t("home.news.entry")}</span>{:else}{t("home.news.entry")}{/if}</a>
-							{#if b.pages.length}<span class="mx-1.5" aria-hidden="true">·</span>{#each pageParts(b) as part}{#if "page" in part}<a href={toPage(part.page.id)} class="text-link link-content underline-offset-4 hover:underline">{part.page.title}</a>{:else}{part.text}{/if}{/each}{/if}
+							{#if b.pages.length}<span class="mx-1.5" aria-hidden="true">·</span>{#each pageParts(b) as part}{#if "page" in part}<a href={toPage(part.page.id)} lang={contentLang} class="text-link link-content underline-offset-4 hover:underline">{part.page.title}</a>{:else}{part.text}{/if}{/each}{/if}
 						</p>
 					</li>
 				{/each}
@@ -70,3 +71,4 @@
 		</li>
 	{/each}
 </ol>
+<a href={toRoute("/changes")} class="text-link link-content mt-4 inline-flex min-h-9 items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"><Icon name="recent" size={16} />{t("home.news.changes")}</a>

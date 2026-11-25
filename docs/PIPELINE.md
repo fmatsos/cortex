@@ -108,7 +108,7 @@ Entrée : les `summary` et `key_points` de chaque chunk, dans l'ordre. Sortie : 
 
 Les candidats offerts à l'extraction viennent de la sélection élargie de §4.7 (10 max dans le prompt). Pour chaque sujet, dans l'ordre du collator sur le titre :
 1. `candidate ≥ 0` → mise à jour de cette page (après vérification qu'elle est bien du type `kind` ; sinon traité comme -1).
-2. `candidate = -1` → `nearDuplicate` de `naming.ts` (exporté) : `nearest(titre + description)`, 5 pages du même type, `judge` choice `p1…p5 | none` ; probabilité ≥ `dupJudge` (0,7) → mise à jour de la page choisie ; sans juge, cosinus ≥ `dupCosine`. Puis `nearTitle` sur les titres existants et sur les sujets déjà retenus dans ce compile (deux sujets au même slug fusionnent leurs faits).
+2. `candidate = -1` → `nearDuplicate` de `naming.ts` (exporté) : `nearest(titre + description)`, 5 pages du même type, `judge` choice `p1…p5 | none` ; probabilité ≥ `dupJudge` (0,7) → mise à jour de la page choisie ; sans juge, cosinus ≥ le seuil `dups.cosine` du profil du modèle (`embed.ts`, 0,90 pour qwen3 ; `dupCosine` n’est que le repli de `naming.ts` quand aucun profil ne s’applique). Puis `nearTitle` sur les titres existants et sur les sujets déjà retenus dans ce compile (deux sujets au même slug fusionnent leurs faits).
 3. Sujet sans fait vérifié → ignoré, signalé dans le rapport.
 
 Aucun appel au 4B : ce sont les mêmes briques que `cortex new`, exécutées avant toute écriture, donc aucune page n'est créée pour être refusée.

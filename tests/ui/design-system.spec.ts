@@ -14,10 +14,9 @@ const inFrench = async (page: import("@playwright/test").Page) => {
   await expect(page.locator("section#couleurs > h2")).toHaveText("Couleurs");
 };
 
-// Components that still carry the old language and that a later task restyles (C17 rewrites chip-button). They are shown
-// as they are today; the square-contract test lists them explicitly so a new offender cannot hide behind them, and the
-// test below fails the day one of them is fixed, so the entry gets removed.
-const PENDING_SQUARE = [".chip"];
+// Components that still carry the old language and that a later task restyles: none (chip-button is square since C17). An entry
+// here is shown as it is today and listed explicitly, so a new offender cannot hide behind it.
+const PENDING_SQUARE: string[] = [];
 
 test("the page loads with one h1, its landmarks and no error", async ({ page }) => {
   const res = await page.goto(URL);
@@ -98,8 +97,6 @@ test("no element of the page has a radius or a shadow", async ({ page }) => {
   expect(bad.sampled).toBeGreaterThan(500);
   expect(bad.out.filter((o) => !o.pending), "elements with a radius or a shadow").toEqual([]);
   expect(bad.out.filter((o) => o.shadow), "shadows").toEqual([]);
-  // the known gap: remove the entry (and this assertion) when the chip is square
-  expect(bad.out.filter((o) => o.pending).length, "PENDING_SQUARE entries are still round: drop the fixed ones").toBeGreaterThan(0);
 });
 
 const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

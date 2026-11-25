@@ -17,6 +17,8 @@ import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 import { LIMITS } from "./limits";
 import { layoutGraph } from "./graph-layout";
+import { maintenance } from "./maintenance";
+import { readPaths, sitePaths } from "./reading-paths";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
@@ -27,6 +29,20 @@ export const SITE_DIR = join(import.meta.dir, "../site");
  */
 export const resolveLocale = (language?: string | null): Locale =>
   /^(fr(-[a-z]+)?|french|fran[cç]ais)$/i.test((language ?? "").trim()) ? "fr" : "en";
+
+const CONTENT_LANGS: Record<string, string> = {
+  english: "en", french: "fr", "français": "fr", francais: "fr", german: "de", deutsch: "de", spanish: "es", "español": "es", espanol: "es",
+  italian: "it", italiano: "it", portuguese: "pt", "português": "pt", portugues: "pt", dutch: "nl", nederlands: "nl",
+};
+/**
+ * Language of the wiki's own text (BCP 47, for the `lang` attribute of the content zones), from `language` in cortex.json: a known
+ * language name or a tag (`German`, `pt-BR`), otherwise the UI locale (what `resolveLocale` gives, the default). Unlike the UI
+ * language it is never changed by the visitor, so assistive technology keeps reading the prose in its own language.
+ */
+export const resolveContentLang = (language?: string | null): string => {
+  const v = (language ?? "").trim().toLowerCase();
+  return CONTENT_LANGS[v] ?? (/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/.test(v) ? v : resolveLocale(language));
+};
 
 const stamp = (x: Stamp | null | undefined) => (x?.at ? { by: String(x.by ?? ""), at: isoDate(x.at)! } : undefined);
 
@@ -254,11 +270,14 @@ export function graphLinks(directed: Set<string>): GraphData["links"] {
   return out;
 }
 
-export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn) {
+/** The export date: SOURCE_DATE_EPOCH if provided (reproducible export), otherwise the clock. */
+const exportNow = () => (process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000) : new Date());
+
+export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn, now = exportNow()) {
   const root = w.root;
   // UI language of the site; the texts the export writes into the pages (callout titles, missing links…) follow it too
   const cfg = await w.config().catch(() => ({} as Awaited<ReturnType<Wiki["config"]>>));
-  const locale = resolveLocale(cfg.language);
+  const locale = resolveLocale(cfg.language), contentLang = resolveContentLang(cfg.language);
   // optional notions (cortex.json): off, their data does not reach the site
   const features = { review: !!cfg.review, drafts: !!cfg.drafts };
   setLocale(locale);
@@ -316,11 +335,18 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
     links: edges,
   });
 
-  const data: SiteData = { locale, features, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
-  return { data, graph, search: buildSearch(pages) };
+  const data: SiteData = { locale, contentLang, features, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
+
+  // reading paths (<root>/paths/*.md) and the maintenance summary: files of their own, not part of the pages' data
+  const readPathsOf = await readPaths(root);
+  for (const e of readPathsOf.errors) say(`reading path skipped, invalid frontmatter: ${e.path} (${e.msg})`);
+  const readingPaths = sitePaths(readPathsOf.paths, (p) => { const d = byPath.get(p); return d && { title: String(d.fm.title ?? pageId(p)), type: String(d.fm.type ?? ""), description: String(d.fm.description ?? "") }; },
+    { inline: (m, from) => inline(render(m, from, paths).html), block: (m, from) => render(m, from, paths).html, plain: (h) => unesc(h.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim() }, say);
+  const upkeep = maintenance({ pages: docs, raws: await w.raws(), exists: (p) => existsSync(join(root, p)), review: features.review, now });
+  return { data, graph, search: buildSearch(pages), paths: readingPaths, maintenance: upkeep };
 }
 
-export const buildSiteData = (root: string, say: (m: string) => void = warn) => buildSiteDataCtx(openWiki(root), say);
+export const buildSiteData = (root: string, say: (m: string) => void = warn, now?: Date) => buildSiteDataCtx(openWiki(root), say, now);
 
 /** Precomputed search index: inverted index over the full content (folded word → pages) + autocomplete vocabulary. */
 function buildSearch(pages: PageData[]): SearchIndex {
@@ -379,15 +405,16 @@ export function frontendFingerprint(siteDir = SITE_DIR): string {
 export async function exportSite(root: string, out: string, say: (m: string) => void = console.log) {
   checkOut(root, out);
   const t0 = performance.now();
+  const at = exportNow(); // export date and time (SOURCE_DATE_EPOCH if provided, for a reproducible export): outside the site version
   const dataDir = join(root, ".cortex/site-data");
-  const { data, graph, search } = await buildSiteDataCtx(openWiki(root), say);
+  const { data, graph, search, paths, maintenance: upkeep } = await buildSiteDataCtx(openWiki(root), say, at);
   mkdirSync(dataDir, { recursive: true });
   const size = async (name: string, v: unknown) => { const s = JSON.stringify(v); await Bun.write(join(dataDir, name), s); return s.length; };
   await size("data.json", data);
   await size("graph.json", graph);
   const idxBytes = await size("search-index.json", search);
-  // export date and time (SOURCE_DATE_EPOCH if provided, for a reproducible export): outside the site version
-  const at = process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000) : new Date();
+  await size("paths.json", paths);
+  await size("maintenance.json", upkeep);
   await Bun.write(join(dataDir, "build.json"), JSON.stringify({ generatedAt: at.toISOString(), links: graph.links.length }));
   say(`${data.pages.length} pages, ${graph.links.length} links, search index ${(idxBytes / 1024).toFixed(0)} KB`);
 
@@ -395,8 +422,8 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   // version = fingerprint of the frontend (code, assets, language and options compiled into it), NOT of the data: it is written into every
   // page and into the hashed resources, so a data-dependent one would change every file at every export and leave no file in common
   // with the previous site. What the data changes is told, file by file, by the offline manifest (see `stampServiceWorker`).
-  const version = sha256(frontendFingerprint() + data.locale + JSON.stringify(data.features)).slice(0, 12);
-  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_FEATURES: JSON.stringify(data.features), CORTEX_SITE_VERSION: version };
+  const version = sha256(frontendFingerprint() + data.locale + data.contentLang + JSON.stringify(data.features)).slice(0, 12);
+  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_CONTENT_LANG: data.contentLang, CORTEX_SITE_FEATURES: JSON.stringify(data.features), CORTEX_SITE_VERSION: version };
   // The build is process-global (env, cwd, console) and shares site/.svelte-kit: one at a time per machine.
   const unlock = lockBuild();
   // The build reads these from the environment (SvelteKit's forked workers reload vite.config.ts): set for the build only, then restored.

@@ -287,13 +287,14 @@ test("the notice is under the whole header (never over its second row) and the d
   await page.goto("/wiki/concepts/beta/"); // a page without a large search field: the header carries its own
   const dot = building(page).getByRole("button");
   await expect(dot).toBeVisible();
-  // the first link of the navigation is what is at its left edge, not the dot
+  // the first control of the navigation (a link, or the Menu button on a narrow header) is what is at its left edge, not the dot
   const hit = await page.evaluate(() => {
-    const link = document.querySelector("header nav a")!.getBoundingClientRect();
-    const el = document.elementFromPoint(link.left + 2, link.top + link.height / 2);
-    return el?.closest("a")?.getAttribute("href") ?? el?.tagName;
+    const first = [...document.querySelectorAll("header nav a, header nav button")].find((n) => n.getBoundingClientRect().width > 0)!;
+    const box = first.getBoundingClientRect();
+    const el = document.elementFromPoint(box.left + 2, box.top + box.height / 2);
+    return el?.closest("a, button")?.getAttribute("href") ?? el?.closest("button")?.textContent?.trim() ?? el?.tagName;
   });
-  expect(hit).toMatch(/search/);
+  expect(hit).toMatch(/search|Menu/);
   // the tooltip is above the header's second row (the field of a phone), not under it
   await dot.focus();
   await expect(building(page).locator("[role=tooltip]")).toBeVisible();

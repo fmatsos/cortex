@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { parseQuery } from "../site/src/lib/query";
-import { buildTerms, createEngine, facetsOf, highlight } from "../site/src/lib/search-engine";
+import { buildTerms, createEngine, facetsOf, highlight, search } from "../site/src/lib/search-engine";
 import { cachedHybrid, hybrid, judged, probe, resetServerSearch, rows, sections, semanticOnly, worthAsking, type Hybrid, type ServerHit } from "../site/src/lib/server-search";
 
 // The site's client of /api/search (site/src/lib/server-search.ts): probe, caches, the single retry on 429, the mapping of the
@@ -105,4 +105,28 @@ test("highlight: words as word starts and phrases, escaped, accents kept; facets
   expect(highlight("Alpha beta", parseQuery('"alpha beta"'))).toBe("<mark>Alpha beta</mark>");
   const f = facetsOf([doc("a", "A", { tags: ["x", "Y"], partial: true }), doc("b", "B", { type: "Source", status: "draft", verified: false, tags: ["x"] })], (id) => id === "a");
   expect(f).toMatchObject({ total: 2, type: { Concept: 1, Source: 1 }, status: { stable: 1, draft: 1 }, flags: { fav: 1, unverified: 1, review: 0, partial: 1 }, tags: [{ tag: "x", count: 2 }, { tag: "Y", count: 1 }] });
+});
+
+test("more matches than the server ranks: the rest stays reachable, with an exact total, and the counters cover the whole list", async () => {
+  // 120 pages match; the server ranks SERVER_LIMIT of them, the rest must not vanish
+  const docs = Array.from({ length: 120 }, (_, i) => doc(`concepts/p${String(i).padStart(3, "0")}`, `Page ${i}`, { text: "gizmo", tags: [i % 2 ? "odd" : "even"] }));
+  const e = await engine(docs);
+  const { SERVER_LIMIT } = await import("../site/src/lib/server-search");
+  expect(SERVER_LIMIT).toBe(50);
+  const res: Hybrid = { hits: docs.slice(60, 60 + SERVER_LIMIT).map((d) => hit(d.id)), ignored: [] };
+  const p = parseQuery("gizmo");
+  const ranked = rows(e, p, res, () => false);
+  expect(ranked).toHaveLength(50);
+  const ids = new Set(ranked.map((r) => r.doc.id));
+
+  const rest = search(e, "gizmo", () => false, 30, ids);
+  expect(rest.total).toBe(70); // exact, beyond the slice
+  expect(rest.hits).toHaveLength(30);
+  expect(rest.hits.every((h) => !ids.has(h.doc.id))).toBe(true);
+  expect(ranked.length + rest.total).toBe(search(e, "gizmo", () => false, 1).total); // nothing lost, nothing counted twice
+  expect(search(e, "gizmo", () => false, 200, ids).hits.map((h) => h.doc.id).filter((id) => ids.has(id))).toEqual([]);
+
+  const f = facetsOf([...ranked.map((r) => r.doc), ...docs.filter((d) => !ids.has(d.id))], () => false);
+  expect(f.total).toBe(120);
+  expect(f.tags).toEqual([{ tag: "even", count: 60 }, { tag: "odd", count: 60 }]);
 });

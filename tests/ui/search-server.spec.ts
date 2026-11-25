@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./helpers";
+import { mockIndex } from "./search-fixtures";
 
 // The site's search with `cortex serve` behind it: the hybrid results (by meaning) in the palette, and on a validated search the hybrid
 // results then the judge's ranking, grouped. Every `/api/search` answer is a mock (`page.route`): there is no server here. Service
@@ -287,6 +288,134 @@ test("/search/: is:fav is applied in the browser (the server ignores it)", async
   await page.goto("/search/?q=zebracorn%20is%3Afav");
   await expect(links(page)).toHaveText(["Gamma entity"]);
   await expect(page.getByText("1 result", { exact: true })).toBeVisible();
+});
+
+// The server ranks at most 50 pages and gives no total: the local matches beyond them stay reachable, counted, and the page says what
+// the ranking covers. 120 pages match "gizmo" in a mock index; the server ranks 50 of them.
+const MANY = Array.from({ length: 120 }, (_, i) => ({ id: `concepts/p${String(i).padStart(3, "0")}`, title: `Page ${String(i).padStart(3, "0")}`, text: "gizmo" }));
+const manyHit = (i: number, extra: Partial<Hit> = {}) => h(MANY[i].id, MANY[i].title, "lexical", extra);
+const RANKED = Array.from({ length: 50 }, (_, i) => manyHit(110 - i)); // pages 110 down to 061, the server's order
+
+test("/search/: more than 50 matches, the server's 50 come first and every other local match stays reachable", async ({ page }, info) => {
+  const shot = async (name: string) => { const d = process.env.CORTEX_UI_SHOTS; if (d) { mkdirSync(d, { recursive: true }); await page.screenshot({ path: `${d}/many-${info.project.name}-${name}.png` }); } };
+  await mockIndex(page, MANY);
+  const gh = gate(), gj = gate();
+  await mockSearch(page, async (u) => {
+    if (isJudge(u)) { await gj.wait; return { body: { hits: RANKED.map((x, i) => ({ ...x, group: i === 0 ? "retained" : "other", relevance: 0.5 })), judged: true, model: "jev-test", unjudged: 0 } }; }
+    await gh.wait;
+    return { body: plain(RANKED) };
+  });
+  await page.goto("/search/?q=gizmo");
+  await expect(page.getByText("50 of 120 results", { exact: true })).toBeVisible(); // local, before any answer
+  await expect(page.locator("[data-rank-scope]")).toHaveCount(0);
+
+  gh.open();
+  await expect(page.getByText("120 results", { exact: true })).toBeVisible(); // the total includes what the server did not rank
+  await expect(page.locator("[data-rank-scope]")).toHaveText(/ranking covers the 50 best results.*other matches follow/i);
+  await shot("hybrid");
+  const more = page.locator("details[data-group=more]");
+  await expect(more.locator("summary")).toHaveText("Other matches (70)");
+  await expect(more).toHaveJSProperty("open", true); // a plain hybrid list: the rest continues it
+  const ranked = page.locator("main > div, main").locator("ul:not(details ul) > li a.link-content");
+  await expect(ranked.first()).toHaveText("Page 110");
+  await expect(ranked).toHaveCount(50);
+  await expect(more.locator("li a.link-content")).toHaveCount(50); // one slice
+  await expect(more.locator("li a.link-content").first()).toHaveText("Page 000"); // the site's own order, minus what the server already shows
+  const shown = (await page.locator("main li a.link-content").allInnerTexts());
+  expect(new Set(shown).size, "no page twice").toBe(shown.length);
+  await more.getByRole("button", { name: /Show more \(50 of 70\)/ }).click();
+  await expect(more.locator("li a.link-content")).toHaveCount(70);
+  await expect(page.locator("main li a.link-content")).toHaveCount(120);
+  await expect(more.getByRole("button", { name: /Show more/ })).toHaveCount(0);
+  // the counters follow the whole list
+  const filters = page.locator("aside details");
+  if (!(await filters.evaluate((d: HTMLDetailsElement) => d.open))) await filters.locator("summary").click();
+  await expect(page.getByRole("button", { name: /Concepts/ })).toContainText("120");
+
+  gj.open();
+  await expect(page.getByRole("heading", { name: /^Relevant/ })).toBeVisible();
+  await expect(page.locator("details[data-group=other] summary")).toHaveText("Other results (49)");
+  await expect(more.locator("summary")).toHaveText("Other matches (70)");
+  await expect(more).toHaveJSProperty("open", false); // ranked: the rest is folded, like the other results
+  await shot("ranked");
+  await expect(page.locator("[data-rank-scope]")).toBeVisible();
+  await expect(page.getByText("120 results", { exact: true })).toBeVisible();
+});
+
+test("/search/: once ranked, the rest is a folded group with its count, and opens like any group", async ({ page }) => {
+  await mockIndex(page, MANY);
+  await mockSearch(page, (u) => ({ body: isJudge(u)
+    ? { hits: RANKED.map((x, i) => ({ ...x, group: i < 3 ? "retained" : "other", relevance: 0.5 })), judged: true, model: "jev-test", unjudged: 0 }
+    : plain(RANKED) }));
+  await page.goto("/search/?q=gizmo");
+  await expect(page.getByRole("heading", { name: /^Relevant/ })).toBeVisible();
+  const more = page.locator("details[data-group=more]");
+  await expect(more.locator("summary")).toHaveText("Other matches (70)");
+  await expect(more).toHaveJSProperty("open", false);
+  await more.locator("summary").click();
+  await expect(more.locator("li a.link-content")).toHaveCount(50);
+  await expect(page.getByText("120 results", { exact: true })).toBeVisible();
+});
+
+test("/search/: fewer than 50 server hits and nothing local beyond them: no empty group, no scope sentence", async ({ page }) => {
+  await mockSearch(page, (u) => ({ body: isJudge(u) ? { hits: [GAMMA, BETA], judged: false, reason: "not-configured" } : plain([GAMMA, BETA]) }));
+  await page.goto("/search/?q=zebracorn");
+  await expect(links(page)).toHaveText(["Gamma entity", "Beta concept"]);
+  await expect(page.locator("details[data-group=more]")).toHaveCount(0);
+  await expect(page.locator("[data-rank-scope]")).toHaveCount(0);
+});
+
+// Focus follows the page and the action when the ranking replaces the list.
+const focused = (page: Page) => page.evaluate(() => { const a = document.activeElement as HTMLElement | null; return { page: a?.closest("li")?.dataset.page ?? null, action: a?.closest<HTMLElement>("[data-row-action]")?.dataset.rowAction ?? null }; });
+
+for (const action of ["open", "fav"] as const) {
+  test(`/search/: focus on a result's ${action === "open" ? "link" : "star"} stays on it when the hybrid list, then the groups, replace the list`, async ({ page }) => {
+    const gh = gate(), gj = gate();
+    await mockSearch(page, async (u) => {
+      if (isJudge(u)) { await gj.wait; return { body: { hits: [{ ...GAMMA, group: "retained", relevance: 0.9 }, { ...OVERVIEW, group: "related", relevance: 0.4 }, { ...BETA, group: "other", relevance: 0.1 }], judged: true, model: "jev-test", unjudged: 0 } }; }
+      await gh.wait;
+      return { body: plain([OVERVIEW, GAMMA, BETA]) };
+    });
+    await page.goto("/search/?q=zebracorn");
+    const row = page.locator("main li[data-page='concepts/beta']");
+    const target = row.locator(`[data-row-action=${action}]`);
+    await expect(target).toBeVisible();
+    await target.focus();
+    expect(await focused(page)).toEqual({ page: "concepts/beta", action });
+
+    gh.open(); // the server's order replaces the local list: the focused element is destroyed
+    await expect(links(page)).toHaveText(["Overview synthesis", "Gamma entity", "Beta concept"]);
+    await expect.poll(() => focused(page)).toEqual({ page: "concepts/beta", action });
+
+    gj.open(); // Beta is now in the folded "Other results"
+    await expect(page.getByRole("heading", { name: /^Relevant/ })).toBeVisible();
+    await expect.poll(() => focused(page)).toEqual({ page: "concepts/beta", action });
+    await expect(page.locator("details[data-group=other]")).toHaveJSProperty("open", true); // opened for the focus, not left hidden
+    await expect(target).toBeFocused();
+  });
+}
+
+test("/search/: focus that is elsewhere (the field) is not taken by the ranking", async ({ page }) => {
+  const gh = gate();
+  await mockSearch(page, async (u) => { await gh.wait; return { body: isJudge(u) ? { hits: [GAMMA, BETA], judged: false, reason: "not-configured" } : plain([GAMMA, BETA]) }; });
+  await page.goto("/search/?q=zebracorn");
+  await expect(links(page)).toHaveText(["Beta concept"]);
+  await field(page).focus();
+  gh.open();
+  await expect(links(page)).toHaveText(["Gamma entity", "Beta concept"]);
+  await expect(field(page)).toBeFocused();
+});
+
+test("/search/: a page the visitor tabbed out of is not pulled back into focus", async ({ page }) => {
+  const gh = gate();
+  await mockSearch(page, async (u) => { await gh.wait; return { body: isJudge(u) ? { hits: [GAMMA, BETA], judged: false, reason: "not-configured" } : plain([GAMMA, BETA]) }; });
+  await page.goto("/search/?q=zebracorn");
+  await links(page).first().focus();
+  await field(page).focus(); // focus left the results
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  gh.open();
+  await expect(links(page)).toHaveText(["Gamma entity", "Beta concept"]);
+  expect((await focused(page)).page).toBeNull();
 });
 
 // Screens for the review of the design: CORTEX_UI_SHOTS=<folder> bun run test:ui tests/ui/search-server.spec.ts

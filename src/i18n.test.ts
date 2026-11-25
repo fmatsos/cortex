@@ -5,7 +5,7 @@ import en from "../site/src/lib/i18n/en.json";
 import fr from "../site/src/lib/i18n/fr.json";
 import { chooseLocale, DICTS, translate } from "../site/src/lib/i18n/index";
 import { storageKey } from "../site/src/lib/storage";
-import { resolveLocale } from "./export";
+import { resolveContentLang, resolveLocale } from "./export";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -68,4 +68,12 @@ test("app.html applies the remembered language before the app loads, with the ke
   const html = readFileSync(join(import.meta.dir, "../site/src/app.html"), "utf8");
   expect(html).toContain(`localStorage.getItem("${storageKey("lang")}")`);
   expect(html).toContain("document.documentElement.lang=l");
+});
+
+test("resolveContentLang: the language of the wiki text, not the UI's (BCP 47 for `lang`)", () => {
+  expect(["French", "Français", "fr-CA", "FR"].map(resolveContentLang)).toEqual(["fr", "fr", "fr-ca", "fr"]);
+  expect(["German", "deutsch", "Italian", "pt-BR", "es"].map(resolveContentLang)).toEqual(["de", "de", "it", "pt-br", "es"]);
+  // unset or not recognisable: the UI language, i.e. the default
+  for (const l of [undefined, null, "", "English"]) expect(resolveContentLang(l)).toBe("en");
+  expect(resolveContentLang("Klingon (tlhIngan Hol)")).toBe("en");
 });

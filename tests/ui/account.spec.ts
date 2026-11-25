@@ -434,17 +434,17 @@ test.describe("preferences synchronisation", () => {
   const favs = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem("cortex:favs") ?? "[]"));
 
   test("the first synchronisation of an account sends the local state, whole", async ({ page }) => {
-    await seed(page, { "cortex:theme": "dark", "cortex:lang": "fr", "cortex:favs": JSON.stringify(["concepts/alpha"]) });
+    await seed(page, { "cortex:theme": "dark", "cortex:lang": "fr", "cortex:reading": "1", "cortex:favs": JSON.stringify(["concepts/alpha"]) });
     const m = newMock({ me: ADA, state: {} });
     await mockApi(page, m);
     await page.goto("/search/");
     await expect.poll(() => m.puts.length).toBe(1);
-    expect(m.puts[0]).toEqual({ theme: "dark", lang: "fr", favs: ["concepts/alpha"] });
+    expect(m.puts[0]).toEqual({ theme: "dark", lang: "fr", reading: true, comfort: false, favs: ["concepts/alpha"] });
   });
 
   test("a later synchronisation applies the server's state; favorites are the union; the difference is sent back", async ({ page }) => {
     await seed(page, { "cortex:favs": JSON.stringify(["concepts/alpha"]) });
-    const m = newMock({ me: ADA, state: { theme: "dark", lang: "fr", favs: ["entities/gamma"], other: { kept: true } } });
+    const m = newMock({ me: ADA, state: { theme: "dark", lang: "fr", reading: false, comfort: false, favs: ["entities/gamma"], other: { kept: true } } });
     await mockApi(page, m);
     await page.goto("/search/");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -452,13 +452,13 @@ test.describe("preferences synchronisation", () => {
     await expect.poll(() => favs(page)).toEqual(["entities/gamma", "concepts/alpha"]);
     // the local favorite the server did not have goes up (one PUT, the unknown key kept as the server had it)
     await expect.poll(() => m.puts.length).toBe(1);
-    expect(m.puts[0]).toEqual({ theme: "dark", lang: "fr", favs: ["entities/gamma", "concepts/alpha"], other: { kept: true } });
+    expect(m.puts[0]).toEqual({ theme: "dark", lang: "fr", reading: false, comfort: false, favs: ["entities/gamma", "concepts/alpha"], other: { kept: true } });
     expect(await page.evaluate(() => localStorage.getItem("cortex:theme"))).toBe("dark");
   });
 
   test("a server state that already says the same sends nothing; a change goes up once, about 1.5 s after the last", async ({ page }) => {
     await seed(page, { "cortex:favs": JSON.stringify(["concepts/alpha"]) });
-    const m = newMock({ me: ADA, state: { theme: "system", lang: "system", favs: ["concepts/alpha"] } });
+    const m = newMock({ me: ADA, state: { theme: "system", lang: "system", reading: false, comfort: false, favs: ["concepts/alpha"] } });
     await mockApi(page, m);
     await page.goto("/search/");
     await expect(trigger(page)).toHaveAccessibleName(/Ada Lovelace/);
@@ -472,9 +472,35 @@ test.describe("preferences synchronisation", () => {
     await trigger(page).click();
     await menu(page).getByRole("menuitemradio", { name: /^(Light|Clair)$/ }).click();
     await expect.poll(() => m.puts.length, { timeout: 6000 }).toBe(1);
-    expect(m.puts[0]).toEqual({ theme: "light", lang: "system", favs: ["concepts/alpha"] });
+    expect(m.puts[0]).toEqual({ theme: "light", lang: "system", reading: false, comfort: false, favs: ["concepts/alpha"] });
     await page.waitForTimeout(1800);
     expect(m.puts.length).toBe(1);
+  });
+
+  test("the reading options follow the account: the server's choice is applied, a change goes up, an account without them gets the local ones", async ({ page }) => {
+    const m = newMock({ me: ADA, state: { theme: "system", lang: "system", reading: true, comfort: false, favs: [] } });
+    await mockApi(page, m);
+    await page.goto("/search/");
+    await expect(page.locator("html")).toHaveAttribute("data-reading", "");
+    await expect(page.locator("html")).not.toHaveAttribute("data-assistant-comfort");
+    expect(await page.evaluate(() => localStorage.getItem("cortex:reading"))).toBe("1");
+    await page.waitForTimeout(500);
+    expect(m.puts, "the server already said the same").toEqual([]);
+    await trigger(page).click();
+    await menu(page).getByRole("menuitemcheckbox", { name: /Comfortable text|Texte confortable/ }).click();
+    await expect.poll(() => m.puts.length, { timeout: 6000 }).toBe(1);
+    expect(m.puts[0]).toEqual({ theme: "system", lang: "system", reading: true, comfort: true, favs: [] });
+    expect(await page.evaluate(() => localStorage.getItem("cortex:assistant-comfort"))).toBe("1");
+  });
+
+  test("an account saved before the reading options existed is completed from this browser's choices", async ({ page }) => {
+    await seed(page, { "cortex:assistant-comfort": "1" });
+    const m = newMock({ me: ADA, state: { theme: "dark", lang: "fr", favs: [] } });
+    await mockApi(page, m);
+    await page.goto("/search/");
+    await expect.poll(() => m.puts.length).toBe(1);
+    expect(m.puts[0]).toEqual({ theme: "dark", lang: "fr", reading: false, comfort: true, favs: [] });
+    await expect(page.locator("html")).toHaveAttribute("data-assistant-comfort", "");
   });
 
   test("signed out, nothing is ever sent and nothing changes", async ({ page }) => {

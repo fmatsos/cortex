@@ -16,8 +16,10 @@
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
+	import SiteNav, { type NavItem } from "#lib/components/site-nav.svelte";
 	import PreferencesMenu from "#lib/components/preferences-menu.svelte";
 	import { toRoute } from "#lib/links.js";
+	import { toPaths, toMaintenance } from "#lib/path-links.js";
 	import { ensureSymbols } from "#lib/icons.js";
 	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
@@ -81,18 +83,24 @@
 	// and the return of a sign-in that failed (`?auth=`) is read once the router is up, announced and cleared from the URL
 	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; ensureSymbols(); account.takeNotice(); });
 
-	const nav = [
-		["/search", "search", "nav.search"],
-		["/graph", "graph", "nav.graph"],
-		["/tags", "tags", "nav.tags"],
-		["/log", "journal", "nav.log"],
-	] as const;
 	// active section: the route id also works at prerender (the relative URL cannot be compared)
-	const current = (route: string) => page.route.id === route || page.route.id?.startsWith(`${route}/`);
+	const current = (route: string) => page.route.id === route || !!page.route.id?.startsWith(`${route}/`);
 	// "Favorites" = the search filtered on `is:fav` (same view everywhere); the shared query only exists in the browser
 	const onFavs = $derived(page.route.id === "/search" && wantsFav(parseQuery(search.q)));
 	// the home page and /search/ carry their own large field: no second field in the header
 	const pageSearch = $derived(page.route.id === "/" || page.route.id === "/search");
+	// Main navigation: to add a destination, add one entry here (site-nav.svelte lays it out wide and in the narrow "Menu")
+	const nav = $derived<NavItem[]>([
+		{ href: toRoute("/search"), icon: "search", label: "nav.search", here: current("/search") && !onFavs },
+		{ href: toRoute("/graph"), icon: "graph", label: "nav.graph", here: current("/graph") },
+		{ href: toRoute("/tags"), icon: "tags", label: "nav.tags", here: current("/tags") },
+		{ href: toRoute("/log"), icon: "journal", label: "nav.log", here: current("/log") },
+		// optional destinations: review only when it is turned on, paths only when the wiki has some (footer.json, once loaded)
+		...(features.review ? [{ href: toRoute("/review"), icon: "needs-review", label: "nav.review", here: current("/review") } satisfies NavItem] : []),
+		{ href: toRoute("/changes"), icon: "recent", label: "nav.changes", here: current("/changes") },
+		...(f?.paths ? [{ href: toPaths(), icon: "journey", label: "nav.paths", here: current("/paths") } satisfies NavItem] : []),
+		{ href: `${toRoute("/search")}?q=${encodeURIComponent(token("is", "fav"))}`, icon: "favorites", label: "favs.title", here: onFavs },
+	]);
 </script>
 
 <svelte:window onkeydown={globalKeys} />
@@ -104,23 +112,17 @@
 <header bind:this={header} class="bg-header text-header-foreground border-header-border @container sticky top-0 z-40 border-b">
 	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
-	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
+	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @7xl:flex-nowrap @7xl:gap-x-6">
 		<!-- a rebuild of the site (cortex serve only): a dot hung beside the mark while it runs (out of the flow: the row never wraps
 		     differently), a reload offer under it when it ends -->
 		<div class="relative inline-flex">
 			<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={32} /><CortexWordmark /></a>
 			<BuildStatus />
 		</div>
-		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
-			{#each nav as [route, icon, label]}
-				{@const here = current(route) && !(route === "/search" && onFavs)}
-				<a href={toRoute(route)} aria-current={here ? "page" : undefined} class="nav-link"><Icon name={icon} size={20} /><span class="sr-only @xl:not-sr-only">{t(label)}</span></a>
-			{/each}
-			<a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'fav'))}" aria-current={onFavs ? "page" : undefined} class="nav-link"><Icon name="favorites" size={20} /><span class="sr-only @xl:not-sr-only">{t("favs.title")}</span></a>
-		</nav>
+		<SiteNav items={nav} />
 		<!-- search | assistant | preferences. Narrow: a row of its own below the mark and the navigation; wide: the search takes the room left -->
-		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full @5xl:ml-auto @5xl:basis-auto @5xl:flex-1'}">
-			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @5xl:ml-auto @5xl:max-w-xl" />{/if}
+		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full @7xl:ml-auto @7xl:basis-auto @7xl:flex-1'}">
+			{#if !pageSearch}<SearchBox wide class="min-w-0 flex-1 @7xl:ml-auto @7xl:max-w-xl" />{/if}
 			{#if assistant.api}
 				<!-- label from the header's own width (@container): beside the docked panel the header has less room than the viewport
 				     says; narrow, only the icon stays and the label stays as the accessible name -->
@@ -155,39 +157,11 @@
 			<li><a href={toRoute("/tags")} class="hover:text-foreground">{t("footer.tags", { count: f.tags })}</a></li>
 			{#if features.review}<li><a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'verified'))}" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>{/if}
 			<li><a href={toRoute("/log")} class="hover:text-foreground">{t("footer.log", { count: f.log })}</a></li>
+			{#if f.paths}<li><a href={toPaths()} class="hover:text-foreground">{t("footer.paths")}</a></li>{/if}
+			<li><a href={toMaintenance()} class="hover:text-foreground">{t("footer.maintenance")}</a></li>
 		</ul>{/if}
 	</div>
 </footer>
 
 {#if assistant.api}<AssistantPanel />{/if}
 {/key}
-<style>
-	.nav-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		color: var(--muted-foreground);
-		text-underline-offset: 4px;
-		padding: 0.5rem 0.55rem;
-		border-radius: var(--radius-md);
-		/* reserved on every link so the current one only changes colour: no layout shift */
-		border-bottom: 2px solid transparent;
-	}
-	.nav-link:hover {
-		color: var(--foreground);
-		text-decoration: underline;
-	}
-	.nav-link[aria-current="page"] {
-		color: var(--foreground);
-		font-weight: 600;
-		text-decoration: none; /* the 2px bar is the only underline of the current link */
-		border-bottom-color: var(--primary);
-	}
-	@media (pointer: coarse) {
-		.nav-link {
-			min-height: 2.75rem;
-			min-width: 2.75rem;
-			justify-content: center;
-		}
-	}
-</style>
