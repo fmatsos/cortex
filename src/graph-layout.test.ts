@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { layoutGraph } from "./graph-layout";
+import { packIslands } from "../site/src/lib/graph-pack";
 import { graphLinks } from "./export";
 
 const node = (id: string, type = "Concept") => ({ id, title: id, description: "", type, tags: ["topic"], degree: 0 });
@@ -42,4 +43,13 @@ test("graph layout: empty and singleton wiki, all-Source wiki", () => {
     expect(graph.communities).toHaveLength(nodes.length);
     expect(graph.nodes.every((n) => Number.isFinite(n.x + n.y))).toBe(true);
   }
+});
+
+test("packIslands follows the frame ratio: a wide frame gets a wider layout than a square one", () => {
+  const sizes = [84, 49, 30, 20, 12, 8, 8, 5, 4, 3, 2, 2, 1, 1, 1, 1];
+  const ratio = (aspect: number) => {
+    const c = packIslands(sizes, aspect), xs = c.map((p) => p.x), ys = c.map((p) => p.y);
+    return (Math.max(...xs) - Math.min(...xs)) / Math.max(1, Math.max(...ys) - Math.min(...ys));
+  };
+  expect(ratio(2.25)).toBeGreaterThan(ratio(1) * 1.5);
 });
