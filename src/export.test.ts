@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -171,3 +171,24 @@ test("export: the UI follows `language` (French), wiki content untouched, both d
   expect(js).toContain("Copier le Markdown");
   expect(existsSync(join(out, "404.html"))).toBe(true);
 }, 60_000);
+
+test("export: the frontend fingerprint follows static/ (favicon, fonts) and the design tokens", async () => {
+  const { frontendFingerprint } = await import("./export");
+  const root = mkdtempSync(join(tmpdir(), "cortex-fp-"));
+  const site = join(root, "site");
+  mkdirSync(join(site, "src"), { recursive: true });
+  mkdirSync(join(site, "static/fonts"), { recursive: true });
+  mkdirSync(join(root, "design"));
+  writeFileSync(join(site, "src/app.css"), "a{color:red}");
+  writeFileSync(join(site, "static/favicon.svg"), "<svg/>");
+  writeFileSync(join(site, "static/fonts/x.woff2"), "font-1");
+  writeFileSync(join(root, "design/tokens.json"), '{"a":1}');
+  const seen = new Set([frontendFingerprint(site)]);
+  expect(frontendFingerprint(site)).toBe([...seen][0]); // deterministic
+  for (const [file, body] of [["static/favicon.svg", "<svg>2</svg>"], ["static/fonts/x.woff2", "font-2"], ["static/fonts/new.woff2", "font-3"], ["../design/tokens.json", '{"a":2}']]) {
+    writeFileSync(join(site, file), body);
+    const fp = frontendFingerprint(site);
+    expect(seen.has(fp)).toBe(false); // every change gives a new fingerprint
+    seen.add(fp);
+  }
+});

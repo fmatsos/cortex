@@ -338,14 +338,16 @@ export function checkOut(root: string, out: string) {
 }
 
 /**
- * Frontend fingerprint: site sources (src/), Vite config, manifests and dependency lockfile. It is
+ * Frontend fingerprint: site sources (src/), static assets (static/: favicon, icons, licenses), the design tokens
+ * (design/tokens.json), Vite config, manifests and dependency lockfile. It is
  * the fingerprint of the build inputs, not of the files it produces: the version is embedded in the client bundle
  * (`$app/env`), so the hashed name of Vite's assets depends on it (circular fingerprint). Any change to the CSS, a
  * component or a dependency changes the produced assets, and this fingerprint with them.
  */
 export function frontendFingerprint(siteDir = SITE_DIR): string {
-  const files = (readdirSync(join(siteDir, "src"), { recursive: true }) as string[]).map((f) => join("src", f))
-    .concat("vite.config.ts", "package.json", join("..", "package.json"), join("..", "bun.lock"))
+  const tree = (d: string) => existsSync(join(siteDir, d)) ? (readdirSync(join(siteDir, d), { recursive: true }) as string[]).map((f) => join(d, f)) : [];
+  const files = [...tree("src"), ...tree("static")]
+    .concat(join("..", "design", "tokens.json"), "vite.config.ts", "package.json", join("..", "package.json"), join("..", "bun.lock"))
     .filter((f) => existsSync(join(siteDir, f)) && statSync(join(siteDir, f)).isFile()).sort();
   const h = new Bun.CryptoHasher("sha256");
   for (const f of files) h.update(`${f}\0`).update(readFileSync(join(siteDir, f))).update("\0");

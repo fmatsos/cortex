@@ -1,6 +1,62 @@
 @import "tailwindcss";
 @import "./lib/design/tokens.css";
 
+/*
+ * Self-hosted variable fonts (SIL OFL 1.1, notices in static/fonts/): Source Sans 3 for the interface, Source Serif 4
+ * for long prose. The files live in lib/assets/fonts so that Vite hashes them and rewrites each url() relative to the
+ * emitted stylesheet: a root-absolute /fonts/... would break under a base path (CORTEX_SITE_BASE) and from deep pages.
+ * Latin covers French and English (accents, oe, guillemets, typographic apostrophe, no-break spaces); latin-ext is
+ * only downloaded when a page uses one of its characters (unicode-range). No italic sans: the interface never uses one.
+ */
+@font-face {
+	font-family: "Source Sans 3";
+	font-style: normal;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-sans-3-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: "Source Sans 3";
+	font-style: normal;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-sans-3-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+	font-family: "Source Serif 4";
+	font-style: normal;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-serif-4-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: "Source Serif 4";
+	font-style: normal;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-serif-4-latin-ext.woff2") format("woff2");
+	unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+	font-family: "Source Serif 4";
+	font-style: italic;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-serif-4-latin-italic.woff2") format("woff2");
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+	font-family: "Source Serif 4";
+	font-style: italic;
+	font-weight: 200 900;
+	font-display: swap;
+	src: url("./lib/assets/fonts/source-serif-4-latin-ext-italic.woff2") format("woff2");
+	unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
 /* theme: follows the system (prefers-color-scheme); data-theme="dark|light" forces it (palette command) */
 @custom-variant dark {
 	@media (prefers-color-scheme: dark) {
@@ -29,7 +85,8 @@
 }
 
 @theme inline {
-	--font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--font-sans: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--font-serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, Cambria, "Times New Roman", serif;
 	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	--color-ring: var(--ring);
 	--color-input: var(--input);
@@ -131,11 +188,20 @@
 	}
 }
 
-/* reading body: 17 px, line height 1.75, full width of the column (in the components layer: a page utility keeps the upper hand) */
+/* reading body: Source Serif 4, 17 px on mobile and 18 px from 640 px, line height 1.7 (in the components layer: a page
+   utility keeps the upper hand). Headings, callout titles and tables stay in the sans of the interface. */
 @layer components {
 	.wiki {
+		font-family: var(--font-serif);
 		font-size: 1.0625rem;
-		line-height: 1.75;
+		line-height: 1.7;
+	}
+}
+@media (min-width: 640px) {
+	@layer components {
+		.wiki {
+			font-size: 1.125rem;
+		}
 	}
 }
 
@@ -146,6 +212,11 @@
 .wiki > * + * {
 	margin-top: 1rem;
 }
+/* reading measure: prose blocks stop at 70ch; tables, code, images and rules keep the full column (they scroll or fit
+   by themselves) */
+.wiki > :not(table, pre, .table-wrap, img, figure, hr) {
+	max-width: 70ch;
+}
 .wiki p,
 .wiki li {
 	text-wrap: pretty;
@@ -154,6 +225,7 @@
 .wiki h2,
 .wiki h3,
 .wiki h4 {
+	font-family: var(--font-sans);
 	font-weight: 650;
 	line-height: 1.3;
 	margin-top: 1.8rem;
@@ -231,6 +303,7 @@ a.link-content:visited {
 	align-items: center;
 	gap: 0.4rem;
 	margin: 0 0 0.3rem;
+	font-family: var(--font-sans);
 	font-size: 0.875rem;
 	font-weight: 650;
 	line-height: 1.4;
@@ -280,6 +353,7 @@ a.link-content:visited {
 	overflow-x: auto;
 	border-collapse: collapse;
 	border: 1px solid var(--border);
+	font-family: var(--font-sans);
 	font-size: 0.9375rem;
 	line-height: 1.5;
 	background:
@@ -414,6 +488,9 @@ mark {
 		max-width: none;
 		font-size: 11pt;
 		line-height: 1.5;
+	}
+	.wiki > :not(table, pre, .table-wrap, img, figure, hr) {
+		max-width: none;
 	}
 	.wiki a[href^="http"]::after {
 		content: " (" attr(href) ")";
