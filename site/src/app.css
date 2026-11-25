@@ -9,8 +9,10 @@
  * stylesheet: a root-absolute /fonts/... would break under a base path (CORTEX_SITE_BASE) and from deep pages. Inter and
  * Source Serif keep their latin / latin-ext split (latin-ext is only downloaded when a page uses one of its characters,
  * unicode-range). No italic sans: the interface never uses one.
- * Cascadia Code (variable, 200-700, with its programming ligatures) for every piece of code: inline code, blocks, kbd,
- * tokens on the design-system page, assistant answers.
+ * Cascadia Code (variable, 200-700, with its programming ligatures) for real code only: inline code and blocks of the
+ * articles and of the assistant's answers, tokens on the design-system page. It weighs ~219 KB, and a browser only fetches
+ * an @font-face once a rendered element uses it: nothing that every page shows (kbd shortcuts, header, palette) may use
+ * --font-mono, and it is never preloaded. A page without code never downloads it.
  */
 @font-face {
 	font-family: "Cascadia Code";
@@ -203,6 +205,12 @@
 	h2,
 	h3 {
 		text-wrap: balance;
+	}
+	/* keyboard shortcuts ("Ctrl K") are interface, not code: Inter with figures of one width, so that they never pull the
+	   Cascadia Code file (Tailwind's preflight would set them in --font-mono, on every page) */
+	kbd {
+		font-family: var(--font-sans);
+		font-variant-numeric: tabular-nums;
 	}
 	/* scrollbars: the native thin bar, a muted ink thumb on no track, a little stronger over the scroll area being hovered;
 	   one rule for the page and every inner scroll area (aside, palette, tables, assistant), never hidden */

@@ -24,7 +24,9 @@ const url = (path: string) => new URL(path, scope).href;
 
 const files = [...new Map([...immutable, ...assets, ...prerendered].map((f) => [url(f.path), f.path] as const))].map(([href, path]) => ({ href, path }));
 const IMMUTABLE = new Set(immutable.map((f) => url(f.path)));
-const CORE = files.filter((f) => !isContentPath(f.path));
+// Cascadia Code (~219 KB, real code only) is not part of the base: a page that uses it asks for it, and it is kept then
+const LAZY = /cascadia-code/;
+const CORE = files.filter((f) => !isContentPath(f.path) && !LAZY.test(f.path));
 const WIKI = files.filter((f) => isContentPath(f.path));
 const WIKI_PAGES = WIKI.filter((f) => !f.path.endsWith("__data.json")).length;
 
@@ -134,7 +136,13 @@ async function respond(event: FetchEvent): Promise<Response> {
 	const { request } = event;
 	const key = cacheKey(request.url);
 	// immutable files (name = content fingerprint): cache first
-	if (IMMUTABLE.has(key)) return (await lookup(key)) ?? fetch(request);
+	// (one that is not in the base, see LAZY, is kept in it as soon as a page has asked for it)
+	if (IMMUTABLE.has(key)) {
+		return (await lookup(key)) ?? fetch(request).then((response) => {
+			if (response.ok) { const copy = response.clone(); event.waitUntil(caches.open(names.core).then((core) => core.put(key, copy)).catch(() => {})); }
+			return response;
+		});
+	}
 
 	// pages and data: network first (updates are seen online), but bounded when a copy exists
 	const cached = await lookup(key);

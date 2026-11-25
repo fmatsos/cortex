@@ -169,7 +169,7 @@
 						<h2 id="s-examples" class="text-lg font-semibold">{t("search.try")}</h2>
 						<ul class="mt-2 grid gap-2 sm:grid-cols-2">
 							{#each data.seed.examples as ex (ex.q)}
-								<li><a href={urlOf(localizeQuery(ex.q))} class="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 focus-visible:ring-3"><code class="text-link">{localizeQuery(ex.q)}</code><span class="text-muted-foreground text-sm">{t(ex.hint)}</span></a></li>
+								<li><a href={urlOf(localizeQuery(ex.q))} class="hover:bg-muted focus-visible:ring-ring/50 flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 focus-visible:ring-3"><code class="text-link font-sans">{localizeQuery(ex.q)}</code><span class="text-muted-foreground text-sm">{t(ex.hint)}</span></a></li>
 							{/each}
 						</ul>
 					</section>
@@ -195,12 +195,12 @@
 				<section aria-labelledby="s-syntax">
 					<h2 id="s-syntax" class="text-lg font-semibold">{t("search.operators")}</h2>
 					<ul class="mt-2 space-y-2 text-[0.9375rem]">
-						<li class="flex items-center gap-3"><Icon name="operator-tag" size={20} class="text-muted-foreground" /><code>#tag</code> <span class="text-muted-foreground">{t("search.or")}</span> <code>tag:{t("search.operators.name")}</code></li>
-						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code>{token("type", "Concept")}</code> <span class="text-muted-foreground">{valueWords("type")}</span></li>
-						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code>{token("status", "deprecated")}</code> {#each IS_VALUES as v (v)}<code>{token("is", v)}</code> {/each}</li>
-						<li class="flex items-center gap-3"><Icon name="operator-phrase" size={20} class="text-muted-foreground" /><code>"{t("search.operators.phrase")}"</code></li>
-						<li class="flex items-center gap-3"><Icon name="operator-exclude" size={20} class="text-muted-foreground" /><code>-{t("search.operators.word")}</code> <code>-#tag</code> <span class="text-muted-foreground">{t("search.operators.exclude")}</span></li>
-						<li class="flex flex-wrap items-center gap-3"><Icon name="search" size={20} class="text-muted-foreground" /><code>(#a {t("query.word.or")} #b) {token("status", "deprecated")}</code> <code>-(…)</code> <span class="text-muted-foreground">{t("search.operators.or")}</span></li>
+						<li class="flex items-center gap-3"><Icon name="operator-tag" size={20} class="text-muted-foreground" /><code class="font-sans">#tag</code> <span class="text-muted-foreground">{t("search.or")}</span> <code class="font-sans">tag:{t("search.operators.name")}</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-type" size={20} class="text-muted-foreground" /><code class="font-sans">{token("type", "Concept")}</code> <span class="text-muted-foreground">{valueWords("type")}</span></li>
+						<li class="flex items-center gap-3"><Icon name="operator-status" size={20} class="text-muted-foreground" /><code class="font-sans">{token("status", "deprecated")}</code> {#each IS_VALUES as v (v)}<code class="font-sans">{token("is", v)}</code> {/each}</li>
+						<li class="flex items-center gap-3"><Icon name="operator-phrase" size={20} class="text-muted-foreground" /><code class="font-sans">"{t("search.operators.phrase")}"</code></li>
+						<li class="flex items-center gap-3"><Icon name="operator-exclude" size={20} class="text-muted-foreground" /><code class="font-sans">-{t("search.operators.word")}</code> <code class="font-sans">-#tag</code> <span class="text-muted-foreground">{t("search.operators.exclude")}</span></li>
+						<li class="flex flex-wrap items-center gap-3"><Icon name="search" size={20} class="text-muted-foreground" /><code class="font-sans">(#a {t("query.word.or")} #b) {token("status", "deprecated")}</code> <code class="font-sans">-(…)</code> <span class="text-muted-foreground">{t("search.operators.or")}</span></li>
 					</ul>
 					<p class="text-muted-foreground mt-3 text-sm">{t("search.operators.help")}</p>
 				</section>
