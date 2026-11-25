@@ -115,8 +115,12 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     // the state text stays in the panel
     await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);
 
+    await expect(waiting).toHaveAttribute("width", "40"); // owner: one size below the former 48
     release();
     await expect(head).toHaveAttribute("data-state", "answer");
+    // owner: the answer prose reads at the size of the question
+    const sizes = await page.locator("#assistant-panel article").last().evaluate((t) => [getComputedStyle(t.querySelector("p")!).fontSize, getComputedStyle(t.querySelector(".wiki")!).fontSize]);
+    expect(sizes[1]).toBe(sizes[0]);
     await expect(head.locator(".signal, .halo")).toHaveCount(0);
     // all four front nodes animate once, then stay larger than at rest
     await expect(head.locator(".nf")).toHaveCount(4);
