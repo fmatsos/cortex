@@ -34,7 +34,7 @@ test("a stale or missing output is detected, and writing restores it", () => {
   writeFileSync(join(root, "extension/generated/theme.js"), "// hand edit\n");
   expect(staleOutputs(root)).toEqual(["extension/generated/theme.js"]);
   const tokensPath = join(root, "design/tokens.json");
-  writeFileSync(tokensPath, readFileSync(tokensPath, "utf8").replace('"#faf7f0"', '"#faf7f1"'));
+  writeFileSync(tokensPath, readFileSync(tokensPath, "utf8").replace('"#ffffff"', '"#fefefe"'));
   expect(staleOutputs(root)).toEqual(expect.arrayContaining(["site/src/lib/design/tokens.css", "extension/generated/cortex.css"]));
 });
 
