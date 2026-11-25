@@ -1,12 +1,12 @@
 import type { Page, Route } from "@playwright/test";
 import { expect, test } from "./helpers";
 
-// The brand mark is the static folio: drawn in SVG, no raster image, nothing moving. The assistant's avatar is the same
+// The brand mark is the static graph-brain: drawn in SVG, no raster image, nothing moving. The assistant's avatar is the same
 // drawing with four states; a static host has no /api/ask, so those are exercised through a mocked endpoint.
 const running = (page: Page) =>
   page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running" && (a.effect as KeyframeEffect | null)?.target?.closest?.("svg.folio")).length);
 
-test("the header mark is the folio, an inline drawing with no image", async ({ page }) => {
+test("the header mark is the graph-brain, an inline drawing with no image", async ({ page }) => {
   await page.goto("/");
   const mark = page.getByRole("banner").locator("svg.folio").first();
   await expect(mark).toBeVisible();
@@ -17,7 +17,7 @@ test("the header mark is the folio, an inline drawing with no image", async ({ p
   await expect(mark).toHaveAttribute("data-state", "idle");
   expect(await page.locator("svg.folio image, svg.folio foreignObject").count(), "no raster inside the mark").toBe(0);
   // butt ends and mitered joins, as the rest of the square system
-  const style = await mark.locator(".sheets").evaluate((el) => ({ cap: getComputedStyle(el).strokeLinecap, join: getComputedStyle(el).strokeLinejoin }));
+  const style = await mark.locator(".links").first().evaluate((el) => ({ cap: getComputedStyle(el).strokeLinecap, join: getComputedStyle(el).strokeLinejoin }));
   expect(style).toEqual({ cap: "butt", join: "miter" });
 });
 
@@ -85,19 +85,27 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const waiting = page.locator("#assistant-panel article svg.folio");
     await expect(waiting).toHaveAttribute("data-state", "pending");
     await expect(waiting).toHaveAttribute("aria-hidden", "true");
-    // pending moves only when motion is welcome (header button, panel head, waiting turn); the cursor steps, it does not glide
+    // pending moves only when motion is welcome (header button, panel head, waiting turn); the signal steps, it does not glide
     await expect.poll(() => running(page)).toBe(still ? 0 : 3);
-    if (!still) expect(await waiting.locator(".cursor").evaluate((el) => getComputedStyle(el).animationTimingFunction)).toMatch(/^steps\(1/);
+    await expect(waiting.locator(".signal")).toHaveCount(1);
+    if (!still) expect(await waiting.locator(".signal").evaluate((el) => getComputedStyle(el).animationTimingFunction)).toMatch(/^steps\(1/);
     // the state text stays in the panel
     await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);
 
     release();
     await expect(head).toHaveAttribute("data-state", "answer");
-    await expect(head.locator(".rule")).toHaveCount(1);
-    await expect(head.locator(".cursor")).toHaveCount(1);
-    await expect.poll(() => running(page), "the conclusion rule is drawn once, then everything is still").toBe(0);
+    await expect(head.locator(".signal")).toHaveCount(0);
+    // the front nodes grow once and stay larger than at rest
+    await expect(head.locator(".nf").first()).toHaveCSS("transform", /^matrix\(1\.[1-9]/);
+    await expect.poll(() => running(page), "the front nodes grow once, then everything is still").toBe(0);
   });
 }
+
+test("the optical variants follow the size: full, compact, tiny", async ({ page }) => {
+  await page.goto("/design-system/");
+  const optics = await page.locator("svg.folio").evaluateAll((els) => [...new Set(els.map((e) => `${e.getAttribute("width")}:${e.getAttribute("data-optic")}`))]);
+  expect(optics).toEqual(expect.arrayContaining(["24:compact", "48:full", "96:full"]));
+});
 
 test("a failed question puts the avatar in its error composition, still", async ({ page }) => {
   const release = await mockAsk(page, "error");
@@ -106,7 +114,7 @@ test("a failed question puts the avatar in its error composition, still", async 
   const head = panel.locator("header svg.folio");
   await expect(head).toHaveAttribute("data-state", "error");
   await expect(head.locator(".break")).toHaveCount(1);
-  await expect(head.locator(".cursor")).toHaveCount(0);
+  await expect(head.locator(".signal")).toHaveCount(0);
   expect(await running(page)).toBe(0);
   await expect(panel.locator("[role=status]")).toHaveText(/./);
 });

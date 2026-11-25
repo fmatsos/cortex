@@ -2,7 +2,7 @@
 	import { onMount, tick } from "svelte";
 	import { afterNavigate } from "$app/navigation";
 	import Icon from "#lib/components/icon.svelte";
-	import AssistantAvatar, { type FolioState } from "./assistant-avatar.svelte";
+	import AssistantAvatar, { type AvatarState } from "./assistant-avatar.svelte";
 	import AnswerBlock from "./answer-block.svelte";
 	import { assistant, MAX_QUESTION, type Turn } from "#lib/assistant.svelte.js";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
@@ -96,7 +96,7 @@
 	}
 	const over = $derived(assistant.draft.trim().length > MAX_QUESTION);
 	// the avatar follows the last turn: waiting, failed, answered, else at rest
-	const avatar = $derived.by((): FolioState => {
+	const avatar = $derived.by((): AvatarState => {
 		const last = assistant.turns.at(-1);
 		return !last ? "idle" : last.pending ? "pending" : last.error ? "error" : last.answer ? "answer" : "idle";
 	});

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32" role="img" aria-labelledby="t">
+  <title id="t">Cortex</title>
+  <!-- Master drawing of the Cortex mark, favicon variant (16 px grid, fewer nodes, 1 px links): a brain in side profile, front facing right,
+       drawn as a knowledge graph. Square nodes joined by straight links, the outer links forming the contour; the prefrontal
+       cluster, at the front, in the accent colour. 16-unit grid, node edges on whole pixels at 16 px.
+       Square design: square nodes, butt ends, mitered joins, no curve. Idle composition. -->
+  <style>
+    svg { color: #1b2120; --primary: #245849 }
+    @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
+    .links { fill: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter }
+  </style>
+  <g class="links" stroke="currentColor">
+    <path d="M2.5 8.5L4 5L7.5 3.5L12.5 4.5"/>
+    <path d="M2.5 8.5L3 12L6.5 13.5"/>
+    <path d="M10.5 12.5L8 14L6.5 13.5"/>
+    <path d="M2.5 8.5L9.5 7.5"/>
+    <path d="M7.5 3.5L9.5 7.5"/>
+  </g>
+  <g class="links" stroke="var(--primary)">
+    <path d="M12.5 4.5L13.5 9.5"/>
+    <path d="M13.5 9.5L10.5 12.5"/>
+    <path d="M9.5 7.5L12.5 4.5"/>
+    <path d="M9.5 7.5L13.5 9.5"/>
+    <path d="M9.5 7.5L10.5 12.5"/>
+  </g>
+  <g fill="currentColor">
+    <rect x="6" y="2" width="3" height="3"/>
+    <rect x="1" y="7" width="3" height="3"/>
+    <rect x="5" y="12" width="3" height="3"/>
+  </g>
+  <g fill="var(--primary)">
+    <rect x="11" y="3" width="3" height="3"/>
+    <rect x="8" y="6" width="3" height="3"/>
+    <rect x="12" y="8" width="3" height="3"/>
+    <rect x="9" y="11" width="3" height="3"/>
+  </g>
+</svg>

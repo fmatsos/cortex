@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="96" height="96" role="img" aria-labelledby="t">
+  <title id="t">Cortex</title>
+  <!-- Master drawing of the Cortex mark: a brain in side profile, front facing right,
+       drawn as a knowledge graph. Square nodes joined by straight links, the outer links forming the contour; the prefrontal
+       cluster, at the front, in the accent colour. 48-unit grid, node edges on whole pixels at 48 and 96 px.
+       Square design: square nodes, butt ends, mitered joins, no curve. Idle composition. -->
+  <style>
+    svg { color: #1b2120; --primary: #245849 }
+    @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
+    .links { fill: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter }
+  </style>
+  <g class="links" stroke="currentColor">
+    <path d="M6 22L7 16L10 12L16 9L22 8L34 10"/>
+    <path d="M6 22L5 26L7 29L10 32L12 36L16 38L16 40"/>
+    <path d="M30 28L28 31L26 33L22 34L20 34"/>
+    <path d="M10 12L18 20"/>
+    <path d="M22 8L18 20"/>
+    <path d="M6 22L18 20"/>
+    <path d="M18 20L10 32"/>
+    <path d="M18 20L30 28"/>
+    <path d="M10 32L20 34"/>
+    <path d="M20 34L16 40"/>
+  </g>
+  <g class="links" stroke="var(--primary)">
+    <path d="M34 10L39 14L42 20L41 25L36 28L30 28"/>
+    <path d="M18 20L26 16"/>
+    <path d="M26 16L34 10"/>
+    <path d="M26 16L42 20"/>
+    <path d="M26 16L30 28"/>
+    <path d="M42 20L30 28"/>
+  </g>
+  <g fill="currentColor">
+    <rect x="20" y="6" width="4" height="4"/>
+    <rect x="8" y="10" width="4" height="4"/>
+    <rect x="4" y="20" width="4" height="4"/>
+    <rect x="16" y="18" width="4" height="4"/>
+    <rect x="8" y="30" width="4" height="4"/>
+    <rect x="18" y="32" width="4" height="4"/>
+    <rect x="14" y="38" width="4" height="4"/>
+  </g>
+  <g fill="var(--primary)">
+    <rect x="32" y="8" width="4" height="4"/>
+    <rect x="24" y="14" width="4" height="4"/>
+    <rect x="40" y="18" width="4" height="4"/>
+    <rect x="28" y="26" width="4" height="4"/>
+  </g>
+</svg>

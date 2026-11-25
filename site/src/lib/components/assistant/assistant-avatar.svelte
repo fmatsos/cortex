@@ -1,58 +1,126 @@
 <script module lang="ts">
-	export type FolioState = "idle" | "pending" | "answer" | "error";
+	export type AvatarState = "idle" | "pending" | "answer" | "error";
 
-	// One drawing, three optical sizes. Coordinates are chosen so that every stroke edge lands on a whole pixel at the size the
-	// variant is made for: full 48 and 96 px (also 72), compact 24 px, tiny 16 px. Other sizes render, with softer edges.
-	// back: the rear sheet and the margin rule, as one mitered path; front: x, y, side of the front sheet; rows: centre of each
-	// index line; x0, x1: extent of a line; short: end of a line still being written; cs: side of the square cursor;
-	// rule: height of the conclusion rule (none when it does not fit); bx: centre of the break mark.
-	type Optic = { vb: number; sw: number; back: string; front: number[]; rows: number[]; x0: number; x1: number; short: number; cs: number; rule?: number; bx: number; br: number };
+	// One drawing, three optical sizes: full (viewBox 48, 28 px and up), compact (viewBox 24, 18 to 27 px: fewer nodes, a thicker
+	// link relative to the size) and tiny (viewBox 16, under 18 px, also the favicon). Coordinates are chosen so that node edges
+	// land on whole pixels at the size the variant is made for (48, 96, 24, 16); links are straight segments at any angle.
+	// nodes: centres of the square nodes; front: the nodes of the prefrontal cluster (accent colour);
+	// links: polylines, a point is a node index or a [x, y] bend, f marks a link of the front cluster;
+	// path: the nodes the pending signal walks through, from the back of the brain to the front;
+	// cut: the two nodes of the straight link that breaks in the error state, gap: length of the break along that link;
+	// s: side of a node, sw: link width, grow: side of a front node once answered.
+	type Pt = number | [number, number];
+	type Link = { p: Pt[]; f?: true };
+	type Optic = { vb: number; sw: number; s: number; grow: number; gap: number; cut: [number, number]; nodes: [number, number][]; front: number[]; links: Link[]; path: number[] };
 	export const OPTICS: Record<"full" | "compact" | "tiny", Optic> = {
-		full: { vb: 48, sw: 2, back: "M11 45V3H45V39H39", front: [3, 9, 36], rows: [17, 25, 33], x0: 16, x1: 34, short: 26, cs: 6, rule: 39, bx: 30, br: 4 },
-		compact: { vb: 48, sw: 2, back: "M11 45V3H45V39H39", front: [3, 9, 36], rows: [19, 29], x0: 16, x1: 34, short: 26, cs: 6, rule: 37, bx: 30, br: 4 },
-		tiny: { vb: 16, sw: 1, back: "M4.5 4.5V1.5H14.5V11.5H11.5", front: [1.5, 4.5, 10], rows: [7.5, 11.5], x0: 4, x1: 9, short: 7, cs: 3, bx: 7.5, br: 2 },
+		full: {
+			vb: 48, sw: 1, s: 4, grow: 6, gap: 8, path: [4, 5, 3, 6], cut: [3, 6], front: [2, 3, 6, 7],
+			nodes: [[22, 8], [10, 12], [34, 10], [26, 16], [6, 22], [18, 20], [42, 20], [30, 28], [10, 32], [20, 34], [16, 40]],
+			links: [
+				{ p: [4, [7, 16], 1, [16, 9], 0, 2] },
+				{ p: [4, [5, 26], [7, 29], 8, [12, 36], [16, 38], 10] },
+				{ p: [7, [28, 31], [26, 33], [22, 34], 9] },
+				{ p: [1, 5] }, { p: [0, 5] }, { p: [4, 5] }, { p: [5, 8] }, { p: [5, 7] }, { p: [8, 9] }, { p: [9, 10] },
+				{ p: [2, [39, 14], 6, [41, 25], [36, 28], 7], f: true },
+				{ p: [5, 3], f: true }, { p: [3, 2], f: true }, { p: [3, 6], f: true }, { p: [3, 7], f: true }, { p: [6, 7], f: true },
+			],
+		},
+		compact: {
+			vb: 24, sw: 1, s: 4, grow: 5, gap: 4, path: [3, 4, 2, 5], cut: [4, 6], front: [1, 2, 5, 6],
+			nodes: [[11, 4], [17, 5], [14, 9], [3, 12], [9, 11], [21, 11], [16, 15], [9, 20]],
+			links: [
+				{ p: [3, [4, 7], [6, 5], 0, 1] },
+				{ p: [3, [3, 16], [6, 19], 7] },
+				{ p: [6, [13, 18], 7] },
+				{ p: [4, 6] }, { p: [0, 4] }, { p: [3, 4] },
+				{ p: [1, [20, 7], 5, [19, 15], 6], f: true },
+				{ p: [4, 2], f: true }, { p: [2, 1], f: true }, { p: [2, 5], f: true }, { p: [2, 6], f: true },
+			],
+		},
+		tiny: {
+			vb: 16, sw: 1, s: 3, grow: 4, gap: 3, path: [3, 2, 4], cut: [3, 2], front: [1, 2, 4, 5],
+			nodes: [[7.5, 3.5], [12.5, 4.5], [9.5, 7.5], [2.5, 8.5], [13.5, 9.5], [10.5, 12.5], [6.5, 13.5]],
+			links: [
+				{ p: [3, [4, 5], 0, 1] },
+				{ p: [3, [3, 12], 6] },
+				{ p: [5, [8, 14], 6] },
+				{ p: [3, 2] }, { p: [0, 2] },
+				{ p: [1, 4], f: true }, { p: [4, 5], f: true },
+				{ p: [2, 1], f: true }, { p: [2, 4], f: true }, { p: [2, 5], f: true },
+			],
+		},
 	};
 </script>
 
 <script lang="ts">
-	// The assistant's avatar: the indexed folio (master drawing: design/brand/folio.svg). Two offset sheets, a margin rule,
-	// index lines and a square cursor. Square language: butt ends, mitered joins, no curve. Decorative: the state is told by
-	// the panel's text. Colours come from the tokens (currentColor, --primary, --destructive). Below 40 px an optical variant
-	// keeps two index lines, so the strokes do not merge.
+	// The assistant's avatar: a brain in side profile (front facing right) drawn as a knowledge graph, small square nodes
+	// joined by straight links, the outer links forming the contour; the prefrontal cluster, at the front, is in the accent
+	// colour (master drawing: design/brand/cortex-mark.svg). Square language: square nodes, butt ends, mitered joins, no curve.
+	// Decorative: the state is told by the panel's text. Colours come from the tokens (currentColor, --primary, --destructive).
 	//
-	//   idle      still; cursor on the first index mark
-	//   pending   cursor steps down the marks and back, orthogonally, only while pending; the last line is still being written
-	//   answer    cursor on the last mark; a conclusion rule is drawn once, then still
-	//   error     the index breaks off at an angular mark (a tilted square); no cursor
+	//   idle      still
+	//   pending   a square signal steps along the links from the back of the brain to the front cluster, only while pending
+	//   answer    the front nodes grow once, in two steps, then stay larger
+	//   error     one link of the front cluster is broken, the break marked by a square in the destructive colour
 	//
-	// Reduced motion: no state moves; each is a distinct still composition (pending: cursor on the middle mark).
-	let { state = "idle", size = 24 }: { state?: FolioState; size?: number } = $props();
+	// Reduced motion: no state moves; each is a distinct still composition (pending: the signal rests mid-path).
+	let { state = "idle", size = 24 }: { state?: AvatarState; size?: number } = $props();
 
-	const optic = $derived(size < 20 ? "tiny" : size < 40 ? "compact" : "full");
+	const optic = $derived(size < 18 ? "tiny" : size < 28 ? "compact" : "full");
 	const o = $derived(OPTICS[optic]);
-	const pitch = $derived(o.rows[1] - o.rows[0]);
-	// still position of the cursor, as an index mark (pending in the middle, or on the last one when there are two)
-	const at = $derived(state === "answer" ? o.rows.length - 1 : state === "pending" ? Math.max(1, o.rows.length - 2) : 0);
-	const end = (i: number) => (state === "pending" && i === o.rows.length - 1 ? o.short : o.x1);
-	const brk = $derived(o.rows[1]);
+	const at = (p: Pt): [number, number] => (typeof p === "number" ? o.nodes[p] : p);
+	const d = (l: Link) => l.p.map((p, i) => `${i ? "L" : "M"}${at(p).join(" ")}`).join("");
+	const broken = (l: Link) => l.p.length === 2 && l.p[0] === o.cut[0] && l.p[1] === o.cut[1];
+	const ink = $derived(o.links.filter((l) => !l.f));
+	const front = $derived(o.links.filter((l) => l.f));
+	const frontCut = $derived(front.some(broken));
+	const isFront = (i: number) => o.front.includes(i);
+
+	// the pending signal: a node, the middle of a link, the next node, up to the front; seven resting places
+	const stops = $derived.by(() => {
+		const pts = o.path.map((i) => o.nodes[i]);
+		const all = pts.flatMap((p, i) => (i ? [[(pts[i - 1][0] + p[0]) / 2, (pts[i - 1][1] + p[1]) / 2], p] : [p]));
+		while (all.length < 7) all.push(all[all.length - 1]);
+		return all;
+	});
+	const vars = $derived(stops.map(([x, y], i) => `--x${i}:${x}px;--y${i}:${y}px`).join(";") + `;--sx:${stops[1][0]}px;--sy:${stops[1][1]}px;--sw:${o.sw};--grow:${o.grow / o.s}`);
+
+	// the broken link: two stubs and, between them, the break mark
+	const brk = $derived.by(() => {
+		const [a, b] = [o.nodes[o.cut[0]], o.nodes[o.cut[1]]];
+		const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+		const [ux, uy] = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+		const [mx, my] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+		const h = o.gap / 2;
+		return { a, b, m: [mx, my], s1: [mx - ux * h, my - uy * h], s2: [mx + ux * h, my + uy * h] };
+	});
 </script>
 
-<svg class="folio" data-state={state} data-optic={optic} viewBox="0 0 {o.vb} {o.vb}" width={size} height={size} focusable="false" aria-hidden="true" style="--pitch: {pitch}; --at: {at}; --sw: {o.sw}">
-	<g class="sheets">
-		<path d={o.back} />
-		<rect x={o.front[0]} y={o.front[1]} width={o.front[2]} height={o.front[2]} />
+<svg class="folio" data-state={state} data-optic={optic} viewBox="0 0 {o.vb} {o.vb}" width={size} height={size} focusable="false" aria-hidden="true" style={vars}>
+	<g class="links ink">
+		{#each ink as l, i (i)}{#if state !== "error" || !broken(l)}<path d={d(l)} />{/if}{/each}
 	</g>
-	<g class="lines">
-		{#each o.rows as c, i (c)}
-			{#if state !== "error" || i < 2}<path d="M{o.x0} {c}H{state === "error" && i === 1 ? o.x0 + o.cs : end(i)}" />{/if}
+	<g class="links front">
+		{#each front as l, i (i)}
+			{#if state !== "error" || !broken(l)}<path d={d(l)} />{/if}
+		{/each}
+		{#if state === "error" && frontCut}<path d="M{brk.a.join(" ")}L{brk.s1.join(" ")}M{brk.s2.join(" ")}L{brk.b.join(" ")}" />{/if}
+	</g>
+	{#if state === "error" && !frontCut}
+		<g class="links ink"><path d="M{brk.a.join(" ")}L{brk.s1.join(" ")}M{brk.s2.join(" ")}L{brk.b.join(" ")}" /></g>
+	{/if}
+	<g class="nodes ink">
+		{#each o.nodes as [x, y], i (i)}
+			{#if !isFront(i)}<rect x={x - o.s / 2} y={y - o.s / 2} width={o.s} height={o.s} />{/if}
 		{/each}
 	</g>
-	{#if state === "answer" && o.rule}<path class="rule" pathLength="1" d="M{o.x0} {o.rule}H{o.x1}" />{/if}
-	{#if state === "error"}
-		<path class="break" d="M{o.bx} {brk - o.br}L{o.bx + o.br} {brk}L{o.bx} {brk + o.br}L{o.bx - o.br} {brk}Z" />
-	{:else}
-		<rect class="cursor" x={o.x0} y={o.rows[0] - o.cs / 2} width={o.cs} height={o.cs} />
-	{/if}
+	<g class="nodes front">
+		{#each o.nodes as [x, y], i (i)}
+			{#if isFront(i)}<rect class="nf" x={x - o.s / 2} y={y - o.s / 2} width={o.s} height={o.s} />{/if}
+		{/each}
+	</g>
+	{#if state === "pending"}<rect class="signal" x={-o.s / 2} y={-o.s / 2} width={o.s} height={o.s} />{/if}
+	{#if state === "error"}<rect class="break" x={brk.m[0] - o.s / 2} y={brk.m[1] - o.s / 2} width={o.s} height={o.s} />{/if}
 </svg>
 
 <style>
@@ -60,52 +128,66 @@
 		display: block;
 		flex: none;
 	}
-	.sheets, .lines, .rule {
+	.links {
 		fill: none;
 		stroke-width: var(--sw);
 		stroke-linecap: butt;
 		stroke-linejoin: miter;
 	}
-	.sheets, .lines {
+	.ink {
 		stroke: currentColor;
+		fill: currentColor;
 	}
-	.rule {
+	.links.ink {
+		fill: none;
+	}
+	.nodes.ink {
+		stroke: none;
+	}
+	.front {
 		stroke: var(--primary, currentColor);
+		fill: var(--primary, currentColor);
+	}
+	.links.front {
+		fill: none;
+	}
+	.nodes.front {
+		stroke: none;
+	}
+	.signal {
+		fill: var(--primary, currentColor);
+		transform: translate(var(--sx), var(--sy));
 	}
 	.break {
 		fill: var(--destructive, currentColor);
 	}
-	.cursor {
-		fill: var(--primary, currentColor);
-		transform: translateY(calc(var(--pitch) * var(--at) * 1px));
+	.nf {
+		transform-box: fill-box;
+		transform-origin: center;
+	}
+	[data-state="answer"] .nf {
+		transform: scale(var(--grow));
 	}
 
 	@media (prefers-reduced-motion: no-preference) {
-		[data-state="pending"] .cursor {
-			animation: walk 3.2s step-end infinite;
+		[data-state="pending"] .signal {
+			animation: walk 5s step-end infinite;
 		}
-		[data-optic="compact"][data-state="pending"] .cursor,
-		[data-optic="tiny"][data-state="pending"] .cursor {
-			animation-name: walk-two;
-		}
-		.rule {
-			stroke-dasharray: 1;
-			animation: write 0.45s steps(6, end) both;
+		[data-state="answer"] .nf {
+			animation: settle 0.5s steps(2, end) both;
 		}
 	}
-	/* the cursor goes down the marks and back; each move is a whole step, held until the next */
+	/* the signal rests on each place for half a second, holds on the front, then starts again from the back */
 	@keyframes walk {
-		0% { transform: translateY(0); }
-		25% { transform: translateY(calc(var(--pitch) * 1px)); }
-		50% { transform: translateY(calc(var(--pitch) * 2px)); }
-		75% { transform: translateY(calc(var(--pitch) * 1px)); }
+		0% { transform: translate(var(--x0), var(--y0)); }
+		10% { transform: translate(var(--x1), var(--y1)); }
+		20% { transform: translate(var(--x2), var(--y2)); }
+		30% { transform: translate(var(--x3), var(--y3)); }
+		40% { transform: translate(var(--x4), var(--y4)); }
+		50% { transform: translate(var(--x5), var(--y5)); }
+		60% { transform: translate(var(--x6), var(--y6)); }
 	}
-	@keyframes walk-two {
-		0% { transform: translateY(0); }
-		50% { transform: translateY(calc(var(--pitch) * 1px)); }
-	}
-	@keyframes write {
-		from { stroke-dashoffset: 1; }
-		to { stroke-dashoffset: 0; }
+	@keyframes settle {
+		from { transform: scale(1); }
 	}
 </style>
