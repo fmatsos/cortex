@@ -35,8 +35,9 @@ export type SiteData = {
   log: LogEntryData[]; // most recent first
 };
 export type GraphData = {
-  nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number }[];
+  nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number; x: number; y: number; community: string }[];
   links: { source: string; target: string; mutual?: true }[]; // directed: source = page that contains the link; mutual: links in both directions (a single link, never two)
+  communities: { id: string; label: string; size: number; representatives: string[]; x: number; y: number }[];
 };
 export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; needsReview?: boolean; partial?: boolean; text: string };
 export type SearchIndex = { docs: SearchDoc[]; terms: Record<string, number[]>; vocab: string[] };

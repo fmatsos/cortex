@@ -1,7 +1,6 @@
 /**
  * Pure graph logic (tested by bun test): filtered view, directed relations, selection, node search,
- * `?focus=` parameter, particles and timers. No dependency on the DOM or Svelte: the component only
- * has to wire these functions to force-graph.
+ * `?focus=` parameter and neighbourhood framing. No dependency on the DOM or Svelte.
  */
 import { fold } from "./fold";
 import type { GraphData } from "./types";
@@ -37,7 +36,7 @@ export type Relations = { cites: string[]; citedBy: string[] };
 
 /**
  * Directed relations of a page: `cites` = pages it links to, `citedBy` = pages that link to it.
- * A reciprocal link (`mutual`) appears in both lists. The ends can be ids or node objects (force-graph).
+ * A reciprocal link (`mutual`) appears in both lists. The ends can be ids or node objects.
  */
 export function relationsOf(id: string, links: Iterable<{ source: string | { id: string }; target: string | { id: string }; mutual?: boolean }>): Relations {
 	const cites = new Set<string>(), citedBy = new Set<string>();
@@ -58,32 +57,6 @@ export function relationIndex(view: Pick<GraphView, "nodes" | "links">): Map<str
 		if (l.mutual) { m.get(l.source)?.citedBy.push(l.target); m.get(l.target)?.cites.push(l.source); }
 	}
 	return m;
-}
-
-export type SimLink = { source: string | { id: string }; target: string | { id: string }; twin?: boolean };
-
-/**
- * Links to give to force-graph. Particles go from `source` to `target`; a reciprocal link gets an inverse twin
- * (`twin`, with no stroke of its own) so that particles flow in both directions on the same edge (UX45).
- */
-export function simLinks(links: readonly GLink[]): SimLink[] {
-	const out: SimLink[] = [];
-	for (const l of links) {
-		out.push({ source: l.source, target: l.target });
-		if (l.mutual) out.push({ source: l.target, target: l.source, twin: true });
-	}
-	return out;
-}
-
-export type ParticleOpts = { calm: boolean; paused: boolean; hot: boolean; dim: boolean; linkCount: number };
-/** Beyond this number of links, no more ambient particles (drawing cost); the highlighted neighborhood always keeps them. */
-export const AMBIENT_MAX_LINKS = 250;
-
-/** Number of particles of a link: 3 on the highlighted neighborhood, 1 as ambience (never under reduced motion, when paused or when a neighborhood is isolated). */
-export function particleCount({ calm, paused, hot, dim, linkCount }: ParticleOpts): number {
-	if (calm || paused) return 0;
-	if (hot) return 3;
-	return dim || linkCount > AMBIENT_MAX_LINKS ? 0 : 1;
 }
 
 /** Normalizes `?focus=`: decoded, without leading or trailing slash, without `.md` extension. Returns the id of a known node or `null`. */
@@ -116,21 +89,24 @@ export function searchNodes<T extends Pick<GNode, "title" | "degree">>(nodes: re
 	return scored.slice(0, limit).map((x) => x.n);
 }
 
-/**
- * Single-deadline timer: scheduling a new one cancels the previous, `cancel` cancels it (manual interaction, unmount).
- * The timer functions are injectable for testing.
- */
-export function createTimer(set: (fn: () => void, ms: number) => unknown = setTimeout, clear: (h: any) => void = clearTimeout) {
-	let handle: unknown;
-	let pending = false;
-	const cancel = () => { if (pending) clear(handle); pending = false; handle = undefined; };
-	return {
-		schedule(fn: () => void, ms: number) {
-			cancel();
-			pending = true;
-			handle = set(() => { pending = false; handle = undefined; fn(); }, ms);
-		},
-		cancel,
-		get pending() { return pending; },
-	};
+/** Closest neighbours bound the camera frame of a hub; no relations are removed from the view. */
+export function focusNodes(id: string, view: GraphView, limit = 30): GNode[] {
+	const center = view.nodes.find((n) => n.id === id);
+	if (!center) return [];
+	const r = relationsOf(id, view.links), peers = new Set([...r.cites, ...r.citedBy]);
+	return [center, ...view.nodes.filter((n) => peers.has(n.id)).sort((a, b) =>
+		Math.hypot(a.x - center.x, a.y - center.y) - Math.hypot(b.x - center.x, b.y - center.y) || a.id.localeCompare(b.id)
+	).slice(0, limit)];
+}
+
+/** During gestures keep the focus, a landmark per community, then hubs. The visible scope stays intact. */
+export function gestureNodes(view: GraphView, focus: ReadonlySet<string>, limit = 120): Set<string> {
+	const kept = new Set([...focus].filter((id) => view.ids.has(id)).slice(0, limit));
+	const ranked = [...view.nodes].sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id));
+	const communities = new Set<string>();
+	for (const n of ranked) if (!communities.has(n.community)) {
+		communities.add(n.community); if (kept.size < limit) kept.add(n.id);
+	}
+	for (const n of ranked) { if (kept.size >= limit) break; kept.add(n.id); }
+	return kept;
 }

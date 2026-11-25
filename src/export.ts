@@ -15,6 +15,7 @@ import { isUnder } from "./paths";
 import { sanitizeHtml } from "./sanitize";
 import { paint, warn } from "./style";
 import { LIMITS } from "./limits";
+import { layoutGraph } from "./graph-layout";
 
 export const SITE_DIR = join(import.meta.dir, "../site");
 
@@ -309,10 +310,10 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn)
 
   const degree = new Map<string, number>();
   for (const e of edges) for (const n of [e.source, e.target]) degree.set(n, (degree.get(n) ?? 0) + 1);
-  const graph: GraphData = {
+  const graph = layoutGraph({
     nodes: pages.map((p) => ({ id: p.id, title: p.title, description: p.description, type: p.type, tags: p.tags, degree: degree.get(p.id) ?? 0 })),
     links: edges,
-  };
+  });
 
   const data: SiteData = { locale, features, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
   return { data, graph, search: buildSearch(pages) };
