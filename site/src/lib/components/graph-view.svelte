@@ -2,6 +2,9 @@
 	import { onMount, tick, untrack } from "svelte";
 	import { goto, replaceState } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import { account } from "#lib/account.svelte.js";
+	import JourneyDialogs from "#lib/components/journey/journey-dialogs.svelte";
+	import { JourneyFlow } from "#lib/components/journey/journey-flow.svelte.js";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import Icon from "#lib/components/icon.svelte";
@@ -59,6 +62,8 @@
 	const dest = $derived(step ? destinations(step, index, nodesById) : { cites: [], citedBy: [] });
 	const sorted = $derived([...view.nodes].sort((a, b) => a.title.localeCompare(b.title, "fr")));
 	const results = $derived(searchNodes(raw?.nodes ?? [], query));
+	// save and export of the journey (the saved copy is named in the address: ?journey=<id>)
+	const flow = new JourneyFlow({ route: () => route, titleOf: (id) => titles.get(id) ?? id, graph: () => raw, changed: () => syncUrl() });
 	const rowId = (id: string) => `g-${id.replace(/[^a-z0-9]+/gi, "-")}`;
 	const nodeById = (id: string) => nodesById.get(id);
 	const toggle = (type: string) => { const s = new Set(off); s.has(type) ? s.delete(type) : s.add(type); off = s; };
@@ -70,6 +75,8 @@
 		const url = new URL(location.href);
 		if (mode === "graph") url.searchParams.delete("view"); else url.searchParams.set("view", mode);
 		if (mode === "journey" && route.length) url.searchParams.set("route", serializeRoute(route)); else url.searchParams.delete("route");
+		const saved = flow.linkedId;
+		if (mode === "journey" && route.length && saved) url.searchParams.set("journey", saved); else url.searchParams.delete("journey");
 		replaceState(url, {});
 	}
 	function setMode(next: Mode) {
@@ -87,7 +94,7 @@
 		run++; playing = false; route = next; controller?.journey(next);
 		const id = next.at(-1);
 		if (id) { sel = nodeById(id) ?? null; void controller?.go(id, duration); live = tr("journey.announce", { n: next.length, total: next.length, title: titles.get(id) ?? id }); }
-		else { select(null); fit(); live = ""; }
+		else { flow.unlink(); select(null); fit(); live = ""; }
 		syncUrl();
 	}
 	/** A page chosen on the map, in the search or in the panel: the departure, or the next step when linked to the current page. */
@@ -117,6 +124,13 @@
 	$effect(() => {
 		const v = view;
 		untrack(() => apply?.(v));
+	});
+
+	// the saved copy the address names is read once the account is known (the layout loads it after this page's first render)
+	$effect(() => {
+		if (!account.ready || !flow.wanted) return;
+		const signedIn = !!account.me;
+		untrack(() => void flow.resolve(signedIn));
 	});
 
 	async function focusNode(id: string) {
@@ -165,7 +179,11 @@
 				mode = asked === "map" || asked === "journey" ? asked : "graph";
 				controller.mode(mode);
 				apply(view); ready = true;
-				if (mode === "journey" && params.has("route")) setRoute(parseRoute(params.get("route"), index), 0);
+				if (mode === "journey" && params.has("route")) {
+					const walked = parseRoute(params.get("route"), index);
+					if (walked.length) flow.link(params.get("journey")); // named before the route is set: the address keeps it while the copy is read
+					setRoute(walked, 0);
+				}
 				const wanted = resolveFocus(location.search, g.nodes);
 				if (wanted.id) await focusNode(wanted.id);
 				else if (wanted.asked) notice = tr("graph.pageNotInGraph", { title: wanted.asked });
@@ -173,7 +191,7 @@
 		}
 		retry = () => { teardown(); void start(); };
 		void start();
-		return () => { teardown(); retry = () => {}; motion.removeEventListener("change", onMotion); theme.removeEventListener("change", onTheme); window.removeEventListener("themechange", onTheme); };
+		return () => { flow.destroy(); teardown(); retry = () => {}; motion.removeEventListener("change", onMotion); theme.removeEventListener("change", onTheme); window.removeEventListener("themechange", onTheme); };
 	});
 </script>
 
@@ -319,6 +337,27 @@
 					<Button variant="outline" size="sm" disabled={route.length < 2} aria-pressed={playing} onclick={() => (playing ? setRoute(route) : void replay())}>{playing ? tr("journey.stop") : tr("journey.replay")}</Button>
 					<Button variant="outline" size="sm" onclick={() => setRoute([])}>{tr("journey.clear")}</Button>
 					<Button variant="outline" size="sm" onclick={copyLink}><Icon name="copy-link" size={16} />{tr("journey.copy")}</Button>
+					<!-- no account on this site (static export, no sign-in configured): nothing to save to -->
+					{#if account.enabled}
+						<Button variant="outline" size="sm" aria-label={account.me ? tr("journey.save.label") : tr("journey.save.signIn")} aria-disabled={flow.busy || !!flow.wanted || undefined} class={flow.busy || flow.wanted ? "cursor-not-allowed opacity-50" : ""} onclick={() => flow.save()}><Icon name="save" size={16} />{tr("journey.save")}</Button>
+					{/if}
+					<Button variant="outline" size="sm" aria-label={tr("journey.exportAction.label")} aria-busy={flow.exporting || undefined} aria-disabled={flow.exporting || undefined} class={flow.exporting ? "cursor-not-allowed opacity-50" : ""} onclick={() => void flow.export()}><Icon name="export-markdown" size={16} />{tr("journey.exportAction")}</Button>
+				</div>
+				<!-- the state of the saved copy (with an account only) and the short message that says what just happened: both always present, so that a change is announced -->
+				<p aria-live="polite" data-journey-state={flow.state || "none"} class="text-muted-foreground -mt-2 flex min-h-4 items-center gap-1.5 text-xs leading-4 {flow.state ? '' : 'sr-only'}">
+					{#if flow.state}
+						<span aria-hidden="true" class="size-2 shrink-0 {flow.state === 'unsaved' ? 'bg-warning-foreground' : 'bg-muted-foreground'}"></span>
+						<span class={flow.state === "unsaved" ? "text-foreground" : ""}>{tr(`journey.state.${flow.state}`)}</span>
+					{/if}
+				</p>
+				<div aria-live="polite" data-journey-message class={flow.message ? "-mt-2" : "sr-only"}>
+					{#if flow.message}
+						<div class="flex items-start gap-2 px-2 py-1.5 text-sm {flow.message.kind === 'error' ? 'bg-warning-background text-warning-foreground' : 'bg-muted'}">
+							<Icon name={flow.message.kind === "error" ? "error" : "success"} size={16} class="mt-0.5" />
+							<span class="min-w-0 flex-1 break-words">{flow.message.text}</span>
+							<button type="button" class="hover:bg-background/60 -mr-1 inline-flex size-6 shrink-0 items-center justify-center pointer-coarse:size-9" aria-label={tr("common.closeMessage")} title={tr("common.closeMessage")} onclick={() => flow.dismiss()}><Icon name="clear" size={14} /></button>
+						</div>
+					{/if}
 				</div>
 				{#each [{ label: tr("graph.cites"), nodes: dest.cites }, { label: tr("journey.citedBy"), nodes: dest.citedBy }] as g (g.label)}
 					{#if g.nodes.length}
@@ -386,6 +425,8 @@
 		</aside>
 	{/if}
 </div>
+
+<JourneyDialogs {flow} />
 
 {#if listMode}
 	<section aria-label={tr("graph.list.label")} class="mt-1">

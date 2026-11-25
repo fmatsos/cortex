@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { tick } from "svelte";
 	import { account } from "#lib/account.svelte.js";
 	import { assistant } from "#lib/assistant.svelte.js";
 	import { defaultTitle } from "#lib/assistant-session.js";
-	import Icon from "#lib/components/icon.svelte";
+	import NameDialog from "#lib/components/account/name-dialog.svelte";
+	import SignInDialog from "#lib/components/account/sign-in-dialog.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import * as Dialog from "#lib/components/ui/dialog/index.js";
-	import { Input } from "#lib/components/ui/input/index.js";
 	import { t } from "#lib/i18n/index.js";
 	import type { AssistantFlow } from "./assistant-flow.svelte.js";
 
@@ -14,51 +13,15 @@
 	// the confirmation of a new conversation and of a resumed one. They sit beside the panel's own <dialog>, not inside it: the
 	// Escape of one must not reach the panel's handler (which closes the docked panel).
 	let { flow }: { flow: AssistantFlow } = $props();
-	const uid = $props.id();
-
-	// ---- name ----
-	let draft = $state(""), pending = $state(false), failed = $state(false), input = $state<HTMLInputElement | null>(null);
-	$effect(() => {
-		if (!flow.saveOpen) return;
-		draft = assistant.saved?.title || defaultTitle();
-		failed = false;
-		// the name is selected: typing replaces it, Enter keeps it (after the dialog has taken the focus)
-		void tick().then(tick).then(() => { input?.focus(); input?.select(); });
-	});
-	async function submit(e: SubmitEvent) {
-		e.preventDefault();
-		const title = draft.replace(/\s+/g, " ").trim();
-		if (!title || pending) return;
-		pending = true; failed = false;
-		try { await flow.submitName(title); flow.saveOpen = false; } catch { failed = true; } finally { pending = false; }
-	}
 
 	// a choice that closes its dialog first, so that what it starts (another dialog, a new conversation) finds the page free
 	const choose = (close: () => void, go: () => void) => () => { close(); go(); };
 </script>
 
-<Dialog.Root bind:open={flow.saveOpen} title={t("assistant.saveDialog.title")} description={t("assistant.saveDialog.text")} onclose={() => { flow.cancelSave(); flow.closed(); }}>
-	<form id="{uid}-name" onsubmit={submit} class="flex flex-col gap-1.5">
-		<label for="{uid}-title" class="text-sm font-medium">{t("assistant.saveDialog.label")}</label>
-		<Input id="{uid}-title" bind:ref={input} bind:value={draft} maxlength={120} required autocomplete="off" />
-		{#if failed}<p role="alert" class="text-destructive text-sm">{t("assistant.save.failed")}</p>{/if}
-	</form>
-	{#snippet actions()}
-		<Button variant="outline" onclick={() => (flow.saveOpen = false)}>{t("common.cancel")}</Button>
-		<Button type="submit" form="{uid}-name" disabled={pending || !draft.trim()}>{t("assistant.saveDialog.confirm")}</Button>
-	{/snippet}
-</Dialog.Root>
+<NameDialog bind:open={flow.saveOpen} heading={t("assistant.saveDialog.title")} description={t("assistant.saveDialog.text")} label={t("assistant.saveDialog.label")} confirm={t("assistant.saveDialog.confirm")} failure={t("assistant.save.failed")}
+	value={assistant.saved?.title || defaultTitle()} onsave={(title) => flow.submitName(title)} onclose={() => { flow.cancelSave(); flow.closed(); }} />
 
-<Dialog.Root bind:open={flow.signInOpen} title={t("assistant.signInDialog.title")} description={t("assistant.signInDialog.text")} onclose={() => flow.closed()}>
-	<div class="flex flex-col gap-2">
-		{#each account.methods as provider (provider.id)}
-			<Button onclick={() => account.signIn(provider.id)}><Icon name="sign-in" size={16} />{t("account.signInWith", { label: provider.label })}</Button>
-		{/each}
-	</div>
-	{#snippet actions()}
-		<Button variant="outline" onclick={() => (flow.signInOpen = false)}>{t("common.cancel")}</Button>
-	{/snippet}
-</Dialog.Root>
+<SignInDialog bind:open={flow.signInOpen} heading={t("assistant.signInDialog.title")} text={t("assistant.signInDialog.text")} onclose={() => flow.closed()} />
 
 <Dialog.Root bind:open={flow.newOpen} title={t("assistant.newDialog.title")} description={account.me ? t("assistant.newDialog.unsaved") : t("assistant.newDialog.anonymous")} onclose={() => flow.closed()}>
 	{#snippet actions()}

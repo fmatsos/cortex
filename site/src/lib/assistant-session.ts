@@ -2,7 +2,7 @@ import { ApiError } from "./api";
 import { assistant, keysOf, type Segment, type SavedTurn, type Turn } from "./assistant.svelte";
 import { conversationActions, createConversation, getConversation, updateConversation, type Conversation } from "./conversations";
 import { conversationFilename, conversationMarkdown, normalizeTitle } from "./conversation-markdown";
-import { toRoute } from "./links";
+import { download, siteUrl } from "./export-file";
 import { loadEngine } from "./search-client";
 import { account } from "./account.svelte";
 
@@ -47,22 +47,9 @@ export async function saveConversation(title?: string): Promise<SaveResult> {
 
 // ---- export -----------------------------------------------------------------------------------------------------------
 
-/** The site's root as a URL with a trailing slash, wherever the site is served from (a sub-path included). */
-const siteUrl = () => { const u = new URL(toRoute("/"), location.href); return `${u.origin}${u.pathname.replace(/\/?$/, "/")}`; };
 /** Page titles for the Sources list; without the index (a failure to load it) the ids stand in. */
 async function pageTitles(): Promise<(id: string) => string | undefined> {
 	try { const docs = (await loadEngine()).docs; const by = new Map(docs.map((d) => [d.id, d.title])); return (id) => by.get(id); } catch { return () => undefined; }
-}
-
-/** Offers `text` as a file download (Blob and a link: no server involved). */
-export function download(name: string, text: string) {
-	const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
-	const a = document.createElement("a");
-	a.href = url; a.download = name; a.hidden = true;
-	document.body.append(a);
-	a.click();
-	a.remove();
-	setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** Downloads the conversation on screen (its answered exchanges) as Markdown. */

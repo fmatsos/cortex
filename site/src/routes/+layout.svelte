@@ -22,11 +22,13 @@
 	import { assistant } from "#lib/assistant.svelte.js";
 	import { account } from "#lib/account.svelte.js";
 	import { registerConversationActions } from "#lib/assistant-session.js";
+	import { registerJourneyActions } from "#lib/journeys.js";
 	import AuthNotice from "#lib/components/auth-notice.svelte";
 
 	let { children, data } = $props();
-	// what the account page can do with a saved conversation (resume in the panel, export): before its first render
+	// what the account page can do with a saved conversation (resume in the panel, export) and journey (export): before its first render
 	registerConversationActions();
+	registerJourneyActions();
 	const f = $derived(data.footer);
 	const fmtDate = (d: string) => {
 		const at = new Date(d);

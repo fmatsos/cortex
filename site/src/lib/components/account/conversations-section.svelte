@@ -9,7 +9,7 @@
 	import ConfirmDialog from "./confirm-dialog.svelte";
 	import { day } from "./format";
 	import ListSection from "./list-section.svelte";
-	import RenameDialog from "./rename-dialog.svelte";
+	import NameDialog from "./name-dialog.svelte";
 	import RowAction from "./row-action.svelte";
 	import Row from "./row.svelte";
 
@@ -79,7 +79,7 @@
 	{/each}
 </ListSection>
 
-<RenameDialog bind:open={renameOpen} heading={t("account.conversation.renameTitle")} value={renaming?.title ?? ""} onsave={async (title) => {
+<NameDialog bind:open={renameOpen} heading={t("account.conversation.renameTitle")} value={renaming?.title ?? ""} onsave={async (title) => {
 	const target = renaming;
 	if (!target) return;
 	const saved = await renameConversation(target.id, title);
