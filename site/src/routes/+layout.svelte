@@ -114,16 +114,17 @@
 	<div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
 		<p>
 			<a href={toRoute("/")} class="text-foreground font-semibold tracking-tight">Cortex</a>
-			<span aria-hidden="true">&nbsp;·&nbsp;</span>{t("footer.generated")} <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>
+			{#if f}<span aria-hidden="true">&nbsp;·&nbsp;</span>{t("footer.generated")} <time datetime={f.generatedAt}>{fmtDate(f.generatedAt)}</time>{/if}
 		</p>
-		<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label={t("footer.stats")}>
+		<!-- the layout data is absent on the static 404 fallback (no __data.json): the stats are skipped there -->
+		{#if f}<ul class="flex flex-wrap gap-x-4 gap-y-1" aria-label={t("footer.stats")}>
 			<li><a href="{toRoute('/search')}?q=" class="hover:text-foreground">{t("footer.pages", { count: f.pages })}</a>
 				<span class="text-xs">({t("footer.concepts", { count: f.concepts })}, {t("footer.entities", { count: f.entities })}, {t("footer.syntheses", { count: f.syntheses })}, {t("footer.sources", { count: f.sources })})</span></li>
 			<li><a href={toRoute("/graph")} class="hover:text-foreground">{t("footer.links", { count: f.links })}</a></li>
 			<li><a href={toRoute("/tags")} class="hover:text-foreground">{t("footer.tags", { count: f.tags })}</a></li>
 			{#if features.review}<li><a href="{toRoute('/search')}?q={encodeURIComponent(token('is', 'verified'))}" class="hover:text-foreground">{t("footer.reviewed", { verified: f.verified, pages: f.pages })}</a></li>{/if}
 			<li><a href={toRoute("/log")} class="hover:text-foreground">{t("footer.log", { count: f.log })}</a></li>
-		</ul>
+		</ul>{/if}
 	</div>
 </footer>
 
