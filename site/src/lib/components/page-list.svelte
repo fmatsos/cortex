@@ -27,7 +27,7 @@
 				class="touch-target hover:bg-muted aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:border-foreground/40 focus-visible:ring-ring/50 inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 text-sm focus-visible:ring-3"
 			>
 				<Icon name={typeIcon(t)} size={16} style="color: {typeColor(t)}" />
-				{typeLabel(t)} <span class="text-muted-foreground">{pages.filter((p) => p.type === t).length}</span>
+				{typeLabel(t)} <span class="text-muted-foreground tabular-nums">{pages.filter((p) => p.type === t).length}</span>
 			</button>
 		{/each}
 	</div>

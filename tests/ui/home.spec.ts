@@ -139,7 +139,7 @@ test("news: sentences are 16 px, meta lines 14 px, day headings in the sans fami
   const px = (sel: string, prop: string) => news.locator(sel).first().evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
   expect(await px("ol ol > li > p:nth-of-type(1)", "font-size")).toBe("16px");
   expect(await px("ol ol > li > p:nth-of-type(2)", "font-size")).toBe("14px");
-  expect(await px("ol > li > h3", "font-family")).toContain("Hauora Sans");
+  expect(await px("ol > li > h3", "font-family")).toContain("Inter");
 });
 
 test("no horizontal overflow of the home page at 390", async ({ page }) => {

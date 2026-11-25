@@ -104,7 +104,7 @@
 				{/if}
 				{#if stale}<TrustIcon icon="stale" label={`${t("page.staleSince")} ${day(p.stale_after)}`} />{/if}
 			</div>
-			<h1 class="mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
+			<h1 class="font-display mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
 			<p class="text-muted-foreground mt-2">{p.description}</p>
 			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} reviewable={features.review && (!verified || needsReview)} onreviewed={(r) => (reviewedHere[p.id] = r)} /></div>
 			{#if p.tags.length}
@@ -177,13 +177,13 @@
 			<dl class="space-y-2">
 				{#if p.generated}
 					<div class="flex items-start gap-2">
-						<div><dt class="text-muted-foreground text-xs">{t("page.writtenBy")}</dt><dd><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
+						<div><dt class="text-muted-foreground text-xs">{t("page.writtenBy")}</dt><dd class="tabular-nums"><span class="font-medium">{actor(p.generated.by)}</span> · <time datetime={p.generated.at}>{day(p.generated.at)}</time></dd></div>
 					</div>
 				{/if}
 				{#if features.review}
 				<div class="flex items-start gap-2">
 					{#if verified}
-						<div><dt class="text-muted-foreground text-xs">{t("page.reviewer")}</dt><dd><span class="font-medium">{actor(verified.by)}</span> · <time datetime={verified.at}>{day(verified.at)}</time></dd></div>
+						<div><dt class="text-muted-foreground text-xs">{t("page.reviewer")}</dt><dd class="tabular-nums"><span class="font-medium">{actor(verified.by)}</span> · <time datetime={verified.at}>{day(verified.at)}</time></dd></div>
 					{:else}
 						<div><dt class="sr-only">{t("page.review")}</dt><dd class="text-muted-foreground">{t("page.neverReviewedCap")}</dd></div>
 					{/if}

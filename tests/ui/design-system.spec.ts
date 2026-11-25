@@ -27,13 +27,17 @@ test("the page loads with one h1, its landmarks and no error", async ({ page }) 
   for (const id of ["couleurs", "typographie", "formes", "icones", "composants", "marque"]) await expect(page.locator(`section#${id} > h2`)).toBeVisible();
 });
 
-test("fonts: Hauora Sans for the interface, Cascadia Code for code, both loaded", async ({ page }) => {
+test("fonts: Inter for the interface, Hauora Sans for editorial headings, Source Serif 4 for prose, Cascadia Code for code, all loaded", async ({ page }) => {
   await page.goto(URL);
   const code = page.locator("main code").first();
   await expect(code).toHaveCSS("font-family", /^"Cascadia Code"/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-family", /^"Hauora Sans"/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-family", /^Inter,/);
+  await expect(page.locator("main .wiki h2").first()).toHaveCSS("font-family", /^"Hauora Sans"/);
+  await expect(page.locator("main .wiki p").first()).toHaveCSS("font-family", /^"Source Serif 4"/);
   await page.evaluate(() => document.fonts.ready);
-  expect(await page.evaluate(() => document.fonts.check('14px "Cascadia Code"', "x != y"))).toBe(true);
+  for (const font of ['14px "Cascadia Code"', '16px Inter', '600 16px "Hauora Sans"', '16px "Source Serif 4"']) {
+    expect(await page.evaluate((f) => document.fonts.check(f, "x != y"), font), font).toBe(true);
+  }
 });
 
 test("every icon of the pack is shown and every use resolves to its symbol", async ({ page }) => {
