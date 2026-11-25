@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "svelte/compiler";
 import { parseHTML } from "linkedom";
-import { ICON_NAMES, ICONS, SPRITE_ID, ensureSymbol, ensureSymbols, iconSvg, iconUse, referencedIcons, spriteMarkup, strokeFor, symbolId, symbolMarkup, type IconName } from "../site/src/lib/icons";
+import { ICON_NAMES, ICONS, SPRITE_ID, VIEW_BOX, ensureSymbol, ensureSymbols, iconKey, iconSvg, iconUse, referencedIcons, spriteMarkup, symbolId, symbolMarkup, type IconName } from "../site/src/lib/icons";
+import { existsSync } from "node:fs";
+import { buildBlock, isStale, loadMap, phosphorFile } from "../scripts/build-icons";
 import { handle } from "../site/src/hooks.server";
 import { md, noteCallouts } from "./export";
 import { KINDS, TYPES, kindIcon, kindLabel, statusMeta, typeIcon } from "../site/src/lib/type-meta";
@@ -11,76 +13,57 @@ import { setLocale } from "../site/src/lib/i18n/index";
 
 const SITE = join(import.meta.dir, "../site/src");
 
-// The icons of the « Icon pack » section of the review: each name must exist.
+// The icons of the « Icon pack » section of the review: each name must exist (the names are the public API).
 const WANTED = `home search graph tags journal favorites concept entity synthesis source draft stable deprecated verified unverified needs-review stale star
 copy-link copy-markdown success error sun moon system filter operator-tag operator-type operator-status operator-phrase operator-exclude recent clear toc
 chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated assistant kind-query kind-lint kind-update zoom-in zoom-out
-fit-view pause play close-selection list-view offline offline-ready retry new-tab language`.split(/\s+/);
+fit-view pause play close-selection list-view offline offline-ready retry new-tab language star-filled`.split(/\s+/);
+
+const MAP = loadMap();
 
 test("le pack contient toutes les icônes demandées, et seulement elles", () => {
   expect([...(ICON_NAMES as readonly string[])].sort()).toEqual([...WANTED].sort());
   expect(new Set(ICON_NAMES).size).toBe(ICON_NAMES.length);
 });
 
-// --- minimal reading of a `d` attribute: commands, argument count, absolute endpoints ---
-const ARGS: Record<string, number> = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0 };
-function endpoints(d: string): [number, number][] {
-  const toks = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/g) ?? [];
-  expect(toks.join("").length, "caractères inattendus dans d").toBeGreaterThan(0);
-  expect(d.replace(/[a-zA-Z\s,]|-?(?:\d+\.?\d*|\.\d+)/g, ""), `reste inattendu dans d="${d}"`).toBe("");
-  const pts: [number, number][] = [];
-  let x = 0, y = 0, sx = 0, sy = 0, i = 0, cmd = "";
-  const num = () => {
-    const t = toks[i++];
-    if (t === undefined || /[a-zA-Z]/.test(t)) throw new Error(`argument numérique attendu dans d="${d}"`);
-    return Number(t);
-  };
-  while (i < toks.length) {
-    if (/[a-zA-Z]/.test(toks[i])) cmd = toks[i++];
-    const rel = cmd === cmd.toLowerCase(), c = cmd.toLowerCase();
-    if (!(c in ARGS)) throw new Error(`commande inconnue ${cmd}`);
-    if (c === "z") { x = sx; y = sy; continue; }
-    if (i >= toks.length || /[a-zA-Z]/.test(toks[i])) throw new Error(`arguments manquants pour ${cmd} dans d="${d}"`);
-    if (c === "a") {
-      const [rx, ry] = [num(), num()]; num(); // rotation
-      const [large, sweep] = [num(), num()];
-      expect(rx > 0 && ry > 0, `rayon d'arc positif dans d="${d}"`).toBe(true);
-      expect([0, 1].includes(large) && [0, 1].includes(sweep), `drapeaux d'arc dans d="${d}"`).toBe(true);
-      const [ex, ey] = [num(), num()];
-      x = rel ? x + ex : ex; y = rel ? y + ey : ey;
-    } else if (c === "h") { const v = num(); x = rel ? x + v : v; }
-    else if (c === "v") { const v = num(); y = rel ? y + v : v; }
-    else {
-      const a = Array.from({ length: ARGS[c] }, num);
-      const [ex, ey] = [a[a.length - 2], a[a.length - 1]];
-      x = rel ? x + ex : ex; y = rel ? y + ey : ey;
-      if (c === "m") { sx = x; sy = y; cmd = rel ? "l" : "L"; }
-    }
-    pts.push([x, y]);
+test("design/icons.json : chaque nom pointe vers un fichier Phosphor existant (Light, ou Fill pour les variantes pleines)", () => {
+  expect(Object.keys(MAP.icons).length).toBeGreaterThan(0);
+  expect(Object.keys({ ...MAP.icons, ...MAP.filled }).sort()).toEqual([...WANTED].sort());
+  for (const [name, phosphor] of Object.entries(MAP.icons)) expect(existsSync(phosphorFile(phosphor, "light")), `${name} -> ${phosphor}-light.svg`).toBe(true);
+  for (const [name, phosphor] of Object.entries(MAP.filled)) {
+    expect(existsSync(phosphorFile(phosphor, "fill")), `${name} -> ${phosphor}-fill.svg`).toBe(true);
+    expect(name.endsWith("-filled") && Object.hasOwn(MAP.icons, name.slice(0, -"-filled".length)), `${name}: a filled variant belongs to an existing icon`).toBe(true);
   }
-  return pts;
-}
-test("lecteur de chemin : cas connus", () => {
-  expect(endpoints("M4 4h16v16H4z")).toEqual([[4, 4], [20, 4], [20, 20], [4, 20]]);
-  expect(endpoints("m5 12 4.8 4.8L19 7.5")[2]).toEqual([19, 7.5]);
-  expect(() => endpoints("M4")).toThrow();
-  expect(() => endpoints("M4 4X5 5")).toThrow();
 });
 
-const SHAPES = new Set(["path", "circle", "rect", "g"]);
-const MARGIN = 1.5; // optical margin of 2, with the tolerance of mitered joins
+test("deux sens différents n'ont jamais la même icône Phosphor (hors les paires de même sens)", () => {
+  const SAME_MEANING = [["favorites", "star"], ["clear", "close-selection"]];
+  const byGlyph = new Map<string, string[]>();
+  for (const [name, phosphor] of Object.entries(MAP.icons)) byGlyph.set(phosphor, [...(byGlyph.get(phosphor) ?? []), name]);
+  const shared = [...byGlyph.values()].filter((names) => names.length > 1).map((names) => names.sort());
+  expect(shared).toEqual(SAME_MEANING.map((p) => [...p].sort()));
+});
 
-test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
+test("le générateur : le bloc d'icons.ts est à jour avec design/icons.json et Phosphor (--check)", () => {
+  expect(isStale()).toBe(false);
+  const out = Bun.spawnSync(["bun", join(import.meta.dir, "../scripts/build-icons.ts"), "--check"]);
+  expect(out.exitCode, new TextDecoder().decode(out.stderr)).toBe(0);
+  const block = buildBlock(MAP);
+  for (const name of ICON_NAMES) expect(block, name).toContain(ICONS[name]);
+});
+
+const strip = (h: string) => h.replace(/<!--.*?-->|\s+/g, "");
+
+const SHAPES = new Set(["path"]);
+
+test.each(ICON_NAMES)("l'icône %s produit un SVG valide : grille 256, currentColor, aucun trait", (name) => {
   const { document } = parseHTML(`<!doctype html><body>${iconSvg(name, { size: 20 })}`);
   const svg = document.querySelector("svg")!;
   expect(svg).toBeTruthy();
-  expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
-  expect(svg.getAttribute("fill")).toBe("none");
-  expect(svg.getAttribute("stroke")).toBe("currentColor");
-  expect(svg.getAttribute("stroke-width")).toBe("1.75");
-  expect(svg.getAttribute("stroke-linecap")).toBe("butt");
-  expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
-  expect(svg.getAttribute("stroke-miterlimit")).toBe("2");
+  expect(svg.getAttribute("viewBox")).toBe("0 0 256 256");
+  expect(VIEW_BOX).toBe("0 0 256 256");
+  expect(svg.getAttribute("fill")).toBe("currentColor");
+  for (const a of ["stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit"]) expect(svg.getAttribute(a), `${name}: ${a}`).toBeNull();
   expect(svg.getAttribute("aria-hidden")).toBe("true"); // decorative by default
   expect(svg.getAttribute("role")).toBeNull();
 
@@ -89,48 +72,13 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   for (const el of shapes) {
     const tag = el.tagName.toLowerCase();
     expect(SHAPES.has(tag), `élément ${tag} non prévu`).toBe(true);
-    // square language: no rounded rectangle, no `ry`
-    expect(el.getAttribute("rx"), "rx interdit (angles droits)").toBeNull();
-    expect(el.getAttribute("ry"), "ry interdit (angles droits)").toBeNull();
-    if (el.getAttribute("fill") !== null) {
-      // the only own fill: a dot, a real 2x2 square (a zero-length segment vanishes with butt ends)
-      expect(tag, "seul un rect peut se remplir").toBe("rect");
-      expect(el.getAttribute("fill")).toBe("currentColor");
-      expect(el.getAttribute("stroke")).toBe("none");
-      expect([el.getAttribute("width"), el.getAttribute("height")]).toEqual(["2", "2"]);
-    } else expect(el.getAttribute("stroke"), "trait propre à une forme").toBeNull();
-    if (tag === "g") continue; // transformed group (copy-link): extent computed after rotation, checked by eye
-    const inside = !el.closest("g");
-    if (tag === "path") {
-      const d = el.getAttribute("d");
-      expect(d, "path sans d").toBeTruthy();
-      for (const [px, py] of endpoints(d!)) if (inside) for (const v of [px, py]) { expect(v).toBeGreaterThanOrEqual(MARGIN); expect(v).toBeLessThanOrEqual(24 - MARGIN); }
-    } else if (tag === "circle") {
-      const [cx, cy, r] = ["cx", "cy", "r"].map((a) => Number(el.getAttribute(a)));
-      expect([cx, cy, r].every(Number.isFinite) && r > 0).toBe(true);
-      for (const c of [cx, cy]) { expect(c - r).toBeGreaterThanOrEqual(MARGIN); expect(c + r).toBeLessThanOrEqual(24 - MARGIN); }
-    } else {
-      const [x, y, w, h] = ["x", "y", "width", "height"].map((a) => Number(el.getAttribute(a)));
-      expect([x, y, w, h].every(Number.isFinite) && w > 0 && h > 0).toBe(true);
-      expect(x).toBeGreaterThanOrEqual(MARGIN); expect(y).toBeGreaterThanOrEqual(MARGIN);
-      expect(x + w).toBeLessThanOrEqual(24 - MARGIN); expect(y + h).toBeLessThanOrEqual(24 - MARGIN);
-    }
+    for (const a of ["stroke", "stroke-width", "fill", "style", "transform"]) expect(el.getAttribute(a), `${name}: ${a} sur <${tag}>`).toBeNull();
+    expect(el.getAttribute("d"), "path sans d").toBeTruthy();
   }
+  expect(ICONS[name], `${name}: markup brut sans stroke`).not.toMatch(/stroke/);
 });
 
-test("contrat carré : aucun rx, aucun point h.01, aucun segment de longueur nulle", () => {
-  for (const name of ICON_NAMES) {
-    const body = ICONS[name];
-    expect(body, `${name}: rx`).not.toMatch(/\brx=|\bry=/);
-    expect(body, `${name}: point h.01`).not.toMatch(/[hv]\.0\d?(?![\d])/);
-    expect(body, `${name}: segment nul`).not.toMatch(/[hv]0(?![\d.])/);
-  }
-  // dots exist where the old pack had them (list-view, fit-view, tags...)
-  expect(ICONS["list-view"].match(/<rect /g)?.length).toBe(3);
-  expect(ICONS["fit-view"]).toContain('fill="currentColor"');
-});
-
-test("iconSvg : étiquette, remplissage et trait optique", () => {
+test("iconSvg : étiquette et variante pleine", () => {
   const { document } = parseHTML(`<!doctype html><body>${iconSvg("star", { size: 16, filled: true, label: "Favori <ok>" })}`);
   const svg = document.querySelector("svg")!;
   expect(svg.getAttribute("fill")).toBe("currentColor");
@@ -138,13 +86,15 @@ test("iconSvg : étiquette, remplissage et trait optique", () => {
   expect(svg.getAttribute("aria-label")).toBe("Favori <ok>");
   expect(svg.getAttribute("aria-hidden")).toBeNull();
   expect(svg.getAttribute("width")).toBe("16");
-  expect(svg.getAttribute("stroke-width")).toBe("2");
-  expect(strokeFor(20)).toBe(1.75);
-  expect(strokeFor(24)).toBe(1.75);
-  expect(strokeFor(16)).toBe(2);
+  expect(svg.getAttribute("stroke-width")).toBeNull();
+  expect(strip(svg.innerHTML)).toBe(strip(ICONS["star-filled"]));
+  expect(iconSvg("star")).toContain(ICONS.star);
+  expect(ICONS["star-filled"]).not.toBe(ICONS.star);
+  // an icon without a Fill variant is drawn as is
+  expect(iconKey("search", true)).toBe("search");
+  expect(iconKey("star", true)).toBe("star-filled");
+  expect(iconKey("star")).toBe("star");
 });
-
-const strip = (h: string) => h.replace(/<!--.*?-->|\s+/g, "");
 
 // Compiles the Svelte components for server rendering, once for the whole file.
 async function ssr() {
@@ -186,14 +136,14 @@ test("spriteMarkup : un symbole par nom demandé, ids uniques, contenu du pack, 
   expect(style, "display:none breaks <use> in some browsers").not.toMatch(/display\s*:\s*none/);
   const ids = [...document.querySelectorAll("symbol")].map((s) => s.getAttribute("id")!);
   expect(ids).toEqual(["cx-search", "cx-warning"]);
-  // the whole pack: every symbol present once, with the pack's content, and no stroke contract on the symbol
+  // the whole pack: every symbol present once, with the pack's content, and no paint attributes on the symbol (the instance carries currentColor)
   const full = parseHTML(`<!doctype html><body>${spriteMarkup(ICON_NAMES)}`).document;
   const all = [...full.querySelectorAll("symbol")].map((s) => s.getAttribute("id")!);
   expect(new Set(all).size, "ids de symboles uniques").toBe(all.length);
   expect(all.sort()).toEqual(ICON_NAMES.map(symbolId).sort());
   for (const name of ICON_NAMES) {
     const sym = full.getElementById(symbolId(name))!;
-    expect(sym.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(sym.getAttribute("viewBox")).toBe("0 0 256 256");
     expect(strip(sym.innerHTML), name).toBe(strip(ICONS[name]));
     for (const a of ["stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "fill"]) expect(sym.getAttribute(a), `${name}: ${a} sur le symbole`).toBeNull();
   }
@@ -239,7 +189,7 @@ test("le client et le build produisent le même symbole ; ensureSymbols ne compl
   ensureSymbol("search", d2);
   ensureSymbol("constructor", d2);
   expect(writes).toEqual([symbolMarkup("warning"), symbolMarkup("search")]);
-  expect(symbolMarkup("note")).toBe(`<symbol id="cx-note" viewBox="0 0 24 24">${ICONS.note}</symbol>`);
+  expect(symbolMarkup("note")).toBe(`<symbol id="cx-note" viewBox="0 0 256 256">${ICONS.note}</symbol>`);
   expect(spriteMarkup(["note"])).toContain(symbolMarkup("note"));
 });
 
@@ -256,15 +206,11 @@ test("le composant Icon : un <use> du sprite, sans géométrie ; décorative par
     expect(out, `${name}: no geometry per use`).not.toMatch(/<(path|circle|rect|g)[\s>]/);
     expect(out, `${name}: no path data per use`).not.toMatch(/\bd="/);
     expect(svg.getAttribute("width")).toBe("20");
-    expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
-    expect(svg.getAttribute("fill")).toBe("none");
-    expect(svg.getAttribute("stroke")).toBe("currentColor");
+    expect(svg.getAttribute("viewBox")).toBe("0 0 256 256");
+    expect(svg.getAttribute("fill")).toBe("currentColor");
     expect(svg.getAttribute("aria-hidden")).toBe("true");
     expect(svg.getAttribute("role")).toBeNull();
-    expect(svg.getAttribute("stroke-width")).toBe("1.75");
-    expect(svg.getAttribute("stroke-linecap")).toBe("butt");
-    expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
-    expect(svg.getAttribute("stroke-miterlimit")).toBe("2");
+    for (const a of ["stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit"]) expect(svg.getAttribute(a), `${name}: ${a}`).toBeNull();
   }
   // no instance repeats any icon geometry: it is written once, in the sprite
   for (const body of Object.values(ICONS)) expect(all).not.toContain(body);
@@ -273,17 +219,21 @@ test("le composant Icon : un <use> du sprite, sans géométrie ; décorative par
   expect(labelled.getAttribute("role")).toBe("img");
   expect(labelled.getAttribute("aria-label")).toBe("Rechercher");
   expect(labelled.getAttribute("aria-hidden")).toBeNull();
-  expect(doc({ name: "star", filled: true }).getAttribute("fill")).toBe("currentColor");
-  expect(doc({ name: "star", size: 16 }).getAttribute("stroke-width")).toBe("2");
+  // `filled` swaps the symbol for the Fill weight; an icon without one is unchanged
+  expect(doc({ name: "star", filled: true }).querySelector("use")!.getAttribute("href")).toBe("#cx-star-filled");
+  expect(doc({ name: "star" }).querySelector("use")!.getAttribute("href")).toBe("#cx-star");
+  expect(doc({ name: "search", filled: true }).querySelector("use")!.getAttribute("href")).toBe("#cx-search");
 });
 
-test("iconUse : référence au sprite avec le contrat de trait sur l'instance", () => {
+test("iconUse : référence au sprite, currentColor sur l'instance, aucun trait", () => {
   const svg = parseHTML(`<!doctype html><body>${iconUse("note", { class: "callout-icon" })}`).document.querySelector("svg")!;
   expect(svg.getAttribute("class")).toBe("callout-icon");
   expect(svg.getAttribute("aria-hidden")).toBe("true");
-  expect(svg.getAttribute("stroke-linecap")).toBe("butt");
-  expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
+  expect(svg.getAttribute("viewBox")).toBe("0 0 256 256");
+  expect(svg.getAttribute("fill")).toBe("currentColor");
+  expect(svg.getAttribute("stroke")).toBeNull();
   expect(svg.querySelector("use")!.getAttribute("href")).toBe("#cx-note");
+  expect(iconUse("star", { filled: true })).toContain('href="#cx-star-filled"');
 });
 
 test("les encarts exportés référencent le sprite ; plus aucun masque CSS dupliqué", () => {

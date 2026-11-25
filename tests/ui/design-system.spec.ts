@@ -27,6 +27,15 @@ test("the page loads with one h1, its landmarks and no error", async ({ page }) 
   for (const id of ["couleurs", "typographie", "formes", "icones", "composants", "marque"]) await expect(page.locator(`section#${id} > h2`)).toBeVisible();
 });
 
+test("fonts: Hauora Sans for the interface, Cascadia Code for code, both loaded", async ({ page }) => {
+  await page.goto(URL);
+  const code = page.locator("main code").first();
+  await expect(code).toHaveCSS("font-family", /^"Cascadia Code"/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-family", /^"Hauora Sans"/);
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.fonts.check('14px "Cascadia Code"', "x != y"))).toBe(true);
+});
+
 test("every icon of the pack is shown and every use resolves to its symbol", async ({ page }) => {
   await page.goto(URL);
   for (const name of ICON_NAMES) await expect(page.locator(`[data-icon="${name}"]`)).toHaveCount(1);
