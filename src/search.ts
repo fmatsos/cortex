@@ -1,118 +1,99 @@
-import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { EMBED, nearest } from "./embed";
-import { isReservedPage, parseDoc } from "./lib";
-import { warn } from "./style";
+import { EMBED, queryUnits } from "./embed";
+import { buildIndex, fold, type Index, type Kind } from "./search-index";
 import { LIMITS } from "./limits";
 
-export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number };
+/** `match`: how the page was found, by its words (or a typo of its title), by its meaning, or both. */
+export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: string; score: number; match: "lexical" | "semantic" | "both" };
 
-const AREAS = ["wiki", "raw"] as const;
-/** Bump when the tables or the indexed text change: an older cache is dropped and rebuilt. */
-const CACHE_VERSION = 1;
-
-type FileRow = { path: string; docid: number; mtime: number; size: number };
-
-/** Brings the index in line with wiki/ and raw/: only the files whose mtime or size changed are read again, the removed ones are dropped. */
-async function sync(db: Database, root: string) {
-  if ((db.query("PRAGMA user_version").get() as { user_version: number }).user_version !== CACHE_VERSION) {
-    db.run("DROP TABLE IF EXISTS docs"); db.run("DROP TABLE IF EXISTS files");
-    db.run(`CREATE VIRTUAL TABLE docs USING fts5(path UNINDEXED, area UNINDEXED, title, body, tokenize = 'unicode61 remove_diacritics 2')`);
-    db.run("CREATE TABLE files (path TEXT PRIMARY KEY, docid INTEGER, mtime REAL, size INTEGER)");
-    db.run(`PRAGMA user_version = ${CACHE_VERSION}`);
-  }
-  const have = new Map((db.query("SELECT path, docid, mtime, size FROM files").all() as FileRow[]).map((r) => [r.path, r]));
-  const seen = new Set<string>(), todo: { path: string; area: string; mtime: number; size: number }[] = [];
-  for (const area of AREAS) {
-    if (!existsSync(join(root, area))) continue;
-    for (const f of [...new Bun.Glob("**/*.md").scanSync(join(root, area))].sort()) { // sorted: equal scores keep a stable order
-      const path = `${area}/${f}`;
-      if (isReservedPage(path)) continue;
-      const { mtimeMs: mtime, size } = statSync(join(root, path));
-      seen.add(path);
-      const h = have.get(path);
-      if (!h || h.mtime !== mtime || h.size !== size) todo.push({ path, area, mtime, size });
-    }
-  }
-  const fresh = [] as { path: string; area: string; mtime: number; size: number; title: string; body: string }[], bad: string[] = [];
-  for (const t of todo) {
-    try {
-      const d = parseDoc(t.path, await Bun.file(join(root, t.path)).text());
-      fresh.push({ ...t, title: String(d.fm.title ?? ""), body: `${d.fm.description ?? ""}\n${d.fm.note ?? ""}\n${d.body}` });
-    } catch (e) { warn(`page skipped, invalid frontmatter: ${t.path} (${(e as Error).message.split("\n")[0]})`); bad.push(t.path); }
-  }
-  const gone = [...have.keys()].filter((p) => !seen.has(p));
-  if (!fresh.length && !gone.length && !bad.length) return;
-  const docid = db.prepare("SELECT docid FROM files WHERE path = ?"), ins = db.prepare("INSERT INTO docs (path, area, title, body) VALUES (?, ?, ?, ?)");
-  db.transaction(() => { // immediate: two cortex processes syncing at once do not index a file twice
-    const drop = (path: string) => {
-      const r = docid.get(path) as { docid: number } | null;
-      if (r) { db.run("DELETE FROM docs WHERE rowid = ?", [r.docid]); db.run("DELETE FROM files WHERE path = ?", [path]); }
-    };
-    for (const p of [...gone, ...bad]) drop(p);
-    for (const f of fresh) {
-      drop(f.path);
-      db.run("INSERT INTO files VALUES (?, ?, ?, ?)", [f.path, ins.run(f.path, f.area, f.title, f.body).lastInsertRowid, f.mtime, f.size]);
-    }
-  }).immediate();
-}
-
-/**
- * FTS5 index of wiki/ and raw/, persisted in .cortex/search.db and kept up to date by `sync`. If the cache cannot be used (read-only
- * sandbox, corrupt file, busy), the index is built in memory instead, as every search used to: nothing here is ever required to write.
- */
-export async function buildIndex(root: string): Promise<Database> {
-  const file = join(root, ".cortex/search.db");
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let db: Database | undefined;
-    try {
-      mkdirSync(join(root, ".cortex"), { recursive: true });
-      db = new Database(file);
-      db.run("PRAGMA busy_timeout = 5000");
-      await sync(db, root);
-      return db;
-    } catch (e) {
-      db?.close();
-      if (attempt || !/not a database|malformed|corrupt|no such table/i.test((e as Error).message)) break;
-      try { rmSync(file, { force: true }); } catch { break; } // unreadable cache: start again from nothing
-    }
-  }
-  const db = new Database(":memory:");
-  await sync(db, root);
-  return db;
-}
+export { buildIndex };
 
 /** Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. All terms, or `any` of them. */
 export const ftsQuery = (q: string, any = false) =>
   q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? " OR " : " ");
 
+type Row = { id: number; path: string; kind: Kind; area: "wiki" | "raw"; title: string; page: string; snippet?: string };
+const COLS = "d.id, d.path, d.kind, d.area, d.title, p.title AS page";
+const JOIN = "JOIN docs p ON p.id = COALESCE(d.parent, d.id)";
+
+/** Damerau-Levenshtein distance (a swapped pair of letters costs 1: the usual typo). */
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)] as number[]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+const words = (s: string) => fold(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** A query word that has this many letters is looked for with a tolerance for typos in the titles; a shorter one must be there exactly. */
+const FUZZY_MIN = 5;
+const close = (q: string, t: string) => q === t || (q.length >= FUZZY_MIN && (t.includes(q) || (t.length >= FUZZY_MIN && q.includes(t)) || distance(q, t) <= (q.length >= 9 ? 2 : 1)));
+
+/** The pages whose title holds every word of the query, give or take a typo (trigrams find the candidates, a distance confirms). */
+function fuzzyTitles(ix: Index, q: string, area?: string): Row[] {
+  const ws = words(q);
+  const grams = [...new Set(ws.filter((w) => w.length >= FUZZY_MIN).flatMap((w) => Array.from({ length: w.length - 2 }, (_, i) => w.slice(i, i + 3))))].slice(0, 60);
+  if (!grams.length) return []; // words under 5 letters are the words ranking's business
+  const rows = ix.db.query(`SELECT ${COLS} FROM fts_title t JOIN docs d ON d.id = t.rowid ${JOIN} WHERE fts_title MATCH $q ${area ? "AND d.area = $area" : ""} ORDER BY bm25(fts_title), d.path LIMIT 30`)
+    .all({ $q: grams.map((g) => `"${g}"`).join(" OR "), ...(area && { $area: area }) }) as Row[];
+  return rows.filter((r) => { const tw = words(r.title); return ws.every((w) => tw.some((t) => close(w, t))); }).slice(0, EMBED.pool);
+}
+
+const clip = (text: string) => {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length <= LIMITS.snippetChars ? t : `${t.slice(0, t.lastIndexOf(" ", LIMITS.snippetChars) > 40 ? t.lastIndexOf(" ", LIMITS.snippetChars) : LIMITS.snippetChars)}…`;
+};
+
+type Cand = { path: string; area: "wiki" | "raw"; title: string; rrf: number; lexical: boolean; semantic: boolean; units: Map<number, { kind: Kind; weight: number; snippet?: string }> };
+
 /**
- * BM25 over the title (×5) and the text, wiki before raw. With `titles`, the match is on the title only (duplicate check).
- * When semantic search is on and available (embed.ts), the BM25 and the cosine top 50 are fused (RRF); `nearest` never fails
- * the search: without it, the BM25 ranking is the answer.
+ * Hybrid search of wiki/ and raw/ (search-index.ts): three rankings of the pages and sections, fused by reciprocal rank (RRF) and
+ * folded to one result per page, at its best rank, wiki before raw. The rankings: BM25 over the words (title ×4; all of them, or
+ * `any`), the titles that hold the words give or take a typo (trigrams), and, with `embed` configured and indexed, the nearest
+ * vectors. The extract is the one of the page's best section (the page itself when none matched), also for a page found only by its
+ * meaning. With `titles`, the match is on the title only (duplicate check). Vectors never fail the search: unavailable, the
+ * answer is the words'. `score`: lower is better.
  */
 export async function search(root: string, q: string, opts: { in?: "wiki" | "raw"; limit?: number; titles?: boolean; any?: boolean } = {}): Promise<Hit[]> {
   const limit = opts.limit ?? 20;
-  const near = limit > 0 && !opts.titles && opts.in !== "raw" ? await nearest(root, q, EMBED.topK) : undefined;
-  const db = await buildIndex(root);
+  if (limit <= 0) return [];
+  const ix = await buildIndex(root);
   try {
-    const where = opts.in ? "AND area = $area" : "";
-    const rows = db.query(`
-      SELECT path, area, title, snippet(docs, 3, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(docs, 0, 0, 5, 1) AS score
-      FROM docs WHERE docs MATCH $q ${where}
-      ORDER BY area = 'raw', score, path LIMIT $limit`).all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any), $area: opts.in ?? null, $limit: near ? EMBED.topK : limit }) as Hit[];
-    if (!near) return rows;
-    // reciprocal rank fusion; a page only the vectors found has no snippet; wiki stays before raw
-    const rrf = new Map<string, number>();
-    for (const list of [rows, near]) list.forEach((h, i) => rrf.set(h.path, (rrf.get(h.path) ?? 0) + 1 / (EMBED.rrfK + i + 1)));
-    const byPath = new Map(rows.map((r) => [r.path, r]));
-    const only = near.map((n) => n.path).filter((p) => !byPath.has(p));
-    if (only.length) {
-      const sql = `SELECT d.path, d.area, d.title FROM files f JOIN docs d ON d.rowid = f.docid WHERE f.path IN (${only.map(() => "?").join(",")})`;
-      for (const r of db.query(sql).all(...only) as Omit<Hit, "snippet" | "score">[]) byPath.set(r.path, { ...r, snippet: "", score: 0 });
+    const area = opts.in, where = `${area ? "AND d.area = $area" : ""} ${opts.titles ? "AND d.kind = 'page'" : ""}`;
+    const lexical = ix.db.query(`
+      SELECT ${COLS}, snippet(fts, 1, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(fts, 4, 1) AS score
+      FROM fts JOIN docs d ON d.id = fts.rowid ${JOIN} WHERE fts MATCH $q ${where}
+      ORDER BY d.area = 'raw', score, d.path LIMIT $pool`)
+      .all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any), $pool: EMBED.pool, ...(area && { $area: area }) }) as Row[];
+    const fuzzy = opts.titles ? [] : fuzzyTitles(ix, q, area);
+    const near = !opts.titles && area !== "raw" && q.trim() ? await queryUnits(root, ix, q) : undefined;
+    let sem: Row[] = [];
+    if (near?.length) {
+      const score = new Map(near.map((n) => [n.id, n.score]));
+      sem = (ix.db.query(`SELECT ${COLS} FROM docs d ${JOIN} WHERE d.id IN (${near.map(() => "?").join(",")})`).all(...near.map((n) => n.id)) as Row[])
+        .sort((a, b) => score.get(b.id)! - score.get(a.id)! || a.id - b.id);
     }
-    return [...byPath.values()].map((h) => ({ ...h, score: -(rrf.get(h.path) ?? 0) }))
-      .sort((a, b) => Number(a.area === "raw") - Number(b.area === "raw") || a.score - b.score || a.path.localeCompare(b.path)).slice(0, limit);
-  } finally { db.close(); }
+
+    const cands = new Map<string, Cand>();
+    const fuse = (rows: Row[], by: "lexical" | "semantic") => {
+      const seen = new Set<string>();
+      rows.forEach((r, i) => {
+        const c = cands.get(r.path) ?? cands.set(r.path, { path: r.path, area: r.area, title: r.page, rrf: 0, lexical: false, semantic: false, units: new Map() }).get(r.path)!;
+        const u = c.units.get(r.id) ?? c.units.set(r.id, { kind: r.kind, weight: 0 }).get(r.id)!;
+        u.weight += 1 / (EMBED.rrfK + i + 1); // which section is the page's best one
+        if (by === "lexical" && r.snippet !== undefined) u.snippet ??= r.snippet;
+        if (!seen.has(r.path)) { seen.add(r.path); c.rrf += 1 / (EMBED.rrfK + seen.size); c[by] = true; } // the page, at its best unit's place among the pages
+      });
+    };
+    fuse(lexical, "lexical"); fuse(fuzzy, "lexical"); fuse(sem, "semantic");
+
+    const ranked = [...cands.values()].sort((a, b) => Number(a.area === "raw") - Number(b.area === "raw") || b.rrf - a.rrf || a.path.localeCompare(b.path)).slice(0, limit);
+    return ranked.map((c) => {
+      const units = [...c.units.entries()].map(([id, u]) => ({ id, ...u }));
+      const best = units.filter((u) => u.kind === "passage").sort((a, b) => b.weight - a.weight || a.id - b.id)[0] ?? units.sort((a, b) => b.weight - a.weight || a.id - b.id)[0];
+      const snippet = best.snippet ?? clip((ix.db.query("SELECT body FROM docs WHERE id = ?").get(best.id) as { body: string }).body);
+      return { path: c.path, title: c.title, area: c.area, snippet, score: -c.rrf, match: c.lexical && c.semantic ? "both" : c.semantic ? "semantic" : "lexical" } satisfies Hit;
+    });
+  } finally { ix.close(); }
 }

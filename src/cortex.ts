@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import "./sqlite-lib"; // first: the SQLite library must be chosen before any Database of the process
 import { parseArgs } from "node:util";
 import { join } from "node:path";
 import { add, formatAdd, VIA } from "./add";
@@ -239,6 +240,9 @@ try {
         if (t.path) console.log(`${paint.ok("✓")} ${t.name.padEnd(13)} ${paint.dim(t.path)}`);
         else console.log(`${paint.warn("!")} ${t.name.padEnd(13)} missing: ${t.use}; ${paint.dim(t.install)}`);
       }
+      const si = await (await import("./search-index")).searchInfo();
+      console.log(`${paint.ok("✓")} ${"sqlite".padEnd(13)} ${paint.dim(`${si.sqlite}, ${si.library}`)}`);
+      console.log(`${si.knn ? paint.ok("✓") : paint.warn("!")} ${"sqlite-vec".padEnd(13)} ${si.knn ? paint.dim(`${si.vec}, KNN ok`) : paint.dim("not loaded: nearest neighbours computed in JS (fine up to ~10 000 pages)")}`);
       const { pickRemote, remoteVersion, skewed } = await import("./remote");
       const target = pickRemote(o.wiki, hasLocalWiki());
       if (target) {

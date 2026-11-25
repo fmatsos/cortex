@@ -57,9 +57,9 @@ export const LIMITS = {
   dupCandidates: 5,
   /** New page: the judge picks a candidate with at least this probability → creation refused. */
   dupJudge: 0.7,
-  /** New page, no judge: a candidate at least this close (cosine) → creation refused. Not calibrated yet. */
+  /** New page, no judge: a candidate at least this close (cosine) → creation refused. Qwen3-Embedding's value, not calibrated yet; the other models': embed.ts PROFILES. */
   dupCosine: 0.85,
-  /** New page: candidates at least this close (cosine) are listed as a warning when the page is created. Not calibrated yet. */
+  /** New page: candidates at least this close (cosine) are listed as a warning when the page is created. Qwen3-Embedding's value, not calibrated yet; the other models': embed.ts PROFILES. */
   dupWarn: 0.6,
   /** Ingest: pages close in meaning to the source offered to the judge (those it says the source updates go in the compile prompt). */
   routeCandidates: 10,
@@ -72,6 +72,8 @@ export const LIMITS = {
   logEntries: 20,
   /** Tokens of the search snippet (FTS5 `snippet`). */
   snippetTokens: 12,
+  /** Characters of the extract of a result that no word matched (found by its meaning): the start of its best section. */
+  snippetChars: 160,
   /** Site question: wiki pages the search offers the judge, each judged alone against the question. */
   askCandidates: 16,
   /** Site question: a page the judge rates at or above this is retained (given in full to the agent, listed under the answer). */

@@ -1,7 +1,7 @@
 import type { Wiki } from "./context";
 import { loadConfig } from "./config";
 import { fromResource, PAGE_TYPES } from "./doc";
-import { EMBED, similar } from "./embed";
+import { keepRelated, similar } from "./embed";
 import { CortexError, isReservedPage, rawPath, related } from "./lib";
 import { getFile, reasonText } from "./mcp";
 import { collator } from "./text";
@@ -33,7 +33,7 @@ export const showCtx = async (w: Wiki, ref: string) => getFile(w.root, await res
 export async function relatedCtx(w: Wiki, ref: string, limit: number) {
   const path = await resolveRef(w, ref), pages = await w.pages();
   const hits = related(pages, path, await w.linkGraph());
-  for (const n of (await similar(w.root, path, 5))?.filter((n) => n.score >= EMBED.minSimilar) ?? []) {
+  for (const n of await keepRelated(w.root, (await similar(w.root, path, 5)) ?? [])) {
     const h = hits.find((r) => r.path === n.path), p = pages.find((d) => d.path === n.path);
     if (h) { h.score++; h.reasons.push({ kind: "semantic" }); }
     else if (p) hits.push({ path: p.path, title: String(p.fm.title ?? ""), score: 1, reasons: [{ kind: "semantic" }] });

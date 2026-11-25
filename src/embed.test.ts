@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lintConfig } from "./config";
@@ -20,6 +21,15 @@ function fake(port = 0) {
       return Response.json({ data });
     },
   });
+}
+/** The pages and sections of the index that hold a vector, and what the vectors were made with. */
+function stored(root: string) {
+  const db = new Database(join(root, ".cortex/search.db"), { readonly: true });
+  try {
+    const paths = (db.query("SELECT path FROM docs WHERE vkey IS NOT NULL AND kind = 'page' ORDER BY path").all() as { path: string }[]).map((r) => r.path);
+    const meta = Object.fromEntries((db.query("SELECT key, value FROM meta").all() as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+    return { paths, model: meta.model, dims: Number(meta.dims) };
+  } finally { db.close(); }
 }
 const page = (title: string, body: string) => `---\ntype: Concept\ntitle: ${title}\ndescription: D.\n---\n${body}\n`;
 const roots: string[] = [];
@@ -67,9 +77,7 @@ test("refresh: only changed or new pages are embedded, removed ones dropped, ano
   expect(await refresh(root)).toEqual({ embedded: 2, removed: 0 });
   rmSync(join(root, "wiki/concepts/cat2.md"));
   expect(await refresh(root)).toEqual({ embedded: 0, removed: 1 });
-  const store = await Bun.file(join(root, ".cortex/embeddings.json")).json();
-  expect(Object.keys(store.pages).sort()).toEqual(["wiki/concepts/cat1.md", "wiki/concepts/dog.md", "wiki/concepts/new.md"]);
-  expect(store).toMatchObject({ model: "qwen3-embed", dims: 3 });
+  expect(stored(root)).toEqual({ paths: ["wiki/concepts/cat1.md", "wiki/concepts/dog.md", "wiki/concepts/new.md"], model: "qwen3-embed", dims: 3 });
   seen = [];
   await Bun.write(join(root, "cortex.json"), JSON.stringify({ embed: { base_url: `http://localhost:${s.port}/v1`, dims: 3, model: "other" } }));
   expect(await refresh(root)).toEqual({ embedded: 3, removed: 0 });
@@ -82,9 +90,8 @@ test("refresh: a down server keeps what was stored and does not throw", async ()
   await Bun.write(join(root, "wiki/concepts/dog.md"), page("Chien", "Autre texte."));
   s.stop(true);
   expect(await refresh(root)).toEqual({ embedded: 0, removed: 0 });
-  const before = await Bun.file(join(root, ".cortex/embeddings.json")).text();
-  expect(Object.keys(JSON.parse(before).pages)).toHaveLength(3); // dog keeps its old vector...
-  const s2 = fake(Number(new URL((await embedConfig(root))!.url).port)); // ...and is embedded again once the server is back
+  expect(stored(root).paths).toHaveLength(2); // cat2 and cat1 keep theirs, the changed dog waits...
+  const s2 = fake(Number(new URL((await embedConfig(root))!.url).port)); // ...and is embedded once the server is back
   expect(await refresh(root)).toEqual({ embedded: 1, removed: 0 });
   s2.stop(true);
 });
@@ -105,13 +112,14 @@ test("nearest and similar: cosine order; the query carries the instruction, a pa
   s.stop(true);
 });
 
-test("search: BM25 and cosine fused by RRF; a vector-only hit has no snippet; without embeddings, BM25 alone", async () => {
+test("search: words and cosine fused by RRF; a page found by meaning only has an extract and says so; without embeddings, words alone", async () => {
   const s = fake(), root = await wiki(s.port!);
   await refresh(root);
   const hits = await search(root, "chat");
   expect(hits.map((h) => h.path)).toEqual(["wiki/concepts/cat1.md", "wiki/concepts/cat2.md", "wiki/concepts/dog.md"]); // both rankings, then vectors only
   expect(hits[0].snippet).toContain("«chat»");
-  expect(hits[1]).toMatchObject({ title: "Félin", area: "wiki", snippet: "" });
+  expect(hits[1]).toMatchObject({ title: "Félin", area: "wiki", snippet: "D. Un animal domestique.", match: "semantic" }); // the start of its text, no «»
+  expect(hits[0].match).toBe("both");
   expect((await search(root, "chat", { limit: 2 })).map((h) => h.path)).toEqual(["wiki/concepts/cat1.md", "wiki/concepts/cat2.md"]);
   expect((await search(root, "chat", { titles: true })).map((h) => h.path)).toEqual(["wiki/concepts/cat1.md"]); // titles: no vectors
   s.stop(true);

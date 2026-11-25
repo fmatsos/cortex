@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import "./sqlite-lib"; // before any Database: it chooses the SQLite library
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 

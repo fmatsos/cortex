@@ -11,6 +11,7 @@ import { historyPart, lastQuestion, pagesPart, relevantPages, type Core, type Tu
 import { LIMITS } from "./limits";
 import { search } from "./search";
 import { refresh } from "./embed";
+import { searchInfo } from "./search-index";
 import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
@@ -261,5 +262,6 @@ export async function serve(root: string, o: ServeOpts) {
     },
   });
   say(`cortex serve: http://localhost:${server.port}${o.sync ? " (sync: pull before, commit and push after each review)" : ""}`);
+  void searchInfo().then((i) => say(`search: SQLite ${i.sqlite} (${i.library}), sqlite-vec ${i.knn ? i.vec : "not loaded (nearest neighbours in JS)"}`), () => {});
   return server;
 }

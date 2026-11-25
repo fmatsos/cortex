@@ -23,10 +23,15 @@ run lint --json >/dev/null || true # a fresh wiki has warnings; only a crash mat
 run show Fermentation | grep -q "title: Fermentation"
 run related Fermentation >/dev/null
 run doctor >/dev/null
+# the Linux binary carries sqlite-vec: it must load and answer a KNN query (no model is downloaded: embed is off here)
+case "$bin" in *.js) ;; *) if [ "$(uname -s)" = Linux ]; then run doctor | grep -q "KNN ok"; fi ;; esac
 run schema >/dev/null
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   | run mcp | grep -q '"search"'
 run export --out "$w/site" >/dev/null
 test -f "$w/site/index.html"
+# a local embedding model configured but never downloaded: search stays on words (one warning on stderr), nothing is fetched
+printf '{"embed":{"provider":"local"}}\n' > cortex.json
+run search fermentation --json 2>/dev/null | grep -q Fermentation
 echo "build OK: $bin"

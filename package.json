@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.318",
+    "@huggingface/transformers": "4.3.2",
     "@modelcontextprotocol/server": "^2.4",
     "@mozilla/readability": "^0.6",
     "@openai/codex-sdk": "^0.166.0",
@@ -44,6 +45,9 @@
     "linkedom": "^0.18",
     "oauth4webapi": "^3.8.9",
     "sigma": "^4.0.6",
+    "sqlite-vec": "0.1.9",
+    "sqlite-vec-darwin-arm64": "0.1.9",
+    "sqlite-vec-linux-x64": "0.1.9",
     "svelte": "^5.57.3",
     "tailwind-merge": "^3.7.0",
     "tailwind-variants": "^4.0.1",

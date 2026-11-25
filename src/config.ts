@@ -26,6 +26,8 @@ const template = (k: NamingKey) => str(k).superRefine((v, ctx) => {
   const e = v && checkTemplate(k, v);
   if (e) ctx.addIssue({ code: "custom", message: e, input: v });
 });
+/** Where the embeddings come from: a server speaking the OpenAI `/embeddings` API, or the model run inside cortex. */
+export const EMBED_PROVIDERS = ["openai", "local"] as const;
 /** Social networks with a `parser.social.<network>` block (ids of src/social). */
 export const SOCIAL_NETWORKS = ["x", "bluesky", "mastodon", "linkedin"] as const;
 /** Pages a social post links to, captured as sources tied to it: at most `limit` per post (default LIMITS.maxLinkedSources), 0 = none. */
@@ -71,11 +73,18 @@ const SHAPE = {
   max_tags: z.number({ error: '"max_tags" must be an integer of at least 1, or null.' }).int({ error: '"max_tags" must be an integer of at least 1, or null.' }).min(1, { error: '"max_tags" must be an integer of at least 1, or null.' }).nullish(),
   /** Seconds before a URL fetch gives up (default LIMITS.fetchTimeoutMs / 1000); each --via mirror gets that much. */
   fetch_timeout: z.number({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).positive({ error: '"fetch_timeout" must be a number of seconds above 0, or null.' }).nullish(),
-  /** Semantic search (`cortex index` embeds the pages, `search` fuses it with BM25). Absent = off. base_url: default as the openai client's; model: default `qwen3-embed`; dims: default 256. */
+  /**
+   * Hybrid search (`cortex index` embeds the pages and their sections, `search` fuses words, title fragments and vectors).
+   * Absent = off (words only). provider: `openai` (default: an OpenAI-compatible `POST <base_url>/embeddings` server, llama.cpp…)
+   * or `local` (the model runs in this process, downloaded once). model: default `qwen3-embed` (openai), `Xenova/multilingual-e5-small` (local).
+   * base_url: openai only, default as the openai client's. dims: default 256 (qwen3-embed, Matryoshka), else the model's own (384 for e5-small).
+   * threads: local only, ONNX threads of the model (default: 4 or the number of cores if fewer).
+   */
   embed: z.strictObject({
+    provider: z.enum(EMBED_PROVIDERS, { error: (i) => `unknown embed.provider "${String(i.input)}" (${EMBED_PROVIDERS.join(", ")}).` }).nullish(),
     base_url: str("embed.base_url"), model: str("embed.model"),
-    dims: z.number({ error: '"embed.dims" must be an integer of at least 1, or null.' }).int({ error: '"embed.dims" must be an integer of at least 1, or null.' }).min(1, { error: '"embed.dims" must be an integer of at least 1, or null.' }).nullish(),
-  }, { error: '"embed" must be an object (base_url, model, dims), or null.' }).nullish(),
+    dims: count("embed.dims"), threads: count("embed.threads"),
+  }, { error: '"embed" must be an object (provider, base_url, model, dims, threads), or null.' }).nullish(),
   /**
    * Natural-language questions from the site's search bar (`cortex serve`: POST /api/ask), answered by an agent in read mode.
    * Absent = off (the route spends tokens). client: default the global one; model: default the client's cheapest (claude:
@@ -170,6 +179,9 @@ const issueMsg = (i: z.core.$ZodIssue) =>
 export function lintConfig(c: unknown): ConfigIssue[] {
   const r = ConfigSchema.safeParse(c);
   if (!r.success) return r.error.issues.map((i) => ({ level: "error", msg: issueMsg(i) }));
+  const e = r.data.embed;
+  if (e?.provider === "local" && e.base_url) return [{ level: "warning", msg: 'embed.base_url is ignored with embed.provider "local" (the model runs in cortex).' }];
+  if (e?.threads && e.provider !== "local") return [{ level: "warning", msg: 'embed.threads only applies to embed.provider "local".' }];
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
   if (r.data.site_ask?.client === "openai" && !r.data.site_ask.model && r.data.client !== "openai")
     return [{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }];

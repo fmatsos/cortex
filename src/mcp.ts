@@ -58,7 +58,7 @@ export function buildServer(root: string, language?: string): McpServer {
     toolResult(process.env.CORTEX_SYNC === "1" ? (a: A) => withSync(root, "mcp", () => fn(a)) : fn);
 
   s.registerTool("search", {
-    description: "Full-text search (BM25) in the wiki, then in raw/. Use it first for any question about the user's knowledge. A result found only in raw/ flags a gap to compile.",
+    description: "Hybrid search in the wiki, then in raw/ (words, title typos and, when configured, meaning; one result per page, with the extract of its best section). Use it first for any question about the user's knowledge. A result found only in raw/ flags a gap to compile.",
     inputSchema: z.object({
       q: z.string().describe("search terms"),
       in: z.enum(["wiki", "raw"]).optional().describe("restrict to wiki or raw (default: both, wiki first)"),
@@ -69,7 +69,7 @@ export function buildServer(root: string, language?: string): McpServer {
     const hits = await search(root, q, { in: area, limit: limit ?? 10 });
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
-      hits: hits.map((h) => ({ path: toResource(h.path), title: h.title, area: h.area, snippet: h.snippet })),
+      hits: hits.map((h) => ({ path: toResource(h.path), title: h.title, area: h.area, snippet: h.snippet, match: h.match })),
       ...(gap && { hint: "Found only in raw/: a gap to compile (cortex compile)." }),
     });
   }));
