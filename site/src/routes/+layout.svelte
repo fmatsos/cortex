@@ -155,7 +155,7 @@
 	.nav-link[aria-current="page"] {
 		color: var(--foreground);
 		font-weight: 600;
-		text-decoration: underline;
+		text-decoration: none; /* the 2px bar is the only underline of the current link */
 		border-bottom-color: var(--primary);
 	}
 	@media (pointer: coarse) {
