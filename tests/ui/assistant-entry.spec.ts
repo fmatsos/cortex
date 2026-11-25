@@ -18,6 +18,7 @@ async function mockAsk(page: Page) {
 
 const headerField = (page: Page) => page.getByRole("banner").locator("input[role=combobox]");
 const draft = (page: Page) => page.locator("#assistant-q");
+const prefs = (page: Page) => page.getByRole("banner").getByRole("button", { name: /^(Preferences|Préférences)/ });
 
 test.describe("desktop 1440", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -36,7 +37,7 @@ test.describe("desktop 1440", () => {
     await expect(toggle).toHaveAttribute("title", /Ctrl I/);
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     // right after the search field, before the preferences
-    const [field, btn, theme] = await Promise.all([headerField(page).boundingBox(), toggle.boundingBox(), page.getByRole("banner").locator("select").first().boundingBox()]);
+    const [field, btn, theme] = await Promise.all([headerField(page).boundingBox(), toggle.boundingBox(), prefs(page).boundingBox()]);
     expect(btn!.x).toBeGreaterThanOrEqual(field!.x + field!.width);
     expect(btn!.x + btn!.width).toBeLessThan(theme!.x);
     await toggle.click();
@@ -168,7 +169,7 @@ for (const width of [390, 320]) {
       // the label collapses: the avatar alone shows, the name stays
       expect(((await toggle.boundingBox())?.width ?? 99)).toBeLessThan(56);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      const right = await page.getByRole("banner").locator("select").last().boundingBox();
+      const right = await prefs(page).boundingBox();
       expect(right!.x + right!.width).toBeLessThanOrEqual(width);
       await toggle.click();
       await expect(page.locator("#assistant-panel")).toBeVisible();
