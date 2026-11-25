@@ -52,6 +52,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   let moving = false, projected = false, dragged: string | null = null;
   let map = false; // map mode: islands of land under the pages, sea routes between them, page-to-page links only around the focus
   let routes: { a: { x: number; y: number }; b: { x: number; y: number }; count: number }[] = [];
+  let path: string[] = []; // journey mode: the page ids of the route walked so far
   let emphasized = new Set<string>();
   let landmarks = new Set<string>();
   const peers = new Map<string, Set<string>>();
@@ -59,7 +60,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   let timer: ReturnType<typeof setTimeout> | undefined, frame = 0, dead = false;
   function readPalette() {
     const css = getComputedStyle(document.documentElement), value = (key: string) => css.getPropertyValue(key).trim();
-    return { sea: value("--map-sea"), land: value("--map-land"), coast: value("--map-coast"), border: value("--map-border"), countries: [1, 2, 3, 4, 5, 6].map((i) => value(`--map-country-${i}`)), background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
+    return { sea: value("--map-sea"), land: value("--map-land"), coast: value("--map-coast"), border: value("--map-border"), countries: [1, 2, 3, 4, 5, 6].map((i) => value(`--map-country-${i}`)), background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), signal: value("--signal"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
   }
   let palette = readPalette();
   const representatives = new Set(raw.communities.flatMap((c) => c.representatives));
@@ -161,6 +162,29 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     for (const r of routes) { landContext.lineWidth = 1.5 + Math.log2(r.count); landContext.beginPath(); landContext.moveTo(r.a.x, r.a.y); landContext.lineTo(r.b.x, r.b.y); landContext.stroke(); }
     landContext.setLineDash([]); landContext.globalCompositeOperation = "source-over";
   }
+  // Journey mode: the route walked so far, a trail in the ochre signal colour with a numbered square at each stop. Its own canvas
+  // under the stage (the pages stay drawn over the line), in viewport pixels so line and numbers stay crisp at any zoom; redrawn with each frame.
+  const trail = renderer.createCanvas("journey", { beforeLayer: "stage", style: { pointerEvents: "none" } }), trailContext = trail.getContext("2d")!;
+  trail.setAttribute("aria-hidden", "true");
+  function drawRoute() {
+    const { width, height } = renderer.getDimensions(), dpr = devicePixelRatio || 1;
+    if (trail.width !== Math.round(width * dpr) || trail.height !== Math.round(height * dpr)) { trail.width = Math.round(width * dpr); trail.height = Math.round(height * dpr); trail.style.width = `${width}px`; trail.style.height = `${height}px`; }
+    trailContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+    trailContext.clearRect(0, 0, width, height);
+    const stops = path.flatMap((id) => (positions.has(id) ? [renderer.graphToViewport(positions.get(id)!)] : []));
+    if (!stops.length) return;
+    trailContext.lineJoin = "round"; trailContext.lineCap = "round";
+    for (const [size, colour] of [[6, palette.background], [3, palette.signal]] as const) {
+      trailContext.lineWidth = size; trailContext.strokeStyle = colour; trailContext.beginPath();
+      for (const [i, p] of stops.entries()) i ? trailContext.lineTo(p.x, p.y) : trailContext.moveTo(p.x, p.y);
+      trailContext.stroke();
+    }
+    trailContext.font = `600 11px ${font}`; trailContext.textAlign = "center"; trailContext.textBaseline = "middle";
+    for (const [i, p] of stops.entries()) {
+      trailContext.fillStyle = palette.signal; trailContext.fillRect(p.x - 8, p.y - 28, 16, 16);
+      trailContext.fillStyle = palette.background; trailContext.fillText(String(i + 1), p.x, p.y - 19.5);
+    }
+  }
   let counts = new Map<string, number>();
   function syncRoutes() {
     counts = new Map();
@@ -190,7 +214,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   function readTheme() {
     palette = readPalette();
     el.style.backgroundColor = map ? palette.sea : palette.background;
-    syncStyles();
+    syncStyles(); drawRoute();
   }
 
   /** Collision decisions run when the camera settles, never once per zoom frame. Text stays on the GPU. */
@@ -340,16 +364,17 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     savePositions();
     hot = new Set(id && scope.ids.has(id) ? [id, ...(peers.get(id) ?? [])] : []);
     emphasized = new Set(id ? focusNodes(id, positioned()).map((n) => n.id) : []);
+    if (id) for (const p of path) if (scope.ids.has(p)) { hot.add(p); emphasized.add(p); } // the stops already made stay in view
     landmarks = gestureNodes(scope, emphasized);
     if (moving && projected) populate(scope.nodes.filter((n) => landmarks.has(n.id)), []);
     else if (moving) syncStyles(); else updateLabels();
     startFlow();
   }
-  function move(state: { x: number; y: number; ratio: number }) {
-    if (reduced) renderer.getCamera().setState(state);
-    else void renderer.getCamera().animate(state, { duration: 250 });
+  function move(state: { x: number; y: number; ratio: number }, duration = 250) {
+    if (reduced) { renderer.getCamera().setState(state); return Promise.resolve(); }
+    return renderer.getCamera().animate(state, { duration });
   }
-  function fit(nodes = scope.nodes) {
+  function fit(nodes = scope.nodes, duration?: number) {
     if (dead || !nodes.length || !el.clientWidth) return;
     renderer.resize();
     const points = nodes.filter((n) => scope.ids.has(n.id)).map((n) => renderer.graphToFramedGraph(positions.get(n.id) ?? n));
@@ -360,7 +385,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     const pixels = points.map((p) => renderer.framedGraphToViewport(p, { cameraState: { x, y, ratio: 1, angle: 0 } }));
     const px = pixels.map((p) => p.x), py = pixels.map((p) => p.y);
     const ratio = Math.min(1.8, Math.max(0.07, (Math.max(...px) - Math.min(...px)) / Math.max(80, width - 120), (Math.max(...py) - Math.min(...py)) / Math.max(80, height - 120)));
-    move({ x, y, ratio });
+    return move({ x, y, ratio }, duration);
   }
   if (raw.nodes.length) renderer.setCustomBBox({ x: [Math.min(...raw.nodes.map((n) => n.x)), Math.max(...raw.nodes.map((n) => n.x))], y: [Math.min(...raw.nodes.map((n) => n.y)), Math.max(...raw.nodes.map((n) => n.y))] });
   const resize = new ResizeObserver(() => { if (el.clientWidth && el.clientHeight) { renderer.resize(); scheduleLabels(); } }); resize.observe(el);
@@ -381,7 +406,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   renderer.on("clickNode", ({ node }) => callbacks.select(node));
   renderer.on("doubleClickNode", ({ node, event }) => { event.preventSigmaDefault(); callbacks.open(node); });
   renderer.on("clickStage", () => callbacks.select(null));
-  renderer.on("afterRender", () => { el.dataset.rendered = "true"; drawLand(); });
+  renderer.on("afterRender", () => { el.dataset.rendered = "true"; drawLand(); drawRoute(); });
   readTheme();
   return {
     apply(view: GraphView) {
@@ -401,9 +426,18 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
         cancelAnimationFrame(frame); frame = requestAnimationFrame(() => fit(focusNodes(id, positioned())));
       }
     },
-    mode(next: "graph" | "map") {
-      map = next === "map"; el.dataset.mode = next;
+    /** Journey mode plays on the map: same drawing, plus the route. */
+    mode(next: "graph" | "map" | "journey") {
+      map = next !== "graph"; el.dataset.mode = next;
       readTheme(); updateLabels(); renderer.refresh();
+    },
+    /** Journey: the route walked so far (page ids), drawn as a trail. */
+    journey(ids: string[]) { path = ids; highlight(); drawRoute(); },
+    /** Journey: the page becomes the selection and the camera travels to it; resolves when the camera stops, interrupted or not. */
+    go(id: string, duration = 700) {
+      selected = id; hovered = null; highlight(); savePositions();
+      cancelAnimationFrame(frame);
+      return fit(focusNodes(id, positioned()), duration);
     },
     fit, resize: () => { renderer.resize(); updateLabels(); }, theme: readTheme,
     zoom: (factor: number) => move({ ...renderer.getCamera().getState(), ratio: renderer.getCamera().ratio / factor }),
