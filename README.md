@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/src/lib/assets/cortex-mascot.svg" alt="Cortex mascot" width="128">
+  <img src="design/brand/folio.svg" alt="Cortex" width="128">
 </p>
 
 <h1 align="center">Cortex</h1>
