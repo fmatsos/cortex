@@ -11,6 +11,7 @@
 	import { lang } from "#lib/lang.svelte.js";
 	import { intlLocale, t } from "#lib/i18n/index.js";
 	import Icon from "#lib/components/icon.svelte";
+	import IconSprite from "#lib/components/icon-sprite.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
@@ -75,6 +76,9 @@
 </script>
 
 <svelte:window onkeydown={globalKeys} />
+
+<!-- the one icon sprite: outside the language {#key} so a language change does not rebuild it -->
+<IconSprite />
 
 {#key lang.current}
 <a href="#main-content" class="bg-background focus:border-ring sr-only z-50 rounded-md border px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2">{t("layout.skip")}</a>
