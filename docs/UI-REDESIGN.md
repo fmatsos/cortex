@@ -9,6 +9,8 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 - **Pas de maquettes statiques** : C00 est remplacée par une page `/design-system/` construite tôt (tokens, polices, sprite, avatar, composants, clair et sombre). Le propriétaire valide sur cette page avant la refonte des pages (phase 2 et suivantes). C28 ne fait plus que la compléter.
 - **Playwright** accepté en dépendance de développement (C01).
 - **Wiki de recette** : une copie locale de `thoughts`, jamais l'original.
+- **Pas de bits-ui** (+41 Ko gzip mesurés) : Dropdown Menu en `popover` natif et Tabs écrits à la main, au style shadcn carré, dans `ui/`.
+- **Sprite par page** : chaque page prérendue n'embarque que les symboles qu'elle référence (hook `transformPageChunk`), le client complète les manquants.
 
 # Partie I : revue complète
 
