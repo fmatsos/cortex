@@ -155,8 +155,8 @@
 			{#each days as d (d.day)}
 				<li>
 					<h2 class="flex items-baseline gap-2 text-lg font-semibold first-letter:uppercase">
-						<time datetime={d.day}>{dayLabel(d.day)}</time>
-						<span class="text-muted-foreground text-sm font-normal">{t("log.entries", { count: dayTotals.get(d.day) ?? 0 })}</span>
+						<time datetime={d.day} class="tabular-nums">{dayLabel(d.day)}</time>
+						<span class="text-muted-foreground text-sm font-normal tabular-nums">{t("log.entries", { count: dayTotals.get(d.day) ?? 0 })}</span>
 					</h2>
 					<ol class="border-border mt-4 ml-1 space-y-5 border-l pl-6">
 						{#each d.entries as e (e.id)}

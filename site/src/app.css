@@ -2,12 +2,13 @@
 @import "./lib/design/tokens.css";
 
 /*
- * Self-hosted fonts (SIL OFL 1.1, notices in static/fonts/): Hauora Sans for the interface (four static weights: 400,
- * 500, 600 and 700; the font is not modified, so it keeps its name), Source Serif 4 (variable) for long prose. The
- * files live in lib/assets/fonts so that Vite hashes them and rewrites each url() relative to the emitted stylesheet:
- * a root-absolute /fonts/... would break under a base path (CORTEX_SITE_BASE) and from deep pages. Hauora covers French
- * and English in one file per weight; Source Serif keeps its latin / latin-ext split (latin-ext is only downloaded when
- * a page uses one of its characters, unicode-range). No italic sans: the interface never uses one.
+ * Self-hosted fonts (SIL OFL 1.1, notices in static/fonts/): Inter (variable, wght axis, latin / latin-ext subsets from
+ * @fontsource-variable/inter) for the whole interface; Hauora Sans (static 600 only, unmodified) for editorial headings
+ * (the h1 of a wiki page, h1-h4 of `.wiki` and of the assistant's answers, callout titles); Source Serif 4 (variable) for
+ * long prose. The files live in lib/assets/fonts so that Vite hashes them and rewrites each url() relative to the emitted
+ * stylesheet: a root-absolute /fonts/... would break under a base path (CORTEX_SITE_BASE) and from deep pages. Inter and
+ * Source Serif keep their latin / latin-ext split (latin-ext is only downloaded when a page uses one of its characters,
+ * unicode-range). No italic sans: the interface never uses one.
  * Cascadia Code (variable, 200-700, with its programming ligatures) for every piece of code: inline code, blocks, kbd,
  * tokens on the design-system page, assistant answers.
  */
@@ -26,18 +27,20 @@
 	src: url("./lib/assets/fonts/cascadia-code-italic.woff2") format("woff2");
 }
 @font-face {
-	font-family: "Hauora Sans";
+	font-family: "Inter";
 	font-style: normal;
-	font-weight: 400;
+	font-weight: 100 900;
 	font-display: swap;
-	src: url("./lib/assets/fonts/hauora-sans-regular.woff2") format("woff2");
+	src: url("./lib/assets/fonts/inter-latin-wght-normal.woff2") format("woff2");
+	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-	font-family: "Hauora Sans";
+	font-family: "Inter";
 	font-style: normal;
-	font-weight: 500;
+	font-weight: 100 900;
 	font-display: swap;
-	src: url("./lib/assets/fonts/hauora-sans-medium.woff2") format("woff2");
+	src: url("./lib/assets/fonts/inter-latin-ext-wght-normal.woff2") format("woff2");
+	unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
 	font-family: "Hauora Sans";
@@ -45,13 +48,6 @@
 	font-weight: 600;
 	font-display: swap;
 	src: url("./lib/assets/fonts/hauora-sans-semibold.woff2") format("woff2");
-}
-@font-face {
-	font-family: "Hauora Sans";
-	font-style: normal;
-	font-weight: 700;
-	font-display: swap;
-	src: url("./lib/assets/fonts/hauora-sans-bold.woff2") format("woff2");
 }
 @font-face {
 	font-family: "Source Serif 4";
@@ -116,7 +112,9 @@
 }
 
 @theme inline {
-	--font-sans: "Hauora Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	/* editorial headings only (see the fonts note above); the interface is --font-sans */
+	--font-display: "Hauora Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 	--font-serif: "Source Serif 4", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, Cambria, "Times New Roman", serif;
 	--font-mono: "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	--color-ring: var(--ring);
@@ -236,7 +234,7 @@
 }
 
 /* reading body: Source Serif 4, 17 px on mobile and 18 px from 640 px, line height 1.7 (in the components layer: a page
-   utility keeps the upper hand). Headings, callout titles and tables stay in the sans of the interface. */
+   utility keeps the upper hand). Headings and callout titles are Hauora Sans (--font-display), tables stay in Inter. */
 @layer components {
 	.wiki {
 		font-family: var(--font-serif);
@@ -268,7 +266,7 @@
 .wiki h2,
 .wiki h3,
 .wiki h4 {
-	font-family: var(--font-sans);
+	font-family: var(--font-display);
 	font-weight: 600;
 	line-height: 1.3;
 	margin-top: 1.8rem;
@@ -344,7 +342,7 @@ a.link-content:visited {
 	align-items: center;
 	gap: 0.4rem;
 	margin: 0 0 0.3rem;
-	font-family: var(--font-sans);
+	font-family: var(--font-display);
 	font-size: 0.875rem;
 	font-weight: 600;
 	line-height: 1.4;
@@ -390,6 +388,7 @@ a.link-content:visited {
 	border-collapse: collapse;
 	border: 1px solid var(--border);
 	font-family: var(--font-sans);
+	font-variant-numeric: tabular-nums;
 	font-size: 0.9375rem;
 	line-height: 1.5;
 	background:

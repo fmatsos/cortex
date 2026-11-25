@@ -95,7 +95,7 @@
 <ul class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("home.types")}>
 	{#each data.seed.types.filter((x) => x.count) as x (x.type)}
 		<li><a href={urlOf(`type:${x.type.toLowerCase()}`)} class="hover:bg-muted bg-card shadow-surface focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
-			<Icon name={typeIcon(x.type)} size={20} style="color: {typeColor(x.type)}" />{typePlural(x.type)}<span class="text-muted-foreground ml-auto text-sm">{x.count}</span>
+			<Icon name={typeIcon(x.type)} size={20} style="color: {typeColor(x.type)}" />{typePlural(x.type)}<span class="text-muted-foreground ml-auto text-sm tabular-nums">{x.count}</span>
 		</a></li>
 	{/each}
 </ul>
@@ -152,7 +152,7 @@
 				{#each data.hubs as h (h.id)}
 					<li class="flex flex-1"><a href={toPage(h.id)} class="hover:bg-muted flex min-h-9 flex-1 items-center gap-2 rounded-md px-1 pointer-coarse:min-h-11">
 						<Icon name={typeIcon(h.type)} size={16} style="color: {typeColor(h.type)}" /><span class="text-link min-w-0 truncate">{h.title}</span>
-						<span class="text-muted-foreground ml-auto shrink-0 text-sm">{t("home.links", { count: h.links })}</span>
+						<span class="text-muted-foreground ml-auto shrink-0 text-sm tabular-nums">{t("home.links", { count: h.links })}</span>
 					</a></li>
 				{/each}
 			</ul>

@@ -61,7 +61,7 @@
 						<span class="bg-muted-foreground absolute top-2 -left-6 size-[7px]" aria-hidden="true"></span>
 						<p class="text-base leading-normal [overflow-wrap:anywhere] {b.text ? 'line-clamp-3' : ''}">{s.before}{#if b.source}<a href={toPage(b.source.id)} class="text-link link-content underline-offset-4 hover:underline">{b.source.title}</a>{s.after}{/if}</p>
 						<p class="text-muted-foreground mt-0.5 text-sm leading-snug [overflow-wrap:anywhere]">
-							<a href={entry(b)} class="link-content hover:underline underline-offset-4">{#if hour}<time datetime={b.at}>{hour}</time><span class="sr-only">{t("common.colon")}{t("home.news.entry")}</span>{:else}{t("home.news.entry")}{/if}</a>
+							<a href={entry(b)} class="link-content hover:underline underline-offset-4">{#if hour}<time datetime={b.at} class="tabular-nums">{hour}</time><span class="sr-only">{t("common.colon")}{t("home.news.entry")}</span>{:else}{t("home.news.entry")}{/if}</a>
 							{#if b.pages.length}<span class="mx-1.5" aria-hidden="true">·</span>{#each pageParts(b) as part}{#if "page" in part}<a href={toPage(part.page.id)} class="text-link link-content underline-offset-4 hover:underline">{part.page.title}</a>{:else}{part.text}{/if}{/each}{/if}
 						</p>
 					</li>

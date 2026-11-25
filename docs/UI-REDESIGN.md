@@ -6,7 +6,7 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 
 - **Design carré** : partie II.
 - **Graphe : Sigma 4 + Graphology**, placement ForceAtlas2 et communautés précalculés à l’export ; aucune physique active dans le navigateur.
-- **Polices** : Hauora Sans (OFL 1.1, quatre graisses statiques, non modifiée) pour l'interface ; Source Serif 4 reste la police des articles et des réponses de l'assistant.
+- **Polices** : Inter (OFL 1.1, variable sur l'axe de graisse, sous-ensembles latin et latin-ext de `@fontsource-variable/inter`) pour toute l'interface (en-tête, menus, boutons, champs, colonne latérale, pied de page, graphe, palette, chrome de l'assistant, design system) ; Hauora Sans (OFL 1.1, graisse 600 seule, non modifiée, `--font-display`) pour les titres rédactionnels (h1 d'une page wiki, h1 à h4 de `.wiki` et des réponses de l'assistant, titres de callouts) ; Source Serif 4 reste la police des articles et des réponses de l'assistant. Chiffres tabulaires (`tabular-nums`) pour les compteurs, les dates de provenance, le journal et les tableaux.
 - **Code** : Cascadia Code (OFL 1.1, variable avec ligatures) pour tout le code : code en ligne et blocs des articles, réponses de l'assistant, `kbd`, tokens du design system.
 - **Icônes** : Phosphor Light (MIT, `@phosphor-icons/core`) via `design/icons.json` + `scripts/build-icons.ts`, noms inchangés (`<Icon name>`, `iconUse`, ids `cx-<nom>`) ; le jeu dessiné à la main est retiré.
 - **Pas de maquettes statiques** : C00 est remplacée par une page `/design-system/` construite tôt (tokens, polices, sprite, avatar, composants, clair et sombre). Le propriétaire valide sur cette page avant la refonte des pages (phase 2 et suivantes). C28 ne fait plus que la compléter.

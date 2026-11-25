@@ -104,9 +104,9 @@
 
 	// ---- typography ----------------------------------------------------------------------------------------------
 	const SCALE = [
-		{ cls: "text-[2.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h1.spec"), sample: t("ds.scale.h1.sample") },
-		{ cls: "text-4xl leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h2.spec"), sample: t("ds.scale.h2.sample") },
-		{ cls: "text-[1.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h3.spec"), sample: t("ds.scale.h3.sample") },
+		{ cls: "font-display text-[2.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h1.spec"), sample: t("ds.scale.h1.sample") },
+		{ cls: "font-display text-4xl leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h2.spec"), sample: t("ds.scale.h2.sample") },
+		{ cls: "font-display text-[1.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h3.spec"), sample: t("ds.scale.h3.sample") },
 		{ cls: "text-base", spec: t("ds.scale.body.spec"), sample: t("ds.scale.body.sample") },
 		{ cls: "text-base font-semibold", spec: t("ds.scale.strong.spec"), sample: t("ds.scale.strong.sample") },
 		{ cls: "text-sm text-muted-foreground", spec: t("ds.scale.meta.spec"), sample: t("ds.scale.meta.sample") },
@@ -144,7 +144,7 @@
 	const TRUST: [IconName, string][] = [["verified", t("ds.trust.verified")], ["unverified", t("ds.trust.unverified")], ["needs-review", t("ds.trust.review")], ["stale", t("ds.trust.stale")], ["draft", t("ds.trust.draft")], ["deprecated", t("ds.trust.deprecated")], ["warning", t("ds.trust.partial")]];
 	const ROWS = [
 		{ id: "a", type: "Concept", title: t("ds.row.a.title"), description: t("ds.row.a.description"), status: "stable", verified: true },
-		{ id: "b", type: "Entity", title: "Hauora Sans", description: t("ds.row.b.description"), status: "draft", partial: true },
+		{ id: "b", type: "Entity", title: "Inter", description: t("ds.row.b.description"), status: "draft", partial: true },
 		{ id: "c", type: "Synthesis", title: t("ds.row.c.title"), description: t("ds.row.c.description"), status: "stable", needsReview: true },
 		{ id: "d", type: "Source", title: t("ds.row.d.title"), description: t("ds.row.d.description"), status: "deprecated" },
 	];
@@ -244,7 +244,7 @@
 	<section aria-labelledby="h-typographie" id="typographie" class="mt-14">
 		<h2 id="h-typographie" class={h2}>{t("ds.sec.typographie")}</h2>
 		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.typo.intro"))}</p>
-		<p class="{cap} mt-1 max-w-3xl">{t("ds.typo.credit")} <a href={asset("fonts/LICENSE-hauora.txt")} class="text-link underline underline-offset-4">{t("ds.licence.link")}</a></p>
+		<p class="{cap} mt-1 max-w-3xl">{t("ds.typo.credit")} <a href={asset("fonts/LICENSE-inter.txt")} class="text-link underline underline-offset-4">{t("ds.licence.link")} Inter</a> · <a href={asset("fonts/LICENSE-hauora.txt")} class="text-link underline underline-offset-4">{t("ds.licence.link")} Hauora Sans</a></p>
 		<ul class="mt-6 border-t">
 			{#each SCALE as s (s.spec)}
 				<li class="grid gap-1 border-b py-3 md:grid-cols-[18rem_1fr] md:gap-6">

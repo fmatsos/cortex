@@ -95,7 +95,7 @@
 				</Button>
 				{#if at >= 0}
 					<Button variant="outline" size="sm" onclick={() => go(at - 1)}><Icon name="chevron-down" size={16} class="rotate-180" />{tr("hits.previous")}</Button>
-					<span class="text-muted-foreground" aria-hidden="true">{at + 1} / {marks.length}</span>
+					<span class="text-muted-foreground tabular-nums" aria-hidden="true">{at + 1} / {marks.length}</span>
 				{/if}
 			{/if}
 			<Button variant="outline" size="sm" href={searchHref} onclick={back}><Icon name="back" size={16} />{tr("hits.backToResults")}</Button>
