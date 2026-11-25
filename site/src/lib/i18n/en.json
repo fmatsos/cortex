@@ -890,6 +890,7 @@
 	"journey.export.noContent": "The content of this page could not be loaded: read it at the address above.",
 	"account.label": "Account",
 	"account.named": "Account: {name}",
+	"account.unnamed": "Signed-in user",
 	"account.signInGroup": "Sign in",
 	"account.signInWith": "Sign in with {label}",
 	"account.signOut": "Sign out",

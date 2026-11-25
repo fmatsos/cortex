@@ -28,7 +28,7 @@
 			<div class="flex min-w-0 items-center gap-3">
 				<span class="bg-muted text-muted-foreground border-border flex size-12 shrink-0 items-center justify-center border"><Icon name="account" size={28} /></span>
 				<div class="min-w-0">
-					<p class="text-lg font-semibold break-words">{me.name}</p>
+					<p class="text-lg font-semibold break-words">{me.name || t("account.unnamed")}</p>
 					{#if me.email}<p class="text-muted-foreground text-sm break-all">{me.email}</p>{/if}
 					<p class="text-muted-foreground text-sm">{t("account.via", { provider: account.providerLabel(me.provider) })}</p>
 				</div>

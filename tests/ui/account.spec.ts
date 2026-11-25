@@ -12,7 +12,7 @@ type Journey = { id: string; title: string; route: string[]; created_at: string;
 type Mock = {
   /** `null`: the route does not exist (static site). */
   providers: { id: string; label: string }[] | null;
-  me: { id: string; name: string; email: string; provider: string } | null;
+  me: { id: string; name: string | null; email: string; provider: string } | null;
   state: Record<string, unknown>;
   conversations: Conversation[];
   journeys: Journey[];
@@ -148,6 +148,17 @@ test.describe("header menu", () => {
     await mine.click();
     await expect(page).toHaveURL(/\/account\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^(My account|Mon compte)$/);
+  });
+
+  test("a session whose provider gave no name (name: null) is signed in: generic label, state synchronised", async ({ page }) => {
+    const m = newMock({ me: { ...ADA, name: null, email: "" } });
+    await mockApi(page, m);
+    await page.goto("/search/");
+    await expect(trigger(page)).toHaveAccessibleName(/^(Account|Compte) ?: (Signed-in user|Utilisateur connecté)$/);
+    await trigger(page).click();
+    await expect(menu(page).getByRole("menuitem", { name: /^(My account|Mon compte)$/ })).toBeVisible();
+    await expect(menu(page).getByRole("menuitem", { name: /Sign in/ })).toHaveCount(0);
+    expect(m.calls).toContain("GET /api/me/state");
   });
 
   test("Sign out posts the logout, reloads, and the menu offers the sign-in again", async ({ page }) => {

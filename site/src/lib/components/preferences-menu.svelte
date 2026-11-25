@@ -20,7 +20,7 @@
 	const uid = $props.id();
 	const me = $derived(account.me);
 	const label = $derived(account.enabled ? t("account.label") : t("prefs.label"));
-	const named = $derived(me ? t("account.named", { name: me.name }) : label);
+	const named = $derived(me ? t("account.named", { name: me.name || t("account.unnamed") }) : label);
 	const THEMES = [["system", "system", "theme.option.system"], ["light", "sun", "theme.option.light"], ["dark", "moon", "theme.option.dark"]] as const;
 
 	// Reading comfort (local, off by default): the two options are toggles, the menu stays open to see the effect.
@@ -48,7 +48,7 @@
 				{#if me}
 					<!-- who is signed in: information, not an action (no menu item role, never takes the focus) -->
 					<div role="group" aria-label={t("account.identity")} class="px-2 py-1.5 text-sm">
-						<p class="font-semibold break-words">{me.name}</p>
+						<p class="font-semibold break-words">{me.name || t("account.unnamed")}</p>
 						{#if me.email}<p class="text-muted-foreground text-xs break-all">{me.email}</p>{/if}
 						<p class="text-muted-foreground text-xs">{t("account.via", { provider: account.providerLabel(me.provider) })}</p>
 					</div>

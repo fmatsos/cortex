@@ -19,6 +19,7 @@ import { theme } from "./theme.svelte";
  * goes back as one `PUT` of the whole object, 1.5 s after the last one (see sync-state.ts for the rules).
  */
 export type Provider = { id: string; label: string };
+/** `name` is "" when the provider gave none (the server answers `null`): the views show a generic label then. */
 export type Me = { id: string; name: string; email: string; provider: string };
 export type AuthNotice = "refused" | "error";
 
@@ -39,7 +40,7 @@ function applyLocal(next: SyncState) {
 const isProvider = (p: unknown): p is Provider => !!p && typeof p === "object" && typeof (p as Provider).id === "string" && typeof (p as Provider).label === "string";
 const asMe = (m: unknown): Me | null => {
 	const o = m as Partial<Record<keyof Me, unknown>> | null;
-	return o && typeof o.id === "string" && typeof o.name === "string" ? { id: o.id, name: o.name, email: typeof o.email === "string" ? o.email : "", provider: typeof o.provider === "string" ? o.provider : "" } : null;
+	return o && typeof o.id === "string" && (typeof o.name === "string" || o.name === null) ? { id: o.id, name: o.name ?? "", email: typeof o.email === "string" ? o.email : "", provider: typeof o.provider === "string" ? o.provider : "" } : null;
 };
 
 class Account {

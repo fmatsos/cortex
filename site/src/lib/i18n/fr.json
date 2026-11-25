@@ -890,6 +890,7 @@
 	"journey.export.noContent": "Le contenu de cette page n'a pas pu être chargé : lisez-la à l'adresse ci-dessus.",
 	"account.label": "Compte",
 	"account.named": "Compte : {name}",
+	"account.unnamed": "Utilisateur connecté",
 	"account.signInGroup": "Se connecter",
 	"account.signInWith": "Se connecter avec {label}",
 	"account.signOut": "Se déconnecter",
