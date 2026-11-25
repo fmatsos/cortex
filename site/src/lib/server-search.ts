@@ -1,5 +1,5 @@
-import { matches, parseQuery, type Parsed } from "./query";
-import type { Engine } from "./search-engine";
+import { isEmpty, matches, parseQuery, type Parsed } from "./query";
+import { rank, type Engine } from "./search-engine";
 import type { SearchDoc } from "./types";
 
 /**
@@ -103,12 +103,19 @@ const indexOf = (e: Engine) => { let m = byId.get(e); if (!m) byId.set(e, (m = n
 
 export type Row = { doc: SearchDoc; hit: ServerHit };
 
+const isFavOp = (o: Parsed["ops"][number]) => o.key === "is" && o.value === "fav" && !o.neg;
+/** A branch of an OR (or of a group) is only `is:fav`: the server, which strips it, cannot find the pages that satisfy the query through it. */
+const favBranch = (p: Parsed): boolean =>
+	p.groups.some((g) => !g.neg && g.alts.some((a) => (a.ops.some(isFavOp) && isEmpty({ ...a, ops: a.ops.filter((o) => !isFavOp(o)) })) || favBranch(a)));
+
 /**
  * The server's hits as the site's pages, in the server's order. A hit the site's index does not know (the wiki changed since the
  * export) is left out. `is:fav` is the browser's own list, which the server ignores (it strips it, groups included, so its hits are a
  * superset): the hits are then checked against the whole Boolean structure of the query with the site's own matcher (`(a is:fav)`,
  * `a OR is:fav`, `-is:fav`), on the page's metadata and favorites. Only the top-level free words, phrases and exclusions are left to the
  * server (it checked them on its own text); the ones inside a group are checked here, on the site's text, as the local search does.
+ * `alpha OR is:fav`: the favorites that satisfy the whole query (the site's own ranking) and that the server did not find by their words
+ * follow its hits, without duplicates.
  */
 export function rows(e: Engine, p: Parsed, res: Hybrid, isFav: (id: string) => boolean): Row[] {
 	const idx = indexOf(e);
@@ -120,6 +127,10 @@ export function rows(e: Engine, p: Parsed, res: Hybrid, isFav: (id: string) => b
 		const doc = e.docs[i];
 		if (fav && !matches(doc, fav, isFav, e.hay[i])) continue;
 		out.push({ doc, hit });
+	}
+	if (fav && favBranch(p)) {
+		const have = new Set(out.map((r) => r.doc.id));
+		for (const r of rank(e, p, isFav)) if (isFav(r.doc.id) && !have.has(r.doc.id)) out.push({ doc: r.doc, hit: { id: r.doc.id, title: r.doc.title, type: r.doc.type, extract: "", match: "filter" } });
 	}
 	return out;
 }
