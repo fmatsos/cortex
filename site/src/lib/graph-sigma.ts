@@ -4,7 +4,7 @@ import { UndirectedGraph } from "graphology";
 import { focusNodes, gestureNodes, type GNode, type GraphView } from "./graph-model";
 import { placeLabels, truncateToWidth } from "./graph-labels";
 import { shapeOf, SHAPE_SCALE } from "./graph-shapes";
-import { packIslands } from "./graph-pack";
+import { packIslands, UNLINKED } from "./graph-pack";
 import type { GraphData } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -21,7 +21,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   raw = {
     ...raw,
     nodes: raw.nodes.map((n) => { const d = shift.get(n.community); return d ? { ...n, x: n.x + d.x, y: n.y + d.y } : n; }),
-    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i] })),
+    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i], label: c.id === UNLINKED ? t("graph.unlinked") : c.label })),
   };
   const graph = new UndirectedGraph<Node>({ allowSelfLoops: false });
   const positions = new Map(raw.nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
@@ -153,7 +153,47 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     allowed = new Set(placeLabels(entries, (item) => item.box, context ? 24 : Math.min(65, reserved.length + Math.ceil(width * height / 26000 / Math.max(0.5, ratio))), 6).flatMap((item) => item.node ? [item.node.id] : []));
     labels.style.visibility = "visible";
     syncStyles();
+    startFlow();
   }
+  // Link direction: dots travel from the page that holds the link to the page it cites, both ways for a mutual link.
+  // Only on the selected/hovered page's links, at rest, never under reduced motion: the overview stays still and costs nothing.
+  const flow = document.createElement("canvas"), flowContext = flow.getContext("2d")!;
+  flow.setAttribute("aria-hidden", "true"); flow.dataset.flow = "";
+  flow.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
+  el.append(flow);
+  let flowFrame = 0;
+  function flowLinks() {
+    const context = selected ?? hovered;
+    if (!context || moving || reduced || dead) return [];
+    // ponytail: capped at 80 links, the hub's neighbourhood stays legible and the frame cheap
+    return scope.links.filter((e) => (e.source === context && emphasized.has(e.target)) || (e.target === context && emphasized.has(e.source))).slice(0, 80);
+  }
+  function drawFlow(time: number) {
+    const { width, height } = renderer.getDimensions(), dpr = devicePixelRatio || 1;
+    if (flow.width !== Math.round(width * dpr) || flow.height !== Math.round(height * dpr)) { flow.width = Math.round(width * dpr); flow.height = Math.round(height * dpr); }
+    flowContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+    flowContext.clearRect(0, 0, width, height);
+    const links = flowLinks();
+    flow.dataset.flow = String(links.length);
+    if (!links.length) { flowFrame = 0; return; }
+    flowContext.fillStyle = palette.active;
+    flowContext.globalAlpha = 0.85;
+    for (const [i, e] of links.entries()) {
+      if (!graph.hasNode(e.source) || !graph.hasNode(e.target)) continue;
+      const a = renderer.graphToViewport(graph.getNodeAttributes(e.source)), b = renderer.graphToViewport(graph.getNodeAttributes(e.target));
+      const length = Math.hypot(b.x - a.x, b.y - a.y);
+      if (length < 16) continue;
+      // a constant 40 px/s whatever the link length, offset per link so the dots do not pulse together
+      const t = (time / 1000 * 40 / length + i * 0.137) % 1;
+      for (const k of e.mutual ? [t, 1 - t] : [t]) {
+        flowContext.beginPath();
+        flowContext.arc(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, 1.8, 0, Math.PI * 2);
+        flowContext.fill();
+      }
+    }
+    flowFrame = requestAnimationFrame(drawFlow);
+  }
+  const startFlow = () => { if (!flowFrame) flowFrame = requestAnimationFrame(drawFlow); };
   function settle() {
     if (dead) return;
     if (projected && dragged) { timer = setTimeout(settle, 160); return; }
@@ -179,6 +219,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
       renderer.setSetting("renderLabels", false);
     }
     clearTimeout(timer); timer = setTimeout(settle, 160);
+    startFlow(); // its next frame clears the dots during the gesture, then stops
   }
   function highlight() {
     const id = selected ?? hovered;
@@ -188,6 +229,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     landmarks = gestureNodes(scope, emphasized);
     if (moving && projected) populate(scope.nodes.filter((n) => landmarks.has(n.id)), []);
     else if (moving) syncStyles(); else updateLabels();
+    startFlow();
   }
   function move(state: { x: number; y: number; ratio: number }) {
     if (reduced) renderer.getCamera().setState(state);
@@ -247,7 +289,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     },
     fit, resize: () => { renderer.resize(); updateLabels(); }, theme: readTheme,
     zoom: (factor: number) => move({ ...renderer.getCamera().getState(), ratio: renderer.getCamera().ratio / factor }),
-    motion: (calm: boolean) => { reduced = calm; if (calm) renderer.getCamera().cancelAnimation(); renderer.setSettings({ doubleClickZoomingDuration: calm ? 0 : 180, inertiaDuration: calm ? 0 : 150 }); },
-    kill() { dead = true; clearTimeout(timer); cancelAnimationFrame(frame); resize.disconnect(); labels.replaceChildren(); renderer.kill(); },
+    motion: (calm: boolean) => { reduced = calm; if (calm) renderer.getCamera().cancelAnimation(); renderer.setSettings({ doubleClickZoomingDuration: calm ? 0 : 180, inertiaDuration: calm ? 0 : 150 }); startFlow(); },
+    kill() { dead = true; clearTimeout(timer); cancelAnimationFrame(frame); cancelAnimationFrame(flowFrame); flow.remove(); resize.disconnect(); labels.replaceChildren(); renderer.kill(); },
   };
 }

@@ -146,7 +146,7 @@
 	"graph.hidden": "masquée",
 	"graph.legend.fav": "Favori",
 	"graph.legend.help": "Glisser pour déplacer, molette ou pincement pour zoomer. Un clic (ou un toucher) sélectionne une page et met son voisinage en valeur ; double-clic ou « Ouvrir la page » pour l'ouvrir, Échap pour désélectionner.",
-	"graph.legend.size": "Taille : nombre de pages liées dans le périmètre affiché. Sources plus petites et discrètes. Placement précalculé ; déplacement des nœuds local. Pendant le geste, seuls les repères restent dessinés ; les détails reviennent à l’arrêt.",
+	"graph.legend.size": "Taille : nombre de pages liées dans le périmètre affiché. Sources plus petites et discrètes. Placement précalculé ; déplacement des nœuds local. Pendant le geste, seuls les repères restent dessinés ; les détails reviennent à l’arrêt. Sur la page sélectionnée ou survolée, des points parcourent ses liens dans leur sens, de la page qui cite vers la page citée.",
 	"graph.list.help": "« Cite » : pages vers lesquelles elle fait un lien ; « Cité par » : pages qui font un lien vers elle. Un nom de page lié mène à sa fiche dans cette liste.",
 	"graph.list.label": "Liste des pages et de leurs relations",
 	"graph.listView": "Vue liste",
@@ -711,5 +711,6 @@
 	"ds.avatar.systemAllow": "Votre système demande actuellement : animations permises.",
 	"graph.neighbors_one": "{count} voisin",
 	"graph.neighbors_other": "{count} voisins",
+	"graph.unlinked": "Pages sans lien",
 	"graph.nearestFrame": "cadrage sur les 30 plus proches"
 }

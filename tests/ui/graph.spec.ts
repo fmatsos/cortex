@@ -23,7 +23,7 @@ async function graphData(request: import("@playwright/test").APIRequestContext):
 }
 
 async function ready(page: import("@playwright/test").Page) {
-  await expect(page.locator('[data-rendered="true"] canvas')).toBeVisible();
+  await expect(page.locator('[data-rendered="true"] canvas.sigma-stage')).toBeVisible();
   await page.waitForFunction(() => !!(window as unknown as ProbeWindow).__graphProbe);
 }
 
@@ -59,6 +59,11 @@ test("article focus, source focus, search and sticky selection", async ({ page, 
   const graphLink = page.locator('a[href*="focus="]:visible').first();
   await expect(graphLink).toBeVisible(); await graphLink.click(); await ready(page);
   await expect(page.locator("aside h2")).toHaveText(target.title);
+  // the selected page's links carry moving dots for their direction, on a canvas that never takes the pointer
+  const flow = page.locator("canvas[data-flow]");
+  await expect.poll(async () => Number(await flow.getAttribute("data-flow"))).toBeGreaterThan(0);
+  await expect(flow).toHaveCSS("pointer-events", "none");
+  await expect(flow).toHaveAttribute("aria-hidden", "true");
   await expect.poll(() => page.evaluate((id) => {
     const r = (window as unknown as ProbeWindow).__graphProbe;
     const n = r.getGraph().getNodeAttributes(id), p = r.graphToViewport({ x: n.x, y: n.y }), d = r.getDimensions();
@@ -90,11 +95,11 @@ test.describe("offline", () => {
   test("the precached renderer and graph work without a network", async ({ page, request, context }) => {
     const data = await graphData(request);
     await page.goto("/graph/");
-    await expect(page.locator('[data-rendered="true"] canvas')).toBeVisible();
+    await expect(page.locator('[data-rendered="true"] canvas.sigma-stage')).toBeVisible();
     await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise<void>((resolve) => navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true })); });
     await context.setOffline(true);
     await page.reload();
-    await expect(page.locator('[data-rendered="true"] canvas')).toBeVisible();
+    await expect(page.locator('[data-rendered="true"] canvas.sigma-stage')).toBeVisible();
     await page.getByRole("button", { name: /Vue liste|List view/ }).click();
     await expect(page.locator('section[aria-label] > ul > li')).toHaveCount(data.nodes.length);
     await context.setOffline(false);
@@ -107,6 +112,8 @@ test("reduced motion, source URL, tag scope and narrow screens", async ({ page, 
   await page.goto(`/graph/?focus=${encodeURIComponent(source.id)}`); await ready(page);
   await expect(page.locator("aside h2")).toHaveText(source.title);
   expect(await page.evaluate(() => (window as unknown as ProbeWindow).__graphProbe.getSetting("zoomDuration"))).toBe(0);
+  await page.waitForTimeout(300);
+  expect(await page.locator("canvas[data-flow]").getAttribute("data-flow"), "no moving dots under reduced motion").not.toMatch(/^[1-9]/);
   const tag = data.nodes.find((n) => n.tags.length)?.tags[0];
   if (tag) {
     await page.locator("main select").selectOption(tag);

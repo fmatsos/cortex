@@ -146,7 +146,7 @@
 	"graph.hidden": "hidden",
 	"graph.legend.fav": "Favorite",
 	"graph.legend.help": "Drag to move, wheel or pinch to zoom. A click (or a tap) selects a page and highlights its neighborhood; double-click or “Open the page” to open it, Esc to deselect.",
-	"graph.legend.size": "Size: linked pages in the visible scope. Sources are smaller and quieter. Precomputed positions; node dragging stays local. While moving, only landmarks are drawn; details return when the gesture ends.",
+	"graph.legend.size": "Size: linked pages in the visible scope. Sources are smaller and quieter. Precomputed positions; node dragging stays local. While moving, only landmarks are drawn; details return when the gesture ends. On the selected or hovered page, dots travel along its links in their direction, from the citing page to the cited one.",
 	"graph.list.help": "“Cites”: pages it links to; “Cited by”: pages that link to it. A related page name leads to its entry in this list.",
 	"graph.list.label": "List of the pages and their relations",
 	"graph.listView": "List view",
@@ -711,5 +711,6 @@
 	"ds.avatar.systemAllow": "Your system currently requests: animations allowed.",
 	"graph.neighbors_one": "{count} neighbour",
 	"graph.neighbors_other": "{count} neighbours",
+	"graph.unlinked": "Unlinked pages",
 	"graph.nearestFrame": "framing the closest 30"
 }
