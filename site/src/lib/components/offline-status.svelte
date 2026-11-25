@@ -1,16 +1,18 @@
 <script lang="ts">
-	import { onMount, tick } from "svelte";
+	import { onMount, type Snippet } from "svelte";
 	import { dev, version } from "$app/env";
 	import Icon from "#lib/components/icon.svelte";
-	import { Button } from "#lib/components/ui/button/index.js";
+	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 	import { type OfflineState, estimateBytes, formatBytes, isOfflineState, percent } from "#lib/offline.js";
 	import type { IconName } from "#lib/icons.js";
 	import { storageKey } from "#lib/storage.js";
 	import { t } from "#lib/i18n/index.js";
 
-	// Offline mode status, always accessible: a discreet button (bottom left) opens a panel with the state
-	// (preparing, available, failed + retry), the kept version, the connection and the full download of the wiki.
-	// Important changes are also announced for a few seconds in the `aria-live` region.
+	// Offline mode status. It owns the service worker state and gives its menu section to the caller (the preferences menu):
+	// the state (preparing, available, failed + retry), the kept version, the connection and the full download of the wiki.
+	// Important changes (state, connection, download) are announced in an `aria-live` region and shown for a few seconds in
+	// a small toast; the toast stays while the visitor is offline or a download runs. No permanent floating button.
+	let { children }: { children?: Snippet<[{ section: Snippet; refresh: () => void; offline: boolean; attention: boolean }]> } = $props();
 	const KEY = storageKey("offline-ready");
 	const MESSAGE_MS = 6000;
 
@@ -20,16 +22,14 @@
 	let failed = $state(false); // the installation ended in failure
 	let waiting = $state(false); // a new version is installed and waits for the tabs to close
 	let sw = $state<OfflineState>();
-	let open = $state(false);
 	let announce = $state(""); // temporary message, read by screen readers
-	let root = $state<HTMLDivElement>();
-	let toggle = $state<HTMLButtonElement | null>(null);
+	let toastEl = $state<HTMLElement | null>(null);
 	let registration: ServiceWorkerRegistration | undefined;
 	// an active service worker that does not answer `status` (pre-panel version) has finished installing: it is ready
 	let silent = $state(false);
 	let quiet: ReturnType<typeof setTimeout>;
 	const uid = $props.id();
-	const panelId = `hl-${uid}`;
+	const headId = `hl-${uid}`;
 
 	type Phase = "unsupported" | "inactive" | "preparing" | "ready" | "error";
 	const phase = $derived<Phase>(
@@ -70,7 +70,16 @@
 		clearTimeout(quiet);
 		silent = false;
 		const wasReady = sw?.phase === "ready", wasFailed = failed || sw?.phase === "error";
+		const before = sw?.download?.state;
+		const known = !!sw; // transitions only count once a first state is known: a reload does not replay an old download result
 		sw = e.data;
+		const now = e.data.download?.state;
+		if (known && now !== before) {
+			if (now === "running") say(t("offline.download"));
+			else if (now === "done") say(t("offline.done"));
+			else if (now === "cancelled") say(t("offline.cancelled"));
+			else if (now === "error") say(e.data.download?.message ? t("offline.interruptedWith", { detail: e.data.download.message }) : t("offline.interrupted"));
+		}
 		if (e.data.phase === "ready") {
 			failed = false;
 			// once per site version: the message comes back if it changes, not on every load
@@ -109,6 +118,7 @@
 
 	onMount(() => {
 		offline = !navigator.onLine;
+		if (offline) say(t("offline.offline"));
 		const sync = (e: Event) => { offline = e.type === "offline"; say(offline ? t("offline.offline") : t("offline.backOnline")); };
 		addEventListener("online", sync);
 		addEventListener("offline", sync);
@@ -143,103 +153,86 @@
 		} else location.reload();
 	}
 
-	function toggleOpen() {
-		open = !open;
-		if (open) post({ type: "status" });
-	}
-	async function close(refocus: boolean) {
-		open = false;
-		if (refocus) { await tick(); toggle?.focus(); }
-	}
-	function onWindowClick(e: MouseEvent) {
-		if (open && root && !root.contains(e.target as Node)) close(false);
-	}
-	function onWindowKeydown(e: KeyboardEvent) {
-		if (open && e.key === "Escape") { e.preventDefault(); close(true); }
-	}
+	const refresh = () => post({ type: "status" });
+	const attention = $derived(offline || phase === "error");
+	const running = $derived(download?.state === "running");
+
+	// The visual toast: the announcement, else the download progress, else the offline notice. It lives in the top layer
+	// (`popover="manual"`): the header is a size container, which would otherwise make it the anchor of a fixed element.
+	const toastText = $derived(
+		announce ||
+		(running && download ? t("offline.downloading", { percent: t("common.percent", { n: percent(download.done, download.total) }), size: formatBytes(download.bytes) }) : "") ||
+		(offline ? t("offline.offline") : ""),
+	);
+	$effect(() => {
+		if (!toastEl) return;
+		const shown = toastEl.matches(":popover-open");
+		if (toastText && !shown) toastEl.showPopover();
+		else if (!toastText && shown) toastEl.hidePopover();
+	});
 
 	const cachedLabel = $derived(sw ? t("offline.cachedOf", { cached: sw.wiki.cached, files: sw.wiki.files }) : "");
 </script>
 
-<svelte:window onclick={onWindowClick} onkeydown={onWindowKeydown} />
+{#snippet section()}
+	<div role="group" aria-labelledby={headId} class="text-sm">
+		<div id={headId} class="text-muted-foreground px-2 py-1.5 text-xs font-semibold">{t("offline.title")}</div>
+		<p class="flex items-center gap-2 px-2 pb-1 font-medium {phase === 'error' ? 'text-destructive' : ''}">
+			<Icon name={icon} size={16} class={phase === "preparing" && !offline ? "motion-safe:animate-spin" : ""} />
+			{label}
+		</p>
 
-<div bind:this={root} class="fixed bottom-3 left-3 z-30 print:hidden">
-	{#if open}
-		<div id={panelId} role="region" aria-label={t("offline.title")} class="bg-popover text-popover-foreground absolute bottom-full left-0 mb-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-lg border p-3 text-sm shadow-lg">
-			<h2 class="flex items-center gap-2 font-semibold">
-				<Icon name={icon} size={16} class={phase === "error" ? "text-destructive" : phase === "preparing" ? "motion-safe:animate-spin" : ""} />
-				{label}
-			</h2>
+		{#if phase === "unsupported"}
+			<p class="text-muted-foreground px-2 pb-1 text-xs">{t("offline.unsupported")}</p>
+		{:else if phase === "inactive"}
+			<p class="text-muted-foreground px-2 pb-1 text-xs">{dev ? t("offline.dev") : t("offline.inactive")}</p>
+			{#if !dev}<DropdownMenu.Item onSelect={retry}><Icon name="retry" size={16} />{t("common.retry")}</DropdownMenu.Item>{/if}
+		{:else if phase === "error"}
+			<p class="px-2 pb-1 text-xs">{t("offline.error")}</p>
+			{#if sw?.message}<p class="text-muted-foreground px-2 pb-1 text-xs break-words">{t("common.detail", { detail: sw.message })}</p>{/if}
+			<DropdownMenu.Item onSelect={retry}><Icon name="retry" size={16} />{t("common.retry")}</DropdownMenu.Item>
+		{:else if phase === "preparing"}
+			<p class="text-muted-foreground px-2 pb-1 text-xs">{t("offline.preparingBase")}{sw ? ` ${t("common.percent", { n: percent(sw.core.done, sw.core.total) })}` : ""}</p>
+			{#if sw}<progress class="accent-primary mx-2 mb-1 h-2 w-[calc(100%-1rem)]" max={sw.core.total} value={sw.core.done} aria-label={t("offline.preparing")}></progress>{/if}
+		{:else}
+			<p class="text-muted-foreground px-2 pb-1 text-xs">{offline ? t("offline.readyText.offline") : t("offline.readyText")}</p>
 
-			{#if phase === "unsupported"}
-				<p class="text-muted-foreground mt-2">{t("offline.unsupported")}</p>
-			{:else if phase === "inactive"}
-				<p class="text-muted-foreground mt-2">{dev ? t("offline.dev") : t("offline.inactive")}</p>
-				{#if !dev}<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />{t("common.retry")}</Button>{/if}
-			{:else if phase === "error"}
-				<p class="mt-2">{t("offline.error")}</p>
-				{#if sw?.message}<p class="text-muted-foreground mt-1 text-xs break-words">{t("common.detail", { detail: sw.message })}</p>{/if}
-				<Button variant="outline" size="sm" class="mt-3" onclick={retry}><Icon name="retry" size={16} />{t("common.retry")}</Button>
-			{:else if phase === "preparing"}
-				<p class="text-muted-foreground mt-2">{t("offline.preparingBase")}{sw ? ` ${t("common.percent", { n: percent(sw.core.done, sw.core.total) })}` : ""}</p>
-				{#if sw}<progress class="accent-primary mt-2 h-2 w-full" max={sw.core.total} value={sw.core.done} aria-label={t("offline.preparing")}></progress>{/if}
-			{:else}
-				<p class="text-muted-foreground mt-2">{offline ? t("offline.readyText.offline") : t("offline.readyText")}</p>
-
-				{#if sw}
-					<div class="mt-3 border-t pt-3">
-						{#if download?.state === "running"}
-							<p role="status">{t("offline.downloading", { percent: t("common.percent", { n: percent(download.done, download.total) }), size: formatBytes(download.bytes) })}</p>
-							<progress class="accent-primary mt-2 h-2 w-full" max={download.total} value={download.done} aria-label={t("offline.download")}></progress>
-							<Button variant="outline" size="sm" class="mt-2" onclick={() => post({ type: "cancel" })}>{t("common.cancel")}</Button>
-						{:else if allCached}
-							<p class="flex items-center gap-2" role="status"><Icon name="success" size={16} />{t("offline.allCached", { count: sw.wiki.pages })}</p>
-						{:else}
-							{#if download?.state === "error"}
-								<p class="text-destructive mb-2 flex items-start gap-2" role="status"><Icon name="error" size={16} class="mt-0.5" />{download.message ? t("offline.interruptedWith", { detail: download.message }) : t("offline.interrupted")}</p>
-							{:else if download?.state === "cancelled"}
-								<p class="text-muted-foreground mb-2" role="status">{t("offline.cancelled")}</p>
-							{:else if download?.state === "done"}
-								<p class="mb-2" role="status">{t("offline.done")}</p>
-							{/if}
-							<Button variant="outline" size="sm" disabled={offline} onclick={() => post({ type: "download-all" })}>
-								<Icon name="download" size={16} />{download?.state === "error" ? t("offline.retryDownload") : t("offline.downloadAll")}
-							</Button>
-							<p class="text-muted-foreground mt-2 text-xs">
-								{offline ? t("offline.reconnect") : t("offline.estimate", { size: formatBytes(estimateBytes(left)), cached: cachedLabel })}
-							</p>
-						{/if}
-					</div>
+			{#if sw}
+				{#if running && download}
+					<p class="px-2 pb-1 text-xs">{t("offline.downloading", { percent: t("common.percent", { n: percent(download.done, download.total) }), size: formatBytes(download.bytes) })}</p>
+					<progress class="accent-primary mx-2 mb-1 h-2 w-[calc(100%-1rem)]" max={download.total} value={download.done} aria-label={t("offline.download")}></progress>
+					<DropdownMenu.Item onSelect={() => post({ type: "cancel" })}><Icon name="clear" size={16} />{t("common.cancel")}</DropdownMenu.Item>
+				{:else if allCached}
+					<p class="flex items-center gap-2 px-2 pb-1 text-xs"><Icon name="success" size={16} />{t("offline.allCached", { count: sw.wiki.pages })}</p>
+				{:else}
+					{#if download?.state === "error"}
+						<p class="text-destructive flex items-start gap-2 px-2 pb-1 text-xs"><Icon name="error" size={16} class="mt-0.5" />{download.message ? t("offline.interruptedWith", { detail: download.message }) : t("offline.interrupted")}</p>
+					{:else if download?.state === "cancelled"}
+						<p class="text-muted-foreground px-2 pb-1 text-xs">{t("offline.cancelled")}</p>
+					{:else if download?.state === "done"}
+						<p class="px-2 pb-1 text-xs">{t("offline.done")}</p>
+					{/if}
+					<DropdownMenu.Item disabled={offline} onSelect={() => post({ type: "download-all" })}>
+						<Icon name="download" size={16} />{download?.state === "error" ? t("offline.retryDownload") : t("offline.downloadAll")}
+					</DropdownMenu.Item>
+					<p class="text-muted-foreground px-2 pt-1 text-xs">
+						{offline ? t("offline.reconnect") : t("offline.estimate", { size: formatBytes(estimateBytes(left)), cached: cachedLabel })}
+					</p>
 				{/if}
 			{/if}
+		{/if}
 
-			<dl class="text-muted-foreground mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t pt-3 text-xs">
-				<dt>{t("offline.connection")}</dt><dd>{offline ? t("offline.state.offline") : t("offline.state.online")}</dd>
-				{#if sw}<dt>{t("offline.localVersion")}</dt><dd><code>{sw.version}</code></dd>{/if}
-				{#if sw && sw.version !== version}<dt>{t("offline.thisPage")}</dt><dd><code>{version}</code></dd>{/if}
-			</dl>
-			{#if waiting}<p class="text-muted-foreground mt-2 text-xs">{t("offline.waiting")}</p>{/if}
-		</div>
-	{/if}
-
-	<div class="flex items-center gap-2">
-		<Button
-			bind:ref={toggle}
-			variant="outline"
-			size="icon"
-			class="bg-background {phase === 'error' ? 'text-destructive' : 'text-muted-foreground'}"
-			aria-expanded={open}
-			aria-controls={open ? panelId : undefined}
-			aria-label={t("offline.buttonLabel", { label })}
-			onclick={toggleOpen}
-		>
-			<Icon name={icon} size={18} class={phase === "preparing" && !offline ? "motion-safe:animate-spin" : ""} />
-		</Button>
-		<!-- always in the DOM: an `aria-live` region must exist before its text changes -->
-		<div aria-live="polite" class="pointer-events-none">
-			{#if offline || announce}
-				<p class="bg-background text-muted-foreground rounded-md border px-2.5 py-1 text-xs shadow-sm">{offline && !announce ? t("offline.offline") : announce}</p>
-			{/if}
-		</div>
+		<dl class="text-muted-foreground mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-2 pb-1 text-xs">
+			<dt>{t("offline.connection")}</dt><dd>{offline ? t("offline.state.offline") : t("offline.state.online")}</dd>
+			{#if sw}<dt>{t("offline.localVersion")}</dt><dd><code>{sw.version}</code></dd>{/if}
+			{#if sw && sw.version !== version}<dt>{t("offline.thisPage")}</dt><dd><code>{version}</code></dd>{/if}
+		</dl>
+		{#if waiting}<p class="text-muted-foreground px-2 pb-1 text-xs">{t("offline.waiting")}</p>{/if}
 	</div>
-</div>
+{/snippet}
+
+{@render children?.({ section, refresh, offline, attention })}
+
+<!-- always in the DOM: an `aria-live` region must exist before its text changes. The visual toast repeats it, hidden from assistive technology -->
+<div aria-live="polite" class="sr-only">{announce}</div>
+<div bind:this={toastEl} popover="manual" aria-hidden="true" class="bg-background text-muted-foreground pointer-events-none fixed inset-auto bottom-3 left-3 m-0 w-fit max-w-[calc(100vw-1.5rem)] overflow-visible rounded-none border px-2.5 py-1 text-xs print:hidden">{toastText}</div>
