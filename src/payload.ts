@@ -10,6 +10,29 @@ declare global {
   var CORTEX_DIST: "binary" | "bundle" | undefined;
 }
 
+/**
+ * What `bun install` fetches but cortex never loads from the payload's node_modules, deleted once installed (about 400 MB of 600): the
+ * ONNX runtime of the other platforms (only <os>/<arch> is run), source maps and TypeScript declarations (nothing compiles or debugs
+ * the dependencies), the tests that packages ship. `onnxruntime-web` is not here: it is replaced by an empty package (package.json "overrides"), so it is not even downloaded.
+ */
+const PRUNE = {
+  /** Folders of a package that are not the one of the machine running cortex. */
+  otherPlatforms: ["onnxruntime-node/bin/napi-v*/*/*"],
+  /** Files and folders to delete wherever they are in node_modules. */
+  everywhere: "**/{*.map,*.d.ts,*.d.mts,*.d.cts,test,tests,__tests__}",
+};
+
+/** Deletes what PRUNE lists from `<dir>/node_modules`. Best effort: a file that stays only costs disk. */
+export function pruneModules(dir: string, platform = process.platform, arch = process.arch): void {
+  const modules = join(dir, "node_modules");
+  const keep = `/${platform}/${arch}`;
+  const doomed = [
+    ...PRUNE.otherPlatforms.flatMap((g) => [...new Bun.Glob(g).scanSync({ cwd: modules, onlyFiles: false })].filter((d) => !d.endsWith(keep))),
+    ...new Bun.Glob(PRUNE.everywhere).scanSync({ cwd: modules, onlyFiles: false, dot: true }),
+  ];
+  for (const d of doomed) rmSync(join(modules, d), { recursive: true, force: true });
+}
+
 const asBun = { ...process.env, BUN_BE_BUN: "1" }; // the compiled binary behaves as the bun it embeds (no effect on a real bun)
 
 /**
@@ -33,9 +56,10 @@ export async function runFromSources(root: string): Promise<number> {
       console.error("First export of this version: installing the site's dependencies (once)…");
       const install = Bun.spawn([process.execPath, "install", "--frozen-lockfile", "--production", "--omit", "optional"], { cwd: tmp, env: asBun, stdio: ["ignore", "inherit", "inherit"] });
       if ((await install.exited) !== 0) throw new Error("could not install the dependencies (network?): rerun cortex export.");
+      pruneModules(tmp);
       renameSync(tmp, dir);
       // ponytail: no lock; a different build exporting at this very moment loses its folder and fails (rerun it).
-      // a new build is in place: earlier versions (~620 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour
+      // a new build is in place: earlier versions (~175 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour
       for (const old of readdirSync(dirname(dir))) {
         const p = join(dirname(dir), old);
         if (old !== basename(dir) && (!old.includes(".tmp-") || Date.now() - statSync(p).mtimeMs > 3_600_000)) rmSync(p, { recursive: true, force: true });

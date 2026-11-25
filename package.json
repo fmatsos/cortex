@@ -56,6 +56,9 @@
     "vite": "8.3.5",
     "zod": "^4"
   },
+  "overrides": {
+    "onnxruntime-web": "file:./src/stubs/onnxruntime-web"
+  },
   "devDependencies": {
     "@phosphor-icons/core": "2.1.1",
     "@playwright/test": "^1.65.1",

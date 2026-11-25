@@ -50,7 +50,7 @@ Three ways, same features. Pick one.
 |---|---|---|---|
 | Standalone binary | ~72 MB (~162 MB on disk) | no | `cortex upgrade` |
 | `cortex.js` | ~2.5 MB (~5.7 MB on disk) | yes | `cortex upgrade` |
-| From the sources | clone + ~670 MB of dependencies | yes | `git pull && bun install` |
+| From the sources | clone + ~470 MB of dependencies | yes | `git pull && bun install` |
 
 **Standalone binary** (Linux x64, macOS arm64). Nothing else to install:
 
@@ -78,7 +78,7 @@ bun link                      # puts `cortex` on your PATH
 
 `bun link` makes the `cortex` command point to your clone, so a `git pull` updates it.
 
-**Updates.** `cortex upgrade --check` compares your version with the latest release; `cortex upgrade` installs it. It only accepts a release whose checksums are signed with the cortex release key. **First export.** The binary and `cortex.js` carry the sources of the HTML site but not its dependencies: the first `cortex export` of each version installs them in `~/.cache/cortex/` (network needed once, ~620 MB, of which ~450 MB for the local embedding model's runtime; older versions are removed).
+**Updates.** `cortex upgrade --check` compares your version with the latest release; `cortex upgrade` installs it. It only accepts a release whose checksums are signed with the cortex release key. **First export.** The binary and `cortex.js` carry the sources of the HTML site but not its dependencies: the first `cortex export` of each version installs them in `~/.cache/cortex/` (network needed once, ~175 MB on disk, of which ~45 MB for the local embedding model's ONNX runtime; older versions are removed). Once installed, what the run never loads is deleted: the ONNX runtime of the other platforms, source maps, type declarations and the packages' own tests; `onnxruntime-web`, which only browsers use, is replaced by an empty package (`overrides` in `package.json`) and is not fetched at all.
 
 ## Quick start
 
@@ -214,7 +214,7 @@ The result is one line per page, at its best rank, wiki before raw, with the ext
 | `base_url` | as the openai client | `openai` only (`$OPENAI_API_KEY` only goes to a URL the environment names). |
 | `threads` | 4, or the number of cores if fewer | `local` only: ONNX threads. |
 
-**Local model.** `multilingual-e5-small`, quantized (q8, 384 dimensions, French included). It is downloaded once (~120 MB) by `cortex index` or a `cortex serve` rebuild into `~/.cache/cortex/models` (`$CORTEX_MODEL_CACHE` to move it), never by a search or any other command. Cost: about 0.5 to 0.9 GB of memory while it runs, 3 to 5 s to load it in a one-shot `cortex search` (a `serve` or `mcp` process loads it once), and a few passages per second per thread to index, so the first index of a large wiki takes minutes and the next ones only embed what changed. The standalone binary carries the ONNX runtime (+18 MB on the download, see Installation), but `cortex serve` and `cortex export` of a binary or `cortex.js` run from the sources it unpacks, whose first-run install of dependencies grew accordingly (see Installation); a source install or `cortex.js` needs `bun install` to have fetched `@huggingface/transformers`.
+**Local model.** `multilingual-e5-small`, quantized (q8, 384 dimensions, French included). It is downloaded once (~120 MB) by `cortex index` or a `cortex serve` rebuild into `~/.cache/cortex/models` (`$CORTEX_MODEL_CACHE` to move it), never by a search or any other command. Cost: about 0.5 to 0.9 GB of memory while it runs, 3 to 5 s to load it in a one-shot `cortex search` (a `serve` or `mcp` process loads it once), and a few passages per second per thread to index, so the first index of a large wiki takes minutes and the next ones only embed what changed. The standalone binary carries the ONNX runtime (+18 MB on the download, see Installation), but `cortex serve` and `cortex export` of a binary or `cortex.js` run from the sources it unpacks, whose first-run install of dependencies is ~175 MB on disk, the ONNX runtime of its platform included (see Installation); a source install or `cortex.js` needs `bun install` to have fetched `@huggingface/transformers`.
 
 **Never an error.** Model not downloaded (no network at the first index), runtime or extension missing, server down: the search answers by words only, with one warning (it names `"provider": "openai"` as the way out when the local model cannot run), and `cortex index` says how many sections it could not embed. The commands that work offline never start a download.
 
