@@ -5,7 +5,7 @@ import { version } from "$app/env";
 import { assets, immutable, prerendered } from "$app/manifest";
 import { self } from "$app/service-worker";
 import {
-	MAX_RUNTIME_ENTRIES, NETWORK_TIMEOUT_MS, cacheKey, cacheNames, isTemporaryFailure, isContentPath,
+	MAX_RUNTIME_ENTRIES, NETWORK_TIMEOUT_MS, cacheKey, cacheNames, isApiPath, isTemporaryFailure, isContentPath,
 	obsoleteCaches, offlineFallbackHtml, oldestToEvict, pool, staleImmutable, withTimeout,
 	type OfflineState, type ToWorker,
 } from "#lib/offline.js";
@@ -128,7 +128,7 @@ async function remember(key: string, response: Response) {
 
 self.addEventListener("fetch", (event) => {
 	const { request } = event;
-	if (request.method !== "GET" || !request.url.startsWith(scope)) return;
+	if (request.method !== "GET" || !request.url.startsWith(scope) || isApiPath(request.url, scope)) return; // the API goes straight to the network
 	event.respondWith(respond(event));
 });
 

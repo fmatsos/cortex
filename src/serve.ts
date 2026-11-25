@@ -14,6 +14,8 @@ import { refresh } from "./embed";
 import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
+import { accountRoute } from "./account-api";
+import { loadConfig } from "./config";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -23,6 +25,8 @@ import { commitAndPush, pullRebase } from "./sync";
  * It also serves the phone share target under /share/ (scripts/share-server.ts): a share is written to `inbox/`
  * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
+ * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
+ * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
  */
 export type ServeOpts = { port: number; sync: boolean; reviewer: string; say?: (m: string) => void; ask?: AskFn };
 /** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
@@ -169,11 +173,17 @@ export async function serve(root: string, o: ServeOpts) {
   void ingest(); // entries left by a previous run
   if (!current) throw new Error("the first export failed: nothing to serve.");
 
+  const accounts = accountRoute({
+    root, say, config: () => loadConfig(root),
+    titles: async () => new Map((await openWiki(root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
+  });
   let asking = false; // ponytail: one question at a time for the whole server, a queue if several people use it
   const server = Bun.serve({
     port: o.port,
     async fetch(req, srv) {
       const url = new URL(req.url);
+      const account = await accounts(req);
+      if (account) return account;
       if (url.pathname === "/api/verify") {
         if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its button
         if (req.method !== "POST") return new Response(null, { status: 405 });

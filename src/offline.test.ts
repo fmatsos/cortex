@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-	cacheKey, cacheNames, cachePrefix, estimateBytes, formatBytes, isTemporaryFailure, isContentPath, obsoleteCaches,
+	cacheKey, cacheNames, cachePrefix, estimateBytes, formatBytes, isApiPath, isTemporaryFailure, isContentPath, obsoleteCaches,
 	offlineFallbackHtml, oldestToEvict, percent, pool, staleImmutable, withTimeout, AVG_WIKI_FILE_BYTES,
 } from "../site/src/lib/offline";
 import { setLocale } from "../site/src/lib/i18n/index";
@@ -35,6 +35,13 @@ test("la clé de cache ignore les paramètres de recherche et l'ancre", () => {
 test("une copie locale remplace les pannes temporaires, jamais une vraie absence", () => {
 	for (const s of [500, 502, 503, 504, 408, 429]) expect(isTemporaryFailure(s)).toBe(true);
 	for (const s of [200, 301, 304, 400, 401, 403, 404, 410]) expect(isTemporaryFailure(s)).toBe(false);
+});
+
+test("l'API du serveur n'est jamais servie ni gardée par le service worker, à la racine comme sous un sous-chemin", () => {
+	expect(isApiPath(`${ROOT}api/me`, ROOT)).toBe(true);
+	expect(isApiPath(`${ROOT}api/auth/login/github?return=%2F`, ROOT)).toBe(true);
+	expect(isApiPath(`${SUB}api/me`, SUB)).toBe(true);
+	for (const u of [`${ROOT}wiki/api/x/`, `${ROOT}apix/`, `${ROOT}`, `${SUB}wiki/a/`]) expect(isApiPath(u, u.startsWith(SUB) ? SUB : ROOT)).toBe(false);
 });
 
 test("pages du wiki et socle", () => {

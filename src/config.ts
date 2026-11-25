@@ -32,6 +32,32 @@ export const SOCIAL_NETWORKS = ["x", "bluesky", "mastodon", "linkedin"] as const
 const externalLink = (k: string) => z.strictObject({
   limit: z.number({ error: `"${k}.limit" must be an integer of at least 0, or null.` }).int({ error: `"${k}.limit" must be an integer of at least 0, or null.` }).min(0, { error: `"${k}.limit" must be an integer of at least 0, or null.` }).nullish(),
 }, { error: `"${k}" must be an object (limit), or null.` }).nullish();
+
+/** `auth.public_urls` entry: an origin (scheme + host[:port]), nothing after it. Returns an error message, or undefined. */
+export function checkPublicUrl(v: string): string | undefined {
+  let u: URL;
+  try { u = new URL(v); } catch { return `"auth.public_urls" entry "${v}" is not a URL (e.g. https://cortex.example).`; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return `"auth.public_urls" entry "${v}" must start with https:// (or http://).`;
+  if (u.username || u.password || u.search || u.hash || u.pathname !== "/")
+    return `"auth.public_urls" entry "${v}" must be an origin only (https://host[:port]): the API lives at the root of the server, \`CORTEX_SITE_BASE\` only affects the static export.`;
+}
+/** Loopback hosts: the only ones an http:// OIDC issuer is accepted for (tests, a local issuer). */
+export const isLoopbackHost = (h: string) => /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(h);
+function checkIssuer(v: string): string | undefined {
+  let u: URL;
+  try { u = new URL(v); } catch { return `"auth.oidc.issuer" "${v}" is not a URL (e.g. https://auth.example).`; }
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && isLoopbackHost(u.hostname))) return `"auth.oidc.issuer" "${v}" must be an https:// URL.`;
+  if (u.search || u.hash) return `"auth.oidc.issuer" "${v}" must not have a query or fragment.`;
+}
+const text = (k: string) => z.string({ error: `"${k}" must be a non-empty string.` }).trim().min(1, { error: `"${k}" must be a non-empty string.` });
+const refined = (k: string, check: (v: string) => string | undefined) => text(k).superRefine((v, ctx) => { const e = check(v); if (e) ctx.addIssue({ code: "custom", message: e, input: v }); });
+const list = <T extends z.ZodType>(k: string, item: T, what: string) => z.array(item, { error: `"${k}" must be a list of ${what}.` }).min(1, { error: `"${k}" needs at least one entry (an empty list would refuse everyone): leave the provider out instead.` });
+/** The secrets never go in cortex.json (versioned): a `client_secret` key gets its own message. */
+const provider = <S extends z.ZodRawShape>(k: string, shape: S, keys: string) => z.strictObject(shape, {
+  error: (i) => i.code === "unrecognized_keys" && i.keys.includes("client_secret")
+    ? `"${k}.client_secret" does not belong in cortex.json (it is versioned): set $CORTEX_${k.slice(5).toUpperCase()}_CLIENT_SECRET in the server's environment.`
+    : i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" in "${k}" (${keys}).` : `"${k}" must be an object (${keys}), or null.`,
+});
 const SHAPE = {
   client: z.enum(CLIENT_NAMES, { error: (i) => `unknown client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
   model: str("model"),
@@ -76,6 +102,29 @@ const SHAPE = {
     route_candidates: count("judge.route_candidates"), dup_candidates: count("judge.dup_candidates"), route_chars: count("judge.route_chars"),
     ask_retained: prob("judge.ask_retained"), ask_related: prob("judge.ask_related"), ask_candidates: count("judge.ask_candidates"),
   }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars, ask_retained, ask_related, ask_candidates), or null.' }).nullish(),
+  /**
+   * User accounts of `cortex serve` (src/auth.ts, docs in the README): sign-in through a generic OIDC provider (Authelia…),
+   * GitHub (OAuth2) and/or Google (OIDC), each active only when configured AND its secret is in the environment
+   * ($CORTEX_OIDC_CLIENT_SECRET, $CORTEX_GITHUB_CLIENT_SECRET, $CORTEX_GOOGLE_CLIENT_SECRET: never in this file). Absent = no sign-in.
+   * public_urls: the origins the site is reached at (behind the proxies: serve only sees http); the redirect URI is built from
+   * them, never from the request. oidc.groups: the user needs one of them (claim `groups`). github.allow: numeric user ids.
+   * google.allow: e-mail addresses (the account's e-mail must be verified).
+   */
+  auth: z.strictObject({
+    public_urls: z.array(refined("auth.public_urls", checkPublicUrl), { error: '"auth.public_urls" must be a list of origins (https://cortex.example).' }).nullish(),
+    oidc: provider("auth.oidc", {
+      label: str("auth.oidc.label"), issuer: refined("auth.oidc.issuer", checkIssuer), client_id: text("auth.oidc.client_id"),
+      groups: list("auth.oidc.groups", text("auth.oidc.groups"), "group names").nullish(),
+    }, "label, issuer, client_id, groups").nullish(),
+    github: provider("auth.github", {
+      client_id: text("auth.github.client_id"),
+      allow: list("auth.github.allow", z.number({ error: '"auth.github.allow" holds numeric GitHub user ids (a login can be renamed and taken over): curl https://api.github.com/users/<login>.' }).int().positive(), "numeric GitHub user ids"),
+    }, "client_id, allow").nullish(),
+    google: provider("auth.google", {
+      client_id: text("auth.google.client_id"),
+      allow: list("auth.google.allow", text("auth.google.allow").refine((v) => /^[^@\s]+@[^@\s]+$/.test(v), { error: '"auth.google.allow" holds e-mail addresses.' }), "e-mail addresses"),
+    }, "client_id, allow").nullish(),
+  }, { error: (i) => i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" in "auth" (public_urls, oidc, github, google).` : '"auth" must be an object (public_urls, oidc, github, google), or null.' }).nullish(),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({
@@ -101,6 +150,9 @@ export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
   };
   check(["effort"], c.effort, c.client);
   check(["site_ask", "effort"], c.site_ask?.effort, c.site_ask?.client ?? c.client);
+  const a = c.auth;
+  if (a && (a.oidc || a.github || a.google) && !a.public_urls?.length)
+    ctx.addIssue({ code: "custom", path: ["auth", "public_urls"], message: '"auth.public_urls" is required with a provider: the redirect URI is built from it (e.g. ["https://cortex.example"]).' });
 });
 
 /** Content of a valid cortex.json as the schema reads it (null = « not set »). */
@@ -110,7 +162,7 @@ export type Config = { [K in keyof RawConfig]?: NonNullable<RawConfig[K]> };
 export type ConfigIssue = { level: "error" | "warning"; msg: string };
 
 const issueMsg = (i: z.core.$ZodIssue) =>
-  i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" (${CONFIG_KEYS.join(", ")}).`
+  i.code === "unrecognized_keys" && !i.path.length ? `unknown property "${i.keys.join(", ")}" (${CONFIG_KEYS.join(", ")}).`
   : !i.path.length && i.code === "invalid_type" ? "cortex.json must contain a JSON object."
   : i.message;
 
@@ -121,6 +173,8 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
   if (r.data.site_ask?.client === "openai" && !r.data.site_ask.model && r.data.client !== "openai")
     return [{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }];
+  const plain = r.data.auth?.public_urls?.find((u) => u.startsWith("http:"));
+  if (plain) return [{ level: "warning", msg: `auth.public_urls "${plain}" is plain http: the session cookie is not marked Secure there.` }];
   return !r.data.client && (r.data.model || r.data.effort || r.data.base_url)
     ? [{ level: "warning", msg: "model/effort/base_url without a client: ignored by the agnostic mode ($CORTEX_AGENT, $CORTEX_AGENT_BATCH)." }] : [];
 }
