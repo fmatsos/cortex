@@ -161,7 +161,7 @@ const OIDC = { label: "Authelia", issuer: "https://auth.test", client_id: "corte
 const ALL: Config["auth"] = { oidc: { ...OIDC, groups: ["app-cortex"] }, github: { client_id: "gh-client", allow: [12345] }, google: { client_id: "g-client", allow: ["ada@example.org"] } };
 const through = (issuer: { handle: Send }) => (u: URL) => issuer.handle(new Request(u));
 const ada = (a: App) => { a.oidc.claims = { sub: "u1", name: "Ada", email: "ada@example.org", groups: ["app-cortex", "other"] }; };
-const login = async (a: App, who: string, claims: Record<string, unknown> = {}) => {
+const signInAs = async (a: App, who: string, claims: Record<string, unknown> = {}) => {
   const b = a.browser();
   a.oidc.claims = { sub: who, name: who, email: `${who}@example.org`, groups: ["app-cortex"], ...claims };
   const r = await b.signIn("oidc", "/", through(a.oidc));
@@ -385,7 +385,7 @@ test("Google: OIDC, the e-mail must be verified and in the list", async () => {
 
 test("no linking between providers: the same e-mail on two providers is two accounts, each with its own data", async () => {
   const a = await setup(ALL);
-  const viaOidc = await login(a, "same", { email: "ada@example.org" });
+  const viaOidc = await signInAs(a, "same", { email: "ada@example.org" });
   a.google.claims = { sub: "g-same", name: "Ada", email: "ada@example.org", email_verified: true };
   const viaGoogle = a.browser();
   await viaGoogle.signIn("google", "/", through(a.google));
@@ -394,7 +394,7 @@ test("no linking between providers: the same e-mail on two providers is two acco
   await viaOidc.json("/api/me/state", { method: "PUT", body: { theme: "dark" } });
   expect((await viaGoogle.json("/api/me/state")).body).toEqual({});
   // the same identity signing in again is the same account
-  const again = await login(a, "same");
+  const again = await signInAs(a, "same");
   expect((await again.json("/api/me")).body.id).toBe(ids[0]);
   expect((a.db().query("select count(*) as n from users").get() as { n: number }).n).toBe(2);
 });
@@ -421,7 +421,7 @@ test("return: only a path of this site; everything else becomes /", async () => 
 
 test("Origin: every state-changing request needs one of the site's origins, signed in or not; GET needs none", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "o1");
+  const b = await signInAs(a, "o1");
   const writes: [string, string, unknown?][] = [
     ["POST", "/api/auth/logout"], ["PUT", "/api/me/state", {}], ["DELETE", "/api/me"], ["POST", "/api/conversations", { turns: [{ question: "q", answer: "a" }] }],
     ["PUT", "/api/conversations/x", { title: "t" }], ["DELETE", "/api/conversations/x"], ["POST", "/api/journeys", { route: ["a"] }], ["PUT", "/api/journeys/x", { title: "t" }], ["DELETE", "/api/journeys/x"], ["PATCH", "/api/me"],
@@ -447,7 +447,7 @@ test("without a session every account route answers 401", async () => {
 
 test("the session slides (renewed at most once a day) and expires", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "s1");
+  const b = await signInAs(a, "s1");
   const DAY = 86_400_000;
   const token = b.jar.get("__Host-cortex_session")!.value;
   const expiry = () => (a.db().query("select expires_at from sessions").get() as { expires_at: number }).expires_at;
@@ -469,7 +469,7 @@ test("the session slides (renewed at most once a day) and expires", async () => 
 
 test("preferences: a JSON object of bounded size", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "p1");
+  const b = await signInAs(a, "p1");
   expect((await b.json("/api/me/state")).body).toEqual({});
   const prefs = { theme: "dark", language: "fr", favorites: ["concepts/idee"], nested: { a: [1, 2] } };
   expect((await b.json("/api/me/state", { method: "PUT", body: prefs })).status).toBe(200);
@@ -490,7 +490,7 @@ const turn = (n: number, extra: object = {}) => ({ question: `Question ${n} ?`, 
 
 test("conversations: create, list (summaries, search, newest first), read, replace, delete; limits", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "c1");
+  const b = await signInAs(a, "c1");
   const made = await b.json("/api/conversations", { method: "POST", body: { turns: [turn(1, { pages: ["concepts/idee"], at: "2026-11-25T10:00:00+01:00" }), turn(2)] } });
   expect(made.status).toBe(201);
   expect(made.body).toMatchObject({ title: "Question 1 ?", turns: [{ question: "Question 1 ?", answer: "Réponse **1**", pages: ["concepts/idee"], at: "2026-11-25T09:00:00.000Z" }, { question: "Question 2 ?" }] });
@@ -554,7 +554,7 @@ test("conversations: create, list (summaries, search, newest first), read, repla
 
 test("journeys: create with a default title from the pages' titles, list, read, replace, delete; limits", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "j1");
+  const b = await signInAs(a, "j1");
   const made = await b.json("/api/journeys", { method: "POST", body: { route: ["concepts/idee", "entities/inconnue"] } });
   expect(made.status).toBe(201);
   expect(made.body).toMatchObject({ title: "Voyage : Idée → entities/inconnue", route: ["concepts/idee", "entities/inconnue"] }); // a known title, an unknown id as is
@@ -585,7 +585,7 @@ test("journeys: create with a default title from the pages' titles, list, read, 
 
 test("a user's quota is bounded", async () => {
   const a = await setup(ALL);
-  const b = await login(a, "q1");
+  const b = await signInAs(a, "q1");
   const db = new Database(accountsFile(a.root));
   const user = (await b.json("/api/me")).body.id as string;
   db.run("begin");
@@ -601,7 +601,7 @@ test("a user's quota is bounded", async () => {
 
 test("isolation: another user's data is a 404 on every route, and is left untouched", async () => {
   const a = await setup(ALL);
-  const alice = await login(a, "alice"), bob = await login(a, "bob");
+  const alice = await signInAs(a, "alice"), bob = await signInAs(a, "bob");
   const conv = (await alice.json("/api/conversations", { method: "POST", body: { turns: [turn(1)] } })).body;
   const trip = (await alice.json("/api/journeys", { method: "POST", body: { route: ["a", "b"] } })).body;
   await alice.json("/api/me/state", { method: "PUT", body: { theme: "dark" } });
@@ -622,7 +622,7 @@ test("isolation: another user's data is a 404 on every route, and is left untouc
 
 test("deleting the account removes the user and everything under it, and only that user's", async () => {
   const a = await setup(ALL);
-  const alice = await login(a, "alice"), bob = await login(a, "bob");
+  const alice = await signInAs(a, "alice"), bob = await signInAs(a, "bob");
   for (const u of [alice, bob]) {
     await u.json("/api/conversations", { method: "POST", body: { turns: [turn(1)] } });
     await u.json("/api/journeys", { method: "POST", body: { route: ["a"] } });
@@ -638,7 +638,7 @@ test("deleting the account removes the user and everything under it, and only th
   expect((await bob.json("/api/conversations")).body.conversations).toHaveLength(1);
   expect((await bob.json("/api/me")).body.name).toBe("bob");
   // signing in again makes a new, empty account
-  const again = await login(a, "alice");
+  const again = await signInAs(a, "alice");
   expect((await again.json("/api/conversations")).body.conversations).toEqual([]);
 });
 
