@@ -112,7 +112,7 @@
 	onkeydown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !dialog?.matches(":modal")) { e.preventDefault(); close(); } }}>
 	<div class="flex h-full flex-col">
 		<header class="flex items-center gap-2 border-b px-4 py-2">
-			<AssistantAvatar state={avatar} size={24} />
+			<AssistantAvatar state={avatar} size={32} />
 			<h2 id="assistant-title" class="flex-1 text-base font-semibold">{t("assistant.title")}</h2>
 			{#if assistant.turns.length}
 				<button type="button" class="hover:bg-muted inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm disabled:opacity-50 pointer-coarse:min-h-11" disabled={assistant.pending} onclick={() => { assistant.clear(); area?.focus(); }}>
