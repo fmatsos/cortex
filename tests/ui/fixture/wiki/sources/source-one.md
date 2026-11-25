@@ -14,3 +14,6 @@ sources:
 > why I keep this
 
 Summary, see [Alpha](/wiki/concepts/alpha.md).
+
+> [!warning] Check before use
+> The figures below were not verified against the original.

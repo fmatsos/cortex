@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fold } from "../site/src/lib/fold";
+import { iconUse } from "../site/src/lib/icons";
 import { buildTerms } from "../site/src/lib/search-engine";
 import { type Locale, setLocale, t } from "../site/src/lib/i18n/index";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
@@ -63,7 +64,13 @@ function splitWarnings(inner: string): { body: string; warnings: string[] } {
   });
   return { body: warnings.length ? body.replace(/\n\s*\n/g, "\n") : body, warnings };
 }
-const warningAside = (title: string, inner: string) => `<aside class="callout-warning" role="note"><p class="callout-warning-title">${title}</p>${inner}</aside>`;
+/** Generated chrome, added after sanitizing (author content cannot write `svg`): a reference to the sprite's symbol. */
+const calloutIcon = (name: "note" | "warning") => iconUse(name, { class: "callout-icon" });
+/** The callout title paragraph, its icon first. */
+const calloutTitle = (cls: string, icon: "note" | "warning", title: string) => `<p class="${cls}">${calloutIcon(icon)}${title}</p>`;
+const warningAside = (title: string, inner: string) => `<aside class="callout-warning" role="note">${calloutTitle("callout-warning-title", "warning", title)}${inner}</aside>`;
+/** A callout title paragraph with its icon, to strip the title from the text (indexed text, warning excerpts). */
+const CALLOUT_ICON = '(?:<svg class="callout-icon"[^>]*><use [^>]*/></svg>)?';
 
 /**
  * Callouts: the Obsidian callout syntax `> [!note] Title` (optional title), rendered by Bun as a plain
@@ -76,7 +83,7 @@ export const noteCallouts = (html: string) =>
     const inner = (sep === "\n" ? "<p>" : "") + rest, heading = title.trim();
     if (kind.toLowerCase() !== "note") return warningAside(title.trim() || t("callout.warning"), inner.replace(/^<p>\s*⚠️?\s*/, "<p>"));
     const { body, warnings } = splitWarnings(inner);
-    return `<aside class="personal-note" role="note"><p class="personal-note-title">${heading || t("callout.note")}</p>${body}</aside>` +
+    return `<aside class="personal-note" role="note">${calloutTitle("personal-note-title", "note", heading || t("callout.note"))}${body}</aside>` +
       (warnings.length ? warningAside(t("callout.warning"), warnings.map((w) => `<p>${w}</p>`).join("")) : "");
   });
 
@@ -153,7 +160,7 @@ export function render(body: string, from: string, pages: Set<string>) {
     html: defs.has(k) ? links(inline(restore(defs.get(k)!))) : "",
   }));
   const toc = [...html.matchAll(/<h([23]) id="([^"]+)">([\s\S]*?)<\/h\1>/g)].map((m) => ({ level: +m[1] as 2 | 3, id: m[2], text: plain(m[3]) }));
-  const warnings = [...html.matchAll(/<aside class="callout-warning"[^>]*>([\s\S]*?)<\/aside>/g)].map((m) => plain(m[1].replace(/<p class="callout-warning-title">[^<]*<\/p>/, "")));
+  const warnings = [...html.matchAll(/<aside class="callout-warning"[^>]*>([\s\S]*?)<\/aside>/g)].map((m) => plain(m[1].replace(new RegExp(`<p class="callout-warning-title">${CALLOUT_ICON}[^<]*</p>`), "")));
   return { html, notes, toc, warnings };
 }
 
@@ -302,7 +309,7 @@ export const buildSiteData = (root: string, say: (m: string) => void = warn) => 
 
 /** Precomputed search index: inverted index over the full content (folded word → pages) + autocomplete vocabulary. */
 function buildSearch(pages: PageData[]): SearchIndex {
-  const TITLE = /<p class="(?:personal-note|callout-warning)-title">([^<]*)<\/p>/g;
+  const TITLE = new RegExp(`<p class="(?:personal-note|callout-warning)-title">${CALLOUT_ICON}([^<]*)</p>`, "g");
   // One tag strip per page: the callout titles leave the indexed text but still feed the autocomplete vocabulary.
   const titles: string[] = [];
   const docs = pages.map((p) => {

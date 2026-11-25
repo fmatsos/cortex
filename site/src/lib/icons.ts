@@ -7,8 +7,8 @@
  * and `g`. Corners are right angles: no `rx`, no arc used only to round a corner. Curves survive only where they
  * define the symbol (lens, moon, globe, sun, clock, refresh arcs, bulb, wifi). A dot is a real 2x2 filled square
  * (`DOT`, `fill="currentColor" stroke="none"`), never a zero-length segment. A status container is a square frame.
- * The wrapper is in `icon.svelte`; `iconSvg()` renders it as a string for uses outside Svelte (tests, CSS `mask`
- * patterns).
+ * The sprite of all the bodies is `icon-sprite.svelte` (one `<symbol>` per name, mounted once by the layout); `icon.svelte`
+ * draws an instance (`<use>`); `iconSvg()` renders a standalone SVG string (tests).
  */
 
 const STAR = `<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>`;
@@ -123,8 +123,15 @@ export function iconSvg(name: IconName, { size = 20, filled = false, label }: Ic
 	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="${strokeFor(size)}" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="2" focusable="false" ${a11y}>${ICONS[name]}</svg>`;
 }
 
-/** `data:` URL of an icon for CSS `mask-image` (callout pills: the exported content carries no SVG). */
-export function iconMask(name: IconName): string {
-	const svg = iconSvg(name, { size: 24 }).replace(/"/g, "'");
-	return `url("data:image/svg+xml,${svg.replace(/</g, "%3C").replace(/>/g, "%3E").replace(/#/g, "%23")}")`;
+/** Id of an icon's `<symbol>` in the embedded sprite (`icon-sprite.svelte`). */
+export const symbolId = (name: IconName) => `cx-${name}`;
+
+/**
+ * The icon as a sprite reference: a small `<svg>` whose `<use>` points at the symbol of the embedded sprite. The stroke
+ * contract sits here, on the instance (symbols inherit it through `<use>`), so size, `currentColor` and `filled` stay
+ * per instance. For markup generated outside Svelte (the exported callouts); `class` is a fixed token, never user input.
+ */
+export function iconUse(name: IconName, { size, filled = false, class: cls }: { size?: number; filled?: boolean; class?: string } = {}): string {
+	const dim = size ? ` width="${size}" height="${size}"` : "";
+	return `<svg${cls ? ` class="${cls}"` : ""} viewBox="0 0 24 24"${dim} fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="${strokeFor(size ?? 20)}" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="2" focusable="false" aria-hidden="true"><use href="#${symbolId(name)}"/></svg>`;
 }

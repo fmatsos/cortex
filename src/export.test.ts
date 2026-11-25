@@ -2,6 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { iconUse } from "../site/src/lib/icons";
+
+/** The callout title icon the export writes: a reference to the sprite symbol. */
+const NOTE_ICON = iconUse("note", { class: "callout-icon" }), WARNING_ICON = iconUse("warning", { class: "callout-icon" });
 
 // The export test freezes SOURCE_DATE_EPOCH: put the environment back so later tests are unaffected.
 const epoch0 = process.env.SOURCE_DATE_EPOCH;
@@ -18,8 +22,8 @@ test("export: readable unique heading anchors, no collision with UI ids", async 
 test("export: « Note personnelle » callout (Obsidian)", async () => {
   const { noteCallouts } = await import("./export");
   const html = (m: string) => noteCallouts(Bun.markdown.html(m));
-  expect(html("> [!note] Note personnelle\n> pourquoi *je* garde ça")).toBe('<aside class="personal-note" role="note"><p class="personal-note-title">Note personnelle</p><p>pourquoi <em>je</em> garde ça</p>\n</aside>\n');
-  expect(html("> [!note]\n> sans titre")).toContain('<p class="personal-note-title">Personal note</p><p>sans titre');
+  expect(html("> [!note] Note personnelle\n> pourquoi *je* garde ça")).toBe('<aside class="personal-note" role="note"><p class="personal-note-title">' + NOTE_ICON + 'Note personnelle</p><p>pourquoi <em>je</em> garde ça</p>\n</aside>\n');
+  expect(html("> [!note]\n> sans titre")).toContain('<p class="personal-note-title">' + NOTE_ICON + 'Personal note</p><p>sans titre');
   expect(html("> une citation ordinaire")).toContain("<blockquote>");
 });
 
@@ -161,7 +165,7 @@ test("export: the UI follows `language` (French), wiki content untouched, both d
   const a = readFileSync(join(out, "wiki/concepts/a/index.html"), "utf8");
   expect(a).toContain('<html lang="fr">');
   expect(a).toContain("Copier le Markdown"); // UI label in French
-  expect(a).toContain('<p class="personal-note-title">Note personnelle</p>'); // texts the export writes into pages
+  expect(a).toContain('<p class="personal-note-title">' + NOTE_ICON + 'Note personnelle</p>'); // texts the export writes into pages
   expect(a).toContain('class="missing-link" title="page à écrire"');
   expect(a).toContain("JavaScript est désactivé");
   expect(JSON.parse(readFileSync(join(root, ".cortex/site-data/data.json"), "utf8")).locale).toBe("fr");

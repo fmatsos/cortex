@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "svelte/compiler";
 import { parseHTML } from "linkedom";
-import { ICON_NAMES, ICONS, iconMask, iconSvg, strokeFor, type IconName } from "../site/src/lib/icons";
+import { ICON_NAMES, ICONS, iconSvg, iconUse, strokeFor, symbolId, type IconName } from "../site/src/lib/icons";
+import { md, noteCallouts } from "./export";
 import { KINDS, TYPES, kindIcon, kindLabel, statusMeta, typeIcon } from "../site/src/lib/type-meta";
 import { setLocale } from "../site/src/lib/i18n/index";
 
@@ -142,7 +143,10 @@ test("iconSvg : étiquette, remplissage et trait optique", () => {
   expect(strokeFor(16)).toBe(2);
 });
 
-test("le composant Icon rend le même SVG (décorative par défaut, étiquetée sur demande)", async () => {
+const strip = (h: string) => h.replace(/<!--.*?-->|\s+/g, "");
+
+// Compiles the Svelte components for server rendering, once for the whole file.
+async function ssr() {
   Bun.plugin({
     name: "svelte-ssr",
     setup(build) {
@@ -154,34 +158,94 @@ test("le composant Icon rend le même SVG (décorative par défaut, étiquetée 
   });
   const { render } = await import("svelte/server");
   const { default: Icon } = await import("../site/src/lib/components/icon.svelte");
-  const html = (props: Record<string, unknown>) => render(Icon, { props }).body;
+  const { default: IconSprite } = await import("../site/src/lib/components/icon-sprite.svelte");
+  return {
+    icon: (props: Record<string, unknown>) => render(Icon, { props }).body,
+    sprite: () => render(IconSprite, { props: {} }).body,
+  };
+}
 
+test("le sprite : un symbole par nom, ids uniques, contenu du pack, hors flux et de taille nulle", async () => {
+  const { sprite } = await ssr();
+  const html = sprite();
+  const { document } = parseHTML(`<!doctype html><body>${html}`);
+  const root = document.querySelector("svg")!;
+  expect(root.getAttribute("aria-hidden")).toBe("true");
+  const style = root.getAttribute("style") ?? "";
+  expect(style).toMatch(/position:\s*absolute/);
+  expect(style).toMatch(/width:\s*0/);
+  expect(style).toMatch(/height:\s*0/);
+  expect(style, "display:none breaks <use> in some browsers").not.toMatch(/display\s*:\s*none/);
+  const symbols = [...document.querySelectorAll("symbol")];
+  const ids = symbols.map((s) => s.getAttribute("id")!);
+  expect(new Set(ids).size, "ids de symboles uniques").toBe(ids.length);
+  expect(ids.sort()).toEqual(ICON_NAMES.map(symbolId).sort());
   for (const name of ICON_NAMES) {
-    const out = parseHTML(`<!doctype html><body>${html({ name })}`).document.querySelector("svg")!;
-    const ref = parseHTML(`<!doctype html><body>${iconSvg(name, { size: 20 })}`).document.querySelector("svg")!;
-    expect(out.innerHTML.replace(/<!--.*?-->|\s+/g, ""), name).toBe(ref.innerHTML.replace(/\s+/g, ""));
-    expect(out.getAttribute("width")).toBe("20");
-    expect(out.getAttribute("aria-hidden")).toBe("true");
-    expect(out.getAttribute("role")).toBeNull();
-    expect(out.getAttribute("stroke-width")).toBe("1.75");
-    expect(out.getAttribute("stroke-linecap")).toBe("butt");
-    expect(out.getAttribute("stroke-linejoin")).toBe("miter");
-    expect(out.getAttribute("stroke-miterlimit")).toBe("2");
+    const sym = document.getElementById(symbolId(name))!;
+    expect(sym.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(strip(sym.innerHTML), name).toBe(strip(ICONS[name]));
+    // the stroke contract is on the instance, never on the symbol
+    for (const a of ["stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "fill"]) expect(sym.getAttribute(a), `${name}: ${a} sur le symbole`).toBeNull();
   }
-  const labelled = parseHTML(`<!doctype html><body>${html({ name: "search", size: 24, label: "Rechercher" })}`).document.querySelector("svg")!;
+});
+
+test("le composant Icon : un <use> du sprite, sans géométrie ; décorative par défaut, étiquetée sur demande", async () => {
+  const { icon } = await ssr();
+  let all = "";
+  for (const name of ICON_NAMES) {
+    const out = icon({ name });
+    all += out;
+    const svg = parseHTML(`<!doctype html><body>${out}`).document.querySelector("svg")!;
+    const uses = [...svg.querySelectorAll("*")];
+    expect(uses.map((e) => e.tagName.toLowerCase()), name).toEqual(["use"]);
+    expect(uses[0].getAttribute("href")).toBe(`#cx-${name}`);
+    expect(out, `${name}: no geometry per use`).not.toMatch(/<(path|circle|rect|g)[\s>]/);
+    expect(out, `${name}: no path data per use`).not.toMatch(/\bd="/);
+    expect(svg.getAttribute("width")).toBe("20");
+    expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(svg.getAttribute("fill")).toBe("none");
+    expect(svg.getAttribute("stroke")).toBe("currentColor");
+    expect(svg.getAttribute("aria-hidden")).toBe("true");
+    expect(svg.getAttribute("role")).toBeNull();
+    expect(svg.getAttribute("stroke-width")).toBe("1.75");
+    expect(svg.getAttribute("stroke-linecap")).toBe("butt");
+    expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
+    expect(svg.getAttribute("stroke-miterlimit")).toBe("2");
+  }
+  // no instance repeats any icon geometry: it is written once, in the sprite
+  for (const body of Object.values(ICONS)) expect(all).not.toContain(body);
+  const doc = (props: Record<string, unknown>) => parseHTML(`<!doctype html><body>${icon(props)}`).document.querySelector("svg")!;
+  const labelled = doc({ name: "search", size: 24, label: "Rechercher" });
   expect(labelled.getAttribute("role")).toBe("img");
   expect(labelled.getAttribute("aria-label")).toBe("Rechercher");
   expect(labelled.getAttribute("aria-hidden")).toBeNull();
-  const star = parseHTML(`<!doctype html><body>${html({ name: "star", filled: true })}`).document.querySelector("svg")!;
-  expect(star.getAttribute("fill")).toBe("currentColor");
+  expect(doc({ name: "star", filled: true }).getAttribute("fill")).toBe("currentColor");
+  expect(doc({ name: "star", size: 16 }).getAttribute("stroke-width")).toBe("2");
 });
 
-test("les motifs CSS des encarts suivent les icônes du pack", () => {
+test("iconUse : référence au sprite avec le contrat de trait sur l'instance", () => {
+  const svg = parseHTML(`<!doctype html><body>${iconUse("note", { class: "callout-icon" })}`).document.querySelector("svg")!;
+  expect(svg.getAttribute("class")).toBe("callout-icon");
+  expect(svg.getAttribute("aria-hidden")).toBe("true");
+  expect(svg.getAttribute("stroke-linecap")).toBe("butt");
+  expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
+  expect(svg.querySelector("use")!.getAttribute("href")).toBe("#cx-note");
+});
+
+test("les encarts exportés référencent le sprite ; plus aucun masque CSS dupliqué", () => {
   const css = readFileSync(join(SITE, "app.css"), "utf8");
-  expect(css).toContain(`--callout-icon: ${iconMask("note")};`);
-  expect(css).toContain(`--callout-icon: ${iconMask("warning")};`);
-  expect(iconMask("note")).toMatch(/^url\("data:image\/svg\+xml,%3Csvg /);
-  expect(iconMask("note")).not.toMatch(/[<>#]/);
+  expect(css).not.toContain("--callout-icon");
+  expect(css).not.toMatch(/data:image\/svg/);
+  expect(css).not.toMatch(/mask:/);
+  const note = noteCallouts(md("> [!note] Titre\n> corps"));
+  expect(note).toContain('<use href="#cx-note"/>');
+  expect(note).toContain('class="callout-icon"');
+  const warn = noteCallouts(md("> [!warning] Titre\n> corps"));
+  expect(warn).toContain('<use href="#cx-warning"/>');
+  expect(note + warn).not.toMatch(/<(path|circle|rect)[\s>]|\bd="|data:image/);
+  // the icon is generated chrome, added after sanitizing: author content still cannot write svg or use
+  const hostile = md('<svg onload="x"><use href="#cx-note"/></svg><p>texte</p>');
+  expect(hostile).not.toMatch(/<svg|<use/i);
 });
 
 test("type-meta: log labels follow the locale, technical identifiers unchanged", () => {
