@@ -152,6 +152,7 @@ pair("--graph-label", "--map-land"); // map mode: page labels on land
 pair("--graph-label", "--map-sea"); // island names over the sea
 pair("--map-coast", "--map-sea", 1.3); // a coast that reads, quietly
 pair("--graph-edge-active", "--map-land", 3);
+for (let i = 1; i <= 6; i++) { pair("--graph-label", `--map-country-${i}`); pair("--type-concept", `--map-country-${i}`, 3); pair("--map-border", `--map-country-${i}`, 1.8); } // map: labels, cities and borders on every country
 pair("--ring", "--background", 3); // focus ring
 pair("--ring", "--card", 3);
 pair("--link", "--background", 3);

@@ -8,7 +8,7 @@
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { buildView, reconcileSelection, relationIndex, relationsOf, resolveFocus, searchNodes, type GNode, type GraphView } from "#lib/graph-model.js";
-	import { SHAPE_LABEL, shapeOf, svgPoints } from "#lib/graph-shapes.js";
+	import { SHAPE_LABEL, settlementOf, shapeOf, svgPoints } from "#lib/graph-shapes.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import type { GraphData } from "#lib/types.js";
 	import type { createGraph } from "#lib/graph-sigma.js";
@@ -130,6 +130,15 @@
 	{@const pts = svgPoints(sh, size)}
 	<svg width={size} height={size} viewBox="0 0 {size} {size}" aria-hidden="true" focusable="false" class="shrink-0" style="fill: {typeColor(type)}">
 		{#if pts}<polygon points={pts} stroke-linejoin="round" />{:else}<circle cx={size / 2} cy={size / 2} r={size * 0.4} />{/if}
+	</svg>
+{/snippet}
+
+{#snippet settlement(kind: string)}
+	<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false" class="text-foreground shrink-0">
+		{#if kind === "capital"}<circle cx="7" cy="7" r="5.2" fill="none" stroke="currentColor" stroke-width="1.6" /><circle cx="7" cy="7" r="2.2" fill="currentColor" />
+		{:else if kind === "square"}<rect x="3.5" y="3.5" width="7" height="7" fill="currentColor" />
+		{:else if kind === "ring"}<circle cx="7" cy="7" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6" />
+		{:else}<circle cx="7" cy="7" r="4.6" fill="currentColor" />{/if}
 	</svg>
 {/snippet}
 
@@ -305,10 +314,14 @@
 {#if !listMode}
 	<div class="text-muted-foreground mt-2 space-y-1 text-sm">
 		<p class="flex flex-wrap items-center gap-x-4 gap-y-1">
-			{#each types as t (t)}<span class="inline-flex items-center gap-1.5">{@render shape(t, 14)}{typeLabel(t)} ({SHAPE_LABEL[shapeOf(t)]})</span>{/each}
+			{#if mode === "map"}
+				{#each types as t (t)}<span class="inline-flex items-center gap-1.5" data-settlement={settlementOf(t)}>{@render settlement(settlementOf(t))}{tr(`graph.settlement.${settlementOf(t)}`)} ({typeLabel(t)})</span>{/each}
+			{:else}
+				{#each types as t (t)}<span class="inline-flex items-center gap-1.5">{@render shape(t, 14)}{typeLabel(t)} ({SHAPE_LABEL[shapeOf(t)]})</span>{/each}
+			{/if}
 			<span class="inline-flex items-center gap-1.5"><Icon name="star" size={14} filled style="color: var(--favorite)" />{tr("graph.legend.fav")}</span>
 		</p>
-		<p>{tr("graph.legend.size")}</p>
+		{#if mode === "map"}<p>{tr("graph.legend.map")}</p>{:else}<p>{tr("graph.legend.size")}</p>{/if}
 		<p>{tr("graph.legend.help")}</p>
 	</div>
 {/if}

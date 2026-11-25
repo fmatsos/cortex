@@ -43,6 +43,13 @@
 	--map-sea: #e6ecec;
 	--map-land: #fbfaf5;
 	--map-coast: #bfc8c0;
+	--map-country-1: #f1e9d2;
+	--map-country-2: #dfe9d6;
+	--map-country-3: #ecdcd4;
+	--map-country-4: #dce4ec;
+	--map-country-5: #ebe3c4;
+	--map-country-6: #e4dcea;
+	--map-border: #8f988c;
 	--favorite: #7c5a22;
 	--signal: #a8701a;
 	--note-background: #efe7d4;
@@ -106,6 +113,13 @@
 		--map-sea: #151b1a;
 		--map-land: #26302d;
 		--map-coast: #45534d;
+		--map-country-1: #3a3628;
+		--map-country-2: #2c3a2e;
+		--map-country-3: #3c302c;
+		--map-country-4: #2c3440;
+		--map-country-5: #3a3624;
+		--map-country-6: #352f3e;
+		--map-border: #7d8c84;
 		--favorite: #e4c58d;
 		--signal: #e6b85c;
 		--note-background: #332f23;

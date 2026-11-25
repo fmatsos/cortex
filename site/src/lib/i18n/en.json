@@ -715,5 +715,10 @@
 	"graph.mode.label": "Presentation",
 	"graph.mode.graph": "Graph",
 	"graph.mode.map": "Map",
+	"graph.settlement.capital": "Capital",
+	"graph.settlement.circle": "City",
+	"graph.settlement.square": "Town",
+	"graph.settlement.ring": "Village",
+	"graph.legend.map": "Each group of pages is a country, and closely linked countries form a continent; the sea separates continents and dotted lines trace their main routes. A page is a settlement by its type. Zoom in to reveal country names, then page names; a selected page gets its links back.",
 	"graph.nearestFrame": "framing the closest 30"
 }

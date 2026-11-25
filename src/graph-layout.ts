@@ -3,7 +3,11 @@ import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import type { GraphData } from "../site/src/lib/types";
 import { collator } from "./text";
-import { islandRadius, MIN_ISLAND, packIslands, MISC } from "../site/src/lib/graph-pack";
+import { Delaunay } from "d3-delaunay";
+import { islandRadius, MIN_ISLAND, packBoxes, packIslands, MISC, SEA } from "../site/src/lib/graph-pack";
+
+/** Number of --map-country-* tokens. */
+const COUNTRY_COLORS = 6;
 
 type InputNode = Omit<GraphData["nodes"][number], "x" | "y" | "community">;
 type Input = { nodes: InputNode[]; links: GraphData["links"] };
@@ -80,25 +84,106 @@ export function layoutGraph(input: Input): GraphData {
   for (const n of nodes) { const id = membership.get(n.id)!; (groups.get(id) ?? groups.set(id, []).get(id)!).push(n); }
   const tagCounts = new Map<string, number>();
   for (const n of nodes) for (const tag of n.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  const dominantTags = (members: InputNode[]) => {
+    const tags = new Map<string, number>();
+    for (const n of members) for (const tag of n.tags) tags.set(tag, (tags.get(tag) ?? 0) + 1);
+    const idf = (tag: string) => Math.log(1 + nodes.length / tagCounts.get(tag)!);
+    return [...tags].sort((a, b) => b[1] * idf(b[0]) - a[1] * idf(a[0]) || compare(a[0], b[0])).map(([t]) => t.replaceAll("-", " "));
+  };
   const ordered = [...groups].sort((a, b) => b[1].length - a[1].length || compare(a[0], b[0]));
-  const centers = packIslands(ordered.map(([, members]) => members.length), 16 / 9);
-  const positions = new Map<string, { x: number; y: number }>();
-  const communities: GraphData["communities"] = [];
-  // A separate island per community prevents global hubs from swallowing small subjects.
-  for (const [i, [id, members]] of ordered.entries()) {
-    const radius = islandRadius(members.length), center = centers[i];
+
+  // Continents: Louvain over the countries, weighted by the links between them; Various stays an archipelago of its own.
+  const between = new UndirectedGraph({ allowSelfLoops: false });
+  for (const [id] of ordered) if (id !== MISC) between.addNode(id);
+  for (const e of links) {
+    const a = membership.get(e.source)!, b = membership.get(e.target)!;
+    if (a === b || a === MISC || b === MISC) continue;
+    if (between.hasEdge(a, b)) between.updateEdgeAttribute(a, b, "weight", (w: number) => w + 1);
+    else between.addEdge(a, b, { weight: 1 });
+  }
+  const parts = between.size ? louvain(between, { rng: random(), resolution: 1, getEdgeWeight: "weight" }) : {};
+  const continentOf = new Map<string, string>(), continentName = new Map<number, string>();
+  for (const [id] of ordered) {
+    if (id === MISC || parts[id] === undefined) { continentOf.set(id, id); continue; }
+    if (!continentName.has(parts[id])) continentName.set(parts[id], id); // named after its largest country
+    continentOf.set(id, continentName.get(parts[id])!);
+  }
+
+  // Local layout of each country: its pages' FA2 placement scaled into its radius.
+  const local = new Map<string, { x: number; y: number }>();
+  for (const [, members] of ordered) {
+    const radius = islandRadius(members.length);
     const xy = members.map((n) => graph.getNodeAttributes(n.id));
     const mx = xy.reduce((s, p) => s + p.x, 0) / members.length, my = xy.reduce((s, p) => s + p.y, 0) / members.length;
     const extent = Math.max(1, ...xy.map((p) => Math.hypot(p.x - mx, p.y - my)));
-    for (let j = 0; j < members.length; j++) positions.set(members[j].id, {
-      x: Math.round((center.x + (xy[j].x - mx) / extent * radius) * 1000) / 1000,
-      y: Math.round((center.y + (xy[j].y - my) / extent * radius) * 1000) / 1000,
-    });
-    const reps = [...members].sort((a, b) => Number(a.type === "Source") - Number(b.type === "Source") || graph.degree(b.id) - graph.degree(a.id) || compare(a.id, b.id)).slice(0, 3);
-    const tags = new Map<string, number>();
-    for (const n of members) for (const tag of n.tags) tags.set(tag, (tags.get(tag) ?? 0) + 1);
-    const dominant = [...tags].sort((a, b) => b[1] * Math.log(1 + nodes.length / tagCounts.get(b[0])!) - a[1] * Math.log(1 + nodes.length / tagCounts.get(a[0])!) || compare(a[0], b[0]));
-    communities.push({ id, label: id === MISC ? "" : dominant.length ? dominant.slice(0, 2).map(([t]) => t.replaceAll("-", " ")).join(" · ") : reps[0].title, size: members.length, representatives: reps.map((n) => n.id), x: center.x, y: center.y });
+    members.forEach((n, j) => local.set(n.id, { x: (xy[j].x - mx) / extent * radius, y: (xy[j].y - my) / extent * radius }));
   }
-  return { nodes: nodes.map((n) => ({ ...n, degree: graph.degree(n.id), ...positions.get(n.id)!, community: membership.get(n.id)! })).sort((a, b) => collator.compare(a.title, b.title) || collator.compare(a.id, b.id)), links, communities };
+
+  // Countries touch inside a continent (no gap); continents are boxes packed with sea between them.
+  const continents = new Map<string, [string, InputNode[]][]>();
+  for (const entry of ordered) { const c = continentOf.get(entry[0])!; (continents.get(c) ?? continents.set(c, []).get(c)!).push(entry); }
+  const shapes = [...continents].map(([id, countries]) => {
+    // a negative gap: neighbouring countries overlap their margins, so they share a border instead of a strait
+    const centers = packIslands(countries.map(([, m]) => m.length), 1.4, -60);
+    const xs = countries.flatMap(([, m], i) => [centers[i].x - islandRadius(m.length), centers[i].x + islandRadius(m.length)]);
+    const ys = countries.flatMap(([, m], i) => [centers[i].y - islandRadius(m.length), centers[i].y + islandRadius(m.length)]);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    return { id, countries, centers: centers.map((c) => ({ x: c.x - cx, y: c.y - cy })), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  }).sort((a, b) => b.w * b.h - a.w * a.h || compare(a.id, b.id));
+  const placed = packBoxes(shapes, 16 / 9, SEA);
+  const round = (v: number) => Math.round(v * 10) / 10;
+  const positions = new Map<string, { x: number; y: number }>();
+  const communities: GraphData["communities"] = [];
+  const continentData: GraphData["continents"] = [];
+  for (const [k, shape] of shapes.entries()) {
+    const at = placed[k], members: InputNode[] = [];
+    for (const [i, [id, countryMembers]] of shape.countries.entries()) {
+      const center = { x: at.x + shape.centers[i].x, y: at.y + shape.centers[i].y };
+      for (const n of countryMembers) { const l = local.get(n.id)!; positions.set(n.id, { x: Math.round((center.x + l.x) * 1000) / 1000, y: Math.round((center.y + l.y) * 1000) / 1000 }); members.push(n); }
+      const reps = [...countryMembers].sort((a, b) => Number(a.type === "Source") - Number(b.type === "Source") || graph.degree(b.id) - graph.degree(a.id) || compare(a.id, b.id)).slice(0, 3);
+      const dominant = dominantTags(countryMembers);
+      communities.push({ id, label: id === MISC ? "" : dominant.length ? dominant.slice(0, 2).join(" · ") : reps[0].title, size: countryMembers.length, representatives: reps.map((n) => n.id), x: center.x, y: center.y, continent: shape.id, color: 0 });
+    }
+    // Voronoi territories of the pages, bounded by the continent box plus a coast margin; borders where countries meet.
+    const points = members.map((n) => positions.get(n.id)!);
+    const delaunay = Delaunay.from(points, (p) => p.x, (p) => p.y);
+    const voronoi = delaunay.voronoi([at.x - shape.w / 2 - 80, at.y - shape.h / 2 - 80, at.x + shape.w / 2 + 80, at.y + shape.h / 2 + 80]);
+    const cells = members.map((n, i) => ({ id: n.id, points: (voronoi.cellPolygon(i) ?? []).flat().map(round) }));
+    // A border is the edge two cells of different countries share; the cells are already clipped to the continent box,
+    // so no border runs off across the sea (a raw circumcentre of a flat triangle can lie far away).
+    const borders: number[] = [];
+    const key = (x: number, y: number) => `${x.toFixed(1)},${y.toFixed(1)}`;
+    const { halfedges, triangles } = delaunay;
+    for (let e = 0; e < halfedges.length; e++) {
+      const j = halfedges[e];
+      if (j < e) continue;
+      const p = triangles[e], q = triangles[e % 3 === 2 ? e - 2 : e + 1];
+      if (membership.get(members[p].id) === membership.get(members[q].id)) continue;
+      const a = voronoi.cellPolygon(p), b = voronoi.cellPolygon(q);
+      if (!a || !b) continue;
+      const inB = new Set(b.map(([x, y]) => key(x, y)));
+      const shared = [...new Map(a.filter(([x, y]) => inB.has(key(x, y))).map(([x, y]) => [key(x, y), [x, y]])).values()];
+      if (shared.length >= 2) borders.push(round(shared[0][0]), round(shared[0][1]), round(shared[1][0]), round(shared[1][1]));
+    }
+    const label = shape.id === MISC ? "" : dominantTags(members)[0] ?? "";
+    continentData.push({ id: shape.id, label, size: members.length, x: at.x, y: at.y, w: shape.w, h: shape.h, cells, borders });
+  }
+
+  // Political colours: greedy over countries by size, never the colour of a neighbour (a Delaunay edge between two countries).
+  const neighbours = new Map<string, Set<string>>();
+  for (const c of continentData) {
+    const members = c.cells.map((cell) => membership.get(cell.id)!);
+    const delaunay = Delaunay.from(c.cells.map((cell) => positions.get(cell.id)!), (p) => p.x, (p) => p.y);
+    for (let e = 0; e < delaunay.triangles.length; e++) {
+      const a = members[delaunay.triangles[e]], b = members[delaunay.triangles[e % 3 === 2 ? e - 2 : e + 1]];
+      if (a !== b) { (neighbours.get(a) ?? neighbours.set(a, new Set()).get(a)!).add(b); (neighbours.get(b) ?? neighbours.set(b, new Set()).get(b)!).add(a); }
+    }
+  }
+  const colorOf = new Map<string, number>();
+  for (const c of communities) {
+    const taken = new Set([...(neighbours.get(c.id) ?? [])].map((n) => colorOf.get(n)));
+    let color = 0; while (taken.has(color)) color++;
+    colorOf.set(c.id, color % COUNTRY_COLORS); c.color = color % COUNTRY_COLORS;
+  }
+  return { nodes: nodes.map((n) => ({ ...n, degree: graph.degree(n.id), ...positions.get(n.id)!, community: membership.get(n.id)! })).sort((a, b) => collator.compare(a.title, b.title) || collator.compare(a.id, b.id)), links, communities, continents: continentData };
 }
