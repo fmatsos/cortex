@@ -35,7 +35,7 @@ export async function runFromSources(root: string): Promise<number> {
       if ((await install.exited) !== 0) throw new Error("could not install the dependencies (network?): rerun cortex export.");
       renameSync(tmp, dir);
       // ponytail: no lock; a different build exporting at this very moment loses its folder and fails (rerun it).
-      // a new build is in place: earlier versions (~170 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour
+      // a new build is in place: earlier versions (~620 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour
       for (const old of readdirSync(dirname(dir))) {
         const p = join(dirname(dir), old);
         if (old !== basename(dir) && (!old.includes(".tmp-") || Date.now() - statSync(p).mtimeMs > 3_600_000)) rmSync(p, { recursive: true, force: true });

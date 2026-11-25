@@ -295,7 +295,8 @@ export async function searchInfo(): Promise<{ sqlite: string; library: string; v
         knn = (db.query("SELECT id FROM t WHERE embedding MATCH ? AND k = 1").get(new Float32Array([0.1, 1])) as { id: number } | null)?.id === 2;
       } catch { /* reported as not answering */ }
     }
-    const { path, source, error } = sqliteState;
-    return { sqlite, library: path ? `${path}, from ${source === "env" ? "$CORTEX_SQLITE_LIB" : "Homebrew"}` : "the system's, or Bun's own", vec, knn, note: error };
+    const { path, source, error, ignored } = sqliteState;
+    const library = path ? `${path}, from ${source === "env" ? "$CORTEX_SQLITE_LIB" : "Homebrew"}` : ignored ? "Bun's own ($CORTEX_SQLITE_LIB is only honoured on macOS)" : "the system's, or Bun's own";
+    return { sqlite, library, vec, knn, note: error };
   } finally { db.close(); }
 }

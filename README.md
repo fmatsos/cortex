@@ -48,9 +48,9 @@ Three ways, same features. Pick one.
 
 | | Download | Needs Bun | Updated with |
 |---|---|---|---|
-| Standalone binary | ~71 MB (~154 MB on disk) | no | `cortex upgrade` |
-| `cortex.js` | ~1.2 MB (~3.6 MB on disk) | yes | `cortex upgrade` |
-| From the sources | clone + ~175 MB of dependencies | yes | `git pull && bun install` |
+| Standalone binary | ~72 MB (~162 MB on disk) | no | `cortex upgrade` |
+| `cortex.js` | ~2.5 MB (~5.7 MB on disk) | yes | `cortex upgrade` |
+| From the sources | clone + ~670 MB of dependencies | yes | `git pull && bun install` |
 
 **Standalone binary** (Linux x64, macOS arm64). Nothing else to install:
 
@@ -78,7 +78,7 @@ bun link                      # puts `cortex` on your PATH
 
 `bun link` makes the `cortex` command point to your clone, so a `git pull` updates it.
 
-**Updates.** `cortex upgrade --check` compares your version with the latest release; `cortex upgrade` installs it. It only accepts a release whose checksums are signed with the cortex release key. **First export.** The binary and `cortex.js` carry the sources of the HTML site but not its dependencies: the first `cortex export` of each version installs them in `~/.cache/cortex/` (network needed once, ~165 MB; older versions are removed).
+**Updates.** `cortex upgrade --check` compares your version with the latest release; `cortex upgrade` installs it. It only accepts a release whose checksums are signed with the cortex release key. **First export.** The binary and `cortex.js` carry the sources of the HTML site but not its dependencies: the first `cortex export` of each version installs them in `~/.cache/cortex/` (network needed once, ~620 MB, of which ~450 MB for the local embedding model's runtime; older versions are removed).
 
 ## Quick start
 
@@ -214,7 +214,7 @@ The result is one line per page, at its best rank, wiki before raw, with the ext
 | `base_url` | as the openai client | `openai` only (`$OPENAI_API_KEY` only goes to a URL the environment names). |
 | `threads` | 4, or the number of cores if fewer | `local` only: ONNX threads. |
 
-**Local model.** `multilingual-e5-small`, quantized (q8, 384 dimensions, French included). It is downloaded once (~120 MB) by `cortex index` or a `cortex serve` rebuild into `~/.cache/cortex/models` (`$CORTEX_MODEL_CACHE` to move it), never by a search or any other command. Cost: about 0.5 to 0.9 GB of memory while it runs, 3 to 5 s to load it in a one-shot `cortex search` (a `serve` or `mcp` process loads it once), and a few passages per second per thread to index, so the first index of a large wiki takes minutes and the next ones only embed what changed. The standalone binary carries the ONNX runtime (about +18 MB on the download, see Installation); a source install or `cortex.js` needs `bun install` to have fetched `@huggingface/transformers`.
+**Local model.** `multilingual-e5-small`, quantized (q8, 384 dimensions, French included). It is downloaded once (~120 MB) by `cortex index` or a `cortex serve` rebuild into `~/.cache/cortex/models` (`$CORTEX_MODEL_CACHE` to move it), never by a search or any other command. Cost: about 0.5 to 0.9 GB of memory while it runs, 3 to 5 s to load it in a one-shot `cortex search` (a `serve` or `mcp` process loads it once), and a few passages per second per thread to index, so the first index of a large wiki takes minutes and the next ones only embed what changed. The standalone binary carries the ONNX runtime (+18 MB on the download, see Installation), but `cortex serve` and `cortex export` of a binary or `cortex.js` run from the sources it unpacks, whose first-run install of dependencies grew accordingly (see Installation); a source install or `cortex.js` needs `bun install` to have fetched `@huggingface/transformers`.
 
 **Never an error.** Model not downloaded (no network at the first index), runtime or extension missing, server down: the search answers by words only, with one warning (it names `"provider": "openai"` as the way out when the local model cannot run), and `cortex index` says how many sections it could not embed. The commands that work offline never start a download.
 
@@ -224,7 +224,7 @@ The result is one line per page, at its best rank, wiki before raw, with the ext
 
 **Deployment order.** The schema of `cortex.json` is strict: a cortex that does not know `provider` or `threads` refuses the file. Install the new binary (or version) first, then add the keys to `cortex.json`. A wiki that already has `embed` without `provider` (Qwen3-Embedding through llama.cpp) needs nothing: it stays in server mode, with its model, and only its vectors are recomputed once (the index changed format). To move it to the local model, set `"provider": "local"` (and drop `base_url` and `model`), then run `cortex index`.
 
-**macOS.** Apple's SQLite refuses extensions, so sqlite-vec is off by default and the JS path is used (nothing to do). To get sqlite-vec: `brew install sqlite`; cortex then finds Homebrew's library by itself (`/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib`, then `/usr/local/opt/sqlite/lib/libsqlite3.dylib`). `CORTEX_SQLITE_LIB=/path/to/libsqlite3.dylib` names another one and `CORTEX_SQLITE_LIB=system` forces the system's (no detection); on Linux the variable is honoured when set. It is an environment variable, not a `cortex.json` key, because the library has to be chosen before anything is read. A library that is missing or refused gives one warning and cortex goes on with the system's SQLite. The local model is tried on macOS and, if it cannot load, the search stays on words and says to use `"provider": "openai"`. **Not yet validated on the `macos-15` runner**: loading the ONNX runtime from the library the binary extracts to `~/.cache/cortex/native/`, the sqlite-vec `.dylib` with Homebrew's SQLite, and the local model end to end. Bun unpacks the ONNX addon into `$TMPDIR` before loading it: where `$TMPDIR` is mounted `noexec`, point it at a folder that is not.
+**macOS.** Apple's SQLite refuses extensions, so sqlite-vec is off by default and the JS path is used (nothing to do). To get sqlite-vec: `brew install sqlite`; cortex then finds Homebrew's library by itself (`/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib`, then `/usr/local/opt/sqlite/lib/libsqlite3.dylib`). `CORTEX_SQLITE_LIB=/path/to/libsqlite3.dylib` names another one and `CORTEX_SQLITE_LIB=system` forces the system's (no detection). Bun only honours it on macOS (on Linux the call succeeds and Bun keeps its own SQLite, which already loads extensions); `cortex doctor` says which SQLite is in use. It is an environment variable, not a `cortex.json` key, because the library has to be chosen before anything is read. A library that is missing or refused gives one warning and cortex goes on with the system's SQLite. The local model is tried on macOS and, if it cannot load, the search stays on words and says to use `"provider": "openai"`. **Not yet validated on the `macos-15` runner**: loading the ONNX runtime from the library the binary extracts to `~/.cache/cortex/native/`, the sqlite-vec `.dylib` with Homebrew's SQLite (a library of the wrong architecture may fall back to the system's SQLite without a warning), and the local model end to end. Bun unpacks the ONNX addon into `$TMPDIR` before loading it: where `$TMPDIR` is mounted `noexec`, point it at a folder that is not.
 
 ### Naming and folder structure
 

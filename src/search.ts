@@ -7,9 +7,16 @@ export type Hit = { path: string; title: string; area: "wiki" | "raw"; snippet: 
 
 export { buildIndex };
 
-/** Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. All terms, or `any` of them. */
-export const ftsQuery = (q: string, any = false) =>
-  q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`).join(any ? " OR " : " ");
+/**
+ * Each term is quoted: the apostrophe or hyphen of free input does not break the FTS5 syntax. All terms, or `any` of them.
+ * With `prefix`, the last term also matches the words it starts (a word being typed), when it is a plain word of 3 characters or more.
+ */
+export const ftsQuery = (q: string, any = false, prefix = false) => {
+  const terms = q.split(/\s+/).filter(Boolean).map((t) => `"${t.replaceAll('"', '""')}"`);
+  const last = q.split(/\s+/).filter(Boolean).at(-1);
+  if (prefix && last && /^[\p{L}\p{N}]{3,}$/u.test(last)) terms[terms.length - 1] += "*";
+  return terms.join(any ? " OR " : " ");
+};
 
 type Row = { id: number; path: string; kind: Kind; area: "wiki" | "raw"; title: string; page: string; snippet?: string };
 const COLS = "d.id, d.path, d.kind, d.area, d.title, p.title AS page";
@@ -50,7 +57,7 @@ type Cand = { path: string; area: "wiki" | "raw"; title: string; rrf: number; le
 /**
  * Hybrid search of wiki/ and raw/ (search-index.ts): three rankings of the pages and sections, fused by reciprocal rank (RRF) and
  * folded to one result per page, at its best rank, wiki before raw. The rankings: BM25 over the words (title ×4; all of them, or
- * `any`), the titles that hold the words give or take a typo (trigrams), and, with `embed` configured and indexed, the nearest
+ * `any`; the last one also as a prefix), the titles that hold the words give or take a typo (trigrams), and, with `embed` configured and indexed, the nearest
  * vectors. The extract is the one of the page's best section (the page itself when none matched), also for a page found only by its
  * meaning. With `titles`, the match is on the title only (duplicate check). Vectors never fail the search: unavailable, the
  * answer is the words'. `score`: lower is better.
@@ -65,7 +72,7 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
       SELECT ${COLS}, snippet(fts, 1, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(fts, 4, 1) AS score
       FROM fts JOIN docs d ON d.id = fts.rowid ${JOIN} WHERE fts MATCH $q ${where}
       ORDER BY d.area = 'raw', score, d.path LIMIT $pool`)
-      .all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any), $pool: EMBED.pool, ...(area && { $area: area }) }) as Row[];
+      .all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any, true), $pool: EMBED.pool, ...(area && { $area: area }) }) as Row[];
     const fuzzy = opts.titles ? [] : fuzzyTitles(ix, q, area);
     const near = !opts.titles && area !== "raw" && q.trim() ? await queryUnits(root, ix, q) : undefined;
     let sem: Row[] = [];

@@ -76,6 +76,16 @@ test("words: accents folded, one result per page at the extract of its best sect
   expect((await search(root, "yaourt")).map((x) => x.path)).toEqual(["wiki/concepts/ferment.md", "raw/2026/s/source.md"]); // wiki before raw
 });
 
+test("words: the last word of the query also matches the words it starts, in the body and in the titles", async () => {
+  const root = await wiki(null);
+  expect((await search(root, "yaou", { in: "wiki" })).map((h) => h.snippet.includes("«yaourt»"))).toEqual([true]); // being typed
+  expect((await search(root, "decentral", { in: "wiki" })).map((h) => h.path)).toEqual(["wiki/concepts/decentral.md"]); // a title, accents folded
+  expect((await search(root, "fédiv", { in: "wiki" })).map((h) => h.path)).toEqual(["wiki/concepts/decentral.md"]); // the body
+  expect((await search(root, "un procédé anc", { in: "wiki" })).map((h) => h.path)).toEqual(["wiki/concepts/ferment.md"]); // after whole words
+  expect(await search(root, "yaou le", { in: "wiki" })).toEqual([]); // a word of 2 letters is no prefix (and « yaou » alone is not a word)
+  expect(await search(root, "yaou", { titles: true })).toEqual([]); // the duplicate check keeps whole words
+});
+
 test("title fragments: a typo in a word of 5 letters or more still finds the page; every word of the query must be there", async () => {
   const root = await wiki(null);
   expect((await search(root, "fermentaton")).map((x) => x.path)).toEqual(["wiki/concepts/ferment.md"]); // missing letter, no word matches
