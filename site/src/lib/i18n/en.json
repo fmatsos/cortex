@@ -711,6 +711,6 @@
 	"ds.avatar.systemAllow": "Your system currently requests: animations allowed.",
 	"graph.neighbors_one": "{count} neighbour",
 	"graph.neighbors_other": "{count} neighbours",
-	"graph.unlinked": "Unlinked pages",
+	"graph.misc": "Various",
 	"graph.nearestFrame": "framing the closest 30"
 }

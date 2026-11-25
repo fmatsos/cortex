@@ -1,7 +1,9 @@
 /** Shelf packing of the community islands (pure, shared by the export and the browser). */
 
-/** Community id shared by the pages with no link at all: one island instead of one per page. */
-export const UNLINKED = "~unlinked";
+/** Community id of the "Various" island: unlinked pages and groups too small to get a tag of their own. */
+export const MISC = "~misc";
+/** A group needs this many pages to get its own island and tag. */
+export const MIN_ISLAND = 4;
 
 export const islandRadius = (size: number) => 45 + Math.sqrt(size) * 27;
 const GAP = 65;

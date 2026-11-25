@@ -4,7 +4,7 @@ import { UndirectedGraph } from "graphology";
 import { focusNodes, gestureNodes, type GNode, type GraphView } from "./graph-model";
 import { placeLabels, truncateToWidth } from "./graph-labels";
 import { shapeOf, SHAPE_SCALE } from "./graph-shapes";
-import { packIslands, UNLINKED } from "./graph-pack";
+import { packIslands, MISC } from "./graph-pack";
 import type { GraphData } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -21,7 +21,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   raw = {
     ...raw,
     nodes: raw.nodes.map((n) => { const d = shift.get(n.community); return d ? { ...n, x: n.x + d.x, y: n.y + d.y } : n; }),
-    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i], label: c.id === UNLINKED ? t("graph.unlinked") : c.label })),
+    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i], label: c.id === MISC ? t("graph.misc") : c.label })),
   };
   const graph = new UndirectedGraph<Node>({ allowSelfLoops: false });
   const positions = new Map(raw.nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
@@ -129,7 +129,8 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     if (!context && ratio > 0.5) {
       const counts = new Map<string, number>();
       for (const n of scope.nodes) counts.set(n.community, (counts.get(n.community) ?? 0) + 1);
-      const visible = raw.communities.filter((c) => (counts.get(c.id) ?? 0) >= 4);
+      // Various goes first: an island of scattered pages is only readable through its tag
+      const visible = raw.communities.filter((c) => (counts.get(c.id) ?? 0) >= 4).sort((a, b) => Number(b.id === MISC) - Number(a.id === MISC));
       const kept = placeLabels(visible, (c) => {
         const p = renderer.graphToViewport(c), w = Math.min(280, measure.measureText(c.label).width + 16);
         return p.x < w / 2 || p.x > width - w / 2 || p.y < 40 || p.y > height ? null : { x: p.x - w / 2, y: p.y - 37, w, h: 26 };
