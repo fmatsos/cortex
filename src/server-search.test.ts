@@ -82,6 +82,17 @@ test("rows: the server's order, unknown pages left out, is:fav applied here (and
   expect(rows(e, parseQuery('"phrase absent" alpha is:fav'), fav, () => true)).toHaveLength(3); // phrases were the server's to check
 });
 
+test("rows: is:fav inside a group or an OR branch is evaluated here with the whole Boolean structure of the query, the server's order kept", async () => {
+  const e = await engine([doc("concepts/a", "A", { text: "alpha" }), doc("concepts/b", "B", { text: "alpha" }), doc("concepts/c", "C", { text: "beta" }), doc("concepts/d", "D", { text: "gamma" })]);
+  const fav = { hits: [hit("concepts/d"), hit("concepts/c"), hit("concepts/b"), hit("concepts/a")], ignored: ["is:fav"] }; // what the server finds once is:fav is stripped
+  const isFav = (id: string) => id === "concepts/a" || id === "concepts/c";
+  const ids = (q: string) => rows(e, parseQuery(q), fav, isFav).map((r) => r.doc.id);
+  expect(ids("(alpha is:fav)")).toEqual(["concepts/a"]); // b is alpha but not a favorite
+  expect(ids("(beta OR alpha is:fav)")).toEqual(["concepts/c", "concepts/a"]); // beta, or alpha and favorite
+  expect(ids("alpha OR is:fav")).toEqual(["concepts/c", "concepts/b", "concepts/a"]); // alpha, or favorite: d is neither
+  expect(ids("-is:fav")).toEqual(["concepts/d", "concepts/b"]);
+});
+
 test("sections: retained, related, then the rest (below the bars and not judged) in the order given", () => {
   const e = [hit("a", { group: "other" }), hit("b", { group: "retained" }), hit("c", { group: "unjudged" }), hit("d", { group: "related" }), hit("f", { group: "retained" })]
     .map((h) => ({ doc: doc(h.id, h.id), hit: h }));
