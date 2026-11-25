@@ -68,10 +68,9 @@ export async function relevantPages(root: string, question: string, earlier?: st
   const jc = await judgeConfig(root);
   if (!jc) return;
   const query = earlier ? `${earlier} ${question}` : question;
-  // a question rarely has all its words in one page: then any of them
-  const find = (any: boolean) => search(root, query, { in: "wiki", limit: jc.askCandidates, any }).catch(() => []);
-  const all = await find(false);
-  const hits = all.length ? all : await find(true);
+  // a question rarely has all its words in one page: any of them (BM25 weighs the rare ones). All of them left the lexical side
+  // with 0 to 2 pages, so the semantic side filled the candidates alone, and the fallback to `any` never fired
+  const hits = await search(root, query, { in: "wiki", limit: jc.askCandidates, any: true }).catch(() => []);
   const byPath = new Map((await openWiki(root).pages()).map((p) => [p.path, p]));
   const pages = hits.map((h) => byPath.get(h.path)).filter((p): p is Page => !!p);
   const request = earlier ? { question, earlier } : { question };
