@@ -2,7 +2,7 @@
 	import { onMount, tick } from "svelte";
 	import { afterNavigate } from "$app/navigation";
 	import Icon from "#lib/components/icon.svelte";
-	import CortexMark from "#lib/components/cortex-mark.svelte";
+	import AssistantAvatar, { type FolioState } from "./assistant-avatar.svelte";
 	import AnswerBlock from "./answer-block.svelte";
 	import { assistant, MAX_QUESTION, type Turn } from "#lib/assistant.svelte.js";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
@@ -86,6 +86,11 @@
 		if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
 	}
 	const over = $derived(assistant.draft.trim().length > MAX_QUESTION);
+	// the avatar follows the last turn: waiting, failed, answered, else at rest
+	const avatar = $derived.by((): FolioState => {
+		const last = assistant.turns.at(-1);
+		return !last ? "idle" : last.pending ? "pending" : last.error ? "error" : last.answer ? "answer" : "idle";
+	});
 	// announced outside the busy list: start, then ready or failure (the answer itself is not read out)
 	const status = $derived.by(() => {
 		const last = assistant.turns.at(-1);
@@ -98,7 +103,7 @@
 	onkeydown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !dialog?.matches(":modal")) { e.preventDefault(); close(); } }}>
 	<div class="flex h-full flex-col">
 		<header class="flex items-center gap-2 border-b px-4 py-2">
-			<CortexMark size={24} />
+			<AssistantAvatar state={avatar} size={24} />
 			<h2 id="assistant-title" class="flex-1 text-base font-semibold">{t("assistant.title")}</h2>
 			{#if assistant.turns.length}
 				<button type="button" class="hover:bg-muted inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm disabled:opacity-50 pointer-coarse:min-h-11" disabled={assistant.pending} onclick={() => { assistant.clear(); area?.focus(); }}>
@@ -128,7 +133,7 @@
 				<article data-turn={turn.id} class="scroll-mt-4" aria-label={turn.q}>
 					<p class="bg-muted ml-8 rounded-lg px-3 py-2 text-sm break-words">{turn.q}</p>
 					{#if turn.pending}
-						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><CortexMark size={40} animated /><span>{t("assistant.waiting")}</span></div>
+						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><AssistantAvatar state="pending" size={48} /><span>{t("assistant.waiting")}</span></div>
 					{:else if turn.error}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
 							<Icon name="error" size={20} />

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="96" height="96" role="img" aria-labelledby="folio-title">
+  <title id="folio-title">Cortex</title>
+  <!-- Master drawing of the Cortex mark: the indexed folio, idle state. 48-unit grid, every edge on an even unit so the
+       strokes land on whole pixels at 24, 48, 72 and 96 px. Square design: butt ends, mitered joins, no curve.
+       Single ink (currentColor); the site colours the cursor with its primary token. -->
+  <style>:root { color-scheme: light dark; }</style>
+  <g id="sheets" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter">
+    <path d="M11 45V3H45V39H39" />
+    <rect x="3" y="9" width="36" height="36" />
+  </g>
+  <path id="lines" fill="none" stroke="currentColor" stroke-width="2" d="M16 17H34M16 25H34M16 33H34" />
+  <rect id="cursor" x="16" y="14" width="4" height="4" fill="currentColor" />
+</svg>

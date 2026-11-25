@@ -88,7 +88,7 @@
 	<!-- breakpoints on the header's own width (@container): beside the docked assistant it is narrower than the viewport -->
 	<!-- relative: anchor of the header search panel, which spans the whole header width -->
 	<div class="relative mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 @5xl:px-8 @5xl:flex-nowrap @5xl:gap-x-6">
-		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} variant="graph" /><CortexWordmark /></a>
+		<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={24} /><CortexWordmark /></a>
 		<nav aria-label={t("nav.label")} class="flex items-center text-sm">
 			{#each nav as [route, icon, label]}
 				{@const here = current(route) && !(route === "/search" && onFavs)}

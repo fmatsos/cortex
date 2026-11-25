@@ -41,7 +41,7 @@
 <!-- search is the entry point: a large field, examples that give results, recent searches -->
 <section aria-labelledby="h-home" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
 	<div class="flex items-end gap-3">
-		<CortexMark size={112} animated />
+		<CortexMark size={72} />
 		<div class="min-w-0 pb-2">
 			<h1 id="h-home" class="flex flex-wrap items-baseline gap-x-3 text-3xl font-semibold tracking-tight"><CortexWordmark /><span class="text-muted-foreground relative -top-[0.1125rem] text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
 			<p class="text-muted-foreground mt-2">
