@@ -80,3 +80,14 @@ test("any: a question whose words are not all in one page still finds it", async
   expect((await search(root, q, { in: "wiki", any: true })).map((h) => h.path)).toEqual(["wiki/concepts/rot.md"]);
   rmSync(root, { recursive: true, force: true });
 });
+
+test("search: the lexical pool counts pages, not units (a page with many matching sections cannot hide the others)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const sections = Array.from({ length: 80 }, (_, i) => `## Part ${i}\n\nzebra zebra zebra`).join("\n\n");
+  await Bun.write(join(root, "wiki/concepts/many.md"), page("Many", sections));
+  await Bun.write(join(root, "wiki/concepts/one.md"), page("One", "A single mention of zebra among many other words of a long sentence."));
+  await Bun.write(join(root, "wiki/concepts/two.md"), page("Two", "Another page that mentions the zebra once, in a long sentence as well."));
+  const paths = (await search(root, "zebra", { limit: 20 })).map((h) => h.path).sort();
+  expect(paths).toEqual(["wiki/concepts/many.md", "wiki/concepts/one.md", "wiki/concepts/two.md"]);
+});

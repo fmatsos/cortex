@@ -68,10 +68,14 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
   const ix = await buildIndex(root);
   try {
     const area = opts.in, where = `${area ? "AND d.area = $area" : ""} ${opts.titles ? "AND d.kind = 'page'" : ""}`;
+    // One row per page (its best unit): the pool counts pages, not units, so a page with many matching sections cannot hide the others.
     const lexical = ix.db.query(`
-      SELECT ${COLS}, snippet(fts, 1, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(fts, 4, 1) AS score
-      FROM fts JOIN docs d ON d.id = fts.rowid ${JOIN} WHERE fts MATCH $q ${where}
-      ORDER BY d.area = 'raw', score, d.path LIMIT $pool`)
+      SELECT * FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY pid ORDER BY score, path) AS rn FROM (
+          SELECT ${COLS}, p.id AS pid, snippet(fts, 1, '«', '»', '…', ${LIMITS.snippetTokens}) AS snippet, bm25(fts, 4, 1) AS score
+          FROM fts JOIN docs d ON d.id = fts.rowid ${JOIN} WHERE fts MATCH $q ${where}
+        )
+      ) WHERE rn = 1 ORDER BY area = 'raw', score, path LIMIT $pool`)
       .all({ $q: opts.titles ? `title : (${ftsQuery(q, opts.any)})` : ftsQuery(q, opts.any, true), $pool: EMBED.pool, ...(area && { $area: area }) }) as Row[];
     const fuzzy = opts.titles ? [] : fuzzyTitles(ix, q, area);
     const near = !opts.titles && area !== "raw" && q.trim() ? await queryUnits(root, ix, q) : undefined;
