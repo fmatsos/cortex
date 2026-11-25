@@ -42,6 +42,7 @@
     "lightningcss-darwin-arm64": "1.33.0",
     "lightningcss-linux-x64-gnu": "1.33.0",
     "linkedom": "^0.18",
+    "oauth4webapi": "^3.8.9",
     "sigma": "^4.0.6",
     "svelte": "^5.57.3",
     "tailwind-merge": "^3.7.0",

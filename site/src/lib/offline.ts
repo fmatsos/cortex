@@ -45,6 +45,15 @@ export function cacheKey(href: string): string {
 }
 
 /** Statuses for which a local copy is better than the response: temporary outages. 404 and 410 are real absences: never masked. */
+/**
+ * The server's API (`/api/…`: accounts, assistant, review) under this scope: never cached nor answered by the service worker, or a
+ * signed-out visitor would still read the previous user's `/api/me`, and the sign-in redirections would meet the offline page.
+ */
+export function isApiPath(href: string, scope: string): boolean {
+	const base = new URL(scope).pathname.replace(/\/?$/, "/");
+	return new URL(href).pathname.startsWith(`${base}api/`);
+}
+
 export function isTemporaryFailure(status: number): boolean {
 	return status >= 500 || status === 408 || status === 429;
 }
