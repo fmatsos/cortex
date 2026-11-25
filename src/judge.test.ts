@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lintConfig } from "./config";
 import { refresh } from "./embed";
-import { judge, judgeConfig } from "./judge";
+import { jevEnv, judge, judgeConfig } from "./judge";
 import { LIMITS } from "./limits";
 import { newPageCtx } from "./naming";
 import { openWiki } from "./context";
@@ -60,9 +60,9 @@ test("judge config: absent = off, defaults, same base_url rule as embed, strict 
   expect(await judgeConfig(root)).toMatchObject({ url: "http://elsewhere/v1", model: "d3-mini", key: undefined });
   await Bun.write(join(root, "cortex.json"), JSON.stringify({ base_url: "http://elsewhere/v1/", judge: { base_url: "http://j/v1", model: "x" } }));
   expect(await judgeConfig(root)).toMatchObject({ url: "http://j/v1", model: "x" });
-  const env = { u: process.env.CORTEX_JUDGE_BASE_URL, k: process.env.CORTEX_JUDGE_API_KEY };
-  try { // $CORTEX_JUDGE_API_KEY only to $CORTEX_JUDGE_BASE_URL
-    process.env.CORTEX_JUDGE_BASE_URL = "https://api.typesafe.ai/v1/"; process.env.CORTEX_JUDGE_API_KEY = "sk-judge";
+  const env = { u: process.env.CORTEX_JEV_BASE_URL, k: process.env.CORTEX_JEV_API_KEY };
+  try { // $CORTEX_JEV_API_KEY only to $CORTEX_JEV_BASE_URL
+    process.env.CORTEX_JEV_BASE_URL = "https://api.typesafe.ai/v1/"; process.env.CORTEX_JEV_API_KEY = "sk-judge";
     await Bun.write(join(root, "cortex.json"), JSON.stringify({ base_url: "http://elsewhere/v1/", judge: { model: "jev-1.13.0" } }));
     expect(await judgeConfig(root)).toMatchObject({ url: "https://api.typesafe.ai/v1", key: "sk-judge", model: "jev-1.13.0" });
     await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { base_url: "https://api.typesafe.ai/v1" } }));
@@ -70,19 +70,19 @@ test("judge config: absent = off, defaults, same base_url rule as embed, strict 
     await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { base_url: "http://evil/v1" } }));
     expect(await judgeConfig(root)).toMatchObject({ url: "http://evil/v1", key: undefined });
   } finally {
-    for (const [k, v] of [["CORTEX_JUDGE_BASE_URL", env.u], ["CORTEX_JUDGE_API_KEY", env.k]] as const) v === undefined ? delete process.env[k] : process.env[k] = v;
+    for (const [k, v] of [["CORTEX_JEV_BASE_URL", env.u], ["CORTEX_JEV_API_KEY", env.k]] as const) v === undefined ? delete process.env[k] : process.env[k] = v;
   }
 });
 
-test("judge settings: cortex.json, else $CORTEX_JUDGE_<NAME>, else limits.ts; an invalid env value is ignored", async () => {
+test("judge settings: cortex.json, else $CORTEX_JEV_<NAME>, else limits.ts; an invalid env value is ignored", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-judge-")); roots.push(root);
-  const names = ["CORTEX_JUDGE_MODEL", "CORTEX_JUDGE_ROUTE_YES", "CORTEX_JUDGE_DUP_YES", "CORTEX_JUDGE_ROUTE_CANDIDATES", "CORTEX_JUDGE_ROUTE_CHARS"];
+  const names = ["CORTEX_JEV_MODEL", "CORTEX_JEV_ROUTE_YES", "CORTEX_JEV_DUP_YES", "CORTEX_JEV_ROUTE_CANDIDATES", "CORTEX_JEV_ROUTE_CHARS"];
   const saved = names.map((k) => process.env[k]);
   try {
     for (const k of names) delete process.env[k];
     await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: {} }));
     expect(await judgeConfig(root)).toMatchObject({ model: "d3-mini", routeYes: LIMITS.routeYes, dupYes: LIMITS.dupJudge, routeCandidates: LIMITS.routeCandidates, dupCandidates: LIMITS.dupCandidates, routeChars: LIMITS.routeChars });
-    Object.assign(process.env, { CORTEX_JUDGE_MODEL: "jev-1.13.0", CORTEX_JUDGE_ROUTE_YES: "0.65", CORTEX_JUDGE_DUP_YES: "1.5", CORTEX_JUDGE_ROUTE_CANDIDATES: "3.5", CORTEX_JUDGE_ROUTE_CHARS: "4000" });
+    Object.assign(process.env, { CORTEX_JEV_MODEL: "jev-1.13.0", CORTEX_JEV_ROUTE_YES: "0.65", CORTEX_JEV_DUP_YES: "1.5", CORTEX_JEV_ROUTE_CANDIDATES: "3.5", CORTEX_JEV_ROUTE_CHARS: "4000" });
     expect(await judgeConfig(root)).toMatchObject({ model: "jev-1.13.0", routeYes: 0.65, dupYes: LIMITS.dupJudge, routeCandidates: LIMITS.routeCandidates, routeChars: 4000 });
     await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: { model: "m", route_yes: 0.4, dup_candidates: 7 } }));
     expect(await judgeConfig(root)).toMatchObject({ model: "m", routeYes: 0.4, dupCandidates: 7, routeChars: 4000 });
@@ -230,4 +230,73 @@ test("site question: one failed call no longer cancels the batch (the judged pag
     verdict = () => new Response("down", { status: 503 });
     expect(await relevantPages(root, "Le félin mange-t-il ?")).toBeUndefined();
   } finally { server.stop(true); }
+});
+
+// The environment of the judge: $CORTEX_JEV_*, with the former $CORTEX_JUDGE_* names accepted (deprecated) when the new one is absent.
+const ENV_NAMES = ["BASE_URL", "API_KEY", "MODEL", "ROUTE_YES"].flatMap((n) => [`CORTEX_JEV_${n}`, `CORTEX_JUDGE_${n}`]);
+async function withEnv(vars: Record<string, string>, fn: (lines: string[]) => Promise<void>) {
+  const saved = ENV_NAMES.map((k) => process.env[k]), lines: string[] = [], error = console.error;
+  console.error = (...a: unknown[]) => { lines.push(a.join(" ")); };
+  try { for (const k of ENV_NAMES) delete process.env[k]; Object.assign(process.env, vars); await fn(lines); }
+  finally { console.error = error; ENV_NAMES.forEach((k, i) => saved[i] === undefined ? delete process.env[k] : process.env[k] = saved[i]); }
+}
+const cfgRoot = async (judgeCfg: object = {}) => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-judge-")); roots.push(root);
+  await Bun.write(join(root, "cortex.json"), JSON.stringify({ judge: judgeCfg }));
+  return root;
+};
+
+test("jevEnv: the new name; the old name as a fallback with one warning per variable; the new name wins", async () => {
+  await withEnv({ CORTEX_JEV_UNIT_A: " new ", CORTEX_JUDGE_UNIT_A: "old", CORTEX_JUDGE_UNIT_B: "legacy" }, async (lines) => {
+    expect(jevEnv("UNIT_A")).toEqual({ value: "new", name: "CORTEX_JEV_UNIT_A", old: false });
+    expect(lines).toEqual([]); // the old one is not even looked at, so no warning
+    for (let i = 0; i < 3; i++) expect(jevEnv("UNIT_B")).toEqual({ value: "legacy", name: "CORTEX_JUDGE_UNIT_B", old: true });
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toContain("$CORTEX_JUDGE_UNIT_B is deprecated, use $CORTEX_JEV_UNIT_B");
+    expect(jevEnv("UNIT_NONE")).toBeUndefined();
+    process.env.CORTEX_JUDGE_UNIT_C = "  "; // blank = unset
+    expect(jevEnv("UNIT_C")).toBeUndefined();
+    delete process.env.CORTEX_JUDGE_UNIT_B; delete process.env.CORTEX_JUDGE_UNIT_C;
+  });
+});
+
+test("judge env: the new names, the old ones as a fallback, the new one first", async () => {
+  const root = await cfgRoot();
+  await withEnv({ CORTEX_JEV_BASE_URL: "https://new.example/v1/", CORTEX_JEV_API_KEY: "sk-new", CORTEX_JEV_MODEL: "jev-new", CORTEX_JEV_ROUTE_YES: "0.61" }, async (lines) => {
+    expect(await judgeConfig(root)).toMatchObject({ url: "https://new.example/v1", key: "sk-new", model: "jev-new", routeYes: 0.61 });
+    expect(lines).toEqual([]);
+  });
+  await withEnv({ CORTEX_JUDGE_BASE_URL: "https://old.example/v1", CORTEX_JUDGE_API_KEY: "sk-old", CORTEX_JUDGE_MODEL: "jev-old", CORTEX_JUDGE_ROUTE_YES: "0.55" }, async (lines) => {
+    expect(await judgeConfig(root)).toMatchObject({ url: "https://old.example/v1", key: "sk-old", model: "jev-old", routeYes: 0.55 });
+    await judgeConfig(root); await judgeConfig(root);
+    const dep = lines.filter((l) => l.includes("is deprecated"));
+    expect(dep.length).toBeLessThanOrEqual(4); // at most once per old variable, however many calls (an earlier test in the process may have told some)
+    expect(new Set(dep).size).toBe(dep.length);
+  });
+  await withEnv({ CORTEX_JEV_MODEL: "jev-new", CORTEX_JUDGE_MODEL: "jev-old", CORTEX_JEV_ROUTE_YES: "0.8", CORTEX_JUDGE_ROUTE_YES: "0.1" }, async (lines) => {
+    expect(await judgeConfig(root)).toMatchObject({ model: "jev-new", routeYes: 0.8 });
+    expect(lines).toEqual([]);
+  });
+});
+
+test("judge env: the key goes only to the URL it was paired with (old key: old URL, or the new URL when no old URL is set)", async () => {
+  const root = await cfgRoot();
+  const key = async (vars: Record<string, string>, cfgJudge?: object) => { let k: string | undefined, u: string | undefined; await withEnv(vars, async () => { const c = await judgeConfig(cfgJudge ? await cfgRoot(cfgJudge) : root); k = c?.key; u = c?.url; }); return [u, k]; };
+  // new URL + new key
+  expect(await key({ CORTEX_JEV_BASE_URL: "http://n/v1", CORTEX_JEV_API_KEY: "kn" })).toEqual(["http://n/v1", "kn"]);
+  // old URL + old key (production today)
+  expect(await key({ CORTEX_JUDGE_BASE_URL: "http://o/v1", CORTEX_JUDGE_API_KEY: "ko" })).toEqual(["http://o/v1", "ko"]);
+  // new URL, old key, no old URL: the old key follows the new URL
+  expect(await key({ CORTEX_JEV_BASE_URL: "http://n/v1", CORTEX_JUDGE_API_KEY: "ko" })).toEqual(["http://n/v1", "ko"]);
+  // new URL beside a different old URL, old key only: the key was written for the old URL, so it is not sent to the new one
+  expect(await key({ CORTEX_JEV_BASE_URL: "http://n/v1", CORTEX_JUDGE_BASE_URL: "http://o/v1", CORTEX_JUDGE_API_KEY: "ko" })).toEqual(["http://n/v1", undefined]);
+  // ... but a new key does go to the new URL
+  expect(await key({ CORTEX_JEV_BASE_URL: "http://n/v1", CORTEX_JUDGE_BASE_URL: "http://o/v1", CORTEX_JEV_API_KEY: "kn", CORTEX_JUDGE_API_KEY: "ko" })).toEqual(["http://n/v1", "kn"]);
+  // a new key with an old URL: the key goes to the URL the variables name
+  expect(await key({ CORTEX_JUDGE_BASE_URL: "http://o/v1", CORTEX_JEV_API_KEY: "kn" })).toEqual(["http://o/v1", "kn"]);
+  // a judge.base_url of cortex.json that differs from the environment URL gets no key, old names or new
+  expect(await key({ CORTEX_JUDGE_BASE_URL: "http://o/v1", CORTEX_JUDGE_API_KEY: "ko" }, { base_url: "http://evil/v1" })).toEqual(["http://evil/v1", undefined]);
+  expect(await key({ CORTEX_JEV_BASE_URL: "http://n/v1", CORTEX_JEV_API_KEY: "kn" }, { base_url: "http://evil/v1" })).toEqual(["http://evil/v1", undefined]);
+  // a judge.base_url equal to the old environment URL does get the old key
+  expect(await key({ CORTEX_JUDGE_BASE_URL: "http://o/v1/", CORTEX_JUDGE_API_KEY: "ko" }, { base_url: "http://o/v1" })).toEqual(["http://o/v1", "ko"]);
 });
