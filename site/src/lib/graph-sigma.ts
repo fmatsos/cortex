@@ -4,7 +4,7 @@ import { UndirectedGraph } from "graphology";
 import { focusNodes, gestureNodes, type GNode, type GraphView } from "./graph-model";
 import { placeLabels, truncateToWidth } from "./graph-labels";
 import { shapeOf, SHAPE_SCALE } from "./graph-shapes";
-import { packIslands, MISC } from "./graph-pack";
+import { islandRadius, packIslands, MISC } from "./graph-pack";
 import type { GraphData } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -38,6 +38,8 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   let scope: GraphView = { nodes: [], links: [], ids: new Set() };
   let selected: string | null = null, hovered: string | null = null, hot = new Set<string>(), allowed = new Set<string>();
   let moving = false, projected = false, dragged: string | null = null;
+  let map = false; // map mode: islands of land under the pages, sea routes between them, page-to-page links only around the focus
+  let routes: { a: { x: number; y: number }; b: { x: number; y: number }; count: number }[] = [];
   let emphasized = new Set<string>();
   let landmarks = new Set<string>();
   const peers = new Map<string, Set<string>>();
@@ -45,7 +47,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   let timer: ReturnType<typeof setTimeout> | undefined, frame = 0, dead = false;
   function readPalette() {
     const css = getComputedStyle(document.documentElement), value = (key: string) => css.getPropertyValue(key).trim();
-    return { background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
+    return { sea: value("--map-sea"), land: value("--map-land"), coast: value("--map-coast"), background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
   }
   let palette = readPalette();
   const representatives = new Set(raw.communities.flatMap((c) => c.representatives));
@@ -67,7 +69,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   function edgeVisual(e: { source: string; target: string }) {
     const context = selected ?? hovered;
     const active = (context === e.source && emphasized.has(e.target)) || (context === e.target && emphasized.has(e.source));
-    return { color: active ? palette.active : palette.edge, opacity: active ? 0.8 : context ? 0.025 : 0.12, size: active ? 1.2 : 0.45 };
+    return { color: active ? palette.active : palette.edge, opacity: active ? 0.8 : map ? 0 : context ? 0.025 : 0.12, size: active ? 1.2 : 0.45 };
   }
   const visualKeys = ["shape", "color", "visibility", "opacity", "size", "labelColor", "labelVisibility", "backdropVisibility", "backdropArea", "backdropColor", "backdropBorderColor"];
   const bind = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, { attribute: key }]));
@@ -100,6 +102,52 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     },
   });
 
+  // Map mode land, under Sigma's WebGL stage. Drawn in graph units with one affine transform (the camera never rotates):
+  // each page lays a disc of land, so an island's coast follows its pages. Redrawn on every Sigma frame, a few hundred arcs.
+  const land = renderer.createCanvas("land", { beforeLayer: "stage", style: { pointerEvents: "none" } }), landContext = land.getContext("2d")!;
+  land.setAttribute("aria-hidden", "true");
+  const SHORE = 46, COAST = 6;
+  function drawLand() {
+    const { width, height } = renderer.getDimensions(), dpr = devicePixelRatio || 1;
+    if (land.width !== Math.round(width * dpr) || land.height !== Math.round(height * dpr)) { land.width = Math.round(width * dpr); land.height = Math.round(height * dpr); land.style.width = `${width}px`; land.style.height = `${height}px`; }
+    landContext.setTransform(1, 0, 0, 1, 0, 0);
+    landContext.clearRect(0, 0, land.width, land.height);
+    if (!map || !scope.nodes.length) return;
+    const o = renderer.graphToViewport({ x: 0, y: 0 }), ux = renderer.graphToViewport({ x: 1, y: 0 }), uy = renderer.graphToViewport({ x: 0, y: 1 });
+    landContext.setTransform((ux.x - o.x) * dpr, (ux.y - o.y) * dpr, (uy.x - o.x) * dpr, (uy.y - o.y) * dpr, o.x * dpr, o.y * dpr);
+    landContext.strokeStyle = palette.coast; landContext.lineCap = "round"; landContext.setLineDash([8, 14]);
+    for (const r of routes) {
+      landContext.lineWidth = 1.5 + Math.log2(r.count);
+      landContext.beginPath(); landContext.moveTo(r.a.x, r.a.y); landContext.lineTo(r.b.x, r.b.y); landContext.stroke();
+    }
+    landContext.setLineDash([]);
+    // a bedrock disc per island keeps it one landmass; the page discs give it its coast
+    const bedrock = raw.communities.filter((c) => counts.has(c.id));
+    for (const [color, grow] of [[palette.coast, COAST], [palette.land, 0]] as const) {
+      landContext.fillStyle = color; landContext.beginPath();
+      for (const c of bedrock) { const r = islandRadius(counts.get(c.id)!) * 0.55 + grow; landContext.moveTo(c.x + r, c.y); landContext.arc(c.x, c.y, r, 0, Math.PI * 2); }
+      for (const n of scope.nodes) { const q = positions.get(n.id)!, r = SHORE + grow; landContext.moveTo(q.x + r, q.y); landContext.arc(q.x, q.y, r, 0, Math.PI * 2); }
+      landContext.fill();
+    }
+  }
+  let counts = new Map<string, number>();
+  function syncRoutes() {
+    counts = new Map();
+    for (const n of scope.nodes) counts.set(n.community, (counts.get(n.community) ?? 0) + 1);
+    const center = new Map(raw.communities.map((c) => [c.id, c])), community = new Map(scope.nodes.map((n) => [n.id, n.community])), pairs = new Map<string, number>();
+    for (const e of scope.links) {
+      const a = community.get(e.source), b = community.get(e.target);
+      if (!a || !b || a === b) continue;
+      const key = a < b ? `${a}\t${b}` : `${b}\t${a}`;
+      pairs.set(key, (pairs.get(key) ?? 0) + 1);
+    }
+    // each island keeps only its two strongest routes: a readable sea, not a second hairball
+    const kept = new Set<string>(), byIsland = new Map<string, [string, number][]>();
+    for (const entry of pairs) for (const id of entry[0].split("\t")) (byIsland.get(id) ?? byIsland.set(id, []).get(id)!).push(entry);
+    for (const list of byIsland.values()) for (const [key] of list.sort((a, b) => b[1] - a[1]).slice(0, 2)) kept.add(key);
+    // ponytail: straight routes; bundled ones if the sea still gets crowded
+    routes = [...pairs].filter(([key, count]) => count >= 2 && kept.has(key)).map(([key, count]) => { const [a, b] = key.split("\t"); return { a: center.get(a)!, b: center.get(b)!, count }; });
+  }
   function syncStyles() {
     // 4.0.6's partial repaint fails before indexation (initial load / cleared edges).
     // The structural "type" hint requests fresh program slots for these batched updates.
@@ -109,7 +157,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
 
   function readTheme() {
     palette = readPalette();
-    el.style.backgroundColor = palette.background;
+    el.style.backgroundColor = map ? palette.sea : palette.background;
     syncStyles();
   }
 
@@ -141,7 +189,9 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
         button.type = "button"; button.textContent = c.label;
         const count = counts.get(c.id)!;
         button.title = t("common.pages", { count }); button.setAttribute("aria-label", `${c.label} (${count})`);
-        button.className = "pointer-events-auto absolute max-w-64 truncate border bg-background/95 px-2 py-1 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2";
+        button.className = map
+          ? "pointer-events-auto absolute max-w-64 truncate px-1 py-0.5 text-sm font-semibold text-foreground [text-shadow:0_0_3px_var(--map-land),0_0_3px_var(--map-land),0_0_6px_var(--map-land)] focus-visible:outline focus-visible:outline-2"
+          : "pointer-events-auto absolute max-w-64 truncate border bg-background/95 px-2 py-1 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2";
         button.style.cssText = `left:${p.x}px;top:${p.y - 25}px;transform:translate(-50%,-50%);opacity:${Math.min(1, (ratio - 0.5) * 2)}`;
         button.onclick = () => fit(scope.nodes.filter((n) => n.community === c.id));
         labels.append(button);
@@ -268,13 +318,13 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   renderer.on("clickNode", ({ node }) => callbacks.select(node));
   renderer.on("doubleClickNode", ({ node, event }) => { event.preventSigmaDefault(); callbacks.open(node); });
   renderer.on("clickStage", () => callbacks.select(null));
-  renderer.on("afterRender", () => { el.dataset.rendered = "true"; });
+  renderer.on("afterRender", () => { el.dataset.rendered = "true"; drawLand(); });
   readTheme();
   return {
     apply(view: GraphView) {
       clearTimeout(timer); moving = false; projected = false; renderer.setSetting("renderLabels", true);
       savePositions(); scope = view; dragged = null;
-      populate(view.nodes, view.links); peers.clear();
+      populate(view.nodes, view.links); syncRoutes(); peers.clear();
       for (const e of view.links) for (const [a, b] of [[e.source, e.target], [e.target, e.source]]) (peers.get(a) ?? peers.set(a, new Set()).get(a)!).add(b);
       if (selected && !view.ids.has(selected)) selected = null;
       hovered = null; highlight();
@@ -287,6 +337,10 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
         savePositions();
         cancelAnimationFrame(frame); frame = requestAnimationFrame(() => fit(focusNodes(id, positioned())));
       }
+    },
+    mode(next: "graph" | "map") {
+      map = next === "map"; el.dataset.mode = next;
+      readTheme(); updateLabels(); renderer.refresh();
     },
     fit, resize: () => { renderer.resize(); updateLabels(); }, theme: readTheme,
     zoom: (factor: number) => move({ ...renderer.getCamera().getState(), ratio: renderer.getCamera().ratio / factor }),

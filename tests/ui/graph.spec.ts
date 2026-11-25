@@ -166,3 +166,24 @@ test("dragging stays local, survives filters and resets on reload", async ({ pag
   await page.reload(); await ready(page); await idle();
   expect(await position()).toEqual({ x: before.x, y: before.y });
 });
+
+test("map mode: islands of land under the pages, kept in the URL, back to the graph", async ({ page }) => {
+  await page.goto("/graph/"); await ready(page);
+  const surface = page.locator("[data-graph-surface] > div").first();
+  const land = page.locator("canvas.sigma-land");
+  const inked = () => land.evaluate((c: HTMLCanvasElement) => { const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; });
+  await expect.poll(inked, "no land in graph mode").toBe(0);
+  await page.getByRole("button", { name: /^(Carte|Map)$/ }).click();
+  await expect(page).toHaveURL(/[?&]view=map/);
+  await expect(surface).toHaveAttribute("data-mode", "map");
+  await expect.poll(inked, "the islands are drawn").toBeGreaterThan(1000);
+  await expect(land).toHaveCSS("pointer-events", "none");
+  await page.reload(); await ready(page);
+  await expect(surface).toHaveAttribute("data-mode", "map");
+  await expect(page.getByRole("button", { name: /^(Carte|Map)$/ })).toHaveAttribute("aria-pressed", "true");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: /^(Graphe|Graph)$/ }).click();
+  await expect(page).not.toHaveURL(/view=map/);
+  await expect.poll(inked).toBe(0);
+});

@@ -148,6 +148,10 @@ pair("--input", "--card", 3);
 pair("--graph-edge", "--background", 3); // graph relations
 pair("--graph-edge", "--graph-background", 3);
 pair("--graph-edge-active", "--graph-background", 3); // highlighted relations
+pair("--graph-label", "--map-land"); // map mode: page labels on land
+pair("--graph-label", "--map-sea"); // island names over the sea
+pair("--map-coast", "--map-sea", 1.3); // a coast that reads, quietly
+pair("--graph-edge-active", "--map-land", 3);
 pair("--ring", "--background", 3); // focus ring
 pair("--ring", "--card", 3);
 pair("--link", "--background", 3);

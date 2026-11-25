@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from "svelte";
-	import { goto } from "$app/navigation";
+	import { goto, replaceState } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Input } from "#lib/components/ui/input/index.js";
@@ -23,6 +23,7 @@
 	let ready = $state(false);
 	let sel = $state.raw<GNode | null>(null);
 	let listMode = $state(false);
+	let mode = $state<"graph" | "map">("graph");
 	let notice = $state("");
 	let query = $state("");
 	let active = $state(0);
@@ -55,6 +56,13 @@
 	const resetFilters = () => { off = new Set(); tag = ""; notice = ""; };
 	const fit = () => controller?.fit();
 	const zoomBy = (factor: number) => controller?.zoom(factor);
+	/** Graph or map presentation; kept in the URL (?view=map) so a map can be shared and reloaded. */
+	function setMode(next: "graph" | "map") {
+		mode = next; controller?.mode(next);
+		const url = new URL(location.href);
+		if (next === "map") url.searchParams.set("view", "map"); else url.searchParams.delete("view");
+		replaceState(url, {});
+	}
 	function select(n: GNode | null, center?: string) { sel = n; controller?.select(n?.id ?? null, !!center); }
 
 	$effect(() => {
@@ -103,6 +111,8 @@
 					controller!.apply(v); controller!.select(sel?.id ?? null);
 					if (pendingFocus && v.ids.has(pendingFocus)) { const id = pendingFocus; pendingFocus = null; void focusNode(id); }
 				};
+				mode = new URLSearchParams(location.search).get("view") === "map" ? "map" : "graph";
+				controller.mode(mode);
 				apply(view); ready = true;
 				const wanted = resolveFocus(location.search, g.nodes);
 				if (wanted.id) await focusNode(wanted.id);
@@ -150,6 +160,11 @@
 </div>
 
 <div class="touch-gap mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={tr("graph.controls")}>
+	<div class="flex" role="group" aria-label={tr("graph.mode.label")}>
+		{#each [["graph", "graph", tr("graph.mode.graph")], ["map", "map", tr("graph.mode.map")]] as [m, icon, label] (m)}
+			<Button variant={mode === m ? "default" : "outline"} size="sm" class="-ml-px first:ml-0" aria-pressed={mode === m} disabled={!ready || listMode} onclick={() => setMode(m as "graph" | "map")}><Icon name={icon} size={16} />{label}</Button>
+		{/each}
+	</div>
 	<Button variant="outline" size="sm" aria-pressed={listMode} onclick={() => (listMode = !listMode)} disabled={!raw}><Icon name="list-view" size={16} />{tr("graph.listView")}</Button>
 	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1.5)} aria-label={tr("graph.zoomIn")}><Icon name="zoom-in" size={16} /></Button>
 	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1 / 1.5)} aria-label={tr("graph.zoomOut")}><Icon name="zoom-out" size={16} /></Button>
