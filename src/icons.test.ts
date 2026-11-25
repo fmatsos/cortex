@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile } from "svelte/compiler";
 import { parseHTML } from "linkedom";
-import { ICON_NAMES, ICONS, iconSvg, iconUse, strokeFor, symbolId, type IconName } from "../site/src/lib/icons";
+import { ICON_NAMES, ICONS, SPRITE_ID, ensureSymbol, ensureSymbols, iconSvg, iconUse, referencedIcons, spriteMarkup, strokeFor, symbolId, symbolMarkup, type IconName } from "../site/src/lib/icons";
+import { handle } from "../site/src/hooks.server";
 import { md, noteCallouts } from "./export";
 import { KINDS, TYPES, kindIcon, kindLabel, statusMeta, typeIcon } from "../site/src/lib/type-meta";
 import { setLocale } from "../site/src/lib/i18n/index";
@@ -158,35 +159,88 @@ async function ssr() {
   });
   const { render } = await import("svelte/server");
   const { default: Icon } = await import("../site/src/lib/components/icon.svelte");
-  const { default: IconSprite } = await import("../site/src/lib/components/icon-sprite.svelte");
-  return {
-    icon: (props: Record<string, unknown>) => render(Icon, { props }).body,
-    sprite: () => render(IconSprite, { props: {} }).body,
-  };
+  return { icon: (props: Record<string, unknown>) => render(Icon, { props }).body };
 }
 
-test("le sprite : un symbole par nom, ids uniques, contenu du pack, hors flux et de taille nulle", async () => {
-  const { sprite } = await ssr();
-  const html = sprite();
+// The sprite is per page: only the symbols a document references, from one markup function shared by build and client.
+test("referencedIcons : exactement les noms référencés, inconnus ignorés, ordre du pack", () => {
+  const html = `<svg><use href="#cx-warning"/></svg><svg><use href='#cx-search'/></svg><use href="#cx-warning"/><use href="#cx-nope"/><use href="#other"/><use href="#cx-"/>`
+    + `<script>{"html":"<use href=\\"#cx-note\\"/>"}</script>`;
+  expect(referencedIcons(html)).toEqual(["search", "warning"]);
+  expect(referencedIcons("")).toEqual([]);
+  expect(referencedIcons('<use href="#cx-constructor"/><use href="#cx-__proto__"/>')).toEqual([]);
+});
+
+test("spriteMarkup : un symbole par nom demandé, ids uniques, contenu du pack, hors flux et de taille nulle", () => {
+  expect(spriteMarkup([])).toBe("");
+  expect(spriteMarkup(["nope", "constructor"])).toBe("");
+  const html = spriteMarkup(["warning", "search", "search", "nope"]);
   const { document } = parseHTML(`<!doctype html><body>${html}`);
   const root = document.querySelector("svg")!;
+  expect(root.getAttribute("id")).toBe(SPRITE_ID);
   expect(root.getAttribute("aria-hidden")).toBe("true");
   const style = root.getAttribute("style") ?? "";
   expect(style).toMatch(/position:\s*absolute/);
   expect(style).toMatch(/width:\s*0/);
   expect(style).toMatch(/height:\s*0/);
   expect(style, "display:none breaks <use> in some browsers").not.toMatch(/display\s*:\s*none/);
-  const symbols = [...document.querySelectorAll("symbol")];
-  const ids = symbols.map((s) => s.getAttribute("id")!);
-  expect(new Set(ids).size, "ids de symboles uniques").toBe(ids.length);
-  expect(ids.sort()).toEqual(ICON_NAMES.map(symbolId).sort());
+  const ids = [...document.querySelectorAll("symbol")].map((s) => s.getAttribute("id")!);
+  expect(ids).toEqual(["cx-search", "cx-warning"]);
+  // the whole pack: every symbol present once, with the pack's content, and no stroke contract on the symbol
+  const full = parseHTML(`<!doctype html><body>${spriteMarkup(ICON_NAMES)}`).document;
+  const all = [...full.querySelectorAll("symbol")].map((s) => s.getAttribute("id")!);
+  expect(new Set(all).size, "ids de symboles uniques").toBe(all.length);
+  expect(all.sort()).toEqual(ICON_NAMES.map(symbolId).sort());
   for (const name of ICON_NAMES) {
-    const sym = document.getElementById(symbolId(name))!;
+    const sym = full.getElementById(symbolId(name))!;
     expect(sym.getAttribute("viewBox")).toBe("0 0 24 24");
     expect(strip(sym.innerHTML), name).toBe(strip(ICONS[name]));
-    // the stroke contract is on the instance, never on the symbol
     for (const a of ["stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "fill"]) expect(sym.getAttribute(a), `${name}: ${a} sur le symbole`).toBeNull();
   }
+});
+
+test("le crochet de build : le sprite suit <body> et ne contient que les symboles de la page", async () => {
+  const page = (body: string) => `<!doctype html><html><head></head><body data-x="1"><noscript><p>x</p></noscript><div style="display: contents">${body}</div></body></html>`;
+  const run = async (html: string, done = true) => {
+    let out = "";
+    await handle({ event: {}, resolve: (_e, o) => { out = o.transformPageChunk({ html, done }); return out; } });
+    return out;
+  };
+  const used = await run(page('<svg><use href="#cx-note"/></svg><svg><use href="#cx-search"/></svg>'));
+  const { document } = parseHTML(used);
+  const body = document.querySelector("body")!;
+  expect(body.firstElementChild?.getAttribute("id"), "the sprite is the first thing in <body>").toBe(SPRITE_ID);
+  expect([...document.querySelectorAll("symbol")].map((s) => s.id)).toEqual(["cx-search", "cx-note"]);
+  expect(document.querySelectorAll(`#${SPRITE_ID}`).length).toBe(1);
+  expect(used.indexOf(`id="${SPRITE_ID}"`)).toBeGreaterThan(used.indexOf("<body"));
+  expect(used.indexOf(`id="${SPRITE_ID}"`)).toBeLessThan(used.indexOf("<noscript>"));
+  // a page without any icon gets no sprite at all; a chunk without <body> is left alone
+  expect(await run(page("<p>none</p>"))).not.toContain("<symbol");
+  expect(await run("<p>chunk <use href=\"#cx-note\"/></p>", false)).not.toContain("<symbol");
+});
+
+test("le client et le build produisent le même symbole ; ensureSymbols ne complète que ce qui manque", () => {
+  // linkedom parses insertAdjacentHTML as HTML (it nests <path/>): record the markup the client writes instead of
+  // comparing a re-parsed tree; the real browser parse is covered by tests/ui/icons.spec.ts
+  const doc = () => parseHTML(`<!doctype html><html><body><svg><use href="#cx-note"/></svg><svg><use href="#cx-warning"/></svg><svg><use href="#cx-nope"/></svg></body></html>`).document;
+  const record = (el: Element) => { const w: string[] = []; el.insertAdjacentHTML = (_pos: string, h: string) => { w.push(h); }; return w; };
+
+  // no sprite yet: the client writes the same sprite the hook would, for the first missing name
+  const d1 = parseHTML(`<!doctype html><html><body><svg><use href="#cx-note"/></svg></body></html>`).document;
+  const first = record(d1.body);
+  ensureSymbols(d1);
+  expect(first).toEqual([spriteMarkup(["note"])]);
+
+  // a sprite exists: each missing symbol is appended once, with the shared symbol markup, nothing else
+  const d2 = doc();
+  d2.body.insertAdjacentHTML("afterbegin", `<svg id="${SPRITE_ID}"><symbol id="cx-note"></symbol></svg>`);
+  const writes = record(d2.getElementById(SPRITE_ID)!);
+  ensureSymbols(d2);
+  ensureSymbol("search", d2);
+  ensureSymbol("constructor", d2);
+  expect(writes).toEqual([symbolMarkup("warning"), symbolMarkup("search")]);
+  expect(symbolMarkup("note")).toBe(`<symbol id="cx-note" viewBox="0 0 24 24">${ICONS.note}</symbol>`);
+  expect(spriteMarkup(["note"])).toContain(symbolMarkup("note"));
 });
 
 test("le composant Icon : un <use> du sprite, sans géométrie ; décorative par défaut, étiquetée sur demande", async () => {
