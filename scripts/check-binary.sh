@@ -35,12 +35,12 @@ test -f "$w/site/index.html"
 serve() { env -i HOME="$w/home" PATH="$path" CORTEX_ROOT="$w" CORTEX_REVIEWER=check "$bin" serve --port 0 >"$1" 2>&1 & pid=$!; }
 listening() { for _ in $(seq 1 "$2"); do grep -q 'cortex serve: http' "$1" && return 0; sleep 1; done; return 1; }
 serve "$w/serve1.log"; listening "$w/serve1.log" 180 || { cat "$w/serve1.log"; exit 1; }
-port=$(sed -n '/^cortex serve: http/{s|^cortex serve: http://localhost:\([0-9]*\).*|\1|p;q}' "$w/serve1.log")
+port=$(sed -n '/^cortex serve: http/{s|^cortex serve: http://localhost:\([0-9]*\).*|\1|p;q;}' "$w/serve1.log")
 curl -fsS "http://localhost:$port/" | grep -i '<html' >/dev/null
 kill "$pid"; wait "$pid" || true
 serve "$w/serve2.log"; listening "$w/serve2.log" 10 || { cat "$w/serve2.log"; exit 1; } # the previous build, without waiting for a new one
 grep -q 'serving the build of' "$w/serve2.log"
-port=$(sed -n '/^cortex serve: http/{s|^cortex serve: http://localhost:\([0-9]*\).*|\1|p;q}' "$w/serve2.log")
+port=$(sed -n '/^cortex serve: http/{s|^cortex serve: http://localhost:\([0-9]*\).*|\1|p;q;}' "$w/serve2.log")
 curl -fsS "http://localhost:$port/" | grep -i '<html' >/dev/null
 for _ in $(seq 1 180); do grep -q 'site rebuilt' "$w/serve2.log" && break; sleep 1; done # and the rebuild by the child follows
 grep -q 'site rebuilt' "$w/serve2.log"
