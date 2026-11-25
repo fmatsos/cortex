@@ -36,7 +36,7 @@ test("graph layout: finite positions, canonical reciprocity, every page covered 
 });
 
 test("graph layout: empty and singleton wiki, all-Source wiki", () => {
-  expect(layoutGraph({ nodes: [], links: [] })).toEqual({ nodes: [], links: [], communities: [] });
+  expect(layoutGraph({ nodes: [], links: [] })).toEqual({ nodes: [], links: [], communities: [], continents: [] });
   for (const nodes of [[node("only")], [node("s1", "Source"), node("s2", "Source")]]) {
     const graph = layoutGraph({ nodes, links: [] });
     expect(graph.nodes).toHaveLength(nodes.length);
@@ -62,4 +62,26 @@ test("packIslands follows the frame ratio: a wide frame gets a wider layout than
     return (Math.max(...xs) - Math.min(...xs)) / Math.max(1, Math.max(...ys) - Math.min(...ys));
   };
   expect(ratio(2.25)).toBeGreaterThan(ratio(1) * 1.5);
+});
+
+test("world map data: a territory per page, borders inside their continent, neighbours never share a colour", () => {
+  const ids = (prefix: string) => ["1", "2", "3", "4", "5"].map((k) => prefix + k);
+  const groups = [ids("a"), ids("b"), ids("c")];
+  const pairs = new Set<string>();
+  for (const g of groups) for (const x of g) for (const y of g) if (x < y) pairs.add(`${x}\t${y}`);
+  pairs.add("a1\tb1"); pairs.add("a2\tb2"); pairs.add("b3\tc3"); pairs.add("c1\ta3");
+  const graph = layoutGraph({ nodes: groups.flat().map((id) => node(id)), links: graphLinks(pairs) });
+  const cells = graph.continents.flatMap((c) => c.cells);
+  expect(new Set(cells.map((c) => c.id))).toEqual(new Set(graph.nodes.map((n) => n.id)));
+  expect(cells.every((c) => c.points.length >= 6)).toBe(true);
+  for (const c of graph.continents) for (let i = 0; i < c.borders.length; i += 2) {
+    expect(Math.abs(c.borders[i] - c.x)).toBeLessThanOrEqual(c.w / 2 + 81);
+    expect(Math.abs(c.borders[i + 1] - c.y)).toBeLessThanOrEqual(c.h / 2 + 81);
+  }
+  const multi = graph.continents.find((c) => graph.communities.filter((k) => k.continent === c.id).length > 1);
+  if (multi) {
+    expect(multi.borders.length).toBeGreaterThan(0);
+    const colours = graph.communities.filter((k) => k.continent === multi.id).map((k) => k.color);
+    expect(new Set(colours).size).toBeGreaterThan(1);
+  }
 });

@@ -3,8 +3,8 @@ import { sdfCircle, sdfSquare, sdfDiamond, sdfTriangle } from "sigma/rendering";
 import { UndirectedGraph } from "graphology";
 import { focusNodes, gestureNodes, type GNode, type GraphView } from "./graph-model";
 import { placeLabels, truncateToWidth } from "./graph-labels";
-import { shapeOf, SHAPE_SCALE } from "./graph-shapes";
-import { islandRadius, packIslands, MISC } from "./graph-pack";
+import { settlementOf, shapeOf, SHAPE_SCALE } from "./graph-shapes";
+import { islandRadius, packBoxes, MISC, SEA } from "./graph-pack";
 import type { GraphData } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -12,17 +12,29 @@ import { t } from "./i18n/index";
 type Node = GNode & { label: string; size: number; [key: string]: unknown };
 type Callbacks = { select: (id: string | null) => void; open: (id: string) => void; favorite: (id: string) => boolean };
 
+/** Map settlements drawn by Sigma 4 SDF primitives: a village is a hollow circle, a capital a ring around a dot. */
+const ring = { name: "ring", inradiusFactor: 0.6, glsl: `float sdf_ring(vec2 uv, float size) { return abs(length(uv) - size * 0.72) - size * 0.28; }` };
+const capital = { name: "capital", inradiusFactor: 0.4, glsl: `float sdf_capital(vec2 uv, float size) { float d = length(uv); return min(abs(d - size * 0.8) - size * 0.2, d - size * 0.36); }` };
+
 /** Browser-only renderer. Physics and community detection never enter this bundle. */
 export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData, callbacks: Callbacks) {
-  // The export packs the islands for one ratio; repack them for this frame (the placement inside an island is kept).
+  // The export packs the continents for one ratio; repack them for this frame (everything inside a continent is kept).
   // ponytail: once at creation, a later resize (side panel) only refits the camera
-  const centers = packIslands(raw.communities.map((c) => c.size), el.clientWidth && el.clientHeight ? Math.max(0.6, el.clientWidth / el.clientHeight) : 16 / 9);
-  const shift = new Map(raw.communities.map((c, i) => [c.id, { x: centers[i].x - c.x, y: centers[i].y - c.y }]));
+  const centers = packBoxes(raw.continents, el.clientWidth && el.clientHeight ? Math.max(0.6, el.clientWidth / el.clientHeight) : 16 / 9, SEA);
+  const shiftOf = new Map(raw.continents.map((c, i) => [c.id, { x: centers[i].x - c.x, y: centers[i].y - c.y }]));
+  const continentOf = new Map(raw.communities.map((c) => [c.id, c.continent]));
+  const shift = (community: string) => shiftOf.get(continentOf.get(community)!) ?? { x: 0, y: 0 };
+  const moveFlat = (points: number[], d: { x: number; y: number }) => points.map((v, i) => v + (i % 2 ? d.y : d.x));
   raw = {
     ...raw,
-    nodes: raw.nodes.map((n) => { const d = shift.get(n.community); return d ? { ...n, x: n.x + d.x, y: n.y + d.y } : n; }),
-    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i], label: c.id === MISC ? t("graph.misc") : c.label })),
+    nodes: raw.nodes.map((n) => { const d = shift(n.community); return { ...n, x: n.x + d.x, y: n.y + d.y }; }),
+    communities: raw.communities.map((c) => { const d = shift(c.id); return { ...c, x: c.x + d.x, y: c.y + d.y, label: c.id === MISC ? t("graph.misc") : c.label }; }),
+    continents: raw.continents.map((c, i) => {
+      const d = shiftOf.get(c.id)!;
+      return { ...c, ...centers[i], label: c.id === MISC ? t("graph.misc") : c.label, cells: c.cells.map((cell) => ({ id: cell.id, points: moveFlat(cell.points, d) })), borders: moveFlat(c.borders, d) };
+    }),
   };
+  const countryOfPage = new Map(raw.nodes.map((n) => [n.id, n.community]));
   const graph = new UndirectedGraph<Node>({ allowSelfLoops: false });
   const positions = new Map(raw.nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
   const measure = document.createElement("canvas").getContext("2d")!;
@@ -47,18 +59,20 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   let timer: ReturnType<typeof setTimeout> | undefined, frame = 0, dead = false;
   function readPalette() {
     const css = getComputedStyle(document.documentElement), value = (key: string) => css.getPropertyValue(key).trim();
-    return { sea: value("--map-sea"), land: value("--map-land"), coast: value("--map-coast"), background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
+    return { sea: value("--map-sea"), land: value("--map-land"), coast: value("--map-coast"), border: value("--map-border"), countries: [1, 2, 3, 4, 5, 6].map((i) => value(`--map-country-${i}`)), background: value("--graph-background"), edge: value("--graph-edge"), active: value("--graph-edge-active"), label: value("--graph-label"), favorite: value("--favorite"), types: Object.fromEntries(TYPES.map((t) => [t.type, value(t.color)])) };
   }
   let palette = readPalette();
   const representatives = new Set(raw.communities.flatMap((c) => c.representatives));
   const nodeSize = (n: GNode) => (n.type === "Source" ? 2 + Math.min(1, Math.log2(n.degree + 1) * 0.3) : Math.min(9, 3.5 + Math.log2(n.degree + 1) * 0.8)) * SHAPE_SCALE[shapeOf(n.type)];
+  const mapSize = (n: GNode) => n.type === "Synthesis" ? 7.5 : n.type === "Concept" ? Math.min(7, 3.5 + Math.log2(n.degree + 1) * 0.6) : n.type === "Source" ? 3 : 3.6;
   function nodeVisual(id: string, n: GNode) {
     const context = selected ?? hovered, active = context === id, inContext = hot.has(id), favorite = callbacks.favorite(id);
     return {
-      shape: shapeOf(n.type), color: palette.types[n.type] ?? palette.label,
+      // on the map a page is a settlement drawn in ink: capital, city, town or village by its type
+      shape: map ? settlementOf(n.type) : shapeOf(n.type), color: map ? palette.label : palette.types[n.type] ?? palette.label,
       visibility: moving && !landmarks.has(id) && dragged !== id ? "hidden" : "visible",
-      opacity: context && !inContext ? 0.12 : n.type === "Source" && !inContext ? 0.55 : 1,
-      size: active ? Math.max(7, nodeSize(n)) : nodeSize(n),
+      opacity: context && !inContext ? 0.12 : n.type === "Source" && !inContext && !map ? 0.55 : 1,
+      size: map ? mapSize(n) * (active ? 1.3 : 1) : active ? Math.max(7, nodeSize(n)) : nodeSize(n),
       labelColor: palette.label, labelVisibility: allowed.has(id) ? "visible" : "hidden",
       // a framed node for the active page and favorites; any other shown label gets a plain backdrop to read over nodes
       backdropVisibility: active || favorite || allowed.has(id) ? "visible" : "hidden",
@@ -82,7 +96,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   const positioned = () => ({ ...scope, nodes: scope.nodes.map((n) => ({ ...n, ...positions.get(n.id)! })) });
   populate(raw.nodes, raw.links);
   const renderer = new Sigma(graph, el, {
-    primitives: { nodes: { shapes: [sdfCircle(), sdfSquare(), sdfDiamond(), sdfTriangle()], label: { font: { family: font, size: fontSize }, zoomToLabelSizeRatioFunction: () => 1 } } },
+    primitives: { nodes: { shapes: [sdfCircle(), sdfSquare(), sdfDiamond(), sdfTriangle(), ring, capital], label: { font: { family: font, size: fontSize }, zoomToLabelSizeRatioFunction: () => 1 } } },
     settings: {
       hideEdgesOnMove: true, hideLabelsOnMove: true, enableEdgeEvents: false, enableNodeDrag: true,
       enableCameraRotation: false, enableCameraMouseRotation: false, zoomDuration: 0, zoomingRatio: 1.15,
@@ -106,7 +120,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   // each page lays a disc of land, so an island's coast follows its pages. Redrawn on every Sigma frame, a few hundred arcs.
   const land = renderer.createCanvas("land", { beforeLayer: "stage", style: { pointerEvents: "none" } }), landContext = land.getContext("2d")!;
   land.setAttribute("aria-hidden", "true");
-  const SHORE = 46, COAST = 6;
+  const SHORE = 58, COAST = 6;
   function drawLand() {
     const { width, height } = renderer.getDimensions(), dpr = devicePixelRatio || 1;
     if (land.width !== Math.round(width * dpr) || land.height !== Math.round(height * dpr)) { land.width = Math.round(width * dpr); land.height = Math.round(height * dpr); land.style.width = `${width}px`; land.style.height = `${height}px`; }
@@ -115,33 +129,51 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     if (!map || !scope.nodes.length) return;
     const o = renderer.graphToViewport({ x: 0, y: 0 }), ux = renderer.graphToViewport({ x: 1, y: 0 }), uy = renderer.graphToViewport({ x: 0, y: 1 });
     landContext.setTransform((ux.x - o.x) * dpr, (ux.y - o.y) * dpr, (uy.x - o.x) * dpr, (uy.y - o.y) * dpr, o.x * dpr, o.y * dpr);
-    landContext.strokeStyle = palette.coast; landContext.lineCap = "round"; landContext.setLineDash([8, 14]);
-    for (const r of routes) {
-      landContext.lineWidth = 1.5 + Math.log2(r.count);
-      landContext.beginPath(); landContext.moveTo(r.a.x, r.a.y); landContext.lineTo(r.b.x, r.b.y); landContext.stroke();
+    const px = 1 / Math.hypot(ux.x - o.x, ux.y - o.y); // graph units per CSS pixel
+    // 1. political map: each page's territory in its country's colour, then the borders where countries meet
+    const colour = new Map(raw.communities.map((c) => [c.id, palette.countries[c.color % palette.countries.length]]));
+    // one path per country: its cells rasterise together, so no antialiasing seam shows between two of its pages
+    const territories = new Map<string, Path2D>();
+    for (const c of raw.continents) for (const cell of c.cells) {
+      const pts = cell.points, country = countryOfPage.get(cell.id)!;
+      if (pts.length < 6) continue;
+      const path = territories.get(country) ?? territories.set(country, new Path2D()).get(country)!;
+      path.moveTo(pts[0], pts[1]);
+      for (let i = 2; i < pts.length; i += 2) path.lineTo(pts[i], pts[i + 1]);
+      path.closePath();
     }
-    landContext.setLineDash([]);
-    // a bedrock disc per island keeps it one landmass; the page discs give it its coast
-    const bedrock = raw.communities.filter((c) => counts.has(c.id));
-    for (const [color, grow] of [[palette.coast, COAST], [palette.land, 0]] as const) {
-      landContext.fillStyle = color; landContext.beginPath();
-      for (const c of bedrock) { const r = islandRadius(counts.get(c.id)!) * 0.55 + grow; landContext.moveTo(c.x + r, c.y); landContext.arc(c.x, c.y, r, 0, Math.PI * 2); }
+    for (const [country, path] of territories) { landContext.fillStyle = colour.get(country) ?? palette.land; landContext.fill(path); }
+    landContext.strokeStyle = palette.border; landContext.lineWidth = 1.3 * px; landContext.lineJoin = "round"; landContext.setLineDash([5 * px, 3 * px]);
+    landContext.beginPath();
+    for (const c of raw.continents) for (let i = 0; i < c.borders.length; i += 4) { landContext.moveTo(c.borders[i], c.borders[i + 1]); landContext.lineTo(c.borders[i + 2], c.borders[i + 3]); }
+    landContext.stroke(); landContext.setLineDash([]);
+    // 2. the coast cuts the territories: land is a bedrock disc per country plus a disc per shown page
+    const discs = (grow: number) => {
+      landContext.beginPath();
+      for (const c of raw.communities) { const k = counts.get(c.id); if (!k) continue; const r = islandRadius(k) * 0.92 + grow; landContext.moveTo(c.x + r, c.y); landContext.arc(c.x, c.y, r, 0, Math.PI * 2); }
       for (const n of scope.nodes) { const q = positions.get(n.id)!, r = SHORE + grow; landContext.moveTo(q.x + r, q.y); landContext.arc(q.x, q.y, r, 0, Math.PI * 2); }
-      landContext.fill();
-    }
+    };
+    landContext.globalCompositeOperation = "destination-in"; landContext.fillStyle = "#000"; discs(0); landContext.fill();
+    // 3. behind the land: the coastline, then the sea routes between continents
+    landContext.globalCompositeOperation = "destination-over"; landContext.fillStyle = palette.land; discs(0); landContext.fill(); // fills the seams between countries
+    landContext.fillStyle = palette.coast; discs(COAST); landContext.fill();
+    landContext.strokeStyle = palette.coast; landContext.lineCap = "round"; landContext.setLineDash([8, 14]);
+    for (const r of routes) { landContext.lineWidth = 1.5 + Math.log2(r.count); landContext.beginPath(); landContext.moveTo(r.a.x, r.a.y); landContext.lineTo(r.b.x, r.b.y); landContext.stroke(); }
+    landContext.setLineDash([]); landContext.globalCompositeOperation = "source-over";
   }
   let counts = new Map<string, number>();
   function syncRoutes() {
     counts = new Map();
     for (const n of scope.nodes) counts.set(n.community, (counts.get(n.community) ?? 0) + 1);
-    const center = new Map(raw.communities.map((c) => [c.id, c])), community = new Map(scope.nodes.map((n) => [n.id, n.community])), pairs = new Map<string, number>();
+    const center = new Map(raw.continents.map((c) => [c.id, c])), pairs = new Map<string, number>();
+    const community = new Map(scope.nodes.map((n) => [n.id, continentOf.get(n.community)!]));
     for (const e of scope.links) {
       const a = community.get(e.source), b = community.get(e.target);
       if (!a || !b || a === b) continue;
       const key = a < b ? `${a}\t${b}` : `${b}\t${a}`;
       pairs.set(key, (pairs.get(key) ?? 0) + 1);
     }
-    // each island keeps only its two strongest routes: a readable sea, not a second hairball
+    // each continent keeps only its two strongest sea routes: a readable sea, not a second hairball
     const kept = new Set<string>(), byIsland = new Map<string, [string, number][]>();
     for (const entry of pairs) for (const id of entry[0].split("\t")) (byIsland.get(id) ?? byIsland.set(id, []).get(id)!).push(entry);
     for (const list of byIsland.values()) for (const [key] of list.sort((a, b) => b[1] - a[1]).slice(0, 2)) kept.add(key);
@@ -174,25 +206,50 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     const eligible = candidates.filter((n) => context || ratio < 0.65 || n.degree >= 45);
     const reserved: { x: number; y: number; w: number; h: number; force: boolean }[] = [];
     labels.replaceChildren();
-    if (!context && ratio > 0.5) {
+    if (!context && map && ratio > 0.55) {
+      // continent names, spaced capitals as on a world map, above the countries' names
+      const pages = new Map<string, number>(), countries = new Map<string, Set<string>>();
+      for (const n of scope.nodes) { const c = continentOf.get(n.community)!; pages.set(c, (pages.get(c) ?? 0) + 1); (countries.get(c) ?? countries.set(c, new Set()).get(c)!).add(n.community); }
+      measure.font = `600 ${fontSize * 1.15}px ${font}`;
+      const named = raw.continents.filter((c) => c.label && (countries.get(c.id)?.size ?? 0) >= 2);
+      const width_ = (c: { label: string }) => Math.min(360, measure.measureText(c.label.toUpperCase()).width * 1.25 + 16);
+      const kept = placeLabels(named, (c) => {
+        const p = renderer.graphToViewport({ x: c.x, y: c.y + c.h / 2 }), w = width_(c);
+        return p.x < w / 2 || p.x > width - w / 2 || p.y < 10 || p.y > height ? null : { x: p.x - w / 2, y: p.y - 30, w, h: 26 };
+      }, 8, 12);
+      for (const c of kept) {
+        const p = renderer.graphToViewport({ x: c.x, y: c.y + c.h / 2 }), w = width_(c), button = document.createElement("button");
+        reserved.push({ x: p.x - w / 2, y: p.y - 32, w, h: 30, force: true });
+        button.type = "button"; button.textContent = c.label; button.dataset.continent = c.id;
+        button.setAttribute("aria-label", `${c.label} (${t("common.pages", { count: pages.get(c.id)! })})`);
+        button.className = "pointer-events-auto absolute max-w-96 truncate px-1 text-base font-semibold uppercase tracking-[0.25em] text-muted-foreground [text-shadow:0_0_4px_var(--map-sea),0_0_4px_var(--map-sea)] focus-visible:outline focus-visible:outline-2";
+        button.style.cssText = `left:${p.x}px;top:${p.y - 17}px;transform:translate(-50%,-50%)`;
+        button.onclick = () => fit(scope.nodes.filter((n) => continentOf.get(n.community) === c.id));
+        labels.append(button);
+      }
+      measure.font = `${fontSize}px ${font}`;
+    }
+    if (!context && ratio > (map ? 0.12 : 0.5)) {
       const counts = new Map<string, number>();
       for (const n of scope.nodes) counts.set(n.community, (counts.get(n.community) ?? 0) + 1);
       // Various goes first: an island of scattered pages is only readable through its tag
       const visible = raw.communities.filter((c) => (counts.get(c.id) ?? 0) >= 4).sort((a, b) => Number(b.id === MISC) - Number(a.id === MISC));
       const kept = placeLabels(visible, (c) => {
+        if (reserved.some((r) => { const q = renderer.graphToViewport(c); return Math.abs(q.x - (r.x + r.w / 2)) < r.w / 2 + 40 && Math.abs(q.y - 25 - (r.y + r.h / 2)) < 30; })) return null;
         const p = renderer.graphToViewport(c), w = Math.min(280, measure.measureText(c.label).width + 16);
         return p.x < w / 2 || p.x > width - w / 2 || p.y < 40 || p.y > height ? null : { x: p.x - w / 2, y: p.y - 37, w, h: 26 };
       }, 12, 12);
       for (const c of kept) {
         const p = renderer.graphToViewport(c), button = document.createElement("button"), w = Math.min(280, measure.measureText(c.label).width + 16);
         reserved.push({ x: p.x - w / 2 - 2, y: p.y - 39, w: w + 4, h: 30, force: true });
+        button.dataset.country = c.id;
         button.type = "button"; button.textContent = c.label;
         const count = counts.get(c.id)!;
         button.title = t("common.pages", { count }); button.setAttribute("aria-label", `${c.label} (${count})`);
         button.className = map
-          ? "pointer-events-auto absolute max-w-64 truncate px-1 py-0.5 text-sm font-semibold text-foreground [text-shadow:0_0_3px_var(--map-land),0_0_3px_var(--map-land),0_0_6px_var(--map-land)] focus-visible:outline focus-visible:outline-2"
+          ? "pointer-events-auto absolute max-w-64 truncate px-1 py-0.5 text-sm font-semibold text-foreground italic [text-shadow:0_0_3px_var(--map-land),0_0_3px_var(--map-land)] focus-visible:outline focus-visible:outline-2"
           : "pointer-events-auto absolute max-w-64 truncate border bg-background/95 px-2 py-1 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2";
-        button.style.cssText = `left:${p.x}px;top:${p.y - 25}px;transform:translate(-50%,-50%);opacity:${Math.min(1, (ratio - 0.5) * 2)}`;
+        button.style.cssText = `left:${p.x}px;top:${p.y - 25}px;transform:translate(-50%,-50%);opacity:${map ? 1 : Math.min(1, (ratio - 0.5) * 2)}`;
         button.onclick = () => fit(scope.nodes.filter((n) => n.community === c.id));
         labels.append(button);
       }
@@ -208,6 +265,12 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   }
   // Link direction: dots travel from the page that holds the link to the page it cites, both ways for a mutual link.
   // Only on the selected/hovered page's links, at rest, never under reduced motion: the overview stays still and costs nothing.
+  // Map and group labels are buttons above the canvas: hand their wheel to Sigma so zooming never stalls on a name.
+  labels.addEventListener("wheel", (event) => {
+    if (event.target === labels) return;
+    event.preventDefault();
+    el.querySelector(".sigma-mouse")?.dispatchEvent(new WheelEvent("wheel", event));
+  }, { passive: false });
   const flow = document.createElement("canvas"), flowContext = flow.getContext("2d")!;
   flow.setAttribute("aria-hidden", "true"); flow.dataset.flow = "";
   flow.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";

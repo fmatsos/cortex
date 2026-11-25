@@ -6,6 +6,10 @@ export type Shape = "circle" | "square" | "diamond" | "triangle";
 export type Pt = readonly [number, number];
 
 const SHAPE_OF: Record<string, Shape> = { Concept: "circle", Entity: "square", Synthesis: "diamond", Source: "triangle" };
+/** Map mode: a page is a settlement whose rank follows its type (Sigma primitive names). */
+export type Settlement = "capital" | "circle" | "square" | "ring";
+const SETTLEMENT_OF: Record<string, Settlement> = { Synthesis: "capital", Concept: "circle", Entity: "square", Source: "ring" };
+export const settlementOf = (type: string): Settlement => SETTLEMENT_OF[type] ?? "circle";
 /** Shape of a page type; an unknown type falls back to the circle. */
 export const shapeOf = (type: string): Shape => SHAPE_OF[type] ?? "circle";
 

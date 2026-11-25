@@ -715,5 +715,10 @@
 	"graph.mode.label": "Présentation",
 	"graph.mode.graph": "Graphe",
 	"graph.mode.map": "Carte",
+	"graph.settlement.capital": "Capitale",
+	"graph.settlement.circle": "Ville",
+	"graph.settlement.square": "Bourg",
+	"graph.settlement.ring": "Village",
+	"graph.legend.map": "Chaque groupe de pages est un pays, les pays très liés forment un continent ; la mer sépare les continents et les pointillés y tracent leurs routes principales. Une page est une agglomération selon son type. Zoomer fait apparaître les noms des pays, puis des pages ; une page sélectionnée retrouve ses liens.",
 	"graph.nearestFrame": "cadrage sur les 30 plus proches"
 }

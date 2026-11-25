@@ -37,7 +37,10 @@ export type SiteData = {
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number; x: number; y: number; community: string }[];
   links: { source: string; target: string; mutual?: true }[]; // directed: source = page that contains the link; mutual: links in both directions (a single link, never two)
-  communities: { id: string; label: string; size: number; representatives: string[]; x: number; y: number }[];
+  // countries of the map: color is an index into the --map-country-* tokens, never shared by two neighbours
+  communities: { id: string; label: string; size: number; representatives: string[]; x: number; y: number; continent: string; color: number }[];
+  // continents: a box of touching countries; cells (one per page, its Voronoi territory) and borders are in graph units
+  continents: { id: string; label: string; size: number; x: number; y: number; w: number; h: number; cells: { id: string; points: number[] }[]; borders: number[] }[];
 };
 export type SearchDoc = { id: string; title: string; description: string; type: string; tags: string[]; status: string; verified: boolean; needsReview?: boolean; partial?: boolean; text: string };
 export type SearchIndex = { docs: SearchDoc[]; terms: Record<string, number[]>; vocab: string[] };
