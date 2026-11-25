@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { endpoint, loadConfig } from "./config";
 import { defaultThreads, localEmbed } from "./embed-local";
 import { sha256 } from "./lib";
-import { LIMITS } from "./limits";
 import { buildIndex, getMeta, gcVectors, type Index, type Kind, nearestDocs, pageVector, pathsOf, pending, prepareVectors, putVector, setMeta, vectorModel, vectorOf } from "./search-index";
 import { note, warn } from "./style";
 
@@ -53,12 +52,16 @@ export type Profile = {
 };
 const ALL: Keep = { floor: -1, margin: Infinity, max: Infinity };
 export const PROFILES: Record<Profile["name"], Profile> = {
-  // Qwen3-Embedding: an English instruction on queries only, even for French. Thresholds: the first guesses of limits.ts.
+  // Qwen3-Embedding: an English instruction on queries only, even for French. Thresholds measured on a real French wiki (356 pages, qwen3-embed, 256 dims;
+  // scripts/calibrate-embeddings.ts): `related.floor`: 180 neighbour pairs labelled by hand, ~50 % of the pairs under 0.70 are unrelated against 3.5 % over;
+  // `dups`: the check compares the title and description of the new page with whole-page vectors, 163 distinct pages never exceed 0.880 (Opus 5.5 / Fable 5.2,
+  // Copilot / Cursor, versions of a product) while paraphrases of a page score 0.80-0.95 (rewrites of the same subject from another angle: 0.61-0.84): `cosine`
+  // refuses with no judge only what is almost a copy, `warn` lists what the judge should look at.
   qwen3: {
     name: "qwen3", dims: 256, docChars: 6000,
     prefix: { query: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:", passage: "" },
-    dups: { cosine: LIMITS.dupCosine, warn: LIMITS.dupWarn },
-    related: { floor: 0.5, margin: Infinity, max: Infinity }, query: ALL,
+    dups: { cosine: 0.9, warn: 0.75 },
+    related: { floor: 0.7, margin: Infinity, max: Infinity }, query: ALL,
   },
   // multilingual-e5: `query: ` / `passage: `. Its cosines are packed high (unrelated French texts 0.72-0.87, same subject 0.82-0.88,
   // paraphrase 0.89-0.96, near-duplicate 0.99): a fixed floor cannot tell, so what stays is relative to the best (rank + margin),

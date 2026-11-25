@@ -235,11 +235,12 @@ test("model profiles: prefixes and thresholds depend on the model, not on the pr
   expect(PROFILES.qwen3.prefix.query).toStartWith("Instruct:");
   expect(PROFILES.qwen3.prefix.passage).toBe("");
   expect(PROFILES.e5.prefix).toEqual({ query: "query: ", passage: "passage: " });
-  expect(PROFILES.qwen3.dups).toEqual({ cosine: 0.85, warn: 0.6 }); // unchanged for qwen3
+  expect(PROFILES.qwen3.dups).toEqual({ cosine: 0.9, warn: 0.75 }); // calibrated on a real wiki (scripts/calibrate-embeddings.ts)
   expect(PROFILES.e5.dups).toEqual({ cosine: 0.97, warn: 0.9 });
   const hits = (...s: number[]) => s.map((score, i) => ({ path: `p${i}`, score }));
-  // qwen3: the fixed floor of 0.5
-  expect(keep(hits(0.9, 0.55, 0.45), PROFILES.qwen3.related).map((h) => h.path)).toEqual(["p0", "p1"]);
+  // qwen3: the fixed floor of 0.7
+  expect(PROFILES.qwen3.related.floor).toBe(0.7);
+  expect(keep(hits(0.9, 0.72, 0.65, 0.55), PROFILES.qwen3.related).map((h) => h.path)).toEqual(["p0", "p1"]);
   // e5: relative to the best, so a crowd just below the best is kept, unrelated pages (0.72-0.87) not
   expect(keep(hits(0.88, 0.86, 0.85, 0.83, 0.82, 0.81), PROFILES.e5.related).map((h) => h.path)).toEqual(["p0", "p1", "p2"]); // within 0.04 of the best (0.88), over the 0.8 floor, 5 at most
   expect(keep(hits(0.79, 0.78), PROFILES.e5.related)).toEqual([]);

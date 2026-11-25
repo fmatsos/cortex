@@ -13,7 +13,7 @@ import { compilePrompt } from "./prompts";
 
 // Fake servers: llama.cpp's /embeddings (3 meaningful dims: "chat", "chien", "mi-chat" in between, anything else) and
 // /systemone (TypeSafe's format), whose verdicts each test sets.
-const topic = (t: string) => (/mi-chat/i.test(t) ? [0.7, 0.714, 0] : /chat|f[ée]lin|minou/i.test(t) ? [1, 0, 0] : /chien/i.test(t) ? [0, 1, 0] : [0, 0, 1]);
+const topic = (t: string) => (/mi-chat/i.test(t) ? [0.8, 0.6, 0] : /chat|f[ée]lin|minou/i.test(t) ? [1, 0, 0] : /chien/i.test(t) ? [0, 1, 0] : [0, 0, 1]);
 type Body = { model: string; state: any; questions: Record<string, { type: string; instructions: string; criteria?: Record<string, string> }> };
 let calls: { auth: string | null; body: Body }[] = [], verdict: (b: Body) => Response | object = () => ({}), embedCalls = 0;
 function fake() {
@@ -144,7 +144,7 @@ test("duplicate guard without the judge: a very close cosine refuses, a close on
   expect(await create(root, "Concept", "Minou", "chat").catch((e: Error) => e.message)).toContain("covers the same subject: wiki/concepts/cat");
   const notes: string[] = [];
   await create(root, "Concept", "Entre deux", "mi-chat", { notes });
-  expect(notes[0]).toContain("close in meaning: "); // cosine 0.7: under dupCosine, over dupWarn
+  expect(notes[0]).toContain("close in meaning: "); // cosine 0.8 with « chat »: under dups.cosine (0.9), over dups.warn (0.75)
   const far: string[] = [];
   await create(root, "Concept", "Zébu", "Un bovin.", { notes: far });
   expect(far).toEqual([]);
