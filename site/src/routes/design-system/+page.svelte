@@ -32,6 +32,7 @@
 	import * as Card from "#lib/components/ui/card/index.js";
 	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 	import * as Tabs from "#lib/components/ui/tabs/index.js";
+	import * as Dialog from "#lib/components/ui/dialog/index.js";
 
 	// ---- colours -------------------------------------------------------------------------------------------------
 	// tokens.css only scopes the dark palette on :root, so the dark panel cannot be a plain wrapper: both panels set
@@ -150,6 +151,7 @@
 	];
 
 	let theme = $state("system");
+	let dialogOpen = $state(false);
 	let chip = $state([true, false]);
 	let tab = $state("lire"); // internal ids, never shown
 	let tabLine = $state("resume");
@@ -440,6 +442,18 @@
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 			<span class={cap}>{@render rich(t("ds.menu.hint", { value: `\`${theme}\`` }))}</span>
+		</div>
+
+		<h3 id="c-dialog" class={h3}>Dialog</h3>
+		<div class="{box} flex flex-wrap items-center gap-4">
+			<Button variant="outline" id="dialog-demo" onclick={() => (dialogOpen = true)}>{t("ds.dialog.open")}</Button>
+			<span class={cap}>{t("ds.dialog.hint")}</span>
+			<Dialog.Root bind:open={dialogOpen} title={t("ds.dialog.title")} description={t("ds.dialog.text")}>
+				{#snippet actions()}
+					<Button variant="outline" onclick={() => (dialogOpen = false)}>{t("common.cancel")}</Button>
+					<Button onclick={() => (dialogOpen = false)}>{t("ds.dialog.confirm")}</Button>
+				{/snippet}
+			</Dialog.Root>
 		</div>
 
 		<h3 id="c-tabs" class={h3}>Tabs</h3>

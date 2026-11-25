@@ -29,6 +29,12 @@ export const favs = {
 		removed = null;
 	},
 	dismissUndo() { removed = null; },
+	/** Replaces the whole list (the account's state applied to this browser); leaves the undo of the last removal alone. */
+	replace(next: string[]) {
+		if (next.length === ids.length && next.every((x, i) => x === ids[i])) return;
+		ids = [...next];
+		save();
+	},
 	/** To call once on the browser side (not at prerender); also follows changes made in another tab. */
 	init() {
 		load();
