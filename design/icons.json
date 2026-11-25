@@ -65,7 +65,13 @@
     "offline-ready": "check-circle",
     "retry": "arrow-clockwise",
     "language": "translate",
-    "new-tab": "browser"
+    "new-tab": "browser",
+    "account": "user-circle",
+    "sign-in": "sign-in",
+    "sign-out": "sign-out",
+    "trash": "trash",
+    "rename": "pencil-simple",
+    "conversation": "chat-circle-text"
   },
   "filled": {
     "star-filled": "star"

@@ -232,3 +232,22 @@ test("the page follows the interface language, in English and back in French", a
   await expect(page.locator("section#couleurs > h2")).toHaveText("Couleurs");
   await expect(page.locator('[data-panel="light"] [data-token="--foreground"]')).toContainText("16,34:1");
 });
+
+test("the dialog is a native modal: square, floating-layer shadow and edge, Escape closes it and the focus returns", async ({ page }) => {
+  await page.goto(URL);
+  const open = page.locator("#dialog-demo");
+  await open.click();
+  const dialog = page.getByRole("dialog", { name: "Dialog title" });
+  await expect(dialog).toBeVisible();
+  const look = await dialog.evaluate((el) => {
+    const color = (token: string) => { const d = document.createElement("div"); d.style.color = `var(${token})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
+    const s = getComputedStyle(el);
+    return { radius: s.borderTopLeftRadius, shadow: s.boxShadow, border: s.borderTopColor, input: color("--input") };
+  });
+  expect(look.radius).toBe("0px");
+  expect(look.shadow).not.toBe("none");
+  expect(look.border).toBe(look.input);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(open).toBeFocused();
+});

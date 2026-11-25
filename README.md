@@ -314,7 +314,7 @@ identity_providers:
         userinfo_signed_response_alg: 'none'
 ```
 
-The routes (JSON; `401` without a session on `/api/me*`, `/api/conversations*`, `/api/journeys*`; the front end of the account pages comes after):
+The routes (JSON; `401` without a session on `/api/me*`, `/api/conversations*`, `/api/journeys*`). The site's header menu and its `/account/` page use them (preferences are synchronised; conversations and journeys are listed, renamed and deleted there):
 
 | Route | |
 |---|---|

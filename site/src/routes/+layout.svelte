@@ -20,6 +20,8 @@
 	import AssistantPanel from "#lib/components/assistant/assistant-panel.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { assistant } from "#lib/assistant.svelte.js";
+	import { account } from "#lib/account.svelte.js";
+	import AuthNotice from "#lib/components/auth-notice.svelte";
 
 	let { children, data } = $props();
 	const f = $derived(data.footer);
@@ -29,8 +31,9 @@
 	};
 	let header = $state<HTMLElement | null>(null);
 
-	// favorites, search history, theme and language: specific to this browser (localStorage)
-	onMount(() => { theme.init(); lang.init(); search.init(); assistant.probe(); return favs.init(); });
+	// favorites, search history, theme and language: specific to this browser (localStorage); an account, when the server has
+	// one, then keeps theme, language and favorites (account.init reads the stores, so it comes after them)
+	onMount(() => { theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init(); return stop; });
 
 	// Real height of the sticky header → offset of anchors and of the skip link (never two assumed heights)
 	$effect(() => {
@@ -61,7 +64,8 @@
 	// and the icon sprite gets the symbols of HTML injected with {@html} (exported callouts): the build-time scan only
 	// covers the document the visitor landed on, not the pages reached by client navigation (also fires on the first
 	// load, which covers the 404 shell)
-	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; ensureSymbols(); });
+	// and the return of a sign-in that failed (`?auth=`) is read once the router is up, announced and cleared from the URL
+	afterNavigate((nav) => { if (nav.to?.route.id === "/") search.q = ""; ensureSymbols(); account.takeNotice(); });
 
 	const nav = [
 		["/search", "search", "nav.search"],
@@ -110,6 +114,8 @@
 		</div>
 	</div>
 </header>
+
+<AuthNotice />
 
 <main id="main-content" tabindex="-1" class="anchor-target mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8 outline-none">
 	{@render children()}
