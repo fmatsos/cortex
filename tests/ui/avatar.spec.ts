@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
-import type { Page, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import { expect, test } from "./helpers";
 
 // The brand mark is the static graph-brain: drawn in SVG, no raster image, nothing moving. The assistant's avatar is the same
 // drawing with four states; a static host has no /api/ask, so those are exercised through a mocked endpoint.
 const running = (page: Page) =>
   page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running" && (a.effect as KeyframeEffect | null)?.target?.closest?.("svg.folio")).length);
+const signalPosition = (avatar: Locator) => avatar.locator(".signal").evaluate((el) => {
+  const matrix = (el as SVGCircleElement).getCTM()!;
+  return [matrix.e, matrix.f];
+});
 
 test("the header mark is the graph-brain, an inline drawing with no image", async ({ page }) => {
   await page.goto("/");
@@ -18,6 +22,7 @@ test("the header mark is the graph-brain, an inline drawing with no image", asyn
   await expect(mark).toHaveAttribute("viewBox", "0 0 32 32");
   await expect(mark).toHaveAttribute("aria-hidden", "true");
   await expect(mark).toHaveAttribute("data-state", "idle");
+  await expect(mark.locator(".signal, .halo")).toHaveCount(0);
   expect(await page.locator("svg.folio image, svg.folio foreignObject").count(), "no raster inside the mark").toBe(0);
   // butt ends and mitered joins, as the rest of the square system
   const style = await mark.locator(".links").first().evaluate((el) => ({ cap: getComputedStyle(el).strokeLinecap, join: getComputedStyle(el).strokeLinejoin }));
@@ -88,20 +93,25 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     const waiting = page.locator("#assistant-panel article svg.folio");
     await expect(waiting).toHaveAttribute("data-state", "pending");
     await expect(waiting).toHaveAttribute("aria-hidden", "true");
-    // pending moves only when motion is welcome: the signal of the panel head and the one of the waiting turn, the same
-    // drawing at two sizes; the header button carries the assistant icon, not the avatar
-    await expect.poll(() => running(page)).toBe(still ? 0 : 2);
     await expect(head).toHaveAttribute("data-optic", "mark");
-    await expect(head.locator(".signal")).toHaveCount(1);
-    if (!still) expect(await head.locator(".signal").evaluate((el) => getComputedStyle(el).animationTimingFunction)).toMatch(/^steps\(1/);
-    await expect(waiting.locator(".signal")).toHaveCount(1);
-    if (!still) expect(await waiting.locator(".signal").evaluate((el) => getComputedStyle(el).animationTimingFunction)).toMatch(/^steps\(1/);
+    for (const avatar of [head, waiting]) {
+      await expect(avatar.locator(".signal")).toHaveCount(1);
+      await expect(avatar.locator(".halo")).toHaveCount(1);
+      await expect(avatar.locator(".halo")).toHaveCSS("opacity", "0.18");
+      const position = await signalPosition(avatar);
+      if (still) {
+        await page.waitForTimeout(300);
+        expect(await signalPosition(avatar), "the reduced-motion signal stays still").toEqual(position);
+      } else {
+        await expect.poll(() => signalPosition(avatar), "the dot travels along the graph").not.toEqual(position);
+      }
+    }
     // the state text stays in the panel
     await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);
 
     release();
     await expect(head).toHaveAttribute("data-state", "answer");
-    await expect(head.locator(".signal")).toHaveCount(0);
+    await expect(head.locator(".signal, .halo")).toHaveCount(0);
     // all four front nodes animate once, then stay larger than at rest
     await expect(head.locator(".nf")).toHaveCount(4);
     expect(await head.locator(".nf").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationIterationCount))).toEqual(Array(4).fill("1"));
@@ -156,7 +166,7 @@ test("a failed question puts the avatar in its error composition, still", async 
   await expect(head.locator(".break")).toHaveCount(1);
   await expect(head.locator(".break")).toHaveAttribute("r", "0.65");
   await expect(head.locator(".links polyline")).toHaveCount(21);
-  await expect(head.locator(".signal")).toHaveCount(0);
+  await expect(head.locator(".signal, .halo")).toHaveCount(0);
   expect(await running(page)).toBe(0);
   await expect(panel.locator("[role=status]")).toHaveText(/./);
 });
