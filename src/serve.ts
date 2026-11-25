@@ -11,6 +11,7 @@ import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./promp
 import { historyPart, lastQuestion, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
+import { searchSite } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
 import { inbox } from "./inbox";
@@ -29,6 +30,7 @@ import { loadConfig } from "./config";
  * It also serves the phone share target under /share/ (scripts/share-server.ts): a share is written to `inbox/`
  * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
+ * `GET /api/search`: the hybrid search with the site's operators, and with `judge=1` the judge's ranking (src/search-api.ts).
  * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
  * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
  */
@@ -274,6 +276,7 @@ export async function serve(root: string, o: ServeOpts) {
     root, say, config: () => loadConfig(root),
     titles: async () => new Map((await openWiki(root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
   });
+  let judging = false; // one judged search at a time (each one is up to `judge.search_candidates` calls); the others get a 429
   let asking = false; // ponytail: one question at a time for the whole server, a queue if several people use it
   const server = Bun.serve({
     port: o.port,
@@ -299,6 +302,26 @@ export async function serve(root: string, o: ServeOpts) {
           return Response.json({ ok: true, path, by: `human:${o.reviewer}` });
         } catch (e) {
           return Response.json({ error: (e as Error).message }, { status: /unknown page/.test((e as Error).message) ? 404 : 500 });
+        }
+      }
+      if (url.pathname === "/api/search") {
+        // the hybrid search with the site's operators; `judge=1` also ranks the hits with the judge (search-api.ts). Always on in serve: reading, no account
+        const headers = { "cache-control": "no-store" };
+        if (req.method === "HEAD") return new Response(null, { status: 204, headers }); // probe: the site offers the search by meaning
+        if (req.method !== "GET") return new Response(null, { status: 405, headers });
+        const judge = ["1", "true"].includes(url.searchParams.get("judge") ?? "");
+        // the judge spends tokens: a page of another site must not start it (the answer stays unreadable to it, the cost does not)
+        if (judge && (req.headers.get("sec-fetch-site") === "cross-site" || !sameOrigin(req.headers))) return Response.json({ error: "cross-origin request refused" }, { status: 403, headers });
+        if (judge) srv.timeout(req, 0); // up to `judge.search_candidates` calls outlast Bun's 10 s idle timeout
+        try {
+          const r = await searchSite(root, url.searchParams.get("q") ?? "", {
+            limit: Number(url.searchParams.get("limit")), judge,
+            lock: () => { if (judging) return; judging = true; return () => { judging = false; }; },
+          });
+          return Response.json(r.body, { status: r.status, headers });
+        } catch (e) {
+          say(`search: ${(e as Error).message}`);
+          return Response.json({ error: (e as Error).message }, { status: 500, headers });
         }
       }
       if (url.pathname === "/api/ask/render") {

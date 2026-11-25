@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lintConfig } from "./config";
@@ -204,6 +204,30 @@ test("site question: each page judged alone, retained and related by threshold, 
     await relevantPages(root, "Le chat dort-il ?", "Et le chien ?");
     expect(calls.length).toBe(n); // the same question: no new call
     verdict = () => new Response("down", { status: 500 });
+    expect(await relevantPages(root, "Le félin mange-t-il ?")).toBeUndefined();
+  } finally { server.stop(true); }
+});
+
+test("site question: one failed call no longer cancels the batch (the judged pages count), scores persist in .cortex/judge.db", async () => {
+  const { relevantPages } = await import("./ask-site");
+  const server = fake();
+  try {
+    const root = await wiki(server.port!, { judge: { ask_retained: 0.6, ask_related: 0.3 } });
+    verdict = (b) => b.state.page.title === "Félin" ? new Response("boom", { status: 500 }) : ({ relevant: { type: "noul", noul: b.state.page.title === "Chat" ? 0.9 : 0.4 } });
+    const core = await relevantPages(root, "Le chat dort-il ?");
+    expect(core?.retained.map((r) => r.id)).toEqual(["concepts/cat1"]); // Félin is left out, not fatal
+    expect(core?.related.map((r) => r.id)).not.toContain("concepts/cat2");
+    expect(core?.related.length).toBeGreaterThan(0);
+    const first = calls.length;
+    expect(existsSync(join(root, ".cortex/judge.db"))).toBe(true);
+    // the same question again: the pages already judged are not asked again, the failed one is (the server was not marked down)
+    verdict = (b) => ({ relevant: { type: "noul", noul: b.state.page.title === "Félin" ? 0.5 : 0.1 } });
+    const again = await relevantPages(root, "Le chat dort-il ?");
+    expect(calls.slice(first).map((c) => c.body.state.page.title)).toEqual(["Félin"]);
+    expect(again?.retained.map((r) => r.id)).toEqual(["concepts/cat1"]);
+    expect(again?.related.map((r) => r.id)).toContain("concepts/cat2");
+    // every page failing: no core, the agent works from the search hits as before
+    verdict = () => new Response("down", { status: 503 });
     expect(await relevantPages(root, "Le félin mange-t-il ?")).toBeUndefined();
   } finally { server.stop(true); }
 });

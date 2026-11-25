@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { openWiki } from "./context";
 import { pageId, type Page } from "./doc";
-import { clip, judge, judgeConfig, type JudgeConfig } from "./judge";
+import { clip, judgeConfig, type JudgeConfig } from "./judge";
+import { scorePages } from "./judge-scores";
 import { LIMITS } from "./limits";
 import { prompt } from "./prompts";
 import { search } from "./search";
@@ -28,23 +28,17 @@ const RELEVANT = [
   "No: the page shares the topic or words of the question, but none of its statements answers what is asked.",
 ].join(" ");
 
-// ponytail: kept for the life of the serve process, never evicted; an LRU if the wiki and its questions grow large
-const scores = new Map<string, number>();
-
 /**
- * Each page judged in its own call, all in parallel: one call for every page scored the same page 0.24 first and 0.75 last
- * (measured on Jev). The score depends on the question and the page only, so the same question retains the same pages.
+ * Each page judged in its own call (judge-scores.ts): one call for every page scored the same page 0.24 first and 0.75 last
+ * (measured on Jev). The score depends on the question and the page only, so the same question retains the same pages, from
+ * one serve process to the next (the scores are kept in `.cortex/judge.db`). A call that fails leaves that page without a score.
  */
-async function relevance(root: string, jc: JudgeConfig, request: { question: string; earlier?: string }, p: Page): Promise<number | undefined> {
-  const page = { title: String(p.fm.title ?? p.path), description: String(p.fm.description ?? ""), text: clip(p.body, LIMITS.askJudgeChars) };
-  const key = createHash("sha256").update(JSON.stringify([jc.model, request.question.trim().toLowerCase(), request.earlier?.trim().toLowerCase() ?? "", p.path, page])).digest("hex");
-  const known = scores.get(key);
-  if (known !== undefined) return known;
-  const a = (await judge(root, { request, page }, { relevant: { type: "noul", instructions: RELEVANT } }, undefined, `site question, « ${page.title} »`))?.relevant;
-  if (a?.type !== "noul") return;
-  scores.set(key, a.noul);
-  return a.noul;
-}
+const relevance = (root: string, jc: JudgeConfig, request: { question: string; earlier?: string }, pages: Page[]) =>
+  scorePages(root, jc, {
+    purpose: "ask", question: { type: "noul", instructions: RELEVANT }, request, key: [request.question, request.earlier ?? ""],
+    pages: pages.map((p) => ({ path: p.path, page: { title: String(p.fm.title ?? p.path), description: String(p.fm.description ?? ""), text: clip(p.body, LIMITS.askJudgeChars) } })),
+    what: (p) => `site question, « ${p.page.title} »`,
+  });
 
 /** Most relevant first; equal scores by path, so the order never depends on how the search ranked them. */
 export function coreOf(judged: { page: Page; relevance: number }[], t: { retained: number; related: number }, budget: number = LIMITS.askReadingChars): Core {
@@ -66,8 +60,9 @@ export function coreOf(judged: { page: Page; relevance: number }[], t: { retaine
 export const lastQuestion = (history: readonly Turn[]) => history.findLast((t) => t.role === "user")?.text;
 
 /**
- * The pages the answer rests on, judged against the question; undefined without a judge, or when one call fails (the agent
- * then works from the search hits, as before). The search takes the earlier question too, the judge keeps them apart.
+ * The pages the answer rests on, judged against the question; undefined without a judge, or when no page could be judged (the
+ * agent then works from the search hits, as before). A page whose call failed is left out, the judged ones count. The search
+ * takes the earlier question too, the judge keeps them apart.
  */
 export async function relevantPages(root: string, question: string, earlier?: string): Promise<Core | undefined> {
   const jc = await judgeConfig(root);
@@ -80,9 +75,10 @@ export async function relevantPages(root: string, question: string, earlier?: st
   const byPath = new Map((await openWiki(root).pages()).map((p) => [p.path, p]));
   const pages = hits.map((h) => byPath.get(h.path)).filter((p): p is Page => !!p);
   const request = earlier ? { question, earlier } : { question };
-  const judged = await Promise.all(pages.map((page) => relevance(root, jc, request, page)));
-  if (judged.some((r) => r === undefined)) return;
-  return coreOf(pages.map((page, i) => ({ page, relevance: judged[i]! })), { retained: jc.askRetained, related: Math.min(jc.askRelated, jc.askRetained) });
+  const scores = await relevance(root, jc, request, pages);
+  const judged = pages.flatMap((page, i) => (scores[i] === undefined ? [] : [{ page, relevance: scores[i]! }]));
+  if (pages.length && !judged.length) return;
+  return coreOf(judged, { retained: jc.askRetained, related: Math.min(jc.askRelated, jc.askRetained) });
 }
 
 const list = (refs: PageRef[]) => refs.map((r) => `/${r.path} « ${r.title} »`).join("; ");

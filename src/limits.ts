@@ -90,4 +90,24 @@ export const LIMITS = {
   askHistoryChars: 4000,
   /** Site question: an answer longer than this written without any display block is sent back once to be laid out. */
   askBlocksAfterChars: 600,
+  /** Judge: simultaneous calls of one batch (a search, a site question): a hosted model rate-limits, a local server queues. */
+  judgeConcurrency: 6,
+  /** Judge: scores kept in `.cortex/judge.db`, forgotten after this many days… */
+  judgeCacheDays: 30,
+  /** …and the oldest ones beyond this many rows. */
+  judgeCacheRows: 20_000,
+  /** Site search: results of `GET /api/search` without `limit`, and the most it ever returns. */
+  searchLimit: 20,
+  searchMaxLimit: 50,
+  /** Site search: hits taken from the hybrid search before the operators filter them (a filter keeps a few of them). */
+  searchPool: 300,
+  /** Site search: longest query, in characters. */
+  searchQueryChars: 500,
+  /** Site search with the judge: the best hybrid hits (after the operators) judged against the query. */
+  searchCandidates: 20,
+  /** Site search with the judge: a page rated at or above this is retained; from `searchRelated` to it, related (same calibration as the site question: not calibrated on a wiki yet). */
+  searchRetained: 0.5,
+  searchRelated: 0.3,
+  /** Site search with the judge: characters of the judged page the judge reads (title and description come first). */
+  searchJudgeChars: 2500,
 } as const;
