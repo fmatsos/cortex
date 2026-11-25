@@ -4,6 +4,15 @@ import { expect, test } from "./helpers";
 // The style guide at /design-system/ is the owner's validation gate: it shows the real tokens and components. These tests
 // check that it renders without error and that what it shows obeys the square contract, on the rendered page.
 const URL = "/design-system/";
+// The fixture export has no `language`, so the site defaults to English; the checks that read French labels and French
+// number formats pin the visitor's choice (what the preferences menu stores) before the page loads, then wait for the
+// remount the language switch causes (the layout re-renders its content under the new language) so no locator holds a
+// node of the English render.
+const inFrench = async (page: import("@playwright/test").Page) => {
+  await page.addInitScript(() => localStorage.setItem("cortex:lang", "fr"));
+  await page.goto(URL);
+  await expect(page.locator("section#couleurs > h2")).toHaveText("Couleurs");
+};
 
 // Components that still carry the old language and that a later task restyles (C17 rewrites chip-button). They are shown
 // as they are today; the square-contract test lists them explicitly so a new offender cannot hide behind them, and the
@@ -31,7 +40,7 @@ test("every icon of the pack is shown and every use resolves to its symbol", asy
 });
 
 test("both palettes are shown, with contrast ratios computed from the tokens", async ({ page }) => {
-  await page.goto(URL);
+  await inFrench(page);
   const light = page.locator('[data-panel="light"]'), dark = page.locator('[data-panel="dark"]');
   expect(await light.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(255, 255, 255)");
   expect(await dark.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(23, 28, 27)");
@@ -153,7 +162,7 @@ test("the dropdown menu opens on click and closes with Escape, and works from th
 });
 
 test("tabs switch with the arrow keys, both variants", async ({ page }) => {
-  await page.goto(URL);
+  await inFrench(page);
   await hydrated(page);
   for (const [label, names] of [["Onglets segmentés", ["Lire", "Sources", "Liens"]], ["Onglets soulignés", ["Résumé", "Détail"]]] as const) {
     const list = page.getByRole("tablist", { name: label });
@@ -174,4 +183,39 @@ test("tabs switch with the arrow keys, both variants", async ({ page }) => {
     await page.keyboard.press("ArrowRight"); // wraps around, the disabled tab is skipped
     await expect(tab(names[0])).toBeFocused();
   }
+});
+
+// The page follows the interface language, switched from the preferences menu without a reload: the h1 keeps its name,
+// the section headings, a sentence with inline code and the computed ratios change, and no dictionary key shows raw.
+test("the page follows the interface language, in English and back in French", async ({ page }) => {
+  await page.goto(URL);
+  await hydrated(page);
+  const lang = (name: string) => page.getByRole("menuitemradio", { name, exact: true });
+  const preferences = page.getByRole("banner").getByRole("button", { name: /^(Préférences|Preferences)$/ });
+  await preferences.click();
+  await lang("English").click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Design system");
+  await expect(page).toHaveTitle("Design system · Cortex");
+  await expect(page.locator("section#couleurs > h2")).toHaveText("Colors");
+  await expect(page.locator("section#marque > h2")).toHaveText("Brand and avatar");
+  await expect(page.getByRole("navigation", { name: "Page sections" })).toBeVisible();
+  await expect(page.locator("section#couleurs > p").first()).toContainText("The ratio is computed against the background of its pair");
+  // numbers follow the locale too: a decimal point, English grades
+  await expect(page.locator('[data-panel="light"] [data-token="--foreground"]')).toContainText("16.34:1");
+  await expect(page.locator('#couleurs [data-token]:has-text("below 4.5:1")')).toHaveCount(0);
+  await expect(page.getByRole("tablist", { name: "Segmented tabs" })).toBeVisible();
+  // inline code stays code inside a translated sentence, and no `ds.` key (or backtick) leaks into the text
+  await expect(page.locator("#formes p code", { hasText: "--shadow-overlay" }).first()).toBeVisible();
+  const body = await page.locator("main").innerText();
+  expect(body).not.toMatch(/\bds\.[a-z]+\.[\w.]+/);
+  expect(body).not.toContain("`");
+  expect(body).not.toMatch(/\{\w+\}/);
+  expect(body).not.toContain("Couleurs");
+  // and back to French, still without a reload
+  await preferences.click();
+  await lang("Français").click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.locator("section#couleurs > h2")).toHaveText("Couleurs");
+  await expect(page.locator('[data-panel="light"] [data-token="--foreground"]')).toContainText("16,34:1");
 });
