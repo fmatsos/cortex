@@ -8,3 +8,10 @@ generated: { by: test, at: 2026-11-04T10:00:00+01:00 }
 
 ---
 Back to [Alpha](/wiki/concepts/alpha.md). Searchable keyword: zebracorn.
+
+
+Run `cortex export --out ./site` to build it:
+
+```sh
+cortex export --out ./site
+```
