@@ -43,7 +43,7 @@
 {/snippet}
 
 {#if backlinks.length}
-	<section aria-labelledby="h-back" class="bg-muted/50 rounded-lg border p-3">
+	<section aria-labelledby="h-back" class="bg-muted/50 shadow-surface rounded-lg border p-3">
 		<h2 id="h-back" class="mb-2 flex items-center gap-2 font-semibold" title={tr("related.backlinks.title")}>
 			<Icon name="backlink" size={20} class="text-muted-foreground" />{tr("related.backlinks")} <span class="text-muted-foreground text-sm font-normal">{backlinks.length}</span>
 		</h2>
@@ -54,7 +54,7 @@
 	</section>
 {/if}
 {#if related.length}
-	<section aria-labelledby="h-rel" class="bg-muted/50 rounded-lg border p-3">
+	<section aria-labelledby="h-rel" class="bg-muted/50 shadow-surface rounded-lg border p-3">
 		<h2 id="h-rel" class="mb-2 flex items-center gap-2 font-semibold">
 			<Icon name="related" size={20} class="text-muted-foreground" />{tr("related.title")} <span class="text-muted-foreground text-sm font-normal">{related.length}</span>
 		</h2>

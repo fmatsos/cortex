@@ -480,6 +480,7 @@
 	"assistant.pages.related": "Pages connexes",
 	"assistant.pages.retained": "Pages retenues pour cette question",
 	"assistant.placeholder": "Posez une question au wiki…",
+	"assistant.resize": "Redimensionner l'assistant",
 	"assistant.send": "Envoyer la question",
 	"assistant.status.pending": "L'assistant prépare la réponse.",
 	"assistant.status.ready": "La réponse de l'assistant est prête.",
