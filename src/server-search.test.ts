@@ -93,6 +93,18 @@ test("rows: is:fav inside a group or an OR branch is evaluated here with the who
   expect(ids("-is:fav")).toEqual(["concepts/d", "concepts/b"]);
 });
 
+test("rows: `alpha OR is:fav` adds the favorites the server did not find, after its hits, without duplicates, and only those the whole query accepts", async () => {
+  const e = await engine([doc("concepts/a", "A", { text: "alpha" }), doc("concepts/b", "B", { text: "beta" }), doc("concepts/c", "C", { text: "gamma" }), doc("concepts/d", "D", { text: "gamma" }), doc("entities/e", "E", { type: "Entity", text: "gamma" })]);
+  const fav = { hits: [hit("concepts/a")], ignored: ["is:fav"] }; // alpha alone, once is:fav is stripped
+  const isFav = (id: string) => id === "concepts/a" || id === "concepts/c" || id === "entities/e";
+  const ids = (q: string, res = fav) => rows(e, parseQuery(q), res, isFav).map((r) => r.doc.id);
+  expect(ids("alpha OR is:fav")).toEqual(["concepts/a", "concepts/c", "entities/e"]); // c and e: favorites without « alpha »; b, d: neither
+  expect(rows(e, parseQuery("alpha OR is:fav"), fav, isFav).at(-1)!.hit.match).toBe("filter");
+  expect(ids("alpha OR (is:fav type:entity)")).toEqual(["concepts/a"]); // `type:entity` stays in the server's query (it lists those pages): nothing to add
+  expect(ids("alpha OR is:fav", { hits: [hit("concepts/c"), hit("concepts/a")], ignored: ["is:fav"] })).toEqual(["concepts/c", "concepts/a", "entities/e"]); // no duplicate
+  expect(ids("(alpha is:fav)")).toEqual(["concepts/a"]); // no branch that is is:fav alone: nothing added
+});
+
 test("sections: retained, related, then the rest (below the bars and not judged) in the order given", () => {
   const e = [hit("a", { group: "other" }), hit("b", { group: "retained" }), hit("c", { group: "unjudged" }), hit("d", { group: "related" }), hit("f", { group: "retained" })]
     .map((h) => ({ doc: doc(h.id, h.id), hit: h }));
