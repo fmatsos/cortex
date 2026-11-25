@@ -1,9 +1,12 @@
 <script lang="ts">
 	// Living style guide: the owner validates the design system here before any page is redesigned. Nothing is mocked
 	// up: every sample is the real component, token or icon, rendered by the site (Part I section 2-5 and Part II of
-	// docs/UI-REDESIGN.md). Showcase labels are plain French on purpose (a reference for the owner, not site content).
-	// The page is prerendered but not linked from the navigation (kit.prerender entries default to every route).
+	// docs/UI-REDESIGN.md). Every label goes through the i18n dictionaries (`ds.` keys) like the rest of the site; the layout
+	// re-mounts its content on a language switch ({#key lang.current}), so the arrays below, built at instance creation, follow.
+	// Sentences with inline markup stay whole in the dictionary: `code` is written between backticks and `{name}` marks a slot
+	// the template fills (a link, a highlight), so no HTML ever comes from the JSON. The page is prerendered but not linked from the navigation (kit.prerender entries default to every route).
 	import { onMount } from "svelte";
+	import { intlLocale, t } from "#lib/i18n/index.js";
 	import tokens from "../../../../design/tokens.json";
 	import { iconUse, ICON_NAMES, type IconName } from "#lib/icons.js";
 	import Icon from "#lib/components/icon.svelte";
@@ -52,7 +55,7 @@
 	type Row = { n: string; pair?: [fg: string, bg: string]; k?: "text" | "ui" | "deco"; note?: string };
 	const text = (n: string, bg: string): Row => ({ n, pair: [n, bg], k: "text" });
 	const GROUPS: { title: string; rows: Row[] }[] = [
-		{ title: "Surfaces et texte", rows: [
+		{ title: t("ds.grp.surfaces"), rows: [
 			{ n: "--background" }, text("--foreground", "--background"),
 			{ n: "--card" }, text("--card-foreground", "--card"),
 			{ n: "--popover" }, text("--popover-foreground", "--popover"),
@@ -60,66 +63,70 @@
 			{ n: "--muted" }, text("--muted-foreground", "--muted"),
 			{ n: "--accent" }, text("--accent-foreground", "--accent"),
 		] },
-		{ title: "Bande d'en-tête", rows: [
+		{ title: t("ds.grp.header"), rows: [
 			{ n: "--header" }, text("--header-foreground", "--header"),
-			{ n: "--header-border", pair: ["--header-border", "--header"], k: "ui", note: "filet sous l'en-tête" },
+			{ n: "--header-border", pair: ["--header-border", "--header"], k: "ui", note: t("ds.note.header") },
 		] },
-		{ title: "Actions, liens et états", rows: [
+		{ title: t("ds.grp.actions"), rows: [
 			{ n: "--primary", pair: ["--primary", "--background"], k: "ui" }, text("--primary-foreground", "--primary"),
 			text("--destructive", "--background"),
 			{ n: "--ring", pair: ["--ring", "--background"], k: "ui" },
 			text("--link", "--background"), text("--link-visited", "--background"),
-			{ n: "--mark", pair: ["--foreground", "--mark"], k: "text", note: "texte courant sur surlignage" },
+			{ n: "--mark", pair: ["--foreground", "--mark"], k: "text", note: t("ds.note.mark") },
 		] },
-		{ title: "Bordures", rows: [
+		{ title: t("ds.grp.borders"), rows: [
 			{ n: "--border", pair: ["--border", "--background"], k: "deco" },
-			{ n: "--input", pair: ["--input", "--card"], k: "ui", note: "contour d'un champ sur sa carte" },
+			{ n: "--input", pair: ["--input", "--card"], k: "ui", note: t("ds.note.input") },
 		] },
-		{ title: "Types de page", rows: ["concept", "entity", "synthesis", "source", "other"].map((x) => text(`--type-${x}`, "--background")) },
-		{ title: "Entrées du journal", rows: ["add", "ingest", "query", "lint", "update"].map((x) => text(`--kind-${x}`, "--background")) },
-		{ title: "Graphe", rows: [
+		{ title: t("ds.grp.types"), rows: ["concept", "entity", "synthesis", "source", "other"].map((x) => text(`--type-${x}`, "--background")) },
+		{ title: t("ds.grp.kinds"), rows: ["add", "ingest", "query", "lint", "update"].map((x) => text(`--kind-${x}`, "--background")) },
+		{ title: t("ds.grp.graph"), rows: [
 			{ n: "--graph-background" },
 			{ n: "--graph-edge", pair: ["--graph-edge", "--graph-background"], k: "ui" },
 			{ n: "--graph-edge-active", pair: ["--graph-edge-active", "--graph-background"], k: "ui" },
 			text("--graph-label", "--graph-background"),
 		] },
-		{ title: "Favori, notes et avertissements", rows: [
+		{ title: t("ds.grp.favorite"), rows: [
 			text("--favorite", "--background"),
 			{ n: "--note-background" }, text("--note-foreground", "--note-background"),
 			{ n: "--warning-background" }, text("--warning-foreground", "--warning-background"),
 		] },
-		{ title: "Confiance (alias)", rows: ["verified", "unverified", "review", "stale", "partial", "draft", "deprecated"].map((x) => text(`--trust-${x}`, "--background")) },
+		{ title: t("ds.grp.trust"), rows: ["verified", "unverified", "review", "stale", "partial", "draft", "deprecated"].map((x) => text(`--trust-${x}`, "--background")) },
 	];
-	const ratioText = (r: number) => `${r.toFixed(2).replace(".", ",")}:1`;
-	const grade = (r: number, k: "text" | "ui" | "deco") => (k === "deco" ? "décoratif" : k === "text" ? (r >= 7 ? "AAA" : r >= 4.5 ? "AA" : "sous 4,5:1") : r >= 3 ? "3:1 atteint" : "sous 3:1");
+	const ratioText = (r: number) => `${r.toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}:1`;
+	const grade = (r: number, k: "text" | "ui" | "deco") => (k === "deco" ? t("ds.grade.deco") : k === "text" ? (r >= 7 ? "AAA" : r >= 4.5 ? "AA" : t("ds.grade.belowText")) : r >= 3 ? t("ds.grade.ui") : t("ds.grade.belowUi"));
 	const aliasOf = (n: string) => (tokens.aliases as Record<string, string>)[n]?.slice(1, -1);
 	const panelStyle = (mode: Mode) =>
 		Object.entries(PALETTES[mode]).map(([k, v]) => `${k}:${v}`).join(";") + `;color-scheme:${mode};background:${PALETTES[mode]["--background"]};color:${PALETTES[mode]["--foreground"]}`;
-	const MODES = [{ mode: "light", title: "Clair" }, { mode: "dark", title: "Sombre" }] as const;
+	const MODES = [{ mode: "light", title: t("ds.mode.light") }, { mode: "dark", title: t("ds.mode.dark") }] as const;
+	const slots = (s: string) => s.split(/\{(\w+)\}/); // text, slot name, text, slot name, ...
 
 	// ---- typography ----------------------------------------------------------------------------------------------
 	const SCALE = [
-		{ cls: "text-[2.75rem] leading-[1.15] font-semibold tracking-tight", spec: "Titre 1 : 44 px, interligne 1,15, Source Sans 3 600", sample: "Retrouver une connaissance" },
-		{ cls: "text-4xl leading-[1.15] font-semibold tracking-tight", spec: "Titre 2 : 36 px, interligne 1,15, Source Sans 3 600", sample: "Lire, puis vérifier les sources" },
-		{ cls: "text-[1.75rem] leading-[1.15] font-semibold tracking-tight", spec: "Titre 3 : 28 px, interligne 1,15, Source Sans 3 600", sample: "Explorer les relations du graphe" },
-		{ cls: "text-base", spec: "Corps de l'interface : 16 px, interligne 1,6, Source Sans 3 400", sample: "Navigation, commandes, formulaires et résultats de recherche." },
-		{ cls: "text-base font-semibold", spec: "Corps appuyé : 16 px, Source Sans 3 600", sample: "Titre de résultat ou libellé de commande" },
-		{ cls: "text-sm text-muted-foreground", spec: "Métadonnées : 14 px, texte secondaire", sample: "Concept, mis à jour le 25 novembre 2026, 3 sources" },
-		{ cls: "text-xs text-muted-foreground", spec: "Détail : 12 px, seulement pour le non essentiel", sample: "Identifiant technique et compteurs secondaires" },
-		{ cls: "font-mono text-sm", spec: "Code et identifiants : monospace système, 14 px", sample: "cortex export --out ./site" },
+		{ cls: "text-[2.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h1.spec"), sample: t("ds.scale.h1.sample") },
+		{ cls: "text-4xl leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h2.spec"), sample: t("ds.scale.h2.sample") },
+		{ cls: "text-[1.75rem] leading-[1.15] font-semibold tracking-tight", spec: t("ds.scale.h3.spec"), sample: t("ds.scale.h3.sample") },
+		{ cls: "text-base", spec: t("ds.scale.body.spec"), sample: t("ds.scale.body.sample") },
+		{ cls: "text-base font-semibold", spec: t("ds.scale.strong.spec"), sample: t("ds.scale.strong.sample") },
+		{ cls: "text-sm text-muted-foreground", spec: t("ds.scale.meta.spec"), sample: t("ds.scale.meta.sample") },
+		{ cls: "text-xs text-muted-foreground", spec: t("ds.scale.detail.spec"), sample: t("ds.scale.detail.sample") },
+		{ cls: "font-mono text-sm", spec: t("ds.scale.code.spec"), sample: "cortex export --out ./site" },
 	];
 	// Same markup as the export (src/export.ts: noteCallouts, footnote calls), the callout icons come from the sprite.
-	const calloutTitle = (cls: string, icon: IconName, title: string) => `<p class="${cls}">${iconUse(icon, { class: "callout-icon" })}${title}</p>`;
+	// The sample is HTML built here from the dictionary strings, escaped by `x`; `fill` swaps a `{slot}` for template markup.
+	const x = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	const fill = (v: string, map: Record<string, string>) => x(v).replace(/\{(\w+)\}/g, (_, k: string) => map[k] ?? "");
+	const calloutTitle = (cls: string, icon: IconName, title: string) => `<p class="${cls}">${iconUse(icon, { class: "callout-icon" })}${x(title)}</p>`;
 	const PROSE = `
-<h2>Un titre de section</h2>
-<p>La prose longue est composée en Source Serif 4, 18 px sur ordinateur et 17 px sur mobile, interligne 1,7, sur une mesure de 70 caractères au plus. Un <a href="#couleurs">lien interne</a> est souligné et prend la couleur du lien<sup class="fn-ref"><a href="#fn-1" id="fnref-1-1" aria-label="Note 1">1</a></sup>, avec du <code>code en ligne</code> en monospace.</p>
-<h3>Une liste et une citation</h3>
-<ul><li>Les puces restent simples, sans surcharge décorative.</li><li>Les titres, les callouts et les tableaux gardent la sans de l'interface.</li></ul>
-<ol><li>Première étape d'une procédure.</li><li>Seconde étape, qui contient un peu plus de texte pour montrer le retour à la ligne et l'alignement du numéro.</li></ol>
-<blockquote><p>Une citation se distingue par un filet de 3 px et un texte secondaire, sans fond ni cadre arrondi.</p></blockquote>
-<table><thead><tr><th>Type</th><th>Forme dans le graphe</th><th>Couleur</th></tr></thead><tbody><tr><td>Concept</td><td>Croix pleine</td><td><code>--type-concept</code></td></tr><tr><td>Entité</td><td>Carré plein</td><td><code>--type-entity</code></td></tr><tr><td>Synthèse</td><td>Losange plein</td><td><code>--type-synthesis</code></td></tr><tr><td>Source</td><td>Triangle plein</td><td><code>--type-source</code></td></tr></tbody></table>
-<aside class="personal-note" role="note">${calloutTitle("personal-note-title", "note", "Note personnelle")}<p>Une note du propriétaire : fond papier jaune, filet de 4 px à gauche, titre en sans.</p></aside>
-<aside class="callout-warning" role="note">${calloutTitle("callout-warning-title", "warning", "Avertissement")}<p>Une réserve sur la fiabilité d'une page : fond rouille, même structure que la note.</p></aside>`;
+<h2>${x(t("ds.prose.h2"))}</h2>
+<p>${fill(t("ds.prose.p1"), { link: `<a href="#couleurs">${x(t("ds.prose.link"))}</a>`, fn: `<sup class="fn-ref"><a href="#fn-1" id="fnref-1-1" aria-label="${x(t("ds.prose.note1"))}">1</a></sup>`, code: `<code>${x(t("ds.prose.code"))}</code>` })}</p>
+<h3>${x(t("ds.prose.h3"))}</h3>
+<ul><li>${x(t("ds.prose.li1"))}</li><li>${x(t("ds.prose.li2"))}</li></ul>
+<ol><li>${x(t("ds.prose.ol1"))}</li><li>${x(t("ds.prose.ol2"))}</li></ol>
+<blockquote><p>${x(t("ds.prose.quote"))}</p></blockquote>
+<table><thead><tr><th>${x(t("ds.prose.th.type"))}</th><th>${x(t("ds.prose.th.shape"))}</th><th>${x(t("ds.prose.th.color"))}</th></tr></thead><tbody><tr><td>${x(t("type.Concept"))}</td><td>${x(t("ds.prose.shape.cross"))}</td><td><code>--type-concept</code></td></tr><tr><td>${x(t("type.Entity"))}</td><td>${x(t("ds.prose.shape.square"))}</td><td><code>--type-entity</code></td></tr><tr><td>${x(t("type.Synthesis"))}</td><td>${x(t("ds.prose.shape.diamond"))}</td><td><code>--type-synthesis</code></td></tr><tr><td>${x(t("type.Source"))}</td><td>${x(t("ds.prose.shape.triangle"))}</td><td><code>--type-source</code></td></tr></tbody></table>
+<aside class="personal-note" role="note">${calloutTitle("personal-note-title", "note", t("ds.prose.noteTitle"))}<p>${x(t("ds.prose.noteBody"))}</p></aside>
+<aside class="callout-warning" role="note">${calloutTitle("callout-warning-title", "warning", t("ds.prose.warnTitle"))}<p>${x(t("ds.prose.warnBody"))}</p></aside>`;
 
 	// ---- shapes --------------------------------------------------------------------------------------------------
 	const SPACING = [4, 8, 12, 16, 24, 32, 48, 64];
@@ -131,19 +138,19 @@
 	const BUTTON_SIZES = ["xs", "sm", "default", "lg"] as const;
 	const BADGES = ["default", "secondary", "destructive", "outline", "stable", "caution", "ghost", "link"] as const;
 	const FOCUS = "outline-2 outline-offset-2 outline-ring"; // what :focus-visible applies, shown without moving the focus
-	const TYPES = ["Concept", "Entity", "Synthesis", "Source", "Inconnu"];
+	const TYPES = ["Concept", "Entity", "Synthesis", "Source", t("ds.badges.unknownType")];
 	const KINDS = ["add", "ingest", "query", "lint", "update"];
-	const TRUST: [IconName, string][] = [["verified", "Vérifiée"], ["unverified", "Jamais relue"], ["needs-review", "À relire"], ["stale", "Périmée"], ["draft", "Brouillon"], ["deprecated", "Dépréciée"], ["warning", "Source partielle"]];
+	const TRUST: [IconName, string][] = [["verified", t("ds.trust.verified")], ["unverified", t("ds.trust.unverified")], ["needs-review", t("ds.trust.review")], ["stale", t("ds.trust.stale")], ["draft", t("ds.trust.draft")], ["deprecated", t("ds.trust.deprecated")], ["warning", t("ds.trust.partial")]];
 	const ROWS = [
-		{ id: "a", type: "Concept", title: "Index d'un second cerveau", description: "Un wiki que l'agent entretient : pages, sources et liens.", status: "stable", verified: true },
-		{ id: "b", type: "Entity", title: "Source Sans 3", description: "Famille sans empattement de l'interface.", status: "draft", partial: true },
-		{ id: "c", type: "Synthesis", title: "Choix du design carré", description: "Pourquoi aucun rayon, aucune ombre, un anneau de focus de 2 px.", status: "stable", needsReview: true },
-		{ id: "d", type: "Source", title: "Notes de lecture, novembre", description: "Extrait de la source brute.", status: "deprecated" },
+		{ id: "a", type: "Concept", title: t("ds.row.a.title"), description: t("ds.row.a.description"), status: "stable", verified: true },
+		{ id: "b", type: "Entity", title: "Source Sans 3", description: t("ds.row.b.description"), status: "draft", partial: true },
+		{ id: "c", type: "Synthesis", title: t("ds.row.c.title"), description: t("ds.row.c.description"), status: "stable", needsReview: true },
+		{ id: "d", type: "Source", title: t("ds.row.d.title"), description: t("ds.row.d.description"), status: "deprecated" },
 	];
 
 	let theme = $state("system");
 	let chip = $state([true, false]);
-	let tab = $state("lire");
+	let tab = $state("lire"); // internal ids, never shown
 	let tabLine = $state("resume");
 	let reduced = $state<boolean | null>(null);
 	let ready = $state(false);
@@ -157,23 +164,27 @@
 	});
 	const STATES: AvatarState[] = ["idle", "pending", "answer", "error"];
 	const AVATAR_SIZES = [24, 48, 96];
-	const SECTIONS = [["couleurs", "Couleurs"], ["typographie", "Typographie"], ["formes", "Formes"], ["icones", "Icônes"], ["composants", "Composants"], ["marque", "Marque et avatar"]];
+	const SECTIONS = [["couleurs", t("ds.sec.couleurs")], ["typographie", t("ds.sec.typographie")], ["formes", t("ds.sec.formes")], ["icones", t("ds.sec.icones")], ["composants", t("ds.sec.composants")], ["marque", t("ds.sec.marque")]];
 	const h2 = "anchor-target border-b pb-2 text-[1.75rem] leading-[1.15] font-semibold tracking-tight";
 	const h3 = "anchor-target mt-8 mb-3 text-lg font-semibold";
 	const cap = "text-muted-foreground text-sm";
 	const box = "bg-card border p-4";
+	// the highlighted result row: the dictionary sentence has a {mark} slot, the word is wrapped here
+	const highlighted = (sentence: string) => slots(sentence).map((seg, i) => (i % 2 ? `<mark>${x(t("ds.row.hl.word"))}</mark>` : x(seg))).join("");
 </script>
 
+{#snippet rich(s: string, cls = "font-mono")}{#each s.split("`") as seg, i}{#if i % 2}<code class={cls}>{seg}</code>{:else}{seg}{/if}{/each}{/snippet}
+
 <svelte:head>
-	<title>Design system · Cortex</title>
+	<title>{t("ds.title")} · Cortex</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
 <div data-ready={ready}>
 	<header class="max-w-3xl">
-		<h1 class="text-3xl font-semibold tracking-tight">Design system</h1>
-		<p class="text-muted-foreground mt-2">Référence vivante de Cortex : les jetons, les polices, les icônes, les composants et la marque, tels que le site les rend. Rien n'est une maquette. Le thème du site se change dans l'en-tête ; la section Couleurs montre les deux palettes côte à côte.</p>
-		<nav aria-label="Sections de la page" class="mt-4">
+		<h1 class="text-3xl font-semibold tracking-tight">{t("ds.title")}</h1>
+		<p class="text-muted-foreground mt-2">{t("ds.intro")}</p>
+		<nav aria-label={t("ds.nav")} class="mt-4">
 			<ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
 				{#each SECTIONS as [id, label] (id)}<li><a href="#{id}" class="text-link underline underline-offset-4">{label}</a></li>{/each}
 			</ul>
@@ -182,8 +193,8 @@
 
 	<!-- 1. colours -->
 	<section aria-labelledby="h-couleurs" id="couleurs" class="mt-12">
-		<h2 id="h-couleurs" class={h2}>Couleurs</h2>
-		<p class="{cap} mt-3 max-w-3xl">Chaque jeton de <code>design/tokens.json</code>, en clair et en sombre. Le ratio est calculé contre le fond de sa paire (WCAG 2.2) : 4,5:1 pour le texte, 3:1 pour un composant d'interface, aucun seuil pour un filet décoratif. Le sombre n'est pas une inversion du clair.</p>
+		<h2 id="h-couleurs" class={h2}>{t("ds.sec.couleurs")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.col.intro"))}</p>
 		<div class="mt-6 grid gap-6 lg:grid-cols-2">
 			{#each MODES as { mode, title } (mode)}
 				{@const p = PALETTES[mode]}
@@ -191,19 +202,19 @@
 					<h3 class="text-lg font-semibold">{title}</h3>
 					<!-- the real components, painted with this panel's palette -->
 					<div class="bg-card text-card-foreground mt-3 flex flex-col gap-3 border p-3">
-						<p>Texte courant, <a href="#couleurs" class="text-link underline underline-offset-4">un lien</a>, <mark>un surlignage</mark> et <span class="text-muted-foreground">un texte secondaire</span>.</p>
+						<p>{#each slots(t("ds.panel.text")) as seg, i}{#if i % 2 === 0}{seg}{:else if seg === "link"}<a href="#couleurs" class="text-link underline underline-offset-4">{t("ds.panel.link")}</a>{:else if seg === "mark"}<mark>{t("ds.panel.mark")}</mark>{:else}<span class="text-muted-foreground">{t("ds.panel.muted")}</span>{/if}{/each}</p>
 						<div class="flex flex-wrap items-center gap-2">
-							<Button size="sm">Principal</Button>
-							<Button size="sm" variant="outline">Contour</Button>
-							<Button size="sm" variant="secondary">Secondaire</Button>
-							<Button size="sm" variant="destructive">Détruire</Button>
-							<Badge variant="caution">Brouillon</Badge>
-							<Badge variant="outline">Concept</Badge>
+							<Button size="sm">{t("ds.panel.primary")}</Button>
+							<Button size="sm" variant="outline">{t("ds.panel.outline")}</Button>
+							<Button size="sm" variant="secondary">{t("ds.panel.secondary")}</Button>
+							<Button size="sm" variant="destructive">{t("ds.panel.destroy")}</Button>
+							<Badge variant="caution">{t("ds.panel.draft")}</Badge>
+							<Badge variant="outline">{t("ds.panel.concept")}</Badge>
 						</div>
-						<Input placeholder="Un champ" aria-label="Un champ, aperçu {title}" />
+						<Input placeholder={t("ds.panel.field")} aria-label={t("ds.panel.fieldAria", { title })} />
 						<div class="flex flex-wrap gap-2 text-sm">
-							<span class="px-2 py-1" style="background:{p['--note-background']};color:{p['--note-foreground']}">Note</span>
-							<span class="px-2 py-1" style="background:{p['--warning-background']};color:{p['--warning-foreground']}">Avertissement</span>
+							<span class="px-2 py-1" style="background:{p['--note-background']};color:{p['--note-foreground']}">{t("ds.panel.note")}</span>
+							<span class="px-2 py-1" style="background:{p['--warning-background']};color:{p['--warning-foreground']}">{t("ds.panel.warning")}</span>
 						</div>
 					</div>
 					{#each GROUPS as group (group.title)}
@@ -217,7 +228,7 @@
 									<span class="min-w-0 flex-1 text-sm"><code class="font-mono break-all">{row.n}</code>
 										<span class="text-muted-foreground whitespace-nowrap">{hex}{#if aliasOf(row.n)} = {aliasOf(row.n)}{/if}</span></span>
 									{#if row.pair && r !== undefined && row.k}
-										<span class="text-right text-sm tabular-nums" title={row.note ?? `${row.pair[0]} sur ${row.pair[1]}`}>{ratioText(r)} <span class="text-muted-foreground">{grade(r, row.k)}</span></span>
+										<span class="text-right text-sm tabular-nums" title={row.note ?? t("ds.pairOn", { fg: row.pair[0], bg: row.pair[1] })}>{ratioText(r)} <span class="text-muted-foreground">{grade(r, row.k)}</span></span>
 									{/if}
 								</li>
 							{/each}
@@ -230,8 +241,8 @@
 
 	<!-- 2. typography -->
 	<section aria-labelledby="h-typographie" id="typographie" class="mt-14">
-		<h2 id="h-typographie" class={h2}>Typographie</h2>
-		<p class="{cap} mt-3 max-w-3xl">Source Sans 3 pour l'interface, Source Serif 4 pour la prose longue, monospace système pour le code. Polices auto-hébergées (SIL OFL 1.1).</p>
+		<h2 id="h-typographie" class={h2}>{t("ds.sec.typographie")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.typo.intro"))}</p>
 		<ul class="mt-6 border-t">
 			{#each SCALE as s (s.spec)}
 				<li class="grid gap-1 border-b py-3 md:grid-cols-[18rem_1fr] md:gap-6">
@@ -240,55 +251,55 @@
 				</li>
 			{/each}
 		</ul>
-		<h3 class={h3}>Prose d'article (<code class="font-mono text-base">.wiki</code>)</h3>
+		<h3 class={h3}>{@render rich(t("ds.prose.heading"), "font-mono text-base")}</h3>
 		<article class="{box} md:p-6">
 			<div class="wiki">{@html PROSE}</div>
-			<ol class="text-muted-foreground mt-6 border-t pt-3 text-sm"><li class="note-item" id="fn-1">Une note de bas de page, cible du renvoi ci-dessus. <a href="#fnref-1-1" class="text-link underline underline-offset-4">Retour au texte</a></li></ol>
+			<ol class="text-muted-foreground mt-6 border-t pt-3 text-sm"><li class="note-item" id="fn-1">{#each slots(t("ds.prose.footnote")) as seg, i}{#if i % 2 === 0}{seg}{:else}<a href="#fnref-1-1" class="text-link underline underline-offset-4">{t("ds.prose.back")}</a>{/if}{/each}</li></ol>
 		</article>
 	</section>
 
 	<!-- 3. shapes -->
 	<section aria-labelledby="h-formes" id="formes" class="mt-14">
-		<h2 id="h-formes" class={h2}>Formes</h2>
-		<p class="{cap} mt-3 max-w-3xl">Rayon 0 partout, bordures de 1 px, aucune ombre sur les surfaces de la page. Elles se distinguent par le fond, le contour et l'ordre de superposition ; seules les couches flottantes portent une ombre (voir plus bas). Seuls les symboles gardent la courbe qui les rend reconnaissables.</p>
-		<h3 class={h3}>Rayons</h3>
+		<h2 id="h-formes" class={h2}>{t("ds.sec.formes")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.shapes.intro"))}</p>
+		<h3 class={h3}>{t("ds.shapes.radii")}</h3>
 		<ul class="flex flex-wrap gap-4">
 			{#each Object.entries(RADII) as [r, cls] (r)}
 				<li class="flex flex-col items-center gap-1.5"><span class="bg-primary size-12 {cls}"></span><code class="font-mono text-sm">{cls}</code><span class={cap}>0px</span></li>
 			{/each}
 		</ul>
-		<h3 class={h3}>Traits et séparateurs</h3>
+		<h3 class={h3}>{t("ds.shapes.strokes")}</h3>
 		<div class="grid gap-4 md:grid-cols-3">
-			<div class="{box}"><div class="border-border border p-3 text-sm">Filet ordinaire, 1 px <code class="font-mono">--border</code></div></div>
-			<div class="{box}"><div class="border-input border p-3 text-sm">Contrôle, 1 px <code class="font-mono">--input</code></div></div>
-			<div class="{box}"><div class="border-primary border-b-2 p-3 text-sm">Repère actif, 2 px <code class="font-mono">--primary</code></div></div>
+			<div class="{box}"><div class="border-border border p-3 text-sm">{@render rich(t("ds.shapes.stroke.border"))}</div></div>
+			<div class="{box}"><div class="border-input border p-3 text-sm">{@render rich(t("ds.shapes.stroke.input"))}</div></div>
+			<div class="{box}"><div class="border-primary border-b-2 p-3 text-sm">{@render rich(t("ds.shapes.stroke.primary"))}</div></div>
 		</div>
 		<div class="{box} mt-4 flex items-center gap-4 text-sm">
-			<span>Séparateur horizontal</span><Separator class="flex-1" />
-			<span>vertical</span><Separator orientation="vertical" class="h-6" />
-			<span>fin</span>
+			<span>{t("ds.shapes.sep.h")}</span><Separator class="flex-1" />
+			<span>{t("ds.shapes.sep.v")}</span><Separator orientation="vertical" class="h-6" />
+			<span>{t("ds.shapes.sep.end")}</span>
 		</div>
-		<h3 class={h3}>Couches flottantes et ombre portée</h3>
-		<p class="{cap} max-w-3xl">À plat ne veut pas dire absolument plat : deux niveaux de relief, discrets. Les couches qui flottent au-dessus de la page (menus, fenêtres contextuelles, palette de recherche, notification, tiroir modal de l'assistant) prennent le fond <code class="font-mono">--popover</code>, un contour de 1 px en <code class="font-mono">--input</code> (plus net que <code class="font-mono">--border</code>) et l'ombre <code class="font-mono">--shadow-overlay</code>, plus dense en sombre. Les surfaces de la page (cartes, sections de l'accueil, encarts latéraux des articles) gardent leur contour <code class="font-mono">--border</code> et un simple relief, <code class="font-mono">--shadow-surface</code> : une ombre d'un pixel, jamais une carte qui flotte. Le menu de la section Composants applique l'ombre des couches à l'ouverture.</p>
-		<p class="{cap} mt-3 max-w-3xl">Panneau de l'assistant ancré : il ne flotte pas, mais une ombre sur son bord gauche (<code class="font-mono">--shadow-edge</code>) et un contour <code class="font-mono">--input</code> le détachent de la page ; sa largeur se règle à la poignée de son bord. Barres de défilement : une seule règle globale, <code class="font-mono">scrollbar-width: thin</code> et un pouce en encre atténuée sur fond transparent (<code class="font-mono">--scrollbar-thumb</code>, plus net au survol), pour la page comme pour chaque zone qui défile ; elles restent toujours visibles.</p>
+		<h3 class={h3}>{t("ds.shapes.float")}</h3>
+		<p class="{cap} max-w-3xl">{@render rich(t("ds.shapes.float.p1"))}</p>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.shapes.float.p2"))}</p>
 		<div class="{box} mt-3 grid gap-6 sm:grid-cols-2">
-			<div class="bg-card shadow-surface border p-3 text-sm">Surface de la page : contour <code class="font-mono">--border</code>, relief léger <code class="font-mono">shadow-surface</code></div>
-			<div class="bg-popover text-popover-foreground border-input shadow-overlay border p-3 text-sm" data-floating>Couche flottante : <code class="font-mono">shadow-overlay</code>, contour <code class="font-mono">--input</code></div>
+			<div class="bg-card shadow-surface border p-3 text-sm">{@render rich(t("ds.shapes.surface"))}</div>
+			<div class="bg-popover text-popover-foreground border-input shadow-overlay border p-3 text-sm" data-floating>{@render rich(t("ds.shapes.overlay"))}</div>
 		</div>
-		<h3 class={h3}>Anneau de focus</h3>
+		<h3 class={h3}>{t("ds.focus.heading")}</h3>
 		<div class="{box} flex flex-wrap items-center gap-6">
 			<div class="flex flex-col items-start gap-1.5">
-				<span class="bg-card inline-flex h-9 items-center border px-3 text-sm outline-2 outline-offset-2 outline-ring" data-focus-static>Anneau statique</span>
-				<span class={cap}>2 px <code class="font-mono">--ring</code>, décalage 2 px</span>
+				<span class="bg-card inline-flex h-9 items-center border px-3 text-sm outline-2 outline-offset-2 outline-ring" data-focus-static>{t("ds.focus.static")}</span>
+				<span class={cap}>{@render rich(t("ds.focus.spec"))}</span>
 			</div>
 			<div class="flex flex-wrap items-center gap-2">
-				<Button id="focus-demo">Tab jusqu'ici</Button>
-				<Button variant="outline">puis ici</Button>
-				<a href="#formes" class="text-link inline-flex h-9 items-center px-2 text-sm underline underline-offset-4">un lien</a>
-				<Input class="w-40" placeholder="un champ" aria-label="Champ de démonstration du focus" />
+				<Button id="focus-demo">{t("ds.focus.tab1")}</Button>
+				<Button variant="outline">{t("ds.focus.tab2")}</Button>
+				<a href="#formes" class="text-link inline-flex h-9 items-center px-2 text-sm underline underline-offset-4">{t("ds.focus.link")}</a>
+				<Input class="w-40" placeholder={t("ds.focus.field")} aria-label={t("ds.focus.fieldAria")} />
 			</div>
 		</div>
-		<h3 class={h3}>Échelle d'espacement</h3>
+		<h3 class={h3}>{t("ds.spacing")}</h3>
 		<ul class="{box} flex flex-col gap-2">
 			{#each SPACING as s (s)}
 				<li class="flex items-center gap-3 text-sm"><span class="w-12 shrink-0 tabular-nums">{s} px</span><span class="bg-primary h-4" style="width:{s}px"></span></li>
@@ -298,8 +309,8 @@
 
 	<!-- 4. icons -->
 	<section aria-labelledby="h-icones" id="icones" class="mt-14">
-		<h2 id="h-icones" class={h2}>Icônes</h2>
-		<p class="{cap} mt-3 max-w-3xl">{ICON_NAMES.length} icônes sur une grille de 24, trait 1,75 (2 sous 18 px), terminaisons droites, jointures vives. Chaque instance est un <code>&lt;use&gt;</code> du sprite de la page. Tailles 16, 20 et 24 px.</p>
+		<h2 id="h-icones" class={h2}>{t("ds.sec.icones")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.icons.intro", { count: ICON_NAMES.length }))}</p>
 		<ul class="mt-6 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] border-t border-l">
 			{#each ICON_NAMES as name (name)}
 				<li class="bg-card flex flex-col items-center gap-2 border-r border-b p-3" data-icon={name}>
@@ -308,13 +319,13 @@
 				</li>
 			{/each}
 		</ul>
-		<p class="{cap} mt-3 flex items-center gap-2"><Icon name="star" size={24} filled class="text-favorite" /> <code class="font-mono">star</code> avec <code class="font-mono">filled</code> : réservé à l'étoile active des favoris.</p>
+		<p class="{cap} mt-3 flex items-center gap-2"><Icon name="star" size={24} filled class="text-favorite" /> {@render rich(t("ds.icons.star"))}</p>
 	</section>
 
 	<!-- 5. components -->
 	<section aria-labelledby="h-composants" id="composants" class="mt-14">
-		<h2 id="h-composants" class={h2}>Composants</h2>
-		<p class="{cap} mt-3 max-w-3xl">Primitives de <code>ui/</code> et composants Cortex. Les cellules « focus » reproduisent l'anneau sans déplacer le focus ; « invalide » pose <code>aria-invalid</code>.</p>
+		<h2 id="h-composants" class={h2}>{t("ds.sec.composants")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.comp.intro"))}</p>
 
 		<h3 id="c-button" class={h3}>Button</h3>
 		<div class="{box} flex flex-col gap-5">
@@ -322,20 +333,20 @@
 				<div>
 					<code class="font-mono text-sm">{variant}</code>
 					<div class="mt-1.5 flex flex-wrap items-center gap-3">
-						<Button {variant}>Action</Button>
-						<Button {variant}><Icon name="download" size={16} />Avec icône</Button>
-						<Button {variant} disabled>Désactivé</Button>
-						<Button {variant} class={variant === "destructive" ? "outline-destructive outline-2 outline-offset-2" : FOCUS}>Focus</Button>
-						<Button {variant} href="#c-button">Lien</Button>
+						<Button {variant}>{t("ds.c.action")}</Button>
+						<Button {variant}><Icon name="download" size={16} />{t("ds.c.withIcon")}</Button>
+						<Button {variant} disabled>{t("ds.c.disabled")}</Button>
+						<Button {variant} class={variant === "destructive" ? "outline-destructive outline-2 outline-offset-2" : FOCUS}>{t("ds.c.focus")}</Button>
+						<Button {variant} href="#c-button">{t("ds.c.link")}</Button>
 					</div>
 				</div>
 			{/each}
 			<div>
-				<code class="font-mono text-sm">tailles</code>
+				<code class="font-mono text-sm">{t("ds.c.sizes")}</code>
 				<div class="mt-1.5 flex flex-wrap items-center gap-3">
 					{#each BUTTON_SIZES as size (size)}<Button variant="outline" {size}>{size}</Button>{/each}
-					<Button variant="outline" size="icon" aria-label="Fermer"><Icon name="close-selection" size={16} /></Button>
-					<Button variant="outline" size="icon-sm" aria-label="Copier"><Icon name="copy-link" size={16} /></Button>
+					<Button variant="outline" size="icon" aria-label={t("ds.c.close")}><Icon name="close-selection" size={16} /></Button>
+					<Button variant="outline" size="icon-sm" aria-label={t("ds.c.copy")}><Icon name="copy-link" size={16} /></Button>
 				</div>
 			</div>
 		</div>
@@ -344,31 +355,31 @@
 		<div class="{box} flex flex-col gap-4">
 			<div class="flex flex-wrap items-center gap-2">{#each BADGES as variant (variant)}<Badge {variant}>{variant}</Badge>{/each}</div>
 			<div class="flex flex-wrap items-center gap-2">
-				<Badge size="sm" variant="secondary">petit</Badge>
-				<Badge variant="outline"><Icon name="concept" size={16} />avec symbole</Badge>
-				<Badge variant="outline" href="#c-badge">lien</Badge>
+				<Badge size="sm" variant="secondary">{t("ds.badge.small")}</Badge>
+				<Badge variant="outline"><Icon name="concept" size={16} />{t("ds.badge.symbol")}</Badge>
+				<Badge variant="outline" href="#c-badge">{t("ds.badge.link")}</Badge>
 			</div>
 		</div>
 
 		<h3 id="c-fields" class={h3}>Input, Textarea, Native Select</h3>
 		<div class="{box} grid gap-5 md:grid-cols-2">
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Normal<Input placeholder="Rechercher dans le wiki" /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Focus<Input value="Valeur saisie" class={FOCUS} /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Désactivé<Input value="Non modifiable" disabled /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Invalide<Input value="not-an-address" aria-invalid="true" /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Textarea<Textarea placeholder="Une question ou une note" /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Textarea invalide<Textarea aria-invalid="true" value="Trop court" /></label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Native Select
-				<NativeSelect.Root><NativeSelect.Option value="all">Tous les types</NativeSelect.Option><NativeSelect.Option value="concept">Concept</NativeSelect.Option><NativeSelect.Option value="entity">Entité</NativeSelect.Option></NativeSelect.Root>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.normal")}<Input placeholder={t("ds.field.search")} /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.c.focus")}<Input value={t("ds.field.value")} class={FOCUS} /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.c.disabled")}<Input value={t("ds.field.readonly")} disabled /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.invalid")}<Input value="not-an-address" aria-invalid="true" /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.textarea")}<Textarea placeholder={t("ds.field.textareaPlaceholder")} /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.textareaInvalid")}<Textarea aria-invalid="true" value={t("ds.field.tooShort")} /></label>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.select")}
+				<NativeSelect.Root><NativeSelect.Option value="all">{t("ds.field.allTypes")}</NativeSelect.Option><NativeSelect.Option value="concept">{t("ds.panel.concept")}</NativeSelect.Option><NativeSelect.Option value="entity">{t("ds.field.entity")}</NativeSelect.Option></NativeSelect.Root>
 			</label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Select désactivé
-				<NativeSelect.Root disabled><NativeSelect.Option value="all">Tous les types</NativeSelect.Option></NativeSelect.Root>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.selectDisabled")}
+				<NativeSelect.Root disabled><NativeSelect.Option value="all">{t("ds.field.allTypes")}</NativeSelect.Option></NativeSelect.Root>
 			</label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Select invalide
-				<NativeSelect.Root aria-invalid="true"><NativeSelect.Option value="">Choisir un type</NativeSelect.Option><NativeSelect.Option value="concept">Concept</NativeSelect.Option></NativeSelect.Root>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.selectInvalid")}
+				<NativeSelect.Root aria-invalid="true"><NativeSelect.Option value="">{t("ds.field.chooseType")}</NativeSelect.Option><NativeSelect.Option value="concept">{t("ds.panel.concept")}</NativeSelect.Option></NativeSelect.Root>
 			</label>
-			<label class="flex flex-col gap-1.5 text-sm font-medium">Select petit
-				<NativeSelect.Root size="sm"><NativeSelect.Option value="a">Plus récent</NativeSelect.Option><NativeSelect.Option value="b">Plus ancien</NativeSelect.Option></NativeSelect.Root>
+			<label class="flex flex-col gap-1.5 text-sm font-medium">{t("ds.field.selectSmall")}
+				<NativeSelect.Root size="sm"><NativeSelect.Option value="a">{t("ds.field.newest")}</NativeSelect.Option><NativeSelect.Option value="b">{t("ds.field.oldest")}</NativeSelect.Option></NativeSelect.Root>
 			</label>
 		</div>
 
@@ -376,34 +387,34 @@
 		<div class="grid gap-4 md:grid-cols-2">
 			<Alert.Root>
 				<Icon name="note" size={16} />
-				<Alert.Title>Information</Alert.Title>
-				<Alert.Description>Un message neutre : contour de 1 px, fond carte, aucun ornement.</Alert.Description>
+				<Alert.Title>{t("ds.alert.info")}</Alert.Title>
+				<Alert.Description>{t("ds.alert.infoBody")}</Alert.Description>
 			</Alert.Root>
 			<Alert.Root variant="destructive">
 				<Icon name="warning" size={16} />
-				<Alert.Title>Échec de l'opération</Alert.Title>
-				<Alert.Description>La variante destructive change le contour et le texte, jamais la forme.</Alert.Description>
-				<Alert.Action><Button size="xs" variant="outline">Réessayer</Button></Alert.Action>
+				<Alert.Title>{t("ds.alert.fail")}</Alert.Title>
+				<Alert.Description>{t("ds.alert.failBody")}</Alert.Description>
+				<Alert.Action><Button size="xs" variant="outline">{t("ds.alert.retry")}</Button></Alert.Action>
 			</Alert.Root>
 			<Empty.Root>
 				<Empty.Header>
 					<Empty.Media variant="icon"><Icon name="search" size={20} /></Empty.Media>
-					<Empty.Title>Aucun résultat</Empty.Title>
-					<Empty.Description>Aucune page ne correspond à cette recherche. Essayez moins de filtres.</Empty.Description>
+					<Empty.Title>{t("ds.empty.title")}</Empty.Title>
+					<Empty.Description>{t("ds.empty.body")}</Empty.Description>
 				</Empty.Header>
-				<Empty.Content><Button variant="outline" size="sm">Effacer les filtres</Button></Empty.Content>
+				<Empty.Content><Button variant="outline" size="sm">{t("ds.empty.clear")}</Button></Empty.Content>
 			</Empty.Root>
 			<div class="flex flex-col gap-4">
 				<Card.Root>
 					<Card.Header>
-						<Card.Title>Carte</Card.Title>
-						<Card.Description>Un vrai groupe, pas une enveloppe de section.</Card.Description>
+						<Card.Title>{t("ds.card.title")}</Card.Title>
+						<Card.Description>{t("ds.card.description")}</Card.Description>
 					</Card.Header>
-					<Card.Content class="px-4 text-sm">Contenu de la carte : fond <code class="font-mono">--card</code>, contour 1 px.</Card.Content>
-					<Card.Footer class="border-t px-4 py-3"><Button size="sm" variant="outline">Action</Button></Card.Footer>
+					<Card.Content class="px-4 text-sm">{@render rich(t("ds.card.body"))}</Card.Content>
+					<Card.Footer class="border-t px-4 py-3"><Button size="sm" variant="outline">{t("ds.c.action")}</Button></Card.Footer>
 				</Card.Root>
 				<Card.Root size="sm">
-					<Card.Header><Card.Title>Carte compacte</Card.Title><Card.Description>Variante <code class="font-mono">size="sm"</code>.</Card.Description></Card.Header>
+					<Card.Header><Card.Title>{t("ds.card.compact")}</Card.Title><Card.Description>{@render rich(t("ds.card.compactBody"))}</Card.Description></Card.Header>
 				</Card.Root>
 			</div>
 		</div>
@@ -411,80 +422,80 @@
 		<h3 id="c-menu" class={h3}>Dropdown Menu</h3>
 		<div class="{box} flex flex-wrap items-center gap-4">
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger variant="outline" id="menu-demo">Préférences<Icon name="chevron-down" size={16} /></DropdownMenu.Trigger>
+				<DropdownMenu.Trigger variant="outline" id="menu-demo">{t("ds.menu.trigger")}<Icon name="chevron-down" size={16} /></DropdownMenu.Trigger>
 				<DropdownMenu.Content>
-					<DropdownMenu.Label>Affichage</DropdownMenu.Label>
+					<DropdownMenu.Label>{t("ds.menu.display")}</DropdownMenu.Label>
 					<DropdownMenu.RadioGroup bind:value={theme}>
-						<DropdownMenu.RadioItem value="system">Système</DropdownMenu.RadioItem>
-						<DropdownMenu.RadioItem value="light">Clair</DropdownMenu.RadioItem>
-						<DropdownMenu.RadioItem value="dark">Sombre</DropdownMenu.RadioItem>
+						<DropdownMenu.RadioItem value="system">{t("ds.menu.system")}</DropdownMenu.RadioItem>
+						<DropdownMenu.RadioItem value="light">{t("ds.menu.light")}</DropdownMenu.RadioItem>
+						<DropdownMenu.RadioItem value="dark">{t("ds.menu.dark")}</DropdownMenu.RadioItem>
 					</DropdownMenu.RadioGroup>
 					<DropdownMenu.Separator />
-					<DropdownMenu.Item><Icon name="copy-link" size={16} />Copier le lien</DropdownMenu.Item>
-					<DropdownMenu.Item disabled><Icon name="download" size={16} />Télécharger</DropdownMenu.Item>
-					<DropdownMenu.Item variant="destructive"><Icon name="clear" size={16} />Effacer l'historique</DropdownMenu.Item>
+					<DropdownMenu.Item><Icon name="copy-link" size={16} />{t("ds.menu.copyLink")}</DropdownMenu.Item>
+					<DropdownMenu.Item disabled><Icon name="download" size={16} />{t("ds.menu.download")}</DropdownMenu.Item>
+					<DropdownMenu.Item variant="destructive"><Icon name="clear" size={16} />{t("ds.menu.clear")}</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<span class={cap}>Choix courant : <code class="font-mono">{theme}</code>. Clic, Entrée, Espace ou flèche bas pour ouvrir ; flèches, Origine, Fin pour parcourir ; Échap pour fermer. Le menu est une couche flottante (ombre portée) et chaque action montre le curseur main.</span>
+			<span class={cap}>{@render rich(t("ds.menu.hint", { value: `\`${theme}\`` }))}</span>
 		</div>
 
 		<h3 id="c-tabs" class={h3}>Tabs</h3>
 		<div class="grid gap-4 md:grid-cols-2">
 			<div class={box}>
-				<code class="font-mono text-sm">default (segmenté)</code>
+				<code class="font-mono text-sm">{t("ds.tabs.segmented")}</code>
 				<Tabs.Root bind:value={tab} class="mt-2">
-					<Tabs.List aria-label="Onglets segmentés">
-						<Tabs.Trigger value="lire">Lire</Tabs.Trigger>
-						<Tabs.Trigger value="sources">Sources</Tabs.Trigger>
-						<Tabs.Trigger value="liens">Liens</Tabs.Trigger>
+					<Tabs.List aria-label={t("ds.tabs.segmentedAria")}>
+						<Tabs.Trigger value="lire">{t("ds.tabs.read")}</Tabs.Trigger>
+						<Tabs.Trigger value="sources">{t("ds.tabs.sources")}</Tabs.Trigger>
+						<Tabs.Trigger value="liens">{t("ds.tabs.links")}</Tabs.Trigger>
 					</Tabs.List>
-					<Tabs.Content value="lire" class="p-2 text-sm">Panneau « Lire » : le texte de la réponse.</Tabs.Content>
-					<Tabs.Content value="sources" class="p-2 text-sm">Panneau « Sources » : les pages citées.</Tabs.Content>
-					<Tabs.Content value="liens" class="p-2 text-sm">Panneau « Liens » : les pages voisines.</Tabs.Content>
+					<Tabs.Content value="lire" class="p-2 text-sm">{t("ds.tabs.readBody")}</Tabs.Content>
+					<Tabs.Content value="sources" class="p-2 text-sm">{t("ds.tabs.sourcesBody")}</Tabs.Content>
+					<Tabs.Content value="liens" class="p-2 text-sm">{t("ds.tabs.linksBody")}</Tabs.Content>
 				</Tabs.Root>
 			</div>
 			<div class={box}>
-				<code class="font-mono text-sm">line (soulignement)</code>
+				<code class="font-mono text-sm">{t("ds.tabs.line")}</code>
 				<Tabs.Root bind:value={tabLine} class="mt-2">
-					<Tabs.List variant="line" aria-label="Onglets soulignés">
-						<Tabs.Trigger value="resume">Résumé</Tabs.Trigger>
-						<Tabs.Trigger value="detail">Détail</Tabs.Trigger>
-						<Tabs.Trigger value="gone" disabled>Désactivé</Tabs.Trigger>
+					<Tabs.List variant="line" aria-label={t("ds.tabs.lineAria")}>
+						<Tabs.Trigger value="resume">{t("ds.tabs.summary")}</Tabs.Trigger>
+						<Tabs.Trigger value="detail">{t("ds.tabs.detail")}</Tabs.Trigger>
+						<Tabs.Trigger value="gone" disabled>{t("ds.c.disabled")}</Tabs.Trigger>
 					</Tabs.List>
-					<Tabs.Content value="resume" class="p-2 text-sm">Panneau « Résumé » : repère actif de 2 px sous l'onglet.</Tabs.Content>
-					<Tabs.Content value="detail" class="p-2 text-sm">Panneau « Détail » : flèches gauche et droite changent d'onglet.</Tabs.Content>
+					<Tabs.Content value="resume" class="p-2 text-sm">{t("ds.tabs.summaryBody")}</Tabs.Content>
+					<Tabs.Content value="detail" class="p-2 text-sm">{t("ds.tabs.detailBody")}</Tabs.Content>
 				</Tabs.Root>
 			</div>
 		</div>
 
-		<h3 id="c-cortex" class={h3}>Badges Cortex</h3>
+		<h3 id="c-cortex" class={h3}>{t("ds.badges.heading")}</h3>
 		<div class="{box} flex flex-col gap-4">
-			<div><span class={cap}>Types de page</span><div class="mt-1.5 flex flex-wrap gap-2">{#each TYPES as type (type)}<TypeBadge {type} />{/each}</div></div>
-			<div><span class={cap}>Entrées du journal</span><div class="mt-1.5 flex flex-wrap gap-2">{#each KINDS as kind (kind)}<KindBadge {kind} />{/each}</div></div>
-			<div><span class={cap}>Statuts : brouillon et déprécié ; « stable » n'affiche rien</span>
-				<div class="mt-1.5 flex flex-wrap items-center gap-4"><StatusBadge status="draft" /><StatusBadge status="deprecated" /><StatusBadge status="stable" /><Badge variant="stable">stable</Badge><Badge variant="caution">brouillon</Badge><Badge variant="destructive">déprécié</Badge></div></div>
-			<div><span class={cap}>Confiance : icône seule (libellé en infobulle et pour les lecteurs d'écran), puis avec son libellé</span>
+			<div><span class={cap}>{t("ds.grp.types")}</span><div class="mt-1.5 flex flex-wrap gap-2">{#each TYPES as type (type)}<TypeBadge {type} />{/each}</div></div>
+			<div><span class={cap}>{t("ds.grp.kinds")}</span><div class="mt-1.5 flex flex-wrap gap-2">{#each KINDS as kind (kind)}<KindBadge {kind} />{/each}</div></div>
+			<div><span class={cap}>{t("ds.badges.statuses")}</span>
+				<div class="mt-1.5 flex flex-wrap items-center gap-4"><StatusBadge status="draft" /><StatusBadge status="deprecated" /><StatusBadge status="stable" /><Badge variant="stable">{t("ds.badges.stable")}</Badge><Badge variant="caution">{t("ds.badges.draft")}</Badge><Badge variant="destructive">{t("ds.badges.deprecated")}</Badge></div></div>
+			<div><span class={cap}>{t("ds.badges.trust")}</span>
 				<ul class="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">{#each TRUST as [icon, label] (icon)}<li class="flex items-center gap-1.5 text-sm"><TrustIcon {icon} {label} /><span aria-hidden="true">{label}</span></li>{/each}</ul></div>
 		</div>
 
-		<h3 id="c-chip" class={h3}>Chip button et fil d'Ariane</h3>
+		<h3 id="c-chip" class={h3}>{t("ds.chip.heading")}</h3>
 		<div class="{box} flex flex-col gap-4">
 			<div class="flex flex-wrap items-center gap-2">
-				<ChipButton pressed={chip[0]} onclick={() => (chip[0] = !chip[0])}>Appuyé</ChipButton>
-				<ChipButton pressed={chip[1]} onclick={() => (chip[1] = !chip[1])}>Relâché</ChipButton>
-				<span class={cap}>Deux états (<code class="font-mono">aria-pressed</code>), cliquez pour basculer.</span>
+				<ChipButton pressed={chip[0]} onclick={() => (chip[0] = !chip[0])}>{t("ds.chip.pressed")}</ChipButton>
+				<ChipButton pressed={chip[1]} onclick={() => (chip[1] = !chip[1])}>{t("ds.chip.released")}</ChipButton>
+				<span class={cap}>{@render rich(t("ds.chip.hint"))}</span>
 			</div>
-			<Breadcrumb type="Concept" title="Index d'un second cerveau" />
+			<Breadcrumb type="Concept" title={ROWS[0].title} />
 		</div>
 
 		<h3 id="c-row" class={h3}>Result row</h3>
 		<div class="grid gap-4 lg:grid-cols-[3fr_2fr]">
 			<ul class="bg-card divide-y border">
 				{#each ROWS as doc (doc.id)}<li class="p-4"><ResultRow {doc} href="#c-row" showFav /></li>{/each}
-				<li class="p-4"><ResultRow doc={ROWS[0]} href="#c-row" titleHtml="Index d'un <mark>second</mark> cerveau" snippetHtml="…un wiki que l'agent entretient, avec un <mark>second</mark> niveau de sources…" /></li>
+				<li class="p-4"><ResultRow doc={ROWS[0]} href="#c-row" titleHtml={highlighted(t("ds.row.hl.title"))} snippetHtml={highlighted(t("ds.row.hl.snippet"))} /></li>
 			</ul>
 			<div>
-				<span class={cap}>Forme compacte (palette)</span>
+				<span class={cap}>{t("ds.row.compact")}</span>
 				<ul class="bg-card mt-1.5 divide-y border">
 					{#each ROWS as doc (doc.id)}<li class="p-3"><ResultRow {doc} compact /></li>{/each}
 				</ul>
@@ -494,23 +505,23 @@
 
 	<!-- 6. brand -->
 	<section aria-labelledby="h-marque" id="marque" class="mt-14 mb-8">
-		<h2 id="h-marque" class={h2}>Marque et avatar</h2>
-		<p class="{cap} mt-3 max-w-3xl">Le graphe-cerveau : un cerveau de profil, face vers la droite, dessiné comme un graphe de connaissances. De petits nœuds carrés reliés par des liens droits, dont les liens extérieurs forment le contour ; le groupe préfrontal, à l'avant, prend la couleur d'accent. Dessin unique en SVG, jamais d'image, en trois tailles optiques (48, 24 et 16). Les couleurs viennent des jetons.</p>
-		<h3 class={h3}>Marque</h3>
+		<h2 id="h-marque" class={h2}>{t("ds.sec.marque")}</h2>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.brand.intro"))}</p>
+		<h3 class={h3}>{t("ds.brand.mark")}</h3>
 		<div class="{box} flex flex-wrap items-center gap-x-12 gap-y-6">
 			<div>
 				<span class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight"><CortexMark size={24} /><CortexWordmark /></span>
-				<p class={cap}>En-tête : marque 24 px et mot</p>
+				<p class={cap}>{t("ds.brand.header")}</p>
 			</div>
 			<div>
 				<span class="flex items-end gap-3"><CortexMark size={72} /><span class="pb-2 text-3xl font-semibold tracking-tight"><CortexWordmark /></span></span>
-				<p class="{cap} mt-1">Accueil : marque 72 px, mot au titre 1</p>
+				<p class="{cap} mt-1">{t("ds.brand.home")}</p>
 			</div>
 		</div>
-		<h3 class={h3}>Avatar de l'assistant</h3>
+		<h3 class={h3}>{t("ds.avatar.heading")}</h3>
 		<div class="{box} overflow-x-auto">
 			<table class="w-fit text-sm">
-				<thead><tr><th scope="col" class="p-2 pr-16 text-left font-semibold">État</th>{#each AVATAR_SIZES as s (s)}<th scope="col" class="p-2 pr-16 text-left font-semibold">{s} px</th>{/each}</tr></thead>
+				<thead><tr><th scope="col" class="p-2 pr-16 text-left font-semibold">{t("ds.avatar.state")}</th>{#each AVATAR_SIZES as s (s)}<th scope="col" class="p-2 pr-16 text-left font-semibold">{s} px</th>{/each}</tr></thead>
 				<tbody>
 					{#each STATES as state (state)}
 						<tr class="border-t">
@@ -522,9 +533,9 @@
 			</table>
 		</div>
 		<p class="{cap} mt-3 max-w-3xl">
-			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un point ocre (<code class="font-mono">--signal</code>), entouré d'un halo léger, parcourt au hasard les liens intérieurs du cerveau ; immobile au milieu d'un lien en mouvement réduit et sous 24 px. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un point à la couleur de destruction.
-			Avec <code class="font-mono">prefers-reduced-motion: reduce</code>, rien ne bouge : chaque état est une composition fixe distincte (en attente, le signal reste à mi-chemin). L'animation ne porte jamais seule l'information, le texte de statut reste dans le panneau.
-			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> Votre système demande actuellement : {reduced ? "mouvement réduit" : "animations permises"}.</span>{/if}
+			{@render rich(t("ds.avatar.states"))}
+			{@render rich(t("ds.avatar.reducedMotion"))}
+			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> {reduced ? t("ds.avatar.systemReduce") : t("ds.avatar.systemAllow")}</span>{/if}
 		</p>
 	</section>
 </div>
