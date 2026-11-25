@@ -9,7 +9,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
-	import AssistantAvatar, { type FolioState } from "#lib/components/assistant/assistant-avatar.svelte";
+	import AssistantAvatar, { type AvatarState } from "#lib/components/assistant/assistant-avatar.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import KindBadge from "#lib/components/kind-badge.svelte";
 	import StatusBadge from "#lib/components/status-badge.svelte";
@@ -155,7 +155,7 @@
 		q.addEventListener("change", on);
 		return () => q.removeEventListener("change", on);
 	});
-	const STATES: FolioState[] = ["idle", "pending", "answer", "error"];
+	const STATES: AvatarState[] = ["idle", "pending", "answer", "error"];
 	const AVATAR_SIZES = [24, 48, 96];
 	const SECTIONS = [["couleurs", "Couleurs"], ["typographie", "Typographie"], ["formes", "Formes"], ["icones", "Icônes"], ["composants", "Composants"], ["marque", "Marque et avatar"]];
 	const h2 = "anchor-target border-b pb-2 text-[1.75rem] leading-[1.15] font-semibold tracking-tight";
@@ -488,7 +488,7 @@
 	<!-- 6. brand -->
 	<section aria-labelledby="h-marque" id="marque" class="mt-14 mb-8">
 		<h2 id="h-marque" class={h2}>Marque et avatar</h2>
-		<p class="{cap} mt-3 max-w-3xl">Le folio indexé : deux feuilles décalées, une marge, des lignes d'index et un curseur carré. Dessin unique en SVG, jamais d'image. Les couleurs viennent des jetons.</p>
+		<p class="{cap} mt-3 max-w-3xl">Le graphe-cerveau : un cerveau de profil, face vers la droite, dessiné comme un graphe de connaissances. De petits nœuds carrés reliés par des liens droits, dont les liens extérieurs forment le contour ; le groupe préfrontal, à l'avant, prend la couleur d'accent. Dessin unique en SVG, jamais d'image, en trois tailles optiques (48, 24 et 16). Les couleurs viennent des jetons.</p>
 		<h3 class={h3}>Marque</h3>
 		<div class="{box} flex flex-wrap items-center gap-x-12 gap-y-6">
 			<div>
@@ -515,8 +515,8 @@
 			</table>
 		</div>
 		<p class="{cap} mt-3 max-w-3xl">
-			<code class="font-mono">idle</code> : immobile, curseur sur le premier repère. <code class="font-mono">pending</code> : le curseur parcourt les repères par pas orthogonaux. <code class="font-mono">answer</code> : curseur sur le dernier repère, règle de conclusion tracée une fois. <code class="font-mono">error</code> : l'index s'interrompt sur un repère angulaire.
-			Avec <code class="font-mono">prefers-reduced-motion: reduce</code>, rien ne bouge : chaque état est une composition fixe distincte (en attente, le curseur reste sur le repère du milieu). L'animation ne porte jamais seule l'information, le texte de statut reste dans le panneau.
+			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un petit signal carré avance par pas le long des liens, de l'arrière du cerveau jusqu'au groupe préfrontal, puis recommence. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un carré à la couleur de destruction.
+			Avec <code class="font-mono">prefers-reduced-motion: reduce</code>, rien ne bouge : chaque état est une composition fixe distincte (en attente, le signal reste à mi-chemin). L'animation ne porte jamais seule l'information, le texte de statut reste dans le panneau.
 			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> Votre système demande actuellement : {reduced ? "mouvement réduit" : "animations permises"}.</span>{/if}
 		</p>
 	</section>
