@@ -1,0 +1,5 @@
+# False positives: `signInAs(a, "alice")` in src/account.test.ts, a test helper taking a fake OIDC identity, not a password (helper since renamed).
+1fbdbd0b488d5b4e0c8d73f59c17ea5984c92898:src/account.test.ts:generic-password:397
+1fbdbd0b488d5b4e0c8d73f59c17ea5984c92898:src/account.test.ts:generic-password:604
+1fbdbd0b488d5b4e0c8d73f59c17ea5984c92898:src/account.test.ts:generic-password:625
+1fbdbd0b488d5b4e0c8d73f59c17ea5984c92898:src/account.test.ts:generic-password:641
