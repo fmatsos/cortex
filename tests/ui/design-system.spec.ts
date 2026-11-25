@@ -49,19 +49,25 @@ test("both palettes are shown, with contrast ratios computed from the tokens", a
 });
 
 // Every rendered element of the page's main (the closed menu included), SVG internals excepted: the four computed radii
-// are 0 and nothing casts a shadow, except the floating layers (popover, menu, dialog, and the static sample marked
-// data-floating), which carry --shadow-overlay. Computed, not read from the source, so a portal or a stylesheet cannot slip through.
+// are 0 and the only shadows are the floating layers' --shadow-overlay (popover, menu, dialog, and the static sample marked
+// data-floating) and the light relief --shadow-surface of the in-page surfaces. Computed, not read from the source, so a
+// portal or a stylesheet cannot slip through.
 const FLOATING = '[popover], dialog, [role="menu"], [role="dialog"], [data-floating]';
 test("no element of the page has a radius or a shadow", async ({ page }) => {
   await page.goto(URL);
   const bad = await page.evaluate(([pending, floating]) => {
+    const probe = document.createElement("i");
+    probe.style.boxShadow = "var(--shadow-surface)";
+    document.body.append(probe);
+    const surface = getComputedStyle(probe).boxShadow;
+    probe.remove();
     const out: { sel: string; radius: string; shadow: string; pending: boolean }[] = [];
     const corners = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"] as const;
     for (const el of document.querySelectorAll("main *")) {
       if (el.closest("svg")) continue;
       const s = getComputedStyle(el);
       const radius = corners.map((c) => s[c]).filter((v) => v !== "0px").join(" ");
-      const shadow = s.boxShadow !== "none" && !el.matches(floating) ? s.boxShadow : "";
+      const shadow = s.boxShadow !== "none" && !s.boxShadow.endsWith(surface) && !el.matches(floating) ? s.boxShadow : "";
       if (!radius && !shadow) continue;
       out.push({ sel: `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.split(" ").join(".") : ""}`, radius, shadow, pending: pending.some((p) => el.matches(p)) });
     }
@@ -74,12 +80,20 @@ test("no element of the page has a radius or a shadow", async ({ page }) => {
   expect(bad.out.filter((o) => o.pending).length, "PENDING_SQUARE entries are still round: drop the fixed ones").toBeGreaterThan(0);
 });
 
-test("the floating layer sample and the menu carry the overlay shadow, the cards stay flat", async ({ page }) => {
+const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+test("the floating layer sample and the menu carry the overlay shadow, the cards a lighter relief", async ({ page }) => {
   await page.goto(URL);
   const shadow = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(await shadow("[data-floating]")).not.toBe("none");
-  expect(await shadow('[data-slot="dropdown-menu-content"]')).not.toBe("none");
-  expect(await shadow('[data-slot="card"]')).toBe("none");
+  const token = (name: string) => page.evaluate((n) => { const i = document.createElement("i"); i.style.boxShadow = `var(${n})`; document.body.append(i); const v = getComputedStyle(i).boxShadow; i.remove(); return v; }, name);
+  const overlay = await token("--shadow-overlay"), surface = await token("--shadow-surface");
+  expect(overlay).not.toBe("none");
+  expect(surface).not.toBe("none");
+  expect(surface).not.toBe(overlay);
+  // a Tailwind shadow utility lists its (transparent) ring layers first, then the token's own
+  expect(await shadow("[data-floating]")).toMatch(new RegExp(`${esc(overlay)}$`));
+  expect(await shadow('[data-slot="dropdown-menu-content"]')).toMatch(new RegExp(`${esc(overlay)}$`));
+  const card = await shadow('[data-slot="card"]');
+  expect(card.endsWith(surface) && !card.endsWith(overlay)).toBe(true);
 });
 
 test("the focus ring is a 2 px rectangle offset by 2 px", async ({ page }) => {

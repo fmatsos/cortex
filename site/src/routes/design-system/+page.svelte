@@ -269,9 +269,10 @@
 			<span>fin</span>
 		</div>
 		<h3 class={h3}>Couches flottantes et ombre portée</h3>
-		<p class="{cap} max-w-3xl">Exception à l'absence d'ombre, réservée aux couches qui flottent au-dessus de la page : menus, fenêtres contextuelles, palette de recherche, notification, tiroir modal de l'assistant. Elles prennent le fond <code class="font-mono">--popover</code>, un contour de 1 px en <code class="font-mono">--input</code> (plus net que <code class="font-mono">--border</code>) et l'ombre <code class="font-mono">--shadow-overlay</code>, plus dense en sombre. Les cartes et le contenu de la page restent plats. Le menu de la section Composants l'applique à l'ouverture.</p>
+		<p class="{cap} max-w-3xl">À plat ne veut pas dire absolument plat : deux niveaux de relief, discrets. Les couches qui flottent au-dessus de la page (menus, fenêtres contextuelles, palette de recherche, notification, tiroir modal de l'assistant) prennent le fond <code class="font-mono">--popover</code>, un contour de 1 px en <code class="font-mono">--input</code> (plus net que <code class="font-mono">--border</code>) et l'ombre <code class="font-mono">--shadow-overlay</code>, plus dense en sombre. Les surfaces de la page (cartes, sections de l'accueil, encarts latéraux des articles) gardent leur contour <code class="font-mono">--border</code> et un simple relief, <code class="font-mono">--shadow-surface</code> : une ombre d'un pixel, jamais une carte qui flotte. Le menu de la section Composants applique l'ombre des couches à l'ouverture.</p>
+		<p class="{cap} mt-3 max-w-3xl">Panneau de l'assistant ancré : il ne flotte pas, mais une ombre sur son bord gauche (<code class="font-mono">--shadow-edge</code>) et un contour <code class="font-mono">--input</code> le détachent de la page ; sa largeur se règle à la poignée de son bord. Barres de défilement : une seule règle globale, <code class="font-mono">scrollbar-width: thin</code> et un pouce en encre atténuée sur fond transparent (<code class="font-mono">--scrollbar-thumb</code>, plus net au survol), pour la page comme pour chaque zone qui défile ; elles restent toujours visibles.</p>
 		<div class="{box} mt-3 grid gap-6 sm:grid-cols-2">
-			<div class="bg-card border p-3 text-sm">Surface de la page : plate, contour <code class="font-mono">--border</code>, sans ombre</div>
+			<div class="bg-card shadow-surface border p-3 text-sm">Surface de la page : contour <code class="font-mono">--border</code>, relief léger <code class="font-mono">shadow-surface</code></div>
 			<div class="bg-popover text-popover-foreground border-input shadow-overlay border p-3 text-sm" data-floating>Couche flottante : <code class="font-mono">shadow-overlay</code>, contour <code class="font-mono">--input</code></div>
 		</div>
 		<h3 class={h3}>Anneau de focus</h3>
@@ -521,7 +522,7 @@
 			</table>
 		</div>
 		<p class="{cap} mt-3 max-w-3xl">
-			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un petit signal carré avance par pas le long des liens, de l'arrière du cerveau jusqu'au groupe préfrontal, puis recommence. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un carré à la couleur de destruction.
+			<code class="font-mono">idle</code> : immobile. <code class="font-mono">pending</code> : un point violet (couleur des questions), entouré d'un halo léger, parcourt au hasard les liens intérieurs du cerveau ; immobile au milieu d'un lien en mouvement réduit et sous 24 px. <code class="font-mono">answer</code> : les nœuds du groupe préfrontal grandissent une fois, puis restent plus gros. <code class="font-mono">error</code> : un lien du groupe préfrontal est rompu, la rupture marquée d'un point à la couleur de destruction.
 			Avec <code class="font-mono">prefers-reduced-motion: reduce</code>, rien ne bouge : chaque état est une composition fixe distincte (en attente, le signal reste à mi-chemin). L'animation ne porte jamais seule l'information, le texte de statut reste dans le panneau.
 			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> Votre système demande actuellement : {reduced ? "mouvement réduit" : "animations permises"}.</span>{/if}
 		</p>

@@ -94,7 +94,7 @@
 <!-- encyclopedia-style front page: kinds of pages, then featured, news, did you know, central pages, portals -->
 <ul class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("home.types")}>
 	{#each data.seed.types.filter((x) => x.count) as x (x.type)}
-		<li><a href={urlOf(`type:${x.type.toLowerCase()}`)} class="hover:bg-muted bg-card focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
+		<li><a href={urlOf(`type:${x.type.toLowerCase()}`)} class="hover:bg-muted bg-card shadow-surface focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
 			<Icon name={typeIcon(x.type)} size={20} style="color: {typeColor(x.type)}" />{typePlural(x.type)}<span class="text-muted-foreground ml-auto text-sm">{x.count}</span>
 		</a></li>
 	{/each}
@@ -106,7 +106,7 @@
 
 <div class="mt-6 grid items-stretch gap-6 lg:grid-cols-[3fr_2fr]">
 	{#if featured.length}
-		<section aria-labelledby="h-featured" class="bg-muted/40 flex h-full flex-col border p-4">
+		<section aria-labelledby="h-featured" class="bg-muted/40 flex h-full flex-col border shadow-surface p-4">
 			{@render head("h-featured", "star", t("home.featured"))}
 			<!-- the entries share the height of the section (equal rows between the 1 px rules), whatever the column beside it holds -->
 			<ul class="divide-border mt-3 flex flex-1 flex-col divide-y">
@@ -127,7 +127,7 @@
 	{/if}
 
 	{#if data.news.length}
-		<section aria-labelledby="h-news" class="flex h-full flex-col border p-4">
+		<section aria-labelledby="h-news" class="flex h-full flex-col border shadow-surface p-4">
 			{@render head("h-news", "journal", t("home.news"))}
 			<HomeNews news={data.news} />
 			<a href={toRoute("/log")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.news.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
@@ -135,7 +135,7 @@
 	{/if}
 
 	{#if facts.length}
-		<section aria-labelledby="h-facts" class="flex h-full flex-col rounded-lg border p-4">
+		<section aria-labelledby="h-facts" class="flex h-full flex-col rounded-lg border shadow-surface p-4">
 			{@render head("h-facts", "note", t("home.facts"))}
 			<ul class="mt-3 flex flex-1 list-disc flex-col justify-between gap-2 pl-5">
 				{#each facts as f (f.id)}
@@ -146,7 +146,7 @@
 	{/if}
 
 	{#if data.hubs.length}
-		<section aria-labelledby="h-hubs" class="flex h-full flex-col rounded-lg border p-4">
+		<section aria-labelledby="h-hubs" class="flex h-full flex-col rounded-lg border shadow-surface p-4">
 			{@render head("h-hubs", "graph", t("home.hubs"))}
 			<ul class="mt-3 flex flex-1 flex-col">
 				{#each data.hubs as h (h.id)}
@@ -162,7 +162,7 @@
 </div>
 
 {#if data.seed.tags.length}
-	<section aria-labelledby="h-portals" class="mt-6 flex flex-col rounded-lg border p-4">
+	<section aria-labelledby="h-portals" class="mt-6 flex flex-col rounded-lg border shadow-surface p-4">
 		{@render head("h-portals", "tags", t("home.portals"))}
 		<ul class="touch-gap mt-3 flex flex-wrap gap-2">
 			{#each data.seed.tags as tg (tg.slug)}

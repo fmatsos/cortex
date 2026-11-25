@@ -15,18 +15,30 @@
 	// both: focus trap, Escape and the top layer come from the browser.
 	const PANEL_ID = "assistant-panel";
 	const DOCK = "(min-width: 1280px)";
-	const WIDTH = "28rem";
+	// docked width: 28 rem by default, then the reader's own, between MIN and half the window (720 px at most); kept in this browser
+	const DEFAULT = 448, MIN = 320, MAX = 720, KEY = "cortex-assistant-width";
+	const STEP = 16, BIG_STEP = 64;
 
 	let dialog = $state<HTMLDialogElement | null>(null);
 	let area = $state<HTMLTextAreaElement | null>(null);
 	let list = $state<HTMLElement | null>(null);
 	let docked = $state(false);
+	let vw = $state(0);
+	let pref = $state(DEFAULT);
+	let dragging = $state(false);
+	const max = $derived(Math.max(MIN, Math.min(MAX, Math.floor(vw / 2))));
+	// the chosen width, held within the bounds of the window as it is now (the choice itself survives a narrower window)
+	const width = $derived(Math.min(max, Math.max(MIN, pref)));
 	let engine = $state<Engine>();
 	onMount(() => {
 		const mq = matchMedia(DOCK);
 		const sync = () => (docked = mq.matches);
 		sync();
 		mq.addEventListener("change", sync);
+		try {
+			const saved = Number(localStorage.getItem(KEY));
+			if (Number.isFinite(saved) && saved >= MIN) pref = Math.round(saved);
+		} catch { /* storage blocked: the default width */ }
 		loadEngine().then((e) => (engine = e), () => {});
 		return () => { mq.removeEventListener("change", sync); document.documentElement.style.removeProperty("--assistant-width"); };
 	});
@@ -38,7 +50,33 @@
 		const want = assistant.open, modal = !docked;
 		if (d.open && (!want || d.matches(":modal") !== modal)) d.close();
 		if (want && !d.open) { if (modal) d.showModal(); else d.show(); void tick().then(() => area?.focus()); }
-		document.documentElement.style.setProperty("--assistant-width", want && docked ? WIDTH : "0px");
+		document.documentElement.style.setProperty("--assistant-width", want && docked ? `${width}px` : "0px");
+	});
+
+	// resizing: the handle on the left edge, by pointer or keyboard; the page follows through --assistant-width
+	const clamp = (px: number) => Math.min(max, Math.max(MIN, Math.round(px)));
+	const keep = () => { try { pref === DEFAULT ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, String(pref)); } catch { /* per-viewer convenience only */ } };
+	const set = (px: number) => { pref = clamp(px); keep(); };
+	function onDown(e: PointerEvent) {
+		if (e.button !== 0) return;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		dragging = true;
+		e.preventDefault();
+	}
+	function onMove(e: PointerEvent) {
+		if (dragging && dialog) pref = clamp(dialog.getBoundingClientRect().right - e.clientX);
+	}
+	function onUp() { if (dragging) { dragging = false; keep(); } }
+	function onHandleKey(e: KeyboardEvent) {
+		const step = e.shiftKey ? BIG_STEP : STEP;
+		const next = e.key === "ArrowLeft" ? width + step : e.key === "ArrowRight" ? width - step : e.key === "Home" ? MIN : e.key === "End" ? max : e.key === "Enter" ? DEFAULT : undefined;
+		if (next === undefined) return;
+		e.preventDefault();
+		set(next);
+	}
+	$effect(() => {
+		document.documentElement.toggleAttribute("data-assistant-resizing", dragging);
+		return () => document.documentElement.removeAttribute("data-assistant-resizing");
 	});
 	// entry points outside the panel (search field, palette): focus the question, caret at the end of a prefilled text
 	$effect(() => {
@@ -108,8 +146,16 @@
 	});
 </script>
 
+<svelte:window bind:innerWidth={vw} />
+
 <dialog bind:this={dialog} id={PANEL_ID} aria-labelledby="assistant-title" class="assistant" oncancel={(e) => { e.preventDefault(); close(); }}
 	onkeydown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !dialog?.matches(":modal")) { e.preventDefault(); close(); } }}>
+	{#if docked}
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+		<div class="resize" class:active={dragging} role="separator" aria-orientation="vertical" aria-label={t("assistant.resize")} aria-controls={PANEL_ID}
+			aria-valuenow={width} aria-valuemin={MIN} aria-valuemax={max} tabindex="0"
+			onpointerdown={onDown} onpointermove={onMove} onpointerup={onUp} onpointercancel={onUp} onlostpointercapture={onUp} ondblclick={() => set(DEFAULT)} onkeydown={onHandleKey}></div>
+	{/if}
 	<div class="flex h-full flex-col">
 		<header class="flex items-center gap-2 border-b px-4 py-2">
 			<AssistantAvatar state={avatar} size={32} />
@@ -205,10 +251,44 @@
 	.assistant:not(:modal) {
 		width: var(--assistant-width, 28rem);
 	}
-	/* the modal drawer floats over the page: shadow and a stronger edge; the docked panel stays flat */
+	/* the docked panel is not floating but is split from the page by an edge shadow (owner exception to "flat"); the modal drawer
+	   floats over the page: the overlay shadow */
+	.assistant:not(:modal) {
+		width: var(--assistant-width, 28rem);
+		border-left-color: var(--input);
+		box-shadow: var(--shadow-edge);
+	}
 	.assistant:modal {
 		border-left-color: var(--input);
 		box-shadow: var(--shadow-overlay);
+	}
+	/* drag handle: a wide hit area on the left edge, a 2 px line on hover, focus and drag */
+	.resize {
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 8px;
+		z-index: 1;
+		cursor: col-resize;
+		touch-action: none;
+	}
+	.resize::after {
+		content: "";
+		position: absolute;
+		inset: 0 auto 0 0;
+		width: 2px;
+		background: transparent;
+	}
+	.resize:hover::after,
+	.resize:focus-visible::after,
+	.resize.active::after {
+		background: var(--primary);
+	}
+	.resize:focus-visible {
+		outline-offset: -2px;
+	}
+	:global(html[data-assistant-resizing]) {
+		cursor: col-resize;
+		user-select: none;
 	}
 	.assistant::backdrop {
 		background: color-mix(in oklch, var(--foreground) 30%, transparent);

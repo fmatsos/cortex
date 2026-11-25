@@ -90,9 +90,16 @@ test("news: no kind badge, an ordered list of days with a dated heading, briefs 
   expect(await news.locator("ol ol").evaluateAll((els) => els.every((e) => e.tagName === "OL" && e.parentElement?.tagName === "LI"))).toBe(true);
   // the vertical rule and the square markers are decorative
   expect(await briefs.locator("> span[aria-hidden=true]").count(), "one hidden marker per brief").toBe(n);
-  // square system: no radius, no shadow on the block
-  const style = await news.evaluate((el) => { const c = getComputedStyle(el); return { r: c.borderTopLeftRadius, s: c.boxShadow }; });
-  expect(style).toEqual({ r: "0px", s: "none" });
+  // square system: no radius, and only the light relief of an in-page surface (--shadow-surface), never the overlay shadow
+  const style = await news.evaluate((el) => {
+    const c = getComputedStyle(el), i = document.createElement("i");
+    i.style.boxShadow = "var(--shadow-surface)";
+    document.body.append(i);
+    const surface = getComputedStyle(i).boxShadow;
+    i.remove();
+    return { r: c.borderTopLeftRadius, s: c.boxShadow.endsWith(surface) };
+  });
+  expect(style).toEqual({ r: "0px", s: true });
 });
 
 test("news: one sentence per brief, times are links to the log entry, no 00:00 invented", async ({ page }) => {

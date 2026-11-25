@@ -75,6 +75,8 @@
  * is measured by src/theme.test.ts (WCAG 2.2 AA). Only the layout metric below lives here.
  */
 :root {
+	--scrollbar-thumb: color-mix(in oklab, var(--foreground) 32%, transparent);
+	--scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 52%, transparent);
 	--anchor-offset: 5rem; /* height of the sticky header: anchors land below it (taller on mobile: search on a second line) */
 }
 
@@ -129,6 +131,8 @@
 	--color-warning-foreground: var(--warning-foreground);
 	/* floating layers only (menus, popovers, palettes, toasts, the modal drawer): the one exception to "no shadow" */
 	--shadow-overlay: var(--shadow-overlay);
+	/* in-page bordered surfaces (cards, home sections, aside panels): a light relief, never a floating layer */
+	--shadow-surface: var(--shadow-surface);
 	/* square design: every radius is 0 (the doc's Part II); --radius itself comes from the tokens */
 	--radius-xs: 0px;
 	--radius-sm: 0px;
@@ -172,6 +176,15 @@
 	h2,
 	h3 {
 		text-wrap: balance;
+	}
+	/* scrollbars: the native thin bar, a muted ink thumb on no track, a little stronger over the scroll area being hovered;
+	   one rule for the page and every inner scroll area (aside, palette, tables, assistant), never hidden */
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--scrollbar-thumb) transparent;
+	}
+	:not(html):hover {
+		scrollbar-color: var(--scrollbar-thumb-hover) transparent;
 	}
 	:focus-visible {
 		outline: 2px solid var(--ring);

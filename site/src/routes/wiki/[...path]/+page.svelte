@@ -172,7 +172,7 @@
 			</nav>
 		{/if}
 		<RelatedPages backlinks={p.backlinks} {related} />
-		<section aria-labelledby="h-prov" class="bg-muted/50 rounded-lg border p-3">
+		<section aria-labelledby="h-prov" class="bg-muted/50 shadow-surface rounded-lg border p-3">
 			<h2 id="h-prov" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="generated" size={20} class="text-muted-foreground" />{t("page.provenance")}</h2>
 			<dl class="space-y-2">
 				{#if p.generated}
