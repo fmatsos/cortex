@@ -7,6 +7,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { favs } from "#lib/favs.svelte.js";
+	import { destinations, linked, parseRoute, serializeRoute, truncateRoute } from "#lib/journey.js";
 	import { buildView, reconcileSelection, relationIndex, relationsOf, resolveFocus, searchNodes, type GNode, type GraphView } from "#lib/graph-model.js";
 	import { SHAPE_LABEL, settlementOf, shapeOf, svgPoints } from "#lib/graph-shapes.js";
 	import { toPage, toRoute } from "#lib/links.js";
@@ -23,7 +24,13 @@
 	let ready = $state(false);
 	let sel = $state.raw<GNode | null>(null);
 	let listMode = $state(false);
-	let mode = $state<"graph" | "map">("graph");
+	type Mode = "graph" | "map" | "journey";
+	let mode = $state<Mode>("graph");
+	let route = $state<string[]>([]); // journey: ids of the pages walked so far, each linked to the one before
+	let playing = $state(false);
+	let live = $state("");
+	let heading = $state<HTMLElement>();
+	let run = 0; // replay generation: any other move bumps it and the replay stops
 	let notice = $state("");
 	let query = $state("");
 	let active = $state(0);
@@ -48,6 +55,8 @@
 	const rel = $derived(sel ? relationsOf(sel.id, view.links) : { cites: [], citedBy: [] });
 	const neighborCount = $derived(new Set([...rel.cites, ...rel.citedBy]).size);
 	const index = $derived(relationIndex(view));
+	const step = $derived(route.at(-1) ?? null);
+	const dest = $derived(step ? destinations(step, index, nodesById) : { cites: [], citedBy: [] });
 	const sorted = $derived([...view.nodes].sort((a, b) => a.title.localeCompare(b.title, "fr")));
 	const results = $derived(searchNodes(raw?.nodes ?? [], query));
 	const rowId = (id: string) => `g-${id.replace(/[^a-z0-9]+/gi, "-")}`;
@@ -56,14 +65,54 @@
 	const resetFilters = () => { off = new Set(); tag = ""; notice = ""; };
 	const fit = () => controller?.fit();
 	const zoomBy = (factor: number) => controller?.zoom(factor);
-	/** Graph or map presentation; kept in the URL (?view=map) so a map can be shared and reloaded. */
-	function setMode(next: "graph" | "map") {
-		mode = next; controller?.mode(next);
+	/** Presentation (graph, map, journey) and the route; kept in the URL (?view=map, ?view=journey&route=a,b) so it can be shared and reloaded. */
+	function syncUrl() {
 		const url = new URL(location.href);
-		if (next === "map") url.searchParams.set("view", "map"); else url.searchParams.delete("view");
+		if (mode === "graph") url.searchParams.delete("view"); else url.searchParams.set("view", mode);
+		if (mode === "journey" && route.length) url.searchParams.set("route", serializeRoute(route)); else url.searchParams.delete("route");
 		replaceState(url, {});
 	}
+	function setMode(next: Mode) {
+		run++; playing = false;
+		mode = next; controller?.mode(next);
+		if (next === "journey" && !route.length && sel) route = [sel.id];
+		controller?.journey(next === "journey" ? route : []);
+		if (next === "journey" && step) { sel = nodeById(step) ?? null; void controller?.go(step); }
+		syncUrl();
+	}
 	function select(n: GNode | null, center?: string) { sel = n; controller?.select(n?.id ?? null, !!center); }
+
+	/** Journey: every change of the route goes through here; the camera travels to the last step (duration 0: a jump). */
+	function setRoute(next: string[], duration?: number) {
+		run++; playing = false; route = next; controller?.journey(next);
+		const id = next.at(-1);
+		if (id) { sel = nodeById(id) ?? null; void controller?.go(id, duration); live = tr("journey.announce", { n: next.length, total: next.length, title: titles.get(id) ?? id }); }
+		else { select(null); fit(); live = ""; }
+		syncUrl();
+	}
+	/** A page chosen on the map, in the search or in the panel: the departure, or the next step when linked to the current page. */
+	function pick(id: string) {
+		if (id === step) return;
+		if (!step || linked(index, step, id)) { notice = ""; setRoute([...route, id]); }
+		else notice = tr("journey.notLinked");
+	}
+	const advance = (id: string) => { pick(id); void tick().then(() => heading?.focus()); };
+	async function replay() {
+		const me = ++run, ids = [...route], pause = matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 300;
+		playing = true;
+		for (const [i, id] of ids.entries()) {
+			controller?.journey(ids.slice(0, i + 1)); sel = nodeById(id) ?? null;
+			live = tr("journey.announce", { n: i + 1, total: ids.length, title: titles.get(id) ?? id });
+			await controller?.go(id, 900);
+			if (me !== run) return;
+			await new Promise((done) => setTimeout(done, pause));
+			if (me !== run) return;
+		}
+		playing = false;
+	}
+	async function copyLink() {
+		try { await navigator.clipboard.writeText(location.href); notice = tr("journey.copied"); } catch { notice = tr("journey.copyFailed"); }
+	}
 
 	$effect(() => {
 		const v = view;
@@ -75,7 +124,8 @@
 		notice = "";
 		if (listMode) { listMode = false; await tick(); }
 		if (!view.ids.has(id)) { pendingFocus = id; notice = tr("graph.filtersReset"); off = new Set(); tag = ""; return; }
-		const n = nodeById(id); if (n) select(n, "focus");
+		const n = nodeById(id);
+		if (n) { if (mode === "journey") pick(id); else select(n, "focus"); }
 	}
 	const choose = (id: string) => { query = ""; searchOpen = false; active = 0; void focusNode(id); };
 	function onSearchKey(e: KeyboardEvent) {
@@ -104,16 +154,18 @@
 				raw = g; // The HTML list remains available even if WebGL is unavailable.
 				const [{ createGraph }] = await Promise.all([import("#lib/graph-sigma.js"), document.fonts.ready]);
 				if (me !== generation) return;
-				controller = createGraph(el, labels, g, { select: (id) => select(id ? nodeById(id) ?? null : null), open: (id) => { void goto(toPage(id)); }, favorite: (id) => favs.has(id) });
+				controller = createGraph(el, labels, g, { select: (id) => { if (mode !== "journey") select(id ? nodeById(id) ?? null : null); else if (id) pick(id); }, open: (id) => { void goto(toPage(id)); }, favorite: (id) => favs.has(id) });
 				apply = (v) => {
 					const keep = reconcileSelection(sel?.id, v.ids);
 					sel = keep ? v.nodes.find((n) => n.id === keep) ?? null : null;
 					controller!.apply(v); controller!.select(sel?.id ?? null);
 					if (pendingFocus && v.ids.has(pendingFocus)) { const id = pendingFocus; pendingFocus = null; void focusNode(id); }
 				};
-				mode = new URLSearchParams(location.search).get("view") === "map" ? "map" : "graph";
+				const params = new URLSearchParams(location.search), asked = params.get("view");
+				mode = asked === "map" || asked === "journey" ? asked : "graph";
 				controller.mode(mode);
 				apply(view); ready = true;
+				if (mode === "journey" && params.has("route")) setRoute(parseRoute(params.get("route"), index), 0);
 				const wanted = resolveFocus(location.search, g.nodes);
 				if (wanted.id) await focusNode(wanted.id);
 				else if (wanted.asked) notice = tr("graph.pageNotInGraph", { title: wanted.asked });
@@ -142,7 +194,7 @@
 	</svg>
 {/snippet}
 
-<svelte:window onkeydown={(e) => { if (e.key === "Escape" && sel && !e.defaultPrevented) select(null); }} />
+<svelte:window onkeydown={(e) => { if (e.key !== "Escape" || e.defaultPrevented) return; if (playing) setRoute(route); else if (sel && mode !== "journey") select(null); }} />
 
 <div class="touch-gap flex flex-wrap items-center gap-2" role="group" aria-label={tr("graph.filters")}>
 	{#each types as t (t)}
@@ -170,8 +222,8 @@
 
 <div class="touch-gap mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={tr("graph.controls")}>
 	<div class="flex" role="group" aria-label={tr("graph.mode.label")}>
-		{#each [["graph", "graph", tr("graph.mode.graph")], ["map", "map", tr("graph.mode.map")]] as [m, icon, label] (m)}
-			<Button variant={mode === m ? "default" : "outline"} size="sm" class="-ml-px first:ml-0" aria-pressed={mode === m} disabled={!ready || listMode} onclick={() => setMode(m as "graph" | "map")}><Icon name={icon} size={16} />{label}</Button>
+		{#each [["graph", "graph", tr("graph.mode.graph")], ["map", "map", tr("graph.mode.map")], ["journey", "journey", tr("graph.mode.journey")]] as [m, icon, label] (m)}
+			<Button variant={mode === m ? "default" : "outline"} size="sm" class="-ml-px first:ml-0" aria-pressed={mode === m} disabled={!ready || listMode} onclick={() => setMode(m as Mode)}><Icon name={icon} size={16} />{label}</Button>
 		{/each}
 	</div>
 	<Button variant="outline" size="sm" aria-pressed={listMode} onclick={() => (listMode = !listMode)} disabled={!raw}><Icon name="list-view" size={16} />{tr("graph.listView")}</Button>
@@ -224,7 +276,7 @@
 </div>
 <p role="status" class="text-muted-foreground mt-2 min-h-5 text-sm">{notice}</p>
 
-<div class="mt-1 grid min-w-0 gap-3 {sel ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''}" class:hidden={listMode}>
+<div class="mt-1 grid min-w-0 gap-3 {sel || mode === 'journey' ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : ''}" class:hidden={listMode}>
 <div data-graph-surface class="bg-card relative h-[45vh] min-h-[320px] min-w-0 overflow-hidden border sm:h-[60vh] sm:min-h-[360px]">
 	<div bind:this={el} class="absolute inset-0" role="img" aria-label={tr("graph.canvasLabel")}></div>
 	<div bind:this={labels} class="pointer-events-none absolute inset-0 overflow-hidden"></div>
@@ -251,7 +303,58 @@
 		</div>
 	{/if}
 	</div>
-	{#if sel}
+	{#if mode === "journey"}
+		<aside aria-label={tr("journey.panel")} class="bg-card shadow-surface flex min-w-0 flex-col gap-4 border p-4 lg:max-h-[60vh] lg:overflow-auto">
+			<p class="sr-only" aria-live="polite">{live}</p>
+			{#if step}
+				{@const cur = nodesById.get(step)}
+				<section aria-labelledby="journey-now" class="flex flex-col gap-2">
+					<p class="text-muted-foreground text-sm">{tr("journey.step", { n: route.length })}</p>
+					<h2 id="journey-now" bind:this={heading} tabindex="-1" class="text-base leading-snug font-semibold focus-visible:outline-2">{titles.get(step) ?? step}</h2>
+					{#if cur}<div><TypeBadge type={cur.type} /></div>{/if}
+					<Button href={toPage(step)} size="sm" class="self-start"><Icon name="external-link" size={16} />{tr("journey.read")}</Button>
+				</section>
+				<div class="touch-gap flex flex-wrap gap-2">
+					<Button variant="outline" size="sm" disabled={route.length < 2} onclick={() => setRoute(route.slice(0, -1))}>{tr("journey.back")}</Button>
+					<Button variant="outline" size="sm" disabled={route.length < 2} aria-pressed={playing} onclick={() => (playing ? setRoute(route) : void replay())}>{playing ? tr("journey.stop") : tr("journey.replay")}</Button>
+					<Button variant="outline" size="sm" onclick={() => setRoute([])}>{tr("journey.clear")}</Button>
+					<Button variant="outline" size="sm" onclick={copyLink}><Icon name="copy-link" size={16} />{tr("journey.copy")}</Button>
+				</div>
+				{#each [{ label: tr("graph.cites"), nodes: dest.cites }, { label: tr("journey.citedBy"), nodes: dest.citedBy }] as g (g.label)}
+					{#if g.nodes.length}
+						<section aria-label={`${g.label} (${g.nodes.length})`}>
+							<h3 class="text-muted-foreground mb-1 text-sm">{g.label} ({g.nodes.length})</h3>
+							<ul class="flex flex-col">
+								{#each g.nodes as m (m.id)}
+									<li><button type="button" onclick={() => advance(m.id)} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 w-full items-center gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3">{@render shape(m.type, 12)}<span class="truncate">{m.title}</span><span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(m.type)}</span></button></li>
+								{/each}
+							</ul>
+						</section>
+					{/if}
+				{/each}
+				{#if !dest.cites.length && !dest.citedBy.length}<p class="text-muted-foreground text-sm">{tr("graph.noRelated")}</p>{/if}
+			{:else}
+				<h2 class="text-base leading-snug font-semibold">{tr("graph.mode.journey")}</h2>
+				<p class="text-muted-foreground text-sm">{tr("journey.start")}</p>
+			{/if}
+			<section aria-labelledby="journey-log" class="flex flex-col gap-2 border-t pt-3">
+				<h3 id="journey-log" class="text-sm font-semibold">{tr("journey.log")}</h3>
+				{#if route.length}
+					<p class="text-muted-foreground text-sm">{tr("journey.logHelp")}</p>
+					<ol class="flex flex-col">
+						{#each route as id, i (`${i}:${id}`)}
+							<li class="flex items-center">
+								<button type="button" aria-current={i === route.length - 1 ? "step" : undefined} onclick={() => setRoute(truncateRoute(route, i))} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 min-w-0 flex-1 items-baseline gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3 {i === route.length - 1 ? 'font-semibold' : ''}"><span class="text-muted-foreground w-5 shrink-0 text-right tabular-nums" aria-hidden="true">{i + 1}</span><span class="truncate">{titles.get(id) ?? id}</span></button>
+								<Button variant="ghost" size="icon-sm" href={toPage(id)} aria-label={tr("journey.openStep", { title: titles.get(id) ?? id })}><Icon name="external-link" size={16} /></Button>
+							</li>
+						{/each}
+					</ol>
+				{:else}
+					<p class="text-muted-foreground text-sm">{tr("journey.logEmpty")}</p>
+				{/if}
+			</section>
+		</aside>
+	{:else if sel}
 		<aside aria-label={tr("graph.selected")} class="bg-card flex max-h-[60vh] min-w-0 flex-col gap-3 overflow-auto border p-4 shadow-sm">
 			<div class="flex items-center justify-between gap-2">
 				<TypeBadge type={sel.type} />
@@ -321,7 +424,7 @@
 			{/if}
 			<span class="inline-flex items-center gap-1.5"><Icon name="star" size={14} filled style="color: var(--favorite)" />{tr("graph.legend.fav")}</span>
 		</p>
-		{#if mode === "map"}<p>{tr("graph.legend.map")}</p>{:else}<p>{tr("graph.legend.size")}</p>{/if}
+			{#if mode !== "graph"}<p>{tr("graph.legend.map")}</p>{#if mode === "journey"}<p>{tr("journey.legend")}</p>{/if}{:else}<p>{tr("graph.legend.size")}</p>{/if}
 		<p>{tr("graph.legend.help")}</p>
 	</div>
 {/if}
