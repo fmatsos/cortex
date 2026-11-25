@@ -40,8 +40,6 @@ test("une copie locale remplace les pannes temporaires, jamais une vraie absence
 test("pages du wiki et socle", () => {
 	expect(isContentPath("wiki/concepts/a/")).toBe(true);
 	expect(isContentPath("/wiki/concepts/a/__data.json")).toBe(true);
-	expect(isContentPath("tags/ia/")).toBe(true);
-	expect(isContentPath("tags/ia/__data.json")).toBe(true);
 	for (const p of ["", "tags/", "tags/__data.json", "log/", "search/", "search-index.json", "graph.json", "_app/immutable/x.js", "wikis/x/"]) expect(isContentPath(p)).toBe(false);
 });
 

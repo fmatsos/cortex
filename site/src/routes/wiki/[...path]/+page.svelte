@@ -109,7 +109,7 @@
 			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} reviewable={features.review && (!verified || needsReview)} onreviewed={(r) => (reviewedHere[p.id] = r)} /></div>
 			{#if p.tags.length}
 				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label={t("nav.tags")}>
-					{#each p.tags as tag}<li><Badge href={toTag(data.slugs[tag])} variant="secondary">#{tag}</Badge></li>{/each}
+					{#each p.tags as tag}<li><Badge href={toTag(tag)} variant="secondary">#{tag}</Badge></li>{/each}
 				</ul>
 			{/if}
 		</header>

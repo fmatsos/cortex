@@ -58,7 +58,7 @@
 <p class="text-muted-foreground mt-3 text-sm" role="status">{shown.length === data.tags.length ? tr("tags.count", { count: data.tags.length }) : tr("tags.countOf", { shown: shown.length, count: data.tags.length })}, {tr("tags.sorted", { how: sentence ?? "" })}</p>
 <ul class="touch-gap mt-4 flex flex-wrap gap-2">
 	{#each shown as t (t.slug)}
-		<li><Badge href={toTag(t.slug)} variant="secondary" class="h-7 px-3 text-sm">#{t.tag} <span class="text-muted-foreground">{t.count}</span></Badge></li>
+		<li><Badge href={toTag(t.tag)} variant="secondary" class="h-7 px-3 text-sm">#{t.tag} <span class="text-muted-foreground">{t.count}</span></Badge></li>
 	{:else}
 		<li class="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
 			{tr("tags.noMatch", { q: q.trim() })}
