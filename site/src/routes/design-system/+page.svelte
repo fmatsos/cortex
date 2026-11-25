@@ -60,6 +60,10 @@
 			{ n: "--muted" }, text("--muted-foreground", "--muted"),
 			{ n: "--accent" }, text("--accent-foreground", "--accent"),
 		] },
+		{ title: "Bande d'en-tête", rows: [
+			{ n: "--header" }, text("--header-foreground", "--header"),
+			{ n: "--header-border", pair: ["--header-border", "--header"], k: "ui", note: "filet sous l'en-tête" },
+		] },
 		{ title: "Actions, liens et états", rows: [
 			{ n: "--primary", pair: ["--primary", "--background"], k: "ui" }, text("--primary-foreground", "--primary"),
 			text("--destructive", "--background"),
