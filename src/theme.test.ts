@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Contrasts of the site theme (WCAG 2.2 AA), computed from the variables of cli/site/src/app.css:
- * the CSS stays the only source, the test fails as soon as a text/background pair drops below its threshold.
- * `CORTEX_CONTRAST_TABLE=1 bun test cli/src/theme.test.ts` prints the ratio table.
+ * Contrasts of the site theme (WCAG 2.2 AA), computed from the variables of the generated
+ * site/src/lib/design/tokens.css (itself built from design/tokens.json): the test fails as soon as a
+ * text/background pair drops below its threshold. `CORTEX_CONTRAST_TABLE=1 bun test src/theme.test.ts` prints the ratio table.
  */
-const CSS = readFileSync(join(import.meta.dir, "../site/src/app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const CSS = readFileSync(join(import.meta.dir, "../site/src/lib/design/tokens.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const APP_CSS = readFileSync(join(import.meta.dir, "../site/src/app.css"), "utf8");
 
 /** Body of the first block whose opening line is exactly `opening` (indentation included). */
 function block(opening: string): string {
@@ -20,7 +21,23 @@ const vars = (body: string) => Object.fromEntries([...body.matchAll(/(--[\w-]+):
 const LIGHT = vars(block(":root"));
 const DARK_SYSTEM = vars(block('\t:root:not([data-theme="light"])'));
 const DARK_FORCED = vars(block(':root[data-theme="dark"]'));
-const THEMES: Record<string, Record<string, string>> = { clair: LIGHT, sombre: { ...LIGHT, ...DARK_FORCED } };
+/** Resolves `var(--x)` aliases (trust tokens) against the theme they are read in. */
+function resolveAliases(t: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(t)) {
+    let value = v;
+    for (let depth = 0; /^var\(--[\w-]+\)$/.test(value); depth++) {
+      if (depth > 5) throw new Error(`alias circulaire : ${k}`);
+      const target = t[value.slice(4, -1)];
+      if (target === undefined) throw new Error(`alias non résolu : ${k} -> ${value}`);
+      value = target;
+    }
+    out[k] = value;
+  }
+  return out;
+}
+const THEMES: Record<string, Record<string, string>> = { clair: resolveAliases(LIGHT), sombre: resolveAliases({ ...LIGHT, ...DARK_FORCED }) };
+const TRUST = ["verified", "unverified", "review", "stale", "partial", "draft", "deprecated"];
 
 // --- WCAG computation ---
 type Rgb = [number, number, number];
@@ -53,8 +70,18 @@ test("chaque variable de couleur claire a son pendant sombre", () => {
   const colors = Object.keys(LIGHT).filter((k) => /^#/.test(LIGHT[k]));
   expect(colors.length).toBeGreaterThan(30);
   for (const k of colors) expect(DARK_FORCED[k], k).toBeDefined();
-  for (const k of ["--graph-edge", "--favorite", "--note-background", "--note-foreground", "--warning-background", "--warning-foreground", "--link-visited"]) expect(LIGHT[k], k).toBeDefined();
-  expect(LIGHT["--radius"]).toBe("0.75rem");
+  for (const k of ["--graph-background", "--graph-edge", "--graph-edge-active", "--graph-label", "--favorite", "--note-background", "--note-foreground", "--warning-background", "--warning-foreground", "--link-visited"]) expect(LIGHT[k], k).toBeDefined();
+  for (const k of TRUST) expect(LIGHT[`--trust-${k}`], `--trust-${k}`).toMatch(/^var\(--[\w-]+\)$/);
+});
+
+test("design carré : --radius et tous les rayons dérivés valent 0px", () => {
+  expect(LIGHT["--radius"]).toBe("0px");
+  const theme = APP_CSS.slice(APP_CSS.indexOf("@theme inline"));
+  const radii = [...theme.slice(0, theme.indexOf("\n}")).matchAll(/(--radius-[\w]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]);
+  expect(radii.map(([k]) => k).sort()).toEqual(["--radius-2xl", "--radius-3xl", "--radius-4xl", "--radius-lg", "--radius-md", "--radius-sm", "--radius-xl", "--radius-xs"]);
+  for (const [k, v] of radii) expect(v, k).toBe("0px");
+  // no numeric radius left in the stylesheet itself
+  expect(APP_CSS.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/border-radius/);
 });
 
 test("l'impression force la palette claire (noir sur blanc) quel que soit le thème", () => {
@@ -109,10 +136,16 @@ for (const k of ["add", "ingest", "query", "lint", "update"]) {
 }
 pair("--favorite", "--background");
 pair("--favorite", "--card");
+// trust states (aliases, resolved per theme): text on the surfaces where badges and marks sit
+for (const k of TRUST) for (const bg of ["--background", "--card", "--muted"]) pair(`--trust-${k}`, bg);
+pair("--trust-partial", "--warning-background");
+pair("--graph-label", "--graph-background"); // node labels on the canvas
 // graphical elements and borders that identify a control: 3:1
 pair("--input", "--background", 3); // border of a field
 pair("--input", "--card", 3);
 pair("--graph-edge", "--background", 3); // graph relations
+pair("--graph-edge", "--graph-background", 3);
+pair("--graph-edge-active", "--graph-background", 3); // highlighted relations
 pair("--ring", "--background", 3); // focus ring
 pair("--ring", "--card", 3);
 pair("--link", "--background", 3);

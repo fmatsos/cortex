@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./lib/design/tokens.css";
 
 /* theme: follows the system (prefers-color-scheme); data-theme="dark|light" forces it (palette command) */
 @custom-variant dark {
@@ -13,149 +14,18 @@
 }
 
 /*
- * Direction "mineral paper, petrol ink": tinted background, white surfaces, petrol action,
- * semantic colors reserved for data. Each text/background pair is measured by src/theme.test.ts
- * (WCAG 2.2 AA); the dark block is written twice (system, then forced) and the test checks that they stay identical.
+ * Direction "Cabinet de recherche": warm paper, dark ink, binding green. Every color token comes from
+ * design/tokens.json through the generated lib/design/tokens.css, imported at the top (`bun run design`); each text/background pair
+ * is measured by src/theme.test.ts (WCAG 2.2 AA). Only the layout metric below lives here.
  */
 :root {
 	--anchor-offset: 5rem; /* height of the sticky header: anchors land below it (taller on mobile: search on a second line) */
-	color-scheme: light dark;
-	--background: #f7f8fa;
-	--foreground: #172a34;
-	--card: #ffffff;
-	--card-foreground: #172a34;
-	--popover: #ffffff;
-	--popover-foreground: #172a34;
-	--primary: #075e75;
-	--primary-foreground: #ffffff;
-	--secondary: #e8edf1;
-	--secondary-foreground: #172a34;
-	--muted: #e8edf1;
-	--muted-foreground: #52616b;
-	--accent: #e1f1f3;
-	--accent-foreground: #103b47;
-	--destructive: #a81f37;
-	--border: #cbd5de;
-	--input: #7d8d9a; /* field border: ≥ 3:1 against the background and against a card */
-	--ring: #176b83;
-	--radius: 0.75rem;
-	--link: #075e75;
-	--link-visited: #5b3f99;
-	--mark: #f4e3a7;
-	/* one hue per page type (Concept, Entity, Synthesis, Source): badges, legend and graph; also readable as text */
-	--type-concept: #315bc5;
-	--type-entity: #9a4d07;
-	--type-synthesis: #247342;
-	--type-source: #546875;
-	--type-other: #5b6870;
-	/* one hue per log entry type */
-	--kind-add: #247342;
-	--kind-ingest: #315bc5;
-	--kind-query: #7844a1;
-	--kind-lint: #8a5a0a;
-	--kind-update: #176b83;
-	/* graph: relations (≥ 3:1 against the background) and favorites */
-	--graph-edge: #7d8d9a;
-	--favorite: #8a5a0a;
-	/* "Note personnelle" callout (the human's intent) and "Avertissement" callout (limit of the source) */
-	--note-background: #fff3da;
-	--note-foreground: #624300;
-	--warning-background: #fdece4;
-	--warning-foreground: #8a2a0b;
 }
 
 @media (max-width: 639px) {
 	:root {
 		--anchor-offset: 8.5rem;
 	}
-}
-
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) {
-		color-scheme: dark;
-		--background: #101820;
-		--foreground: #e9f0f4;
-		--card: #182630;
-		--card-foreground: #e9f0f4;
-		--popover: #182630;
-		--popover-foreground: #e9f0f4;
-		--primary: #79d6e5;
-		--primary-foreground: #10232b;
-		--secondary: #23323e;
-		--secondary-foreground: #e9f0f4;
-		--muted: #23323e;
-		--muted-foreground: #acbdc9;
-		--accent: #23434b;
-		--accent-foreground: #d8f5f8;
-		--destructive: #ff9aae;
-		--border: #354956;
-		--input: #7c929f;
-		--ring: #79d6e5;
-		--link: #79d6e5;
-		--link-visited: #c9b8f2;
-		--mark: #514218;
-		--type-concept: #9cb7ff;
-		--type-entity: #f4ba76;
-		--type-synthesis: #83d7a4;
-		--type-source: #aec2cd;
-		--type-other: #b4c0c8;
-		--kind-add: #83d7a4;
-		--kind-ingest: #9cb7ff;
-		--kind-query: #d2b0f5;
-		--kind-lint: #f0c775;
-		--kind-update: #80d2db;
-		--graph-edge: #7c929f;
-		--favorite: #f0c775;
-		--note-background: #342b1b;
-		--note-foreground: #f2d591;
-		--warning-background: #3b2420;
-		--warning-foreground: #ffbfa3;
-	}
-}
-
-:root[data-theme="dark"] {
-	color-scheme: dark;
-	--background: #101820;
-	--foreground: #e9f0f4;
-	--card: #182630;
-	--card-foreground: #e9f0f4;
-	--popover: #182630;
-	--popover-foreground: #e9f0f4;
-	--primary: #79d6e5;
-	--primary-foreground: #10232b;
-	--secondary: #23323e;
-	--secondary-foreground: #e9f0f4;
-	--muted: #23323e;
-	--muted-foreground: #acbdc9;
-	--accent: #23434b;
-	--accent-foreground: #d8f5f8;
-	--destructive: #ff9aae;
-	--border: #354956;
-	--input: #7c929f;
-	--ring: #79d6e5;
-	--link: #79d6e5;
-	--link-visited: #c9b8f2;
-	--mark: #514218;
-	--type-concept: #9cb7ff;
-	--type-entity: #f4ba76;
-	--type-synthesis: #83d7a4;
-	--type-source: #aec2cd;
-	--type-other: #b4c0c8;
-	--kind-add: #83d7a4;
-	--kind-ingest: #9cb7ff;
-	--kind-query: #d2b0f5;
-	--kind-lint: #f0c775;
-	--kind-update: #80d2db;
-	--graph-edge: #7c929f;
-	--favorite: #f0c775;
-	--note-background: #342b1b;
-	--note-foreground: #f2d591;
-	--warning-background: #3b2420;
-	--warning-foreground: #ffbfa3;
-}
-
-:root[data-theme="light"] {
-	color-scheme: light;
 }
 
 @theme inline {
@@ -182,17 +52,30 @@
 	--color-link: var(--link);
 	--color-link-visited: var(--link-visited);
 	--color-favorite: var(--favorite);
+	--color-graph-background: var(--graph-background);
 	--color-graph-edge: var(--graph-edge);
+	--color-graph-edge-active: var(--graph-edge-active);
+	--color-graph-label: var(--graph-label);
+	--color-trust-verified: var(--trust-verified);
+	--color-trust-unverified: var(--trust-unverified);
+	--color-trust-review: var(--trust-review);
+	--color-trust-stale: var(--trust-stale);
+	--color-trust-partial: var(--trust-partial);
+	--color-trust-draft: var(--trust-draft);
+	--color-trust-deprecated: var(--trust-deprecated);
 	--color-note-background: var(--note-background);
 	--color-note-foreground: var(--note-foreground);
 	--color-warning-background: var(--warning-background);
 	--color-warning-foreground: var(--warning-foreground);
-	--radius-sm: calc(var(--radius) * 0.6);
-	--radius-md: 0.5rem; /* buttons, fields: 0.5 rem */
-	--radius-lg: var(--radius);
-	--radius-xl: calc(var(--radius) * 1.4);
-	--radius-2xl: calc(var(--radius) * 1.8);
-	--radius-4xl: calc(var(--radius) * 2.6); /* pills: fully rounded */
+	/* square design: every radius is 0 (the doc's Part II); --radius itself comes from the tokens */
+	--radius-xs: 0px;
+	--radius-sm: 0px;
+	--radius-md: 0px;
+	--radius-lg: 0px;
+	--radius-xl: 0px;
+	--radius-2xl: 0px;
+	--radius-3xl: 0px;
+	--radius-4xl: 0px;
 }
 
 /* fluid page titles: 28 px on mobile, 40 px from ~1150 px wide (every h1 of the site is text-3xl) */
@@ -323,7 +206,6 @@ a.link-content:visited {
 .wiki .callout-warning {
 	margin: 1.25rem 0;
 	padding: 0.85rem 1rem;
-	border-radius: var(--radius-md);
 	border: 1px solid;
 	border-left-width: 4px;
 	color: var(--foreground);
@@ -377,12 +259,10 @@ a.link-content:visited {
 	font-family: var(--font-mono);
 	font-size: 0.88em;
 	background: var(--muted);
-	border-radius: 0.3rem;
 	padding: 0.1rem 0.35rem;
 }
 .wiki pre {
 	background: var(--muted);
-	border-radius: var(--radius-md);
 	padding: 0.9rem 1rem;
 	overflow-x: auto;
 }
@@ -400,7 +280,6 @@ a.link-content:visited {
 	overflow-x: auto;
 	border-collapse: collapse;
 	border: 1px solid var(--border);
-	border-radius: var(--radius-md);
 	font-size: 0.9375rem;
 	line-height: 1.5;
 	background:
@@ -458,7 +337,6 @@ a.link-content:visited {
 mark {
 	background: var(--mark);
 	color: inherit;
-	border-radius: 0.2rem;
 }
 
 /* touch screen: the clickable area reaches ~44 px without changing the compact look (transparent pseudo-element) */
@@ -494,7 +372,6 @@ mark {
 .wiki .fn-ref a:target,
 .note-item:target {
 	background: var(--mark);
-	border-radius: 0.2rem;
 }
 /* return from a note to the text: the call lands at a third of the screen (not stuck under the header),
    and the whole paragraph that holds it is highlighted, otherwise a highlighted "1" goes unnoticed */
@@ -504,7 +381,6 @@ mark {
 .wiki :is(p, li, td, blockquote):has(> .fn-ref a:target, > * > .fn-ref a:target) {
 	background: color-mix(in oklab, var(--mark) 45%, transparent);
 	box-shadow: -0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent), 0.5rem 0 0 color-mix(in oklab, var(--mark) 45%, transparent);
-	border-radius: 0.25rem;
 }
 @media (prefers-reduced-motion: no-preference) {
 	.wiki .fn-ref a:target {
@@ -517,49 +393,7 @@ mark {
 
 /* print: the article alone, black on white whatever the theme, without controls or navigation */
 @media print {
-	:root:not([data-theme="light"]),
-	:root[data-theme="dark"],
-	:root[data-theme="light"] {
-		color-scheme: light;
-		--background: #ffffff;
-		--foreground: #000000;
-		--card: #ffffff;
-		--muted: #f0f0f0;
-		--muted-foreground: #333333;
-		--border: #8a8a8a;
-		--link: #000000;
-		--link-visited: #000000;
-		--mark: #e6e6e6;
-		--note-background: #ffffff;
-		--note-foreground: #000000;
-		--warning-background: #ffffff;
-		--warning-foreground: #000000;
-		/* the rest: the light palette, taken as is (src/theme.test.ts checks that it does not drift) */
-		--card-foreground: #172a34;
-		--popover: #ffffff;
-		--popover-foreground: #172a34;
-		--primary: #075e75;
-		--primary-foreground: #ffffff;
-		--secondary: #e8edf1;
-		--secondary-foreground: #172a34;
-		--accent: #e1f1f3;
-		--accent-foreground: #103b47;
-		--destructive: #a81f37;
-		--input: #7d8d9a;
-		--ring: #176b83;
-		--type-concept: #315bc5;
-		--type-entity: #9a4d07;
-		--type-synthesis: #247342;
-		--type-source: #546875;
-		--type-other: #5b6870;
-		--kind-add: #247342;
-		--kind-ingest: #315bc5;
-		--kind-query: #7844a1;
-		--kind-lint: #8a5a0a;
-		--kind-update: #176b83;
-		--graph-edge: #7d8d9a;
-		--favorite: #8a5a0a;
-	}
+	/* the palette itself (black on white, whatever the theme) is generated into lib/design/tokens.css */
 	header.sticky,
 	nav,
 	aside,
