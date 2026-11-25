@@ -288,7 +288,7 @@ test("journey: everything from the panel with the keyboard, the log, replay, cle
   const toBeta = panel.getByRole("button", { name: /Beta concept/ });
   await toBeta.focus(); await page.keyboard.press("Enter");
   await expect(heading).toHaveText("Beta concept"); await expect(heading).toBeFocused();
-  await expect(panel.locator("[aria-live]")).toHaveText(/(Étape|Step) 2 (sur|of) 2/);
+  await expect(panel.locator("[aria-live]").first()).toHaveText(/(Étape|Step) 2 (sur|of) 2/);
   await panel.getByRole("button", { name: /Overview synthesis/ }).focus(); await page.keyboard.press("Space");
   await expect(heading).toHaveText("Overview synthesis"); await expect(steps).toHaveCount(3);
   await expect(panel.getByRole("link", { name: /Lire la page|Read the page/ })).toHaveAttribute("href", /syntheses\/overview/);
@@ -297,10 +297,10 @@ test("journey: everything from the panel with the keyboard, the log, replay, cle
   const replay = panel.getByRole("button", { name: /^(Rejouer|Replay)$/ });
   await replay.click();
   await expect(panel.getByRole("button", { name: /^(Arrêter|Stop)$/ })).toBeVisible();
-  await expect(panel.locator("[aria-live]")).toHaveText(/(Étape|Step) 1 (sur|of) 3/);
+  await expect(panel.locator("[aria-live]").first()).toHaveText(/(Étape|Step) 1 (sur|of) 3/);
   await page.keyboard.press("Escape");
   await expect(replay).toBeVisible();
-  await expect(panel.locator("[aria-live]")).toHaveText(/(Étape|Step) 3 (sur|of) 3/);
+  await expect(panel.locator("[aria-live]").first()).toHaveText(/(Étape|Step) 3 (sur|of) 3/);
   await replay.click();
   await expect(replay).toBeVisible({ timeout: 10_000 }); // it ends by itself
   await expect(steps).toHaveCount(3);

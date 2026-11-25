@@ -9,6 +9,8 @@
 //   ## question 1        answer 1 (blocks flattened, wiki links absolute, headings pushed under the question)
 //   ## Sources           the pages the answers cite, once each, in order
 
+import { absoluteLinks, collapseBlankLines, demoteHeadings, escapeLabel, MAX_TITLE, normalizeTitle, oneLine, prefixNotes, slugFilename, wikiUrl, yamlString } from "./markdown-export";
+
 export type ExportTurn = { question: string; answer: string; pages?: string[]; at?: string };
 export type ExportOptions = {
 	title: string;
@@ -24,21 +26,10 @@ export type ExportOptions = {
 	now?: Date;
 };
 
-export const MAX_TITLE = 120;
-
-/** One line, single spaces, at most 120 characters: the name a conversation gets from its first question. */
-export const normalizeTitle = (text: string, max = MAX_TITLE) => text.replace(/\s+/g, " ").trim().slice(0, max).trim();
+export { absoluteLinks, MAX_TITLE, normalizeTitle, wikiUrl };
 
 /** "Règles du panier : durée ?" becomes "regles-du-panier-duree.md" (60 characters at most, "conversation.md" when nothing is left). */
-export function conversationFilename(title: string): string {
-	const slug = title.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60).replace(/^-+|-+$/g, "");
-	return `${slug || "conversation"}.md`;
-}
-
-const yamlString = (s: string) => `"${s.replace(/\s+/g, " ").trim().replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
-const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-/** The text of a link: one line, brackets escaped. */
-const escapeLabel = (s: string) => oneLine(s).replace(/([[\]])/g, "\\$1");
+export const conversationFilename = (title: string) => slugFilename(title, "conversation");
 
 // ---- display blocks ---------------------------------------------------------------------------------------------------
 
@@ -78,32 +69,6 @@ export function flattenBlocks(md: string, label: (path: string) => string = (p) 
 	});
 }
 
-// ---- links, headings, footnotes ---------------------------------------------------------------------------------------
-
-/** Pieces of `md` outside code fences (even indexes) and the fences themselves (odd): the rewrites below leave code alone. */
-const CODE = /(```[\s\S]*?(?:```|$))/g;
-const outsideCode = (md: string, f: (prose: string) => string) => md.split(CODE).map((p, i) => (i % 2 ? p : f(p))).join("");
-
-/** URL of a wiki file (`wiki/concepts/x.md`) on the site: `wiki/concepts/x/`; the index is the home page, the log has its own. */
-export function wikiUrl(path: string, site: string): string {
-	const p = path.replace(/^\//, "");
-	if (p === "wiki/index.md") return site;
-	if (p === "wiki/log.md") return `${site}log/`;
-	return `${site}${p.replace(/\.md$/, "")}/`;
-}
-
-const WIKI_LINK = /\]\(\/?(wiki\/[^)\s#]+\.md)(#[^)\s]*)?\)/g;
-const RAW_LINK = /\[([^\]\n]*)\]\(\/?raw\/[^)\s]*\)/g;
-/** `](/wiki/x.md#a)` becomes `](https://site/wiki/x/#a)`; a link to `raw/` (not published) is left as its label. */
-export const absoluteLinks = (md: string, site: string) =>
-	outsideCode(md, (p) => p.replace(RAW_LINK, "$1").replace(WIKI_LINK, (_, path: string, frag = "") => `](${wikiUrl(path, site)}${frag})`));
-
-/** Footnote ids are numbered per answer: in one document `[^1]` of two answers would collide. */
-const prefixNotes = (md: string, n: number) => outsideCode(md, (p) => p.replace(/\[\^([\w-]+)\]/g, (_, id: string) => `[^q${n}-${id}]`));
-
-/** An answer's headings go under its question (`##`): `#`, `##` become `###`, `####`, six levels at most. */
-const demoteHeadings = (md: string) => outsideCode(md, (p) => p.replace(/^(#{1,6})([ \t])/gm, (_, h: string, s: string) => `${"#".repeat(Math.min(6, h.length + 2))}${s}`));
-
 // ---- the document -----------------------------------------------------------------------------------------------------
 
 export function conversationMarkdown(o: ExportOptions): string {
@@ -114,7 +79,7 @@ export function conversationMarkdown(o: ExportOptions): string {
 	const body = o.turns.flatMap((t, i) => [
 		`## ${oneLine(t.question)}`,
 		"",
-		prefixNotes(demoteHeadings(absoluteLinks(flattenBlocks(t.answer.trim(), labelOf), o.site)), i + 1).trim(),
+		prefixNotes(demoteHeadings(absoluteLinks(flattenBlocks(t.answer.trim(), labelOf), o.site)), `q${i + 1}-`).trim(),
 		"",
 	]);
 	const ids = [...new Set(o.turns.flatMap((t) => t.pages ?? []))];
@@ -137,5 +102,5 @@ export function conversationMarkdown(o: ExportOptions): string {
 		...sources,
 	].join("\n");
 	// the blank lines a flattened block adds are collapsed; code is left as written
-	return `${outsideCode(doc, (p) => p.replace(/\n{3,}/g, "\n\n")).replace(/\n+$/, "")}\n`;
+	return `${collapseBlankLines(doc).replace(/\n+$/, "")}\n`;
 }

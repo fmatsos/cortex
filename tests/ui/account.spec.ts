@@ -262,7 +262,7 @@ test.describe("account page", () => {
     await expect(resume).toHaveAttribute("title", /Resume the conversation « Alpha question »/);
   });
 
-  test("without the assistant (no /api/ask) Resume is inert, Export of a conversation works; Export of a journey waits for phase D", async ({ page }) => {
+  test("without the assistant (no /api/ask) Resume is inert, Export of a conversation and of a journey work", async ({ page }) => {
     await mockApi(page, newMock({ me: ADA }));
     await page.goto("/account/");
     const conversations = page.getByRole("region", { name: "Conversations" });
@@ -272,8 +272,7 @@ test.describe("account page", () => {
     await resume.click({ force: true }); // aria-disabled: Playwright would wait for it to be enabled
     await expect(conversations.getByRole("button", { name: /^Export the conversation « Alpha question » as Markdown$/ })).not.toHaveAttribute("aria-disabled", "true");
     const exportJourney = page.getByRole("region", { name: /^(Journeys|Voyages)$/ }).getByRole("button", { name: /^Export the journey « Alpha to Beta »$/ });
-    await expect(exportJourney).toHaveAttribute("aria-disabled", "true");
-    await exportJourney.click({ force: true });
+    await expect(exportJourney).not.toHaveAttribute("aria-disabled", "true"); // phase D plugs it in (tests/ui/journey-save.spec.ts exercises it)
   });
 
   test("the search field filters after 250 ms and a late answer never replaces a newer one", async ({ page }) => {
