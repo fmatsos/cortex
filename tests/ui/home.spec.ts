@@ -150,3 +150,16 @@ test("no horizontal overflow of the home page at 390", async ({ page }) => {
   const box = (await news.boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(390);
 });
+
+// The home tab carries a translated subtitle; the other pages keep "Page · Cortex".
+test("home: the tab title is 'Cortex · subtitle' in both languages", async ({ page }) => {
+  await page.goto("/");
+  const pick = async (name: string) => {
+    await page.getByRole("banner").getByRole("button", { name: /^(Préférences|Preferences)$/ }).click();
+    await page.getByRole("menu").getByRole("menuitemradio", { name, exact: true }).click();
+  };
+  await pick("Français");
+  await expect(page).toHaveTitle("Cortex · Wiki de connaissances");
+  await pick("English");
+  await expect(page).toHaveTitle("Cortex · Knowledge wiki");
+});

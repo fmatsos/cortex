@@ -38,7 +38,7 @@
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
-<svelte:head><title>Cortex</title></svelte:head>
+<svelte:head><title>{t("home.title")}</title></svelte:head>
 
 <!-- search is the entry point: a large field, examples that give results, recent searches -->
 <section aria-labelledby="h-home" class="mx-auto max-w-3xl pt-2 pb-6 sm:pt-8">
