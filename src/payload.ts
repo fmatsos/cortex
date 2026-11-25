@@ -35,6 +35,20 @@ export function pruneModules(dir: string, platform = process.platform, arch = pr
 
 const asBun = { ...process.env, BUN_BE_BUN: "1" }; // the compiled binary behaves as the bun it embeds (no effect on a real bun)
 
+/** A build payload folder, `<version>-<12 hex>`, or one being extracted (`.tmp-<pid>`): the only folders of the cache that this module owns. */
+const PAYLOAD_DIR = /^\d+\.\d+\.\d+[^/]*-[0-9a-f]{12}(\.tmp-.+)?$/;
+
+/**
+ * A new build is in place: earlier payloads (~175 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour.
+ * Anything else in the cache folder (models/, native/: caches that outlive a version) is never touched.
+ */
+export function pruneOldPayloads(base: string, keep: string) {
+  for (const old of readdirSync(base)) {
+    const p = join(base, old);
+    if (old !== keep && PAYLOAD_DIR.test(old) && (!old.includes(".tmp-") || Date.now() - statSync(p).mtimeMs > 3_600_000)) rmSync(p, { recursive: true, force: true });
+  }
+}
+
 /**
  * In a distributed build (binary or cortex.js bundle), runs this command from the embedded sources: Vite (cortex export) needs real files and its
  * native bindings on disk. Once per build, the tarball is extracted to ~/.cache/cortex/<version>-<hash>/ and the locked
@@ -59,11 +73,7 @@ export async function runFromSources(root: string): Promise<number> {
       pruneModules(tmp);
       renameSync(tmp, dir);
       // ponytail: no lock; a different build exporting at this very moment loses its folder and fails (rerun it).
-      // a new build is in place: earlier versions (~175 MB each) go; folders being extracted (.tmp-) stay unless abandoned for over an hour
-      for (const old of readdirSync(dirname(dir))) {
-        const p = join(dirname(dir), old);
-        if (old !== basename(dir) && (!old.includes(".tmp-") || Date.now() - statSync(p).mtimeMs > 3_600_000)) rmSync(p, { recursive: true, force: true });
-      }
+      pruneOldPayloads(dirname(dir), basename(dir));
     } catch (e) {
       rmSync(tmp, { recursive: true, force: true });
       if (!existsSync(dir)) throw e; // otherwise a concurrent run extracted it first
