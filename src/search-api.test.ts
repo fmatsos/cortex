@@ -80,6 +80,14 @@ test("operators: the site's own matcher on the site's own metadata (tags, type, 
   for (const q of ["status:draft", "status:stable", "is:verified"]) expect([q, (await ids(root, q, { limit: 50 })).sort()]).toEqual([q, bare.filter((d) => matches(d, parseQuery(q), () => false)).map((d) => d.id).sort()]);
 });
 
+test("an OR branch without free text (`lasagnes OR type:source`) also lists the pages that satisfy it, after the words' hits", async () => {
+  const root = await wiki();
+  const hits = (await searchSite(root, "lasagnes OR type:source", { limit: 50 })).body.hits as SearchHit[];
+  expect(hits.map((h) => h.id)).toEqual(["concepts/lasagnes", "entities/garfield", "sources/src"]); // the words' hits first, then the Source page that has no "lasagnes"
+  expect(hits.map((h) => h.match)).toEqual(["lexical", "lexical", "filter"]);
+  expect((await ids(root, "lasagnes OR #nope"))).toEqual(["concepts/lasagnes", "entities/garfield"]); // a branch that no page satisfies adds nothing
+});
+
 test("is:fav belongs to the browser: ignored, said so, never excluding anything; empty and oversized queries are refused", async () => {
   const root = await wiki();
   const r = await searchSite(root, "chat is:fav -is:fav (is:fav OR #pet)");

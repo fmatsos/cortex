@@ -143,13 +143,14 @@ export async function searchSite(root: string, q: string, opts: SearchOpts = {})
   const ok = (p: Page) => matches(doc(p), parsed, () => false, needsText ? undefined : "");
 
   type Found = { page: Page; match: SearchMatch; score: number; extract: string };
+  /** The pages that pass the whole predicate, by title, listed as the site does a query with operators only. */
+  const byFilter = (list: Page[]): Found[] => list.sort((a, b) => collator.compare(doc(a).title, doc(b).title) || a.path.localeCompare(b.path))
+    .map((page) => ({ page, match: "filter", score: 0, extract: clip(doc(page).description, LIMITS.snippetChars) }));
   let found: Found[];
   const text = freeText(q);
   if (isEmpty(parsed)) found = [];
-  else if (!hasText(parsed) || !text) {
-    found = pages.filter(ok).sort((a, b) => collator.compare(doc(a).title, doc(b).title) || a.path.localeCompare(b.path))
-      .map((page) => ({ page, match: "filter", score: 0, extract: clip(doc(page).description, LIMITS.snippetChars) }));
-  } else {
+  else if (!hasText(parsed) || !text) found = byFilter(pages.filter(ok));
+  else {
     // all the words, else any of them (a question rarely has every word in one page); an OR group asks for any from the start
     const find = (any: boolean) => search(root, text, { in: "wiki", limit: LIMITS.searchPool, any }).catch(() => []);
     const first = parsed.groups.length ? await find(true) : await find(false);
@@ -158,6 +159,11 @@ export async function searchSite(root: string, q: string, opts: SearchOpts = {})
       const page = byPath.get(h.path);
       return page && ok(page) ? [{ page, match: h.match, score: Math.round(-h.score * 1e6) / 1e6, extract: h.snippet.replace(/[«»]/g, "").replace(/\s+/g, " ").trim() }] : [];
     });
+    // `alpha OR type:Source`: an alternative without free text is satisfied by pages the words never found; they come after the words' hits
+    if (!parsed.words.length && parsed.groups.some((g) => !g.neg && g.alts.some((a) => !hasText(a)))) {
+      const have = new Set(found.map((f) => f.page.path));
+      found.push(...byFilter(pages.filter((p) => !have.has(p.path) && ok(p))));
+    }
   }
 
   const view = (f: Found): SearchHit => ({ id: pageId(f.page.path), path: f.page.path, title: doc(f.page).title, type: doc(f.page).type, extract: f.extract, match: f.match, score: f.score });
