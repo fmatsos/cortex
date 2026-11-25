@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { onMount, tick } from "svelte";
 	import Icon from "#lib/components/icon.svelte";
 	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -7,9 +7,10 @@
 	import { toRoute } from "#lib/links.js";
 	import { theme, type Mode } from "#lib/theme.svelte.js";
 	import { lang, type LangChoice } from "#lib/lang.svelte.js";
+	import { reading } from "#lib/reading.svelte.js";
 	import { defaultLocale, LOCALE_NAMES, t } from "#lib/i18n/index.js";
 
-	// The header's one preferences menu: theme, interface language (never the wiki content) and the offline status. On a server
+	// The header's one preferences menu: theme, interface language (never the wiki content), reading comfort and the offline status. On a server
 	// with sign-in (account.svelte.ts) it is also the account menu: the button reads "Account" and the menu adds the sign-in
 	// methods (signed out) or the identity, the page of the account and "Sign out" (signed in). Where there is no account
 	// (static site, server out of reach) nothing of it shows: it stays the preferences menu.
@@ -21,6 +22,10 @@
 	const label = $derived(account.enabled ? t("account.label") : t("prefs.label"));
 	const named = $derived(me ? t("account.named", { name: me.name }) : label);
 	const THEMES = [["system", "system", "theme.option.system"], ["light", "sun", "theme.option.light"], ["dark", "moon", "theme.option.dark"]] as const;
+
+	// Reading comfort (local, off by default): the two options are toggles, the menu stays open to see the effect.
+	onMount(() => reading.init());
+	const READING = [["reading", "prefs.reading.article"], ["comfort", "prefs.reading.assistant"]] as const;
 
 	// Changing the language re-renders the whole layout (`{#key lang.current}`), trigger included: the focus is given back
 	// to the new one once it exists.
@@ -62,6 +67,17 @@
 					<DropdownMenu.RadioItem value="en" lang="en" onSelect={pickLang}>{LOCALE_NAMES.en}</DropdownMenu.RadioItem>
 					<DropdownMenu.RadioItem value="fr" lang="fr" onSelect={pickLang}>{LOCALE_NAMES.fr}</DropdownMenu.RadioItem>
 				</DropdownMenu.RadioGroup>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Label id="{uid}-reading">{t("prefs.reading")}</DropdownMenu.Label>
+				<div role="group" aria-labelledby="{uid}-reading">
+					{#each READING as [which, label]}
+						{@const checked = which === "reading" ? reading.article : reading.assistant}
+						<DropdownMenu.Item role="menuitemcheckbox" aria-checked={checked} closeOnSelect={false} class="pl-8" onSelect={() => (which === "reading" ? reading.setArticle(!checked) : reading.setAssistant(!checked))}>
+							{#if checked}<span aria-hidden="true" class="bg-current pointer-events-none absolute left-3 size-2"></span>{/if}
+							{t(label)}
+						</DropdownMenu.Item>
+					{/each}
+				</div>
 				<DropdownMenu.Separator />
 				{@render section()}
 				{#if me}

@@ -111,6 +111,26 @@ test.describe("export", () => {
     await expect(message(page)).toContainText("Journey exported.");
   });
 
+  test("the path draft: the route as a reading path file (goal to write, one step per page), not the journey", async ({ page }) => {
+    await open(page, newMock({ me: null, providers: null }), [ALPHA, BETA, ALPHA]);
+    const [dl] = await Promise.all([page.waitForEvent("download"), button(page, "Export as a reading path draft").click()]);
+    expect(dl.suggestedFilename()).toBe("journey-alpha-concept-alpha-concept.md");
+    const md = await read(dl);
+    expect(md).toMatch(/^---\ntitle: "Journey: Alpha concept → Alpha concept"\ngoal: ""\n---\n\n1\. \[Alpha concept\]\(\/wiki\/concepts\/alpha\.md\): /);
+    expect(md).toContain("2. [Beta concept](/wiki/concepts/beta.md): cites and is cited by step 1");
+    expect(md).not.toContain("kind: journey"); // not the journey export
+    expect(md.match(/^\d+\. \[/gm)).toHaveLength(2); // a page walked twice is one step
+    await expect(message(page)).toContainText("Path draft exported.");
+  });
+
+  test("the path draft button follows the language", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("cortex:lang", "fr"));
+    await open(page, newMock({ me: null, providers: null }), [ALPHA, BETA]);
+    const [dl] = await Promise.all([page.waitForEvent("download"), button(page, "Exporter comme brouillon de parcours").click()]);
+    expect(dl.suggestedFilename()).toBe("voyage-alpha-concept-beta-concept.md");
+    await expect(message(page)).toContainText("Brouillon de parcours exporté.");
+  });
+
   test("a page walked twice is given in full once", async ({ page }) => {
     await open(page, newMock({ me: null, providers: null }), [ALPHA, BETA, ALPHA]);
     const [dl] = await Promise.all([page.waitForEvent("download"), button(page, EXPORT).click()]);

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { t as tr } from "#lib/i18n/index.js";
+	import { contentLang, t as tr } from "#lib/i18n/index.js";
+	import { isBodyHeading } from "#lib/article.js";
 	import Icon from "#lib/components/icon.svelte";
 	import Toc from "#lib/components/toc.svelte";
 	import type { TocItem } from "#lib/types.js";
@@ -24,7 +25,7 @@
 	>
 		<Icon name="toc" size={20} />
 		<span>{tr("page.toc")}</span>
-		{#if now}<span class="text-muted-foreground min-w-0 truncate font-normal">· {now}</span>{/if}
+		{#if now}<span lang={isBodyHeading(current) ? contentLang : undefined} class="text-muted-foreground min-w-0 truncate font-normal">· {now}</span>{/if}
 	</button>
 
 	<div id="toc-sheet" popover="auto" bind:this={sheet} aria-labelledby="toc-sheet-title" class="toc-sheet bg-popover text-popover-foreground">
@@ -48,7 +49,6 @@
 		overflow-y: auto;
 		border: 0;
 		border-top: 1px solid var(--input);
-		border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 		padding: 1rem 1rem 1.25rem;
 		box-shadow: var(--shadow-overlay);
 	}

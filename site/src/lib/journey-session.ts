@@ -5,7 +5,7 @@ import { ApiError } from "./api";
 import { download, siteUrl } from "./export-file";
 import { relationIndex } from "./graph-model";
 import { t } from "./i18n/index";
-import { journeyFilename, journeyMarkdown, type JourneyPage } from "./journey-markdown";
+import { journeyFilename, journeyMarkdown, pathDraftMarkdown, type JourneyPage } from "./journey-markdown";
 import { serializeRoute } from "./journey";
 import { createJourney, getJourney, updateJourney, type Journey } from "./journeys";
 import { toPage } from "./links";
@@ -69,14 +69,18 @@ async function loadPages(ids: readonly string[], graph: GraphData): Promise<{ pa
 	return { pages, partial };
 }
 
-/** Writes the journey `route` as Markdown and downloads it. `graph`: the graph the page already holds, to spare a request. Throws when the graph cannot be read. */
-export async function exportRoute(o: { route: readonly string[]; title: string; created?: string; graph?: GraphData }): Promise<{ partial: boolean }> {
+/**
+ * Writes the journey `route` as Markdown and downloads it. `graph`: the graph the page already holds, to spare a request.
+ * `format: "path"`: a draft of a reading path (what goes in `<wiki>/paths/`) instead of the whole journey. Throws when the graph cannot be read.
+ */
+export async function exportRoute(o: { route: readonly string[]; title: string; created?: string; graph?: GraphData; format?: "journey" | "path" }): Promise<{ partial: boolean }> {
 	const graph = o.graph ?? await fetchGraph();
 	const { pages, partial } = await loadPages(o.route, graph);
 	// the links of the whole graph, not of the filters on screen: the export says how each step is linked to the one before it
 	const relations = relationIndex(graph);
-	const text = journeyMarkdown({ title: o.title, route: o.route, pages, relations, site: siteUrl(), t, typeLabel, created: o.created });
-	download(journeyFilename(o.title, t("journey.export.fileName")), text);
+	const draft = o.format === "path";
+	const text = draft ? pathDraftMarkdown({ title: o.title, route: o.route, pages, relations, t }) : journeyMarkdown({ title: o.title, route: o.route, pages, relations, site: siteUrl(), t, typeLabel, created: o.created });
+	download(journeyFilename(o.title, t(draft ? "paths.draft.fileName" : "journey.export.fileName")), text);
 	return { partial };
 }
 

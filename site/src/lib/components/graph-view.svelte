@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from "svelte";
+	import { storageKey } from "#lib/storage.js";
 	import { goto, replaceState } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { account } from "#lib/account.svelte.js";
@@ -17,7 +18,7 @@
 	import type { GraphData } from "#lib/types.js";
 	import type { createGraph } from "#lib/graph-sigma.js";
 	import { TYPES, typeColor, typeLabel, typePlural } from "#lib/type-meta.js";
-	import { t as tr } from "#lib/i18n/index.js";
+	import { contentLang, t as tr } from "#lib/i18n/index.js";
 
 	let el: HTMLDivElement, labels: HTMLDivElement;
 	let raw = $state<GraphData>();
@@ -33,6 +34,13 @@
 	let playing = $state(false);
 	let live = $state("");
 	let heading = $state<HTMLElement>();
+	let selHeading = $state<HTMLElement>(); // title of the selection panel: where the focus goes when its control disappeared
+	let announce = $state(""); // polite, outside the panel (which does not exist yet when the selection is made)
+	// link animation (dots along the selected page's links): on by default, stopped with a text control, remembered here;
+	// `calm` = the system already asks for no motion, the control is then pointless
+	const FLOW = storageKey("graph-flow");
+	let animate = $state(true);
+	let calm = $state(false);
 	let run = 0; // replay generation: any other move bumps it and the replay stops
 	let notice = $state("");
 	let query = $state("");
@@ -41,7 +49,7 @@
 	let controller: ReturnType<typeof createGraph> | undefined;
 	let apply: ((v: GraphView) => void) | undefined;
 	let retry: () => void = () => {};
-	let pendingFocus: string | null = null;
+	let pendingFocus: string | null = null, pendingPanel = false;
 	const EMPTY: GraphView = { nodes: [], links: [], ids: new Set() };
 	const view = $derived(raw ? buildView(raw, { off, tag }) : EMPTY);
 	const shown = $derived(view.nodes.length);
@@ -133,13 +141,21 @@
 		untrack(() => void flow.resolve(signedIn));
 	});
 
-	async function focusNode(id: string) {
+	/** The control that was used is gone (list closed, neighbour list rebuilt): the focus goes to the panel's title, with a short announcement. */
+	async function toPanel() {
+		await tick();
+		if (mode !== "journey") { announce = ""; await tick(); announce = `${tr("graph.selected")}${tr("common.colon")}${sel?.title ?? ""}, ${tr("graph.neighbors", { count: neighborCount })}`; }
+		(mode === "journey" ? heading : selHeading)?.focus();
+	}
+	const stopFlow = () => { animate = !animate; controller?.flow(animate); try { animate ? localStorage.removeItem(FLOW) : localStorage.setItem(FLOW, "off"); } catch { /* per-viewer convenience only */ } };
+	/** `panel`: the request comes from a control that disappears (the list), so the focus must land somewhere. */
+	async function focusNode(id: string, panel = false) {
 		if (!raw?.nodes.some((n) => n.id === id)) { notice = tr("graph.notInGraph"); return; }
 		notice = "";
 		if (listMode) { listMode = false; await tick(); }
-		if (!view.ids.has(id)) { pendingFocus = id; notice = tr("graph.filtersReset"); off = new Set(); tag = ""; return; }
+		if (!view.ids.has(id)) { pendingFocus = id; pendingPanel = panel; notice = tr("graph.filtersReset"); off = new Set(); tag = ""; return; }
 		const n = nodeById(id);
-		if (n) { if (mode === "journey") pick(id); else select(n, "focus"); }
+		if (n) { if (mode === "journey") pick(id); else select(n, "focus"); if (panel) await toPanel(); }
 	}
 	const choose = (id: string) => { query = ""; searchOpen = false; active = 0; void focusNode(id); };
 	function onSearchKey(e: KeyboardEvent) {
@@ -154,7 +170,9 @@
 	onMount(() => {
 		let generation = 0;
 		const motion = matchMedia("(prefers-reduced-motion: reduce)"), theme = matchMedia("(prefers-color-scheme: dark)");
-		const onMotion = () => controller?.motion(motion.matches), onTheme = () => controller?.theme();
+		const onMotion = () => { calm = motion.matches; controller?.motion(motion.matches); }, onTheme = () => controller?.theme();
+		calm = motion.matches;
+		try { animate = localStorage.getItem(FLOW) !== "off"; } catch { /* default: on */ }
 		motion.addEventListener("change", onMotion); theme.addEventListener("change", onTheme);
 		window.addEventListener("themechange", onTheme);
 		const teardown = () => { generation++; controller?.kill(); controller = undefined; apply = undefined; ready = false; };
@@ -169,11 +187,12 @@
 				const [{ createGraph }] = await Promise.all([import("#lib/graph-sigma.js"), document.fonts.ready]);
 				if (me !== generation) return;
 				controller = createGraph(el, labels, g, { select: (id) => { if (mode !== "journey") select(id ? nodeById(id) ?? null : null); else if (id) pick(id); }, open: (id) => { void goto(toPage(id)); }, favorite: (id) => favs.has(id) });
+				controller.flow(animate);
 				apply = (v) => {
 					const keep = reconcileSelection(sel?.id, v.ids);
 					sel = keep ? v.nodes.find((n) => n.id === keep) ?? null : null;
 					controller!.apply(v); controller!.select(sel?.id ?? null);
-					if (pendingFocus && v.ids.has(pendingFocus)) { const id = pendingFocus; pendingFocus = null; void focusNode(id); }
+					if (pendingFocus && v.ids.has(pendingFocus)) { const id = pendingFocus, panel = pendingPanel; pendingFocus = null; pendingPanel = false; void focusNode(id, panel); }
 				};
 				const params = new URLSearchParams(location.search), asked = params.get("view");
 				mode = asked === "map" || asked === "journey" ? asked : "graph";
@@ -248,6 +267,10 @@
 	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1.5)} aria-label={tr("graph.zoomIn")}><Icon name="zoom-in" size={16} /></Button>
 	<Button variant="outline" size="icon-sm" disabled={!ready || listMode} onclick={() => zoomBy(1 / 1.5)} aria-label={tr("graph.zoomOut")}><Icon name="zoom-out" size={16} /></Button>
 	<Button variant="outline" size="sm" disabled={!ready || listMode} onclick={() => fit?.()}><Icon name="fit-view" size={16} />{tr("graph.recenter")}</Button>
+	{#if !calm}
+		<!-- the dots along a hovered or selected page's links never stop by themselves: a text control stops them (selection and links stay) -->
+		<Button variant="outline" size="sm" disabled={!ready || listMode} data-flow-toggle onclick={stopFlow}><Icon name={animate ? "pause" : "play"} size={16} />{animate ? tr("graph.flow.stop") : tr("graph.flow.resume")}</Button>
+	{/if}
 
 	<div class="relative ml-auto w-full sm:w-72">
 		<label for="graph-search" class="sr-only">{tr("graph.search.label")}</label>
@@ -282,7 +305,7 @@
 						onmousemove={() => { active = i; }}
 					>
 						{@render shape(r.type)}
-						<span class="truncate">{r.title}</span>
+						<span lang={contentLang} class="truncate">{r.title}</span>
 						<span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(r.type)}{view.ids.has(r.id) ? "" : ` · ${tr("graph.hidden")}`}</span>
 					</li>
 				{:else}
@@ -293,6 +316,7 @@
 	</div>
 </div>
 <p role="status" class="text-muted-foreground mt-2 min-h-5 text-sm">{notice}</p>
+<p class="sr-only" role="status" data-graph-announce>{announce}</p>
 
 <div class="mt-1 grid min-w-0 gap-3 {sel || mode === 'journey' ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : ''}" class:hidden={listMode}>
 <div data-graph-surface class="bg-card relative h-[45vh] min-h-[320px] min-w-0 overflow-hidden border sm:h-[60vh] sm:min-h-[360px]">
@@ -328,7 +352,7 @@
 				{@const cur = nodesById.get(step)}
 				<section aria-labelledby="journey-now" class="flex flex-col gap-2">
 					<p class="text-muted-foreground text-sm">{tr("journey.step", { n: route.length })}</p>
-					<h2 id="journey-now" bind:this={heading} tabindex="-1" class="text-base leading-snug font-semibold focus-visible:outline-2">{titles.get(step) ?? step}</h2>
+					<h2 id="journey-now" bind:this={heading} tabindex="-1" lang={contentLang} class="text-base leading-snug font-semibold focus-visible:outline-2">{titles.get(step) ?? step}</h2>
 					{#if cur}<div><TypeBadge type={cur.type} /></div>{/if}
 					<Button href={toPage(step)} size="sm" class="self-start"><Icon name="external-link" size={16} />{tr("journey.read")}</Button>
 				</section>
@@ -342,6 +366,7 @@
 						<Button variant="outline" size="sm" aria-label={account.me ? tr("journey.save.label") : tr("journey.save.signIn")} aria-disabled={flow.busy || !!flow.wanted || undefined} class={flow.busy || flow.wanted ? "cursor-not-allowed opacity-50" : ""} onclick={() => flow.save()}><Icon name="save" size={16} />{tr("journey.save")}</Button>
 					{/if}
 					<Button variant="outline" size="sm" aria-label={tr("journey.exportAction.label")} aria-busy={flow.exporting || undefined} aria-disabled={flow.exporting || undefined} class={flow.exporting ? "cursor-not-allowed opacity-50" : ""} onclick={() => void flow.export()}><Icon name="export-markdown" size={16} />{tr("journey.exportAction")}</Button>
+					<Button variant="outline" size="sm" aria-label={tr("journey.draftAction.label")} aria-disabled={flow.exporting || undefined} class={flow.exporting ? "cursor-not-allowed opacity-50" : ""} onclick={() => void flow.export("path")}><Icon name="journey" size={16} />{tr("journey.draftAction")}</Button>
 				</div>
 				<!-- the state of the saved copy (with an account only) and the short message that says what just happened: both always present, so that a change is announced -->
 				<p aria-live="polite" data-journey-state={flow.state || "none"} class="text-muted-foreground -mt-2 flex min-h-4 items-center gap-1.5 text-xs leading-4 {flow.state ? '' : 'sr-only'}">
@@ -365,7 +390,7 @@
 							<h3 class="text-muted-foreground mb-1 text-sm">{g.label} ({g.nodes.length})</h3>
 							<ul class="flex flex-col">
 								{#each g.nodes as m (m.id)}
-									<li><button type="button" onclick={() => advance(m.id)} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 w-full items-center gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3">{@render shape(m.type, 12)}<span class="truncate">{m.title}</span><span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(m.type)}</span></button></li>
+									<li><button type="button" onclick={() => advance(m.id)} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 w-full items-center gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3">{@render shape(m.type, 12)}<span lang={contentLang} class="truncate">{m.title}</span><span class="text-muted-foreground ml-auto shrink-0 text-xs">{typeLabel(m.type)}</span></button></li>
 								{/each}
 							</ul>
 						</section>
@@ -383,7 +408,7 @@
 					<ol class="flex flex-col">
 						{#each route as id, i (`${i}:${id}`)}
 							<li class="flex items-center">
-								<button type="button" aria-current={i === route.length - 1 ? "step" : undefined} onclick={() => setRoute(truncateRoute(route, i))} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 min-w-0 flex-1 items-baseline gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3 {i === route.length - 1 ? 'font-semibold' : ''}"><span class="text-muted-foreground w-5 shrink-0 text-right tabular-nums" aria-hidden="true">{i + 1}</span><span class="truncate">{titles.get(id) ?? id}</span></button>
+								<button type="button" aria-current={i === route.length - 1 ? "step" : undefined} onclick={() => setRoute(truncateRoute(route, i))} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 flex min-h-9 min-w-0 flex-1 items-baseline gap-2 px-2 py-1 text-left text-sm focus-visible:ring-3 {i === route.length - 1 ? 'font-semibold' : ''}"><span class="text-muted-foreground w-5 shrink-0 text-right tabular-nums" aria-hidden="true">{i + 1}</span><span lang={contentLang} class="truncate">{titles.get(id) ?? id}</span></button>
 								<Button variant="ghost" size="icon-sm" href={toPage(id)} aria-label={tr("journey.openStep", { title: titles.get(id) ?? id })}><Icon name="external-link" size={16} /></Button>
 							</li>
 						{/each}
@@ -399,9 +424,9 @@
 				<TypeBadge type={sel.type} />
 				<Button variant="ghost" size="icon-sm" onclick={() => select(null)} aria-label={tr("graph.deselect")}><Icon name="close-selection" size={16} /></Button>
 			</div>
-			<h2 class="text-base leading-snug font-semibold">{sel.title}</h2>
+			<h2 bind:this={selHeading} tabindex="-1" lang={contentLang} class="text-base leading-snug font-semibold">{sel.title}</h2>
 			<p class="text-muted-foreground text-sm">{tr("graph.neighbors", { count: neighborCount })}{#if neighborCount > 30} · {tr("graph.nearestFrame")}{/if}</p>
-			{#if sel.description}<p class="text-muted-foreground text-sm">{sel.description}</p>{/if}
+			{#if sel.description}<p lang={contentLang} class="text-muted-foreground text-sm">{sel.description}</p>{/if}
 			<Button href={toPage(sel.id)} size="sm" class="self-start">{tr("graph.open")}</Button>
 			{#if rel.cites.length || rel.citedBy.length}
 				{#each [{ label: tr("graph.cites"), ids: rel.cites }, { label: tr("graph.citedBy"), ids: rel.citedBy }] as g (g.label)}
@@ -412,7 +437,7 @@
 								{#each g.ids as id (id)}
 									{@const m = nodesById.get(id)}
 									{#if m}
-										<li class="max-w-full"><button type="button" onclick={() => { const n = nodeById(id); if (n) select(n, "always"); }} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 inline-flex min-h-7 max-w-full items-center gap-1.5 border px-2.5 py-1 text-left text-sm focus-visible:ring-3">{@render shape(m.type, 12)}<span class="truncate">{m.title}</span></button></li>
+										<li class="max-w-full"><button type="button" onclick={() => { const n = nodeById(id); if (n) { select(n, "always"); void toPanel(); } }} class="hover:bg-muted focus-visible:ring-ring/50 pointer-coarse:min-h-11 inline-flex min-h-7 max-w-full items-center gap-1.5 border px-2.5 py-1 text-left text-sm focus-visible:ring-3">{@render shape(m.type, 12)}<span lang={contentLang} class="truncate">{m.title}</span></button></li>
 									{/if}
 								{/each}
 							</ul>
@@ -437,16 +462,16 @@
 				<li id={rowId(n.id)} class="anchor-target bg-card border p-3 [contain-intrinsic-size:auto_9rem] [content-visibility:auto]">
 					<div class="flex flex-wrap items-center gap-2">
 						<TypeBadge type={n.type} />
-						<h3 class="text-base leading-snug font-semibold">{n.title}</h3>
+						<h3 lang={contentLang} class="text-base leading-snug font-semibold">{n.title}</h3>
 					</div>
 					<div class="touch-gap mt-2 flex flex-wrap gap-2">
 						<Button size="sm" variant="outline" href={toPage(n.id)}><Icon name="external-link" size={16} />{tr("graph.open")}</Button>
-						<Button size="sm" variant="outline" onclick={() => focusNode(n.id)}><Icon name="graph" size={16} />{tr("graph.selectInGraph")}</Button>
+						<Button size="sm" variant="outline" onclick={() => focusNode(n.id, true)}><Icon name="graph" size={16} />{tr("graph.selectInGraph")}</Button>
 					</div>
 					{#each [{ label: tr("graph.cites"), ids: r?.cites ?? [] }, { label: tr("graph.citedBy"), ids: r?.citedBy ?? [] }] as g (g.label)}
 						{#if g.ids.length}
 							<p class="mt-2 text-sm"><span class="text-muted-foreground">{g.label} :</span>
-								{#each g.ids as id, i (id)}{#if i}{", "}{/if}<a href="#{rowId(id)}" class="text-link underline underline-offset-3">{titles.get(id) ?? id}</a>{/each}</p>
+								{#each g.ids as id, i (id)}{#if i}{", "}{/if}<a href="#{rowId(id)}" lang={contentLang} class="text-link underline underline-offset-3">{titles.get(id) ?? id}</a>{/each}</p>
 						{/if}
 					{/each}
 				</li>

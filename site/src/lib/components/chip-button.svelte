@@ -13,7 +13,6 @@
 		min-height: 2rem;
 		align-items: center;
 		gap: 0.375rem;
-		border-radius: 9999px;
 		border: 1px solid var(--border);
 		background: var(--card);
 		padding-inline: 0.75rem;

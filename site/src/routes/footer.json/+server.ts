@@ -1,4 +1,5 @@
 import { dataFile, site } from "#lib/server/data.js";
+import { readingPaths } from "#lib/server/paths-data.js";
 import type { Footer } from "#lib/types.js";
 
 export const prerender = true;
@@ -23,6 +24,7 @@ export const GET = () => {
 		links: build.links,
 		verified: pages.filter((p) => p.verified).length,
 		log: log.length,
+		paths: readingPaths().length,
 	};
 	return new Response(JSON.stringify(footer), { headers: { "content-type": "application/json" } });
 };

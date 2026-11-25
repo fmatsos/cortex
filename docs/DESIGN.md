@@ -118,6 +118,7 @@ cortex/
 │   ├── concepts/     # type: Concept
 │   ├── entities/     # type: Entity (people, tools, projects, organizations)
 │   └── syntheses/    # type: Synthesis — filed answers, comparisons
+├── paths/            # reading paths (hand-written itineraries, not wiki pages): title, goal, ordered steps with a reason; read by lint and export
 ├── inbox/            # synced drop zone (mobile), emptied by `cortex inbox`
 └── .cortex/           # gitignored: index.sqlite, blobs/<sha256>, cache
 ```
@@ -355,6 +356,8 @@ Rejected: `commander`/`citty`, `yaml`/`gray-matter`, `better-sqlite3`, `vitest`,
 - **An interactive graph page**, in the manner of Obsidian's graph view. Nodes are pages, colored by type; edges are Markdown links. You can zoom, pan, filter by type or tag, and open a page by clicking its node. The graph data is a JSON file produced at export.
 - **A full-text search in the browser**, on a JSON index produced at export.
 - **`raw/` is not published.** Sources point to their original URL. The site contains only the wiki, which the human has reviewed or can review.
+  - *Exception, counts only:* the export reads the front matter of every raw source (`status`, `fetched_at`) to count those still `pending` on the `/maintenance/` page; no raw title, path or text is published.
+- **Reading paths and wiki status.** `paths/*.md` (hand-written itineraries, see the README) and a deterministic summary of the wiki for its owner (`/paths/`, `/maintenance/`; `src/reading-paths.ts`, `src/maintenance.ts`), written as `paths.json` and `maintenance.json` next to `data.json`.
 - **The site works offline.** Everything is bundled by Vite, with no CDN, and a service worker caches the whole site after the first visit (see “Offline” below).
 
 **Stack: SvelteKit (`adapter-static`, on Vite) and shadcn-svelte.**

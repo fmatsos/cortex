@@ -17,6 +17,9 @@ import { t } from "./i18n/index";
 export const NOTES_ID = "h-notes";
 export const SOURCES_ID = "h-sources";
 
+/** A heading of the wiki text (in its language), as opposed to the Notes and Sources sections the interface adds. */
+export const isBodyHeading = (id: string) => id !== NOTES_ID && id !== SOURCES_ID;
+
 /** The body headings, followed by Notes and Sources when they exist (UX20): a single list, a single section tracking. */
 export function tocItems(toc: TocItem[], notes: number, sources: number): TocItem[] {
 	return [

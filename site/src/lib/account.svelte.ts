@@ -4,6 +4,7 @@ import { page } from "$app/state";
 import { api, ApiError } from "./api";
 import { favs } from "./favs.svelte";
 import { lang } from "./lang.svelte";
+import { reading } from "./reading.svelte";
 import { plan, stateKey, toBody, type SyncState } from "./sync-state";
 import { theme } from "./theme.svelte";
 
@@ -13,7 +14,7 @@ import { theme } from "./theme.svelte";
  * and the site works as it always did. Loaded once at start (`init`, from the layout's `onMount`), never blocking a render:
  * `ready` says when `methods` and `me` are known.
  *
- * Preferences (theme, language, favorites) stay local first. Once signed in, the account's state is read once; the first
+ * Preferences (theme, language, reading comfort, favorites) stay local first. Once signed in, the account's state is read once; the first
  * synchronisation of an account sends the local state, later ones apply the server's (favorites: union), then every change
  * goes back as one `PUT` of the whole object, 1.5 s after the last one (see sync-state.ts for the rules).
  */
@@ -25,11 +26,13 @@ const DEBOUNCE_MS = 1500;
 const STATE = "/api/me/state";
 
 /** The one place that reads the local stores... */
-const collectLocal = (): SyncState => ({ theme: theme.mode, lang: lang.choice, favs: [...favs.ids] });
+const collectLocal = (): SyncState => ({ theme: theme.mode, lang: lang.choice, reading: reading.article, comfort: reading.assistant, favs: [...favs.ids] });
 /** ...and the one that writes them: only what differs is touched (a language change re-renders the whole layout). */
 function applyLocal(next: SyncState) {
 	if (next.theme !== theme.mode) theme.set(next.theme);
 	if (next.lang !== lang.choice) lang.set(next.lang);
+	if (next.reading !== reading.article) reading.setArticle(next.reading);
+	if (next.comfort !== reading.assistant) reading.setAssistant(next.comfort);
 	favs.replace(next.favs);
 }
 

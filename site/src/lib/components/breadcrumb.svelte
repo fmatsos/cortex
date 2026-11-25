@@ -2,7 +2,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { collectionLabel, collectionQuery } from "#lib/article.js";
 	import { toRoute } from "#lib/links.js";
-	import { t as tr } from "#lib/i18n/index.js";
+	import { contentLang, t as tr } from "#lib/i18n/index.js";
 
 	// Breadcrumb of an article: Home → type collection → page. The collection opens the search filtered on the type
 	// (`/search/?q=type:concept`); an unknown type has no collection and the link disappears.
@@ -17,6 +17,6 @@
 		{#if collection}
 			<li class="inline-flex items-center gap-1"><Icon name="chevron-down" size={16} class="-rotate-90" /><a href="{toRoute('/search')}{collection}" class={link}>{collectionLabel(type)}</a></li>
 		{/if}
-		<li class="inline-flex min-w-0 items-center gap-1"><Icon name="chevron-down" size={16} class="-rotate-90" /><span aria-current="page" class="text-foreground min-w-0 font-medium">{title}</span></li>
+		<li class="inline-flex min-w-0 items-center gap-1"><Icon name="chevron-down" size={16} class="-rotate-90" /><span aria-current="page" lang={contentLang} class="text-foreground min-w-0 font-medium">{title}</span></li>
 	</ol>
 </nav>

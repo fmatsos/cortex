@@ -6,6 +6,7 @@ import { isReservedPage, slugify, wikiLinks } from "./lib";
 import { LIMITS } from "./limits";
 import { pattern } from "./template";
 import { renderLogMd } from "./log";
+import { readPaths } from "./reading-paths";
 
 export type Issue = { level: "error" | "warning" | "info"; path: string; msg: string };
 
@@ -117,7 +118,27 @@ const journalRule: Rule = async (c) => {
   return out;
 };
 
-export const rules: Rule[] = [invalidYaml, pagesRule, orphans, duplicateSources, rawsRule, tagSynonyms, journalRule];
+// reading paths (<root>/paths/*.md, not wiki pages): a title, a goal, steps that link to existing pages, each with a reason
+const readingPaths: Rule = async (c) => {
+  const { paths, errors } = await readPaths(c.root), known = new Set(c.pages.map((d) => d.path));
+  const out = errors.map((e) => issue("error", e.path, `invalid YAML: ${e.msg}`));
+  for (const p of paths) {
+    if (!p.title) out.push(issue("error", p.file, "missing title"));
+    if (!p.goal) out.push(issue("error", p.file, "missing goal: what the reader can do after the path"));
+    out.push(...p.problems.map((m) => issue("error", p.file, m)));
+    if (!p.steps.length && !p.problems.some((m) => m.startsWith("step"))) out.push(issue("error", p.file, "no step: an ordered list of links to wiki pages"));
+    const seen = new Set<string>();
+    p.steps.forEach((s, i) => {
+      if (!known.has(s.page)) out.push(issue("error", p.file, `step ${i + 1}: unknown page /${s.page}`));
+      else if (seen.has(s.page)) out.push(issue("warning", p.file, `step ${i + 1}: /${s.page} is already a step of this path (only its first step is kept)`));
+      seen.add(s.page);
+      if (!s.reason) out.push(issue("warning", p.file, `step ${i + 1}: no reason after the link (why read it here?)`));
+    });
+  }
+  return out;
+};
+
+export const rules: Rule[] = [invalidYaml, pagesRule, orphans, duplicateSources, rawsRule, tagSynonyms, journalRule, readingPaths];
 
 async function context(w: Wiki, now: Date): Promise<Ctx> {
   const tpl = await w.naming();

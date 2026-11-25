@@ -58,6 +58,14 @@ export const stripFrontMatter = (md: string) => md.replace(/^﻿?---[ \t]*\r?\n[
 /** An id as a front matter flow-sequence item: as it is when plain, quoted otherwise. */
 const yamlItem = (id: string) => (/^[\p{L}\p{N}_./-]+$/u.test(id) ? id : yamlString(id));
 
+/** How step `i` of `route` is linked to the one before it, as the graph says it (a mutual link: both); nothing for the first step or an unlinked pair. */
+function relation(o: Pick<JourneyExportOptions, "relations" | "t">, route: readonly string[], i: number): string {
+	if (i === 0) return "";
+	const r = o.relations.get(route[i]!), prev = route[i - 1]!, t = o.t;
+	const cites = !!r?.cites.includes(prev), citedBy = !!r?.citedBy.includes(prev);
+	return cites && citedBy ? t("journey.export.both", { n: i }) : cites ? t("journey.export.cites", { n: i }) : citedBy ? t("journey.export.citedBy", { n: i }) : "";
+}
+
 export function journeyMarkdown(o: JourneyExportOptions): string {
 	const { t, route } = o;
 	const colon = t("common.colon");
@@ -67,13 +75,7 @@ export function journeyMarkdown(o: JourneyExportOptions): string {
 	const first = new Map<string, number>(); // page id -> its first step (1-based)
 	route.forEach((id, i) => { if (!first.has(id)) first.set(id, i + 1); });
 
-	/** How step `i` is linked to the one before it, as the graph says it (a mutual link: both). */
-	const link = (i: number) => {
-		if (i === 0) return "";
-		const r = o.relations.get(route[i]!), prev = route[i - 1]!;
-		const cites = !!r?.cites.includes(prev), citedBy = !!r?.citedBy.includes(prev);
-		return cites && citedBy ? t("journey.export.both", { n: i }) : cites ? t("journey.export.cites", { n: i }) : citedBy ? t("journey.export.citedBy", { n: i }) : "";
-	};
+	const link = (i: number) => relation(o, route, i);
 	const typeOf = (id: string) => { const type = o.pages.get(id)?.type; return type ? label(type) : ""; };
 
 	const list = route.map((id, i) => {
@@ -115,4 +117,20 @@ export function journeyMarkdown(o: JourneyExportOptions): string {
 		...steps,
 	].join("\n");
 	return `${collapseBlankLines(doc).replace(/\n+$/, "")}\n`;
+}
+
+/**
+ * The journey as a draft of a reading path, in the format `cortex` reads from `<wiki>/paths/<name>.md` (README, "Reading paths"):
+ * front matter with the `title` and an empty `goal` to write, then the ordered list of steps, each a root-relative link to
+ * the wiki page followed by a first reason (how the graph links it to the step before, then the page's summary) for the
+ * author to rewrite. A page walked twice is one step. Not a record of the walk: `cortex lint` flags what is left to write.
+ */
+export function pathDraftMarkdown(o: Pick<JourneyExportOptions, "title" | "route" | "pages" | "relations" | "t">): string {
+	const { t } = o, colon = t("common.colon");
+	const route = [...new Set(o.route)];
+	const steps = route.map((id, i) => {
+		const page = o.pages.get(id), why = [relation(o, route, i), oneLine(page?.description ?? "")].filter(Boolean).join(". ");
+		return `${i + 1}. [${escapeLabel(page?.title ?? id)}](/wiki/${id}.md)${why ? `${colon}${why}` : ""}`;
+	});
+	return `${["---", `title: ${yamlString(normalizeTitle(o.title) || t("journey.export.fallbackTitle"))}`, 'goal: ""', "---", "", ...steps].join("\n")}\n`;
 }

@@ -38,7 +38,8 @@
 	let failed = $state(false); // the search index could not be loaded
 	// pages found by meaning (`cortex serve` only): added after the local pages, once typing pauses; null for the query they answer
 	let semantic = $state<{ q: string; rows: Row[] }>();
-	let panelMax = $state(0); // available height below the field (px): the panel never exceeds the visible screen
+	let panelMax = $state<number>(); // room for the panel (px): it never exceeds the visible screen; undefined until measured
+	let above = $state(false); // little room below the field (low window, virtual keyboard) and more above: the panel opens upwards
 	const uid = $props.id(); // stable identifier: the prerendered HTML is identical on every export
 	const listId = `sb-${uid}`;
 	const value = $derived(search.q);
@@ -57,9 +58,15 @@
 	const measure = () => {
 		if (!wrap) return;
 		const vv = window.visualViewport;
-		const bottom = wrap.getBoundingClientRect().bottom, seen = vv ? vv.offsetTop + vv.height : innerHeight;
-		panelMax = Math.max(180, Math.min(seen - bottom - 12, 560));
+		const r = wrap.getBoundingClientRect(), seen = vv ? vv.offsetTop + vv.height : innerHeight;
+		const below = seen - r.bottom - 12, over = r.top - (vv?.offsetTop ?? 0) - 12;
+		above = below < LOW && over > below;
+		// no minimum: a floor taller than the visible space (landscape phone, virtual keyboard) would push the options off screen
+		panelMax = Math.max(0, Math.min(above ? over : below, 560));
 	};
+	const LOW = 120; // below this room under the field, the other side is used when it has more
+	// a short panel keeps the room for the options: the filter chips (also on the results page) step aside below this height
+	const SHORT_PANEL = 240;
 	$effect(() => {
 		if (!open) return;
 		measure();
@@ -278,7 +285,7 @@
 		/>
 		<!-- the compact field with the assistant button has no room for the hint (the shortcut itself still works) -->
 		{#if !value && (main || !assistant.api)}
-			<kbd class="text-muted-foreground pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border px-1.5 text-xs sm:block pointer-coarse:hidden">{mod} K</kbd>
+			<kbd class="text-muted-foreground pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 border px-1.5 text-xs sm:block pointer-coarse:hidden">{mod} K</kbd>
 		{/if}
 		{#if assistant.api && !main}
 			<!-- inside the compact field: the text typed so far goes to the assistant as a draft -->
@@ -297,8 +304,8 @@
 	{#if open && (items.length || (!live && value.trim()))}
 		<!-- mousedown with no focus effect: the field keeps focus, so the panel does not close before the click -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="bg-popover text-popover-foreground absolute {wide ? 'inset-x-4 lg:inset-x-8' : 'inset-x-0'} border-input shadow-overlay z-50 mt-1.5 flex flex-col rounded-lg border p-1" style:max-height={panelMax ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
-			{#if !live}<FilterChips value={search.q} class="px-1.5 pt-1 pb-1.5" />{/if}
+		<div class="bg-popover text-popover-foreground absolute {wide ? 'inset-x-4 lg:inset-x-8' : 'inset-x-0'} border-input shadow-overlay z-50 {above ? 'bottom-full mb-1.5' : 'mt-1.5'} flex flex-col rounded-lg border p-1" style:max-height={panelMax !== undefined ? `${panelMax}px` : undefined} onmousedown={(e) => e.preventDefault()}>
+			{#if !live && (panelMax === undefined || panelMax >= SHORT_PANEL)}<FilterChips value={search.q} class="px-1.5 pt-1 pb-1.5" />{/if}
 			<ul id={listId} role="listbox" aria-label={t("palette.suggestions")} class="min-h-0 flex-1 scroll-pb-10 overflow-auto">
 				{#each items as item, i (item.key)}
 					{@const sel = i === act}
@@ -317,7 +324,7 @@
 										<span class="text-muted-foreground line-clamp-2 block break-words">{@html item.snippet}</span>
 										{#if item.sub}<span class="text-muted-foreground block text-xs">{item.sub}</span>{/if}
 									</span>
-									<kbd class="text-muted-foreground hidden shrink-0 rounded border px-1 text-xs sm:block pointer-coarse:hidden">{t("assistant.askKey", { key: mod })}</kbd>
+									<kbd class="text-muted-foreground hidden shrink-0 border px-1 text-xs sm:block pointer-coarse:hidden">{t("assistant.askKey", { key: mod })}</kbd>
 								</span>
 							{:else if item.doc}
 								<ResultRow compact selected={sel} doc={item.doc} titleHtml={item.html} snippetHtml={item.snippet} note={item.note} />
@@ -338,10 +345,10 @@
 							</button>
 							{#if sel}
 								<div class="text-muted-foreground flex basis-full flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1.5 text-sm">
-									<span><kbd class="rounded border px-1">↵</kbd> {t("palette.key.open")}</span>
-									{#if !assistant.api}<span><kbd class="rounded border px-1">{mod} ↵</kbd> {t("palette.key.newTab")}</span>{/if}
-									<span><kbd class="rounded border px-1">Alt F</kbd> {t("palette.key.fav")}</span>
-									<button type="button" tabindex="-1" class="hover:text-foreground inline-flex min-h-6 items-center gap-1" onclick={() => copy(item.doc!)}><Icon name="copy-link" size={16} /><kbd class="rounded border px-1">Alt C</kbd> {t("palette.key.copy")}</button>
+									<span><kbd class="border px-1">↵</kbd> {t("palette.key.open")}</span>
+									{#if !assistant.api}<span><kbd class="border px-1">{mod} ↵</kbd> {t("palette.key.newTab")}</span>{/if}
+									<span><kbd class="border px-1">Alt F</kbd> {t("palette.key.fav")}</span>
+									<button type="button" tabindex="-1" class="hover:text-foreground inline-flex min-h-6 items-center gap-1" onclick={() => copy(item.doc!)}><Icon name="copy-link" size={16} /><kbd class="border px-1">Alt C</kbd> {t("palette.key.copy")}</button>
 								</div>
 							{/if}
 						{/if}

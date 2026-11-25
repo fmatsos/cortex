@@ -33,6 +33,8 @@ export const LIMITS = {
   cutRetries: 3,
   /** A source still `pending` after this many days is reported by lint. */
   pendingDays: 7,
+  /** The maintenance summary of the site: a page modified since its review and not reviewed again for this many days counts as stale. */
+  maintenanceStaleDays: 180,
   /** Title taken from the first line of a PDF, cut to this many characters. */
   pdfTitleChars: 120,
   /** Title taken from the first line of a plain text, cut to this many characters. */
@@ -57,10 +59,10 @@ export const LIMITS = {
   dupCandidates: 5,
   /** New page: the judge picks a candidate with at least this probability → creation refused. */
   dupJudge: 0.7,
-  /** New page, no judge: a candidate at least this close (cosine) → creation refused. Qwen3-Embedding's value, not calibrated yet; the other models': embed.ts PROFILES. */
-  dupCosine: 0.85,
-  /** New page: candidates at least this close (cosine) are listed as a warning when the page is created. Qwen3-Embedding's value, not calibrated yet; the other models': embed.ts PROFILES. */
-  dupWarn: 0.6,
+  /** New page, no judge: a candidate at least this close (cosine) → creation refused. Only the fallback of naming.ts when no model profile applies (embeddings off); the calibrated values are the ones of embed.ts PROFILES (here Qwen3-Embedding's). */
+  dupCosine: 0.9,
+  /** New page: candidates at least this close (cosine) are listed as a warning when the page is created. Same fallback role as `dupCosine`: the calibrated values are in embed.ts PROFILES. */
+  dupWarn: 0.75,
   /** Ingest: pages close in meaning to the source offered to the judge (those it says the source updates go in the compile prompt). */
   routeCandidates: 10,
   /** Ingest: characters of the raw source the judge reads (it reads them once per candidate page). */

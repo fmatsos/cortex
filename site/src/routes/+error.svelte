@@ -22,7 +22,7 @@
 	<h1 id="error-title" class="mt-1 text-3xl font-semibold tracking-tight">{title}</h1>
 	{#if notFound}
 		<p class="text-muted-foreground mt-3">
-			{t("error.notFound.text")}{#if page.url.pathname !== "/"}{t("common.colon")}<code class="bg-muted rounded px-1.5 py-0.5 text-sm break-all">{page.url.pathname}</code>{/if}.
+			{t("error.notFound.text")}{#if page.url.pathname !== "/"}{t("common.colon")}<code class="bg-muted px-1.5 py-0.5 text-sm break-all">{page.url.pathname}</code>{/if}.
 			{t("error.notFound.why")}
 		</p>
 	{:else}

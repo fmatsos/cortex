@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { TocItem } from "#lib/types.js";
+	import { isBodyHeading } from "#lib/article.js";
+	import { contentLang } from "#lib/i18n/index.js";
 
 	// Table of contents list (body headings, Notes, Sources): the current section carries aria-current="location".
 	let { items, current = "", onnavigate }: { items: TocItem[]; current?: string; onnavigate?: () => void } = $props();
@@ -10,6 +12,7 @@
 		<li>
 			<a
 				href="#{t.id}"
+				lang={isBodyHeading(t.id) ? contentLang : undefined}
 				onclick={onnavigate}
 				aria-current={current === t.id ? "location" : undefined}
 				class="text-muted-foreground hover:text-foreground aria-[current=location]:border-foreground aria-[current=location]:text-foreground -ml-px block border-l-2 border-transparent py-1 pointer-coarse:py-2.5 aria-[current=location]:font-medium {t.level === 3 ? 'pl-6' : 'pl-3'}"

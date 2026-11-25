@@ -299,10 +299,10 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
   flow.setAttribute("aria-hidden", "true"); flow.dataset.flow = "";
   flow.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
   el.append(flow);
-  let flowFrame = 0;
+  let flowFrame = 0, flowOn = true;
   function flowLinks() {
     const context = selected ?? hovered;
-    if (!context || moving || reduced || dead) return [];
+    if (!context || moving || reduced || dead || !flowOn) return [];
     // ponytail: capped at 80 links, the hub's neighbourhood stays legible and the frame cheap
     return scope.links.filter((e) => (e.source === context && emphasized.has(e.target)) || (e.target === context && emphasized.has(e.source))).slice(0, 80);
   }
@@ -441,6 +441,8 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     },
     fit, resize: () => { renderer.resize(); updateLabels(); }, theme: readTheme,
     zoom: (factor: number) => move({ ...renderer.getCamera().getState(), ratio: renderer.getCamera().ratio / factor }),
+    /** The reader's "stop the animation" choice: the dots stop, the selection and its links stay drawn. */
+    flow(on: boolean) { flowOn = on; startFlow(); },
     motion: (calm: boolean) => { reduced = calm; if (calm) renderer.getCamera().cancelAnimation(); renderer.setSettings({ doubleClickZoomingDuration: calm ? 0 : 180, inertiaDuration: calm ? 0 : 150 }); startFlow(); },
     kill() { dead = true; clearTimeout(timer); cancelAnimationFrame(frame); cancelAnimationFrame(flowFrame); flow.remove(); resize.disconnect(); labels.replaceChildren(); renderer.kill(); },
   };

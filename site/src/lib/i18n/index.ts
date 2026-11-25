@@ -15,6 +15,10 @@ declare const __CORTEX_LOCALE__: string | undefined;
 /** Locale of the export (cortex.json `language`): the prerendered HTML and the "default" choice. */
 export const defaultLocale: Locale = typeof __CORTEX_LOCALE__ === "string" && __CORTEX_LOCALE__ === "fr" ? "fr" : "en";
 
+declare const __CORTEX_CONTENT_LANG__: string | undefined;
+/** Language of the wiki's own text (BCP 47, cortex.json `language`): put in `lang` on the content zones (article body, titles, answers), so that it survives a change of interface language. */
+export const contentLang: string = typeof __CORTEX_CONTENT_LANG__ === "string" && __CORTEX_CONTENT_LANG__ ? __CORTEX_CONTENT_LANG__ : defaultLocale;
+
 let current: Locale = defaultLocale;
 /** Locale in force; changed only by the language selector (browser side). */
 export const getLocale = (): Locale => current;

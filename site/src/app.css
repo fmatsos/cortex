@@ -266,6 +266,13 @@
 	margin-top: 1rem;
 }
 /* owner: the prose takes the full width of the article column (no 70ch measure) */
+/* "Reading" (header preferences menu, local, off by default): larger text and a measure of ~64 characters, for the body of
+   an article only (not the assistant's answers or the log, which also use .wiki). */
+html[data-reading] main article > .wiki {
+	font-size: 1.25rem;
+	line-height: 1.8;
+	max-width: 64ch;
+}
 .wiki p,
 .wiki li {
 	text-wrap: pretty;

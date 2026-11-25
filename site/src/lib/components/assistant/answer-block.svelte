@@ -50,7 +50,7 @@
 		<ol class="space-y-3">
 			{#each block.items as s, i (i)}
 				<li class="flex gap-3">
-					<span class="bg-primary text-primary-foreground inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold" aria-hidden="true">{i + 1}</span>
+					<span class="bg-primary text-primary-foreground inline-flex size-6 shrink-0 items-center justify-center text-xs font-semibold" aria-hidden="true">{i + 1}</span>
 					<div class="min-w-0"><p class="font-medium">{@html s.title}</p>{#if s.html}<div class="wiki text-sm">{@html fix(s.html)}</div>{/if}</div>
 				</li>
 			{/each}

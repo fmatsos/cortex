@@ -6,7 +6,9 @@
 	import CitationPreview from "#lib/components/citation-preview.svelte";
 	import Icon from "#lib/components/icon.svelte";
 	import PageActions from "#lib/components/page-actions.svelte";
+	import PathNav from "#lib/components/path-nav.svelte";
 	import ReadingHits from "#lib/components/reading-hits.svelte";
+	import ReviewQueue from "#lib/components/review-queue.svelte";
 	import RelatedPages from "#lib/components/related-pages.svelte";
 	import StatusBadge from "#lib/components/status-badge.svelte";
 	import TrustIcon from "#lib/components/trust-icon.svelte";
@@ -15,7 +17,7 @@
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import { NOTES_ID, SOURCES_ID, actor, currentSection, domainOf, originalSource, relatedEntries, showToc, tocItems } from "#lib/article.js";
 	import { toPage, toTag } from "#lib/links.js";
-	import { t } from "#lib/i18n/index.js";
+	import { contentLang, t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const p = $derived(data.page);
@@ -68,10 +70,11 @@
 	});
 
 	// Search context: `?q=` is only readable in the browser (prerendered pages); we also know whether we come from the results
-	let q = $state(""), fromSearch = $state(false);
+	let q = $state(""), fromSearch = $state(false), pathSlug = $state(""); // pathSlug: `?path=` names the reading path the page is read in
 	let body = $state<HTMLElement>();
 	afterNavigate((nav) => {
 		q = nav.to?.url.searchParams.get("q") ?? "";
+		pathSlug = nav.to?.url.searchParams.get("path") ?? "";
 		fromSearch = nav.type !== "enter" && !!nav.from?.url.pathname.replace(/\/$/, "").endsWith("/search");
 	});
 </script>
@@ -104,21 +107,24 @@
 				{/if}
 				{#if stale}<TrustIcon icon="stale" label={`${t("page.staleSince")} ${day(p.stale_after)}`} />{/if}
 			</div>
-			<h1 class="font-display mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
-			<p class="text-muted-foreground mt-2">{p.description}</p>
-			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} reviewable={features.review && (!verified || needsReview)} onreviewed={(r) => (reviewedHere[p.id] = r)} /></div>
+			<h1 lang={contentLang} class="font-display mt-3 text-3xl font-semibold tracking-tight">{p.title}</h1>
+			<p lang={contentLang} class="text-muted-foreground mt-2">{p.description}</p>
+			<div class="mt-3"><PageActions id={p.id} md={p.md} original={original && { url: original.url, domain: original.domain }} reviewable={features.review && (!verified || needsReview)} onreviewed={({ id, by, at }) => (reviewedHere[id] = { by, at })} /></div>
 			{#if p.tags.length}
 				<ul class="mt-3 flex flex-wrap gap-1.5" aria-label={t("nav.tags")}>
 					{#each p.tags as tag}<li><Badge href={toTag(tag)} variant="secondary">#{tag}</Badge></li>{/each}
 				</ul>
 			{/if}
 		</header>
+		{#if features.review}<ReviewQueue id={p.id} reviewed={!!reviewedHere[p.id]} />{/if}
 
+		<PathNav pageId={p.id} slug={pathSlug} full />
 		<ReadingHits container={body} {q} pageId={p.id} {fromSearch} />
 
 		<!-- delegation: only footnote-call links trigger `onBody` (Enter on a link also produces a click) -->
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-		<div class="wiki" bind:this={body} onclickcapture={onBody}>{@html p.html}</div>
+		<div class="wiki" lang={contentLang} bind:this={body} onclickcapture={onBody}>{@html p.html}</div>
+		<PathNav pageId={p.id} slug={pathSlug} />
 
 		{#if p.notes.length}
 			<section class="mt-10 border-t pt-6" aria-labelledby={NOTES_ID}>
@@ -127,8 +133,8 @@
 					{#each p.notes as n (n.id)}
 						{@const s = srcOf.get(n.id)}
 						<li id="fn-{n.id}" class="note-item">
-							{#if s}<a href="#src-{s.id}" class="text-link underline underline-offset-3">{s.title}</a>{:else}<span class="text-muted-foreground">{t("page.noteWithoutSource", { id: n.id })}</span>{/if}
-							{#if n.html}<span class="text-muted-foreground"> — </span>{@html n.html}{/if}
+							{#if s}<a href="#src-{s.id}" lang={contentLang} class="text-link underline underline-offset-3">{s.title}</a>{:else}<span class="text-muted-foreground">{t("page.noteWithoutSource", { id: n.id })}</span>{/if}
+							{#if n.html}<span class="text-muted-foreground"> — </span><span lang={contentLang}>{@html n.html}</span>{/if}
 							<a href="#{backTo(n.id)}" aria-label={t("page.backToText")} class="text-link touch-target ml-1 inline-flex items-center px-1 align-middle no-underline"><Icon name="citation-return" size={16} /></a>
 							{#if n.refs > 1}
 								<span class="text-muted-foreground"><span class="sr-only">{t("page.occurrences")}</span>
@@ -150,11 +156,11 @@
 					{#each p.sources as s (s.id)}
 						<li id="src-{s.id}" class="anchor-target">
 							{#if s.url}
-								<a href={s.url} rel="noopener noreferrer" class="text-link inline-flex items-center gap-1 font-medium underline underline-offset-3">{s.title}<Icon name="external-link" size={16} /><span class="sr-only"> — {t("common.externalLink")}</span></a>
+								<a href={s.url} rel="noopener noreferrer" class="text-link inline-flex items-center gap-1 font-medium underline underline-offset-3"><span lang={contentLang}>{s.title}</span><Icon name="external-link" size={16} /><span class="sr-only"> — {t("common.externalLink")}</span></a>
 								{#if domainOf(s.url)}<span class="text-muted-foreground"> ({domainOf(s.url)})</span>{/if}
-							{:else}<span class="font-medium">{s.title}</span>{/if}
+							{:else}<span lang={contentLang} class="font-medium">{s.title}</span>{/if}
 							{#if s.partial}<Badge variant="caution" class="ml-1 align-middle"><Icon name="warning" size={16} />{t("page.partialExtraction")}</Badge>{/if}
-							{#if s.page}<span class="text-muted-foreground"> · {t("page.page")} <a href={toPage(s.page.id)} class="text-link underline underline-offset-3">{s.page.title}</a></span>{/if}
+							{#if s.page}<span class="text-muted-foreground"> · {t("page.page")} <a href={toPage(s.page.id)} lang={contentLang} class="text-link underline underline-offset-3">{s.page.title}</a></span>{/if}
 						</li>
 					{/each}
 				</ul>
