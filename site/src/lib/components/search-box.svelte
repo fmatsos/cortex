@@ -3,7 +3,6 @@
 	import { goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import Icon from "#lib/components/icon.svelte";
-	import AssistantAvatar from "#lib/components/assistant/assistant-avatar.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import ResultRow from "#lib/components/result-row.svelte";
 	import { Input } from "#lib/components/ui/input/index.js";
@@ -246,14 +245,14 @@
 		{#if assistant.api && !main}
 			<!-- inside the compact field: the text typed so far goes to the assistant as a draft -->
 			<Button variant="ghost" size="icon-xs" class="absolute inset-y-0 right-1 my-auto [&_svg:not([class*='size-'])]:size-4" aria-label={t("assistant.askThis")} title="{t('assistant.askThis')} ({t('assistant.askSend', { key: mod })})" aria-keyshortcuts="Control+Enter Meta+Enter" onclick={toAssistant}>
-				<AssistantAvatar size={16} />
+				<Icon name="assistant" size={16} />
 			</Button>
 		{/if}
 	</div>
 	{#if assistant.api && main}
-		<!-- beside the large field there is room for the label; narrow screens keep the avatar, the name stays -->
+		<!-- beside the large field there is room for the label; narrow screens keep the icon, the name stays -->
 		<Button variant="outline" class="h-12 shrink-0 px-3" title="{t('assistant.askThis')} ({t('assistant.askSend', { key: mod })})" aria-keyshortcuts="Control+Enter Meta+Enter" onclick={toAssistant}>
-			<AssistantAvatar size={16} /><span class="sr-only sm:not-sr-only">{t("assistant.askThis")}</span>
+			<Icon name="assistant" size={16} /><span class="sr-only sm:not-sr-only">{t("assistant.askThis")}</span>
 		</Button>
 	{/if}
 	</div>
@@ -274,7 +273,7 @@
 							{#if item.kind === "ask"}
 								<!-- short action label, the question on its own lines (never cut to one line on a phone) -->
 								<span class="flex items-start gap-2">
-									<AssistantAvatar size={16} />
+									<Icon name="assistant" size={16} />
 									<span class="min-w-0 flex-1">
 										<span class="font-medium">{@html item.html}</span>
 										<span class="text-muted-foreground line-clamp-2 block break-words">{@html item.snippet}</span>

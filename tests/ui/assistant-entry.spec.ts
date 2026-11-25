@@ -24,14 +24,16 @@ test.describe("desktop 1440", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   test.skip(({ isMobile }) => isMobile, "keyboard flows: desktop project only");
 
-  test("the header button shows the avatar and its label, and opens and closes the panel", async ({ page }) => {
+  test("the header button shows the sparkles icon and its label, and opens and closes the panel", async ({ page }) => {
     await mockAsk(page);
     await page.goto("/graph");
     const toggle = page.locator("#assistant-toggle");
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveText("Assistant");
-    await expect(toggle.locator("svg.folio")).toHaveAttribute("data-state", "idle");
-    expect((await toggle.locator("svg.folio").boundingBox())?.width).toBe(20);
+    await expect(toggle.locator("svg.folio")).toHaveCount(0);
+    await expect(toggle.locator("svg use")).toHaveAttribute("href", "#cx-assistant");
+    expect((await toggle.locator("svg").boundingBox())?.width).toBe(20);
+    await expect(toggle).not.toHaveAttribute("aria-busy", /.*/);
     await expect(toggle).toHaveAttribute("aria-controls", "assistant-panel");
     await expect(toggle).toHaveAttribute("aria-keyshortcuts", "Control+I Meta+I");
     await expect(toggle).toHaveAttribute("title", /Ctrl I/);
@@ -53,6 +55,7 @@ test.describe("desktop 1440", () => {
     await page.goto("/graph");
     const field = headerField(page);
     await field.fill("how does context rot happen");
+    await expect(page.getByRole("banner").getByRole("button", { name: ASK }).locator("svg use")).toHaveAttribute("href", "#cx-assistant");
     await page.getByRole("banner").getByRole("button", { name: ASK }).click();
     await expect(page.locator("#assistant-panel")).toBeVisible();
     await expect(draft(page)).toHaveValue("how does context rot happen");
@@ -81,6 +84,7 @@ test.describe("desktop 1440", () => {
     const item = page.locator("[role=listbox]").getByRole("option", { name: ASK });
     await expect(item).toBeVisible();
     await expect(item).toContainText("« what is in the wiki about context? »");
+    await expect(item.locator("svg use")).toHaveAttribute("href", "#cx-assistant");
     await expect(item).toContainText(/Ctrl (Enter|Entrée)/);
     await field.press("ArrowDown");
     await expect(item).toHaveAttribute("aria-selected", "true");
@@ -166,7 +170,7 @@ for (const width of [390, 320]) {
       await page.goto("/graph");
       const toggle = page.getByRole("button", { name: "Assistant", exact: true });
       await expect(toggle).toBeVisible();
-      // the label collapses: the avatar alone shows, the name stays
+      // the label collapses: the icon alone shows, the name stays
       expect(((await toggle.boundingBox())?.width ?? 99)).toBeLessThan(56);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       const right = await prefs(page).boundingBox();
