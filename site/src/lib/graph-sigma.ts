@@ -4,6 +4,7 @@ import { UndirectedGraph } from "graphology";
 import { focusNodes, gestureNodes, type GNode, type GraphView } from "./graph-model";
 import { placeLabels, truncateToWidth } from "./graph-labels";
 import { shapeOf, SHAPE_SCALE } from "./graph-shapes";
+import { packIslands } from "./graph-pack";
 import type { GraphData } from "./types";
 import { TYPES } from "./type-meta";
 import { t } from "./i18n/index";
@@ -13,6 +14,15 @@ type Callbacks = { select: (id: string | null) => void; open: (id: string) => vo
 
 /** Browser-only renderer. Physics and community detection never enter this bundle. */
 export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData, callbacks: Callbacks) {
+  // The export packs the islands for one ratio; repack them for this frame (the placement inside an island is kept).
+  // ponytail: once at creation, a later resize (side panel) only refits the camera
+  const centers = packIslands(raw.communities.map((c) => c.size), el.clientWidth && el.clientHeight ? Math.max(0.6, el.clientWidth / el.clientHeight) : 16 / 9);
+  const shift = new Map(raw.communities.map((c, i) => [c.id, { x: centers[i].x - c.x, y: centers[i].y - c.y }]));
+  raw = {
+    ...raw,
+    nodes: raw.nodes.map((n) => { const d = shift.get(n.community); return d ? { ...n, x: n.x + d.x, y: n.y + d.y } : n; }),
+    communities: raw.communities.map((c, i) => ({ ...c, ...centers[i] })),
+  };
   const graph = new UndirectedGraph<Node>({ allowSelfLoops: false });
   const positions = new Map(raw.nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
   const measure = document.createElement("canvas").getContext("2d")!;
@@ -47,9 +57,11 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
       visibility: moving && !landmarks.has(id) && dragged !== id ? "hidden" : "visible",
       opacity: context && !inContext ? 0.12 : n.type === "Source" && !inContext ? 0.55 : 1,
       size: active ? Math.max(7, nodeSize(n)) : nodeSize(n),
-      labelColor: palette.label, labelVisibility: allowed.has(id) ? (active ? "visible" : "auto") : "hidden",
-      backdropVisibility: active || favorite ? "visible" : "hidden",
-      backdropColor: palette.background, backdropBorderColor: active ? palette.active : palette.favorite,
+      labelColor: palette.label, labelVisibility: allowed.has(id) ? "visible" : "hidden",
+      // a framed node for the active page and favorites; any other shown label gets a plain backdrop to read over nodes
+      backdropVisibility: active || favorite || allowed.has(id) ? "visible" : "hidden",
+      backdropArea: active || favorite ? "node" : "label",
+      backdropColor: palette.background, backdropBorderColor: active ? palette.active : favorite ? palette.favorite : palette.background,
     };
   }
   function edgeVisual(e: { source: string; target: string }) {
@@ -57,7 +69,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     const active = (context === e.source && emphasized.has(e.target)) || (context === e.target && emphasized.has(e.source));
     return { color: active ? palette.active : palette.edge, opacity: active ? 0.8 : context ? 0.025 : 0.12, size: active ? 1.2 : 0.45 };
   }
-  const visualKeys = ["shape", "color", "visibility", "opacity", "size", "labelColor", "labelVisibility", "backdropVisibility", "backdropColor", "backdropBorderColor"];
+  const visualKeys = ["shape", "color", "visibility", "opacity", "size", "labelColor", "labelVisibility", "backdropVisibility", "backdropArea", "backdropColor", "backdropBorderColor"];
   const bind = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, { attribute: key }]));
   function savePositions() { graph.forEachNode((id, n) => positions.set(id, { x: n.x, y: n.y })); }
   function populate(nodes: GNode[], links: GraphData["links"]) {
@@ -83,7 +95,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
     // Attribute bindings are static to Sigma. Opaque nodeReducer callbacks force N+E style work
     // on every camera-state change in 4.0.6, even when the callback ignores that state.
     styles: {
-      nodes: { ...bind(["x", "y", "label", ...visualKeys]), labelFont: font, labelSize: fontSize, labelPosition: "below", backdropArea: "node", backdropPadding: 3, backdropBorderWidth: 2, backdropCornerRadius: 0, backdropShadowBlur: 0 },
+      nodes: { ...bind(["x", "y", "label", ...visualKeys]), labelFont: font, labelSize: fontSize, labelPosition: "below", backdropPadding: 3, backdropBorderWidth: 2, backdropCornerRadius: 0, backdropShadowBlur: 0 },
       edges: bind(["size", "color", "opacity"]),
     },
   });
@@ -112,7 +124,7 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
       return { x: p.x - w / 2, y: p.y + (n.id === context ? Math.max(7, nodeSize(n)) : nodeSize(n)) + 4, w, h: fontSize + 6, force: n.id === context };
     };
     const eligible = candidates.filter((n) => context || ratio < 0.65 || n.degree >= 45);
-    const reserved: { x: number; y: number; w: number; h: number }[] = [];
+    const reserved: { x: number; y: number; w: number; h: number; force: boolean }[] = [];
     labels.replaceChildren();
     if (!context && ratio > 0.5) {
       const counts = new Map<string, number>();
@@ -123,8 +135,8 @@ export function createGraph(el: HTMLElement, labels: HTMLElement, raw: GraphData
         return p.x < w / 2 || p.x > width - w / 2 || p.y < 40 || p.y > height ? null : { x: p.x - w / 2, y: p.y - 37, w, h: 26 };
       }, 12, 12);
       for (const c of kept) {
-        const p = renderer.graphToViewport(c), button = document.createElement("button");
-        reserved.push({ x: p.x - 140, y: p.y - 39, w: 280, h: 30 });
+        const p = renderer.graphToViewport(c), button = document.createElement("button"), w = Math.min(280, measure.measureText(c.label).width + 16);
+        reserved.push({ x: p.x - w / 2 - 2, y: p.y - 39, w: w + 4, h: 30, force: true });
         button.type = "button"; button.textContent = c.label;
         const count = counts.get(c.id)!;
         button.title = t("common.pages", { count }); button.setAttribute("aria-label", `${c.label} (${count})`);

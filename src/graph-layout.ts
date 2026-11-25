@@ -3,6 +3,7 @@ import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import type { GraphData } from "../site/src/lib/types";
 import { collator } from "./text";
+import { islandRadius, packIslands } from "../site/src/lib/graph-pack";
 
 type InputNode = Omit<GraphData["nodes"][number], "x" | "y" | "community">;
 type Input = { nodes: InputNode[]; links: GraphData["links"] };
@@ -74,23 +75,18 @@ export function layoutGraph(input: Input): GraphData {
   const tagCounts = new Map<string, number>();
   for (const n of nodes) for (const tag of n.tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
   const ordered = [...groups].sort((a, b) => b[1].length - a[1].length || compare(a[0], b[0]));
-  const radiusOf = (size: number) => 45 + Math.sqrt(size) * 27;
-  const rowWidth = Math.sqrt(ordered.reduce((sum, [, members]) => sum + (2 * radiusOf(members.length) + 65) ** 2, 0) * 1.9);
-  let left = 0, top = 0, rowHeight = 0;
+  const centers = packIslands(ordered.map(([, members]) => members.length), 16 / 9);
   const positions = new Map<string, { x: number; y: number }>();
   const communities: GraphData["communities"] = [];
   // A separate island per community prevents global hubs from swallowing small subjects.
-  for (const [id, members] of ordered) {
-    const radius = radiusOf(members.length), side = 2 * radius + 65;
-    if (left && left + side > rowWidth) { top += rowHeight; left = 0; rowHeight = 0; }
-    const center = { x: left + radius, y: -top - radius };
-    left += side; rowHeight = Math.max(rowHeight, side);
+  for (const [i, [id, members]] of ordered.entries()) {
+    const radius = islandRadius(members.length), center = centers[i];
     const xy = members.map((n) => graph.getNodeAttributes(n.id));
     const mx = xy.reduce((s, p) => s + p.x, 0) / members.length, my = xy.reduce((s, p) => s + p.y, 0) / members.length;
     const extent = Math.max(1, ...xy.map((p) => Math.hypot(p.x - mx, p.y - my)));
-    for (let i = 0; i < members.length; i++) positions.set(members[i].id, {
-      x: Math.round((center.x + (xy[i].x - mx) / extent * radius) * 1000) / 1000,
-      y: Math.round((center.y + (xy[i].y - my) / extent * radius) * 1000) / 1000,
+    for (let j = 0; j < members.length; j++) positions.set(members[j].id, {
+      x: Math.round((center.x + (xy[j].x - mx) / extent * radius) * 1000) / 1000,
+      y: Math.round((center.y + (xy[j].y - my) / extent * radius) * 1000) / 1000,
     });
     const reps = [...members].sort((a, b) => Number(a.type === "Source") - Number(b.type === "Source") || graph.degree(b.id) - graph.degree(a.id) || compare(a.id, b.id)).slice(0, 3);
     const tags = new Map<string, number>();
