@@ -191,9 +191,9 @@
 	.nodes.front {
 		stroke: none;
 	}
-	/* owner: the travelling signal is not green (it would read as a prefrontal node): the assistant "question" colour */
+	/* owner: the travelling signal is not green (it would read as a prefrontal node): an ochre of its own, `--signal` */
 	.signal-motion {
-		fill: var(--kind-query, currentColor);
+		fill: var(--signal, currentColor);
 	}
 	.halo {
 		opacity: 0.12;

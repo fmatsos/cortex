@@ -136,6 +136,8 @@ for (const k of ["add", "ingest", "query", "lint", "update"]) {
 }
 pair("--favorite", "--background");
 pair("--favorite", "--card");
+// avatar pending signal: a graphic, 3:1 against the surfaces the avatar sits on
+for (const bg of ["--background", "--card", "--muted"]) pair("--signal", bg, 3);
 // trust states (aliases, resolved per theme): text on the surfaces where badges and marks sit
 for (const k of TRUST) for (const bg of ["--background", "--card", "--muted"]) pair(`--trust-${k}`, bg);
 pair("--trust-partial", "--warning-background");
