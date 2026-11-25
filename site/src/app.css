@@ -217,11 +217,7 @@
 .wiki > * + * {
 	margin-top: 1rem;
 }
-/* reading measure: prose blocks stop at 70ch; tables, code, images and rules keep the full column (they scroll or fit
-   by themselves) */
-.wiki > :not(table, pre, .table-wrap, img, figure, hr) {
-	max-width: 70ch;
-}
+/* owner: the prose takes the full width of the article column (no 70ch measure) */
 .wiki p,
 .wiki li {
 	text-wrap: pretty;
@@ -486,9 +482,6 @@ mark {
 		max-width: none;
 		font-size: 11pt;
 		line-height: 1.5;
-	}
-	.wiki > :not(table, pre, .table-wrap, img, figure, hr) {
-		max-width: none;
 	}
 	.wiki a[href^="http"]::after {
 		content: " (" attr(href) ")";

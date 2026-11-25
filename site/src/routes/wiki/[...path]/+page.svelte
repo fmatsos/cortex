@@ -82,7 +82,7 @@
 </svelte:head>
 
 <!-- reading column ~72 characters; tables and code blocks scroll horizontally in it -->
-<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_16rem] {toc ? 'pb-16' : ''}">
+<div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_16rem] {toc ? 'pb-16 lg:pb-0' : ''}">
 	<article class="min-w-0">
 		<Breadcrumb type={p.type} title={p.title} />
 		<header class="mb-6">
@@ -162,7 +162,9 @@
 		{/if}
 	</article>
 
-	<aside class="space-y-8 self-start text-sm" aria-label={t("page.aside")}>
+	<!-- large screen: the aside follows the scroll (sticky under the header, scrolls itself if taller than the screen),
+	     so the floating "Sommaire" button is only kept below lg -->
+	<aside class="space-y-8 self-start text-sm lg:sticky lg:top-(--anchor-offset) lg:max-h-[calc(100dvh-var(--anchor-offset)-1rem)] lg:overflow-y-auto" aria-label={t("page.aside")}>
 		{#if toc}
 			<nav aria-labelledby="h-toc" class="hidden lg:block">
 				<h2 id="h-toc" class="mb-2 flex items-center gap-2 font-semibold"><Icon name="toc" size={20} />{t("page.toc")}</h2>
