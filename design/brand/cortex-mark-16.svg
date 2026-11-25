@@ -1,17 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32" role="img" aria-labelledby="t">
   <title id="t">Cortex</title>
-  <!-- Master drawing of the Cortex mark, small glyph (16 px grid, favicon and sizes under 24 px; the 32 grid glyph is in
-       assistant-avatar.svelte): the brain silhouette as one closed polyline (side profile, front facing right, short stem at the
-       bottom) and, inside it, only the prefrontal accent, three round nodes of diameter 2, centres on whole units, contour 1 unit.
-       Idle composition. -->
+  <!-- Master drawing of the Cortex mark, 16-unit grid (favicon and sizes under 24 px): the same silhouette as cortex-mark.svg reduced to six nodes, three ink ones and the three of the prefrontal cluster in the accent colour, a stub below the bottom node for the stem. Nodes 2.3 units across (front 2.5), links 1, no element touches. Butt ends, mitered joins, no curved link. Idle composition. Source of truth for the data: assistant-avatar.svelte. -->
   <style>
     svg { color: #1b2120; --primary: #245849 }
     @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
+    .links { fill: none; stroke-width: 1; stroke-linecap: butt; stroke-linejoin: miter }
   </style>
-  <path d="M1 8L1.5 4L5 1.5L11 1.5L14.5 4L14.5 12L10.5 12.5L10 14.5L7 14.5L6.5 12.5Z" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="butt" stroke-linejoin="miter"/>
+  <g class="links" stroke="currentColor">
+    <path d="M2 7L6 2"/>
+    <path d="M6 2L10 1.5L12.5 4"/>
+    <path d="M2 7L2 10.5L4.5 12.5L7.5 12.5"/>
+    <path d="M7.5 12.5L11 12.5L13.5 11L14 8.5"/>
+    <path d="M7.5 12.5L7.5 15"/>
+    <path d="M6 2L9.5 8"/>
+  </g>
+  <g class="links" stroke="var(--primary)">
+    <path d="M12.5 4L14 8.5"/>
+    <path d="M9.5 8L14 8.5"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="2" cy="7" r="1.15"/>
+    <circle cx="6" cy="2" r="1.15"/>
+    <circle cx="7.5" cy="12.5" r="1.15"/>
+  </g>
   <g fill="var(--primary)">
-    <circle cx="5" cy="7" r="1"/>
-    <circle cx="9" cy="5" r="1"/>
-    <circle cx="11" cy="9" r="1"/>
+    <circle cx="12.5" cy="4" r="1.25"/>
+    <circle cx="14" cy="8.5" r="1.25"/>
+    <circle cx="9.5" cy="8" r="1.25"/>
   </g>
 </svg>
