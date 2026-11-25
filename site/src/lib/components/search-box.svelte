@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 	import { goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import Icon from "#lib/components/icon.svelte";
@@ -11,7 +11,8 @@
 	import { fold } from "#lib/fold.js";
 	import type { IconName } from "#lib/icons.js";
 	import { parseQuery, questionLike, wantsFav, withPassage } from "#lib/query.js";
-	import { type Engine, esc, loadEngine, search as searchIndex, suggest } from "#lib/search-client.js";
+	import { type Engine, esc, highlight, loadEngine, search as searchIndex, suggest } from "#lib/search-client.js";
+	import { cachedHybrid, hybrid, probe, rows as serverRows, semanticOnly, worthAsking, type Row } from "#lib/server-search.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { assistant } from "#lib/assistant.svelte.js";
 	import { theme } from "#lib/theme.svelte.js";
@@ -35,6 +36,8 @@
 	let mac = $state(false);
 	let notice = $state("");
 	let failed = $state(false); // the search index could not be loaded
+	// pages found by meaning (`cortex serve` only): added after the local pages, once typing pauses; null for the query they answer
+	let semantic = $state<{ q: string; rows: Row[] }>();
 	let panelMax = $state(0); // available height below the field (px): the panel never exceeds the visible screen
 	const uid = $props.id(); // stable identifier: the prerendered HTML is identical on every export
 	const listId = `sb-${uid}`;
@@ -73,7 +76,7 @@
 		};
 	});
 
-	type Item = { key: string; kind: "recent" | "filter" | "term" | "page" | "command" | "all" | "ask"; group?: string; icon?: IconName; html: string; sub?: string; snippet?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
+	type Item = { key: string; kind: "recent" | "filter" | "term" | "page" | "command" | "all" | "ask"; group?: string; icon?: IconName; html: string; sub?: string; snippet?: string; note?: string; doc?: SearchDoc; run: (newTab?: boolean) => void };
 	const GO = (to: string) => () => goto(to);
 	const commands = $derived<Item[]>(([
 		["c:home", "home", t("cmd.home"), GO(toRoute("/"))],
@@ -130,12 +133,46 @@
 		const found = new Map(hits.map((h) => [h.doc.id, h.snippet]));
 		for (const d of titles) page(d, esc(d.title), found.get(d.id) ?? esc(d.description));
 		for (const h of hits) page(h.doc, h.title, h.snippet);
+		// found by meaning only, after the local pages (never among them, never before): an arrow key in progress stays on its row
+		if (!live && semantic?.q === q) {
+			const p = parseQuery(q);
+			for (const r of semanticOnly(semantic.rows, seen)) {
+				seen.add(r.doc.id);
+				out.push({ key: `p:${r.doc.id}`, kind: "page", group: t("palette.pages"), html: highlight(r.doc.title, p), snippet: highlight(r.hit.extract, p), note: t("search.match.semantic"), doc: r.doc, run: (newTab) => open_(r.doc, newTab) });
+			}
+		}
 		const toks = fold(q).split(/\s+/);
 		if (!live) for (const c of commands) if (toks.every((w) => fold(c.html).includes(w))) out.push(c);
 		if (ask && !askFirst) out.push(ask);
 		// always visible access (sticky footer) to the full list, with its exact total
 		if (total > 0) out.push({ key: "all", kind: "all", html: esc(t("palette.all", { q })), sub: t("common.pages", { count: total }), run: () => submit() });
 		return out;
+	});
+
+	// Typing pauses (~250 ms): the server's hybrid results (no judge), when it has the API. The previous request is cancelled; offline or
+	// on any error, nothing is said. The panel's own pages come first and stay: the new ones only add at the end of the page group.
+	const DEBOUNCE = 250;
+	const accept = (q: string, res: Awaited<ReturnType<typeof hybrid>>) => {
+		if (!engine || !open || value.trim() !== q) return;
+		const keep = cur?.key; // the active option stays the same option, wherever the list now puts it
+		semantic = { q, rows: serverRows(engine, parseQuery(q), res, favs.has) };
+		if (keep) { const i = items.findIndex((x) => x.key === keep); if (i >= 0) active = i; }
+	};
+	$effect(() => {
+		const q = value.trim();
+		if (live || !open || !engine || !q || !worthAsking(q)) return;
+		const ctl = new AbortController();
+		const cached = cachedHybrid(q);
+		const run = async () => {
+			try {
+				if (!cached && !(await probe())) return;
+				const res = cached ?? (await hybrid(q, ctl.signal));
+				if (!ctl.signal.aborted) untrack(() => accept(q, res));
+			} catch { /* offline, cancelled or failing server: the local results are the answer */ }
+		};
+		const id = cached ? undefined : setTimeout(run, DEBOUNCE);
+		if (cached) void run();
+		return () => { clearTimeout(id); ctl.abort(); };
 	});
 
 	/** The assistant, opened on the typed text as a draft (never sent: the visitor confirms with Enter in the panel). */
@@ -162,6 +199,7 @@
 		const q = value.trim();
 		if (!q) return;
 		search.remember(q);
+		search.validated = q;
 		if (!live) goto(`${toRoute("/search")}?q=${encodeURIComponent(q)}`);
 	};
 	const copy = async (d: SearchDoc) => {
@@ -282,7 +320,7 @@
 									<kbd class="text-muted-foreground hidden shrink-0 rounded border px-1 text-xs sm:block pointer-coarse:hidden">{t("assistant.askKey", { key: mod })}</kbd>
 								</span>
 							{:else if item.doc}
-								<ResultRow compact selected={sel} doc={item.doc} titleHtml={item.html} snippetHtml={item.snippet} />
+								<ResultRow compact selected={sel} doc={item.doc} titleHtml={item.html} snippetHtml={item.snippet} note={item.note} />
 							{:else}
 								<div class="flex items-baseline justify-between gap-3">
 									<span class="flex min-w-0 items-center gap-2 {sel ? 'line-clamp-2' : 'truncate'}">

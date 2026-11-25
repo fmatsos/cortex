@@ -10,10 +10,23 @@ const KEY = storageKey("recent");
  */
 class SearchState {
 	q = $state("");
+	/**
+	 * The last search the visitor validated (Enter, a link with `?q=`): the only one the server's hybrid search and its judge answer
+	 * on /search/. Typing never changes it, and the palette never sends it anywhere.
+	 */
+	validated = $state("");
 	/** Validated searches, most recent first (localStorage, specific to this browser). */
 	recent = $state<string[]>([]);
 	private input: HTMLInputElement | null = null;
 
+	/**
+	 * A deliberate change of the query on /search/ (a facet, a chip, a fix, "reset filters", "clear"): the visitor chose it, so it is a
+	 * validated search, unlike typing. What is displayed, the counters included, then keeps agreeing with what a click announces.
+	 */
+	apply(q: string) {
+		this.q = q;
+		this.validated = q.trim();
+	}
 	/** Registers the visible field; returns the unregistration (to call on unmount). */
 	register(el: HTMLInputElement) {
 		this.input = el;

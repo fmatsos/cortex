@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from "svelte";
+	import { onMount, tick, untrack } from "svelte";
 	import { afterNavigate, goto } from "$app/navigation";
 	import FilterChips from "#lib/components/filter-chips.svelte";
 	import Icon from "#lib/components/icon.svelte";
@@ -9,8 +9,10 @@
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
-	import { type Engine, facetCounts, loadEngine, search as run } from "#lib/search-client.js";
+	import { activeValues, diagnose, IS_VALUES, localizeQuery, parseQuery, removeToken, token, valueWords, wantsFav, withPassage } from "#lib/query.js";
+	import { type Engine, facetCounts, facetsOf, highlight, loadEngine, search as run } from "#lib/search-client.js";
+	import { cachedHybrid, cachedJudged, hybrid, judged, probe, rows as serverRows, sections, worthAsking, type Hybrid, type Judged, type Row } from "#lib/server-search.js";
+	import type { SearchDoc } from "#lib/types.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeIcon, typePlural } from "#lib/type-meta.js";
 	import { t } from "#lib/i18n/index.js";
@@ -29,7 +31,31 @@
 	const text = $derived(q.trim());
 	const parsed = $derived(parseQuery(q));
 	const res = $derived(engine ? run(engine, q, favs.has, limit) : { hits: [], total: 0 });
-	const facets = $derived(engine ? facetCounts(engine, q, favs.has) : undefined);
+
+	// The server (`cortex serve`): on a validated search only, its hybrid results replace the local ones as soon as they come, then the
+	// judge's ranking groups them. Static site (no /api/search): none of this exists, the local results are the answer.
+	type Server = { q: string; res: Hybrid; phase: "judging" | "judged" | "plain"; judged?: Judged };
+	let server = $state<Server>();
+	const srv = $derived(server && server.q === text && engine ? server : undefined);
+	const srvRows = $derived(srv ? serverRows(engine!, parsed, srv.res, favs.has) : []);
+	const onServer = $derived(!!srv && srvRows.length > 0);
+	const grouped = $derived(onServer && srv?.phase === "judged" ? sections(srvRows) : undefined);
+	const judging = $derived(!!srv && srv.phase === "judging");
+	const total = $derived(onServer ? srvRows.length : res.total);
+	const shownServer = $derived(grouped ? srvRows : srvRows.slice(0, limit));
+	const localFacets = $derived(engine ? facetCounts(engine, q, favs.has) : undefined);
+	// the counters follow the displayed results; type and status, which a click replaces, keep the alternatives' counts while their operator is active
+	const facets = $derived.by(() => {
+		if (!engine || !onServer || !localFacets) return localFacets;
+		const f = facetsOf(srvRows.map((r) => r.doc), favs.has);
+		return { ...f, type: activeValues(parsed, "type").size ? localFacets.type : f.type, status: activeValues(parsed, "status").size ? localFacets.status : f.status };
+	});
+
+	type View = { doc: SearchDoc; titleHtml: string; descriptionHtml: string; snippetHtml: string; note?: string };
+	const viewOf = (r: Row): View => {
+		const extract = r.hit.match === "filter" ? "" : r.hit.extract.length > 320 ? `${r.hit.extract.slice(0, 320)} …` : r.hit.extract;
+		return { doc: r.doc, titleHtml: highlight(r.doc.title, parsed), descriptionHtml: highlight(r.doc.description, parsed), snippetHtml: extract && extract !== r.doc.description ? highlight(extract, parsed) : "", note: r.hit.match === "semantic" ? t("search.match.semantic") : undefined };
+	};
 	const tagSet = $derived(engine ? new Set(engine.docs.flatMap((d) => d.tags.map(fold))) : undefined);
 	const issues = $derived(diagnose(parsed, tagSet));
 	const noFav = $derived(wantsFav(parsed) && !favs.ids.length);
@@ -51,8 +77,45 @@
 	afterNavigate((nav) => {
 		const url = nav.to?.url;
 		const p = url?.searchParams.get("q") ?? "";
-		if (url?.searchParams.has("q") || nav.type === "popstate") { if (p !== search.q.trim()) search.q = p; }
+		if (url?.searchParams.has("q") || nav.type === "popstate") {
+			if (p !== search.q.trim()) search.q = p;
+			// arriving with ?q=, a link, back / forward: a validated search. The in-place update of the URL while typing is not.
+			if (!(nav.type === "goto" && nav.from?.route.id === nav.to?.route.id)) search.validated = p.trim();
+		}
 		ready = true;
+	});
+
+	// A validated search goes to the server (when it has the API): the hybrid results at once, and the judge's ranking in parallel.
+	// Changing the query cancels both (the cleanup aborts the requests, and an answer for another query is never displayed). The
+	// caches of server-search.ts answer a query seen again without asking twice.
+	$effect(() => {
+		const v = search.validated.trim();
+		server = undefined;
+		if (!v || !worthAsking(v)) return;
+		const ctl = new AbortController();
+		let final = false;
+		const apply = (s: Server) => { if (!ctl.signal.aborted) server = s; };
+		void untrack(async () => {
+			try {
+				if (!(await probe()) || ctl.signal.aborted) return;
+				const done = cachedJudged(v);
+				if (done) return apply({ q: v, res: done, phase: done.judged ? "judged" : "plain", judged: done });
+				const early = cachedHybrid(v);
+				if (early) apply({ q: v, res: early, phase: "judging" });
+				const hyb = early ? Promise.resolve() : hybrid(v, ctl.signal).then((r) => { if (!final) apply({ q: v, res: r, phase: "judging" }); }, () => {});
+				try {
+					const j = await judged(v, ctl.signal);
+					final = true;
+					apply({ q: v, res: j, phase: j.judged ? "judged" : "plain", judged: j });
+				} catch {
+					// busy twice, a failing judge or the network: the plain hybrid display, without a message
+					await hyb;
+					final = true;
+					if (server?.q === v) apply({ ...server, phase: "plain" });
+				}
+			} catch { /* offline: the local results stay */ }
+		});
+		return () => ctl.abort();
 	});
 	// typing updates the URL in place (without a history entry)
 	$effect(() => {
@@ -65,7 +128,7 @@
 	// Announcement for screen readers: number of results (zero included), only at the end of typing
 	let announced = $state("");
 	$effect(() => {
-		const msg = !text ? "" : failed ? t("search.indexUnavailable") : !engine ? t("search.loadingIndex") : res.total ? `${t("search.results", { count: res.total })}.` : `${t("search.noResults")}.`;
+		const msg = !text ? "" : failed ? t("search.indexUnavailable") : !engine ? t("search.loadingIndex") : total ? `${t("search.results", { count: total })}.` : `${t("search.noResults")}.`;
 		const id = setTimeout(() => (announced = msg), 500);
 		return () => clearTimeout(id);
 	});
@@ -77,14 +140,14 @@
 		await tick();
 		if (!btn.isConnected && favs.removed) undoBtn?.focus();
 	};
-	const fix = (raws: string[]) => { search.q = raws.reduce(removeToken, search.q); };
+	const fix = (raws: string[]) => search.apply(raws.reduce(removeToken, search.q));
 </script>
 
 <svelte:head><title>{t("nav.search")} · Cortex</title></svelte:head>
 
 <h1 class="text-3xl font-semibold tracking-tight">{t("nav.search")}</h1>
 <SearchBox variant="main" live class="mt-4" />
-<FilterChips bind:value={search.q} class="mt-3" />
+<FilterChips bind:value={() => search.q, (v) => search.apply(v)} class="mt-3" />
 
 
 <div class="mt-6 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
@@ -112,6 +175,8 @@
 				<button type="button" class="text-foreground inline-flex min-h-6 items-center gap-1 underline underline-offset-4" onclick={load}><Icon name="retry" size={16} />{t("common.retry")}</button>
 			{:else if !engine}
 				{t("search.loadingIndex")}
+			{:else if onServer}
+				{t("search.results", { count: total })}
 			{:else if res.total}
 				{res.total > res.hits.length ? t("search.resultsPartial", { shown: res.hits.length, count: res.total }) : t("search.results", { count: res.total })}
 			{:else}
@@ -119,6 +184,17 @@
 			{/if}
 		</p>
 		<p class="sr-only" role="status">{announced}</p>
+		<!-- the judge's ranking: polite and discreet, never a blocking state; the region stays in the page so that its changes are announced -->
+		<p role="status" aria-live="polite" class="text-muted-foreground text-sm" data-ranking={judging ? "busy" : srv?.phase === "judged" ? "done" : undefined}>
+			{#if judging}
+				<span class="mt-1 flex items-center gap-2"><span class="bg-muted-foreground size-2 shrink-0 motion-safe:animate-pulse" aria-hidden="true"></span>{t("search.ranking")}</span>
+			{:else if grouped}
+				<span class="sr-only">{t("search.rankedDone", { retained: grouped.retained.length, related: grouped.related.length })}</span>
+				{#if srv?.judged?.model}<span class="mt-1 block">{t("search.ranked", { model: srv.judged.model })}</span>{/if}
+			{:else if srv?.judged?.reason === "unavailable"}
+				<span class="mt-1 block">{t("search.rankingUnavailable")}</span>
+			{/if}
+		</p>
 
 		{#each issues as issue (issue.text)}
 			<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm">
@@ -140,25 +216,63 @@
 		{/if}
 
 		{#if text}
-			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-			<ul class="divide-border mt-2 divide-y" onclick={onRowClick}>
-				{#each res.hits as h (h.doc.id)}
-					<li class="py-4">
-						<ResultRow doc={h.doc} href={withPassage(toPage(h.doc.id), q)} titleHtml={h.title} descriptionHtml={h.description} snippetHtml={h.snippet} showFav onopen={() => search.remember(q)} />
-					</li>
-				{/each}
-			</ul>
-			{#if res.total > res.hits.length}
+			{#snippet item(v: View, href: string)}
+				<li class="py-4">
+					<ResultRow doc={v.doc} {href} titleHtml={v.titleHtml} descriptionHtml={v.descriptionHtml} snippetHtml={v.snippetHtml} note={v.note} showFav onopen={() => search.remember(q)} />
+				</li>
+			{/snippet}
+			{#snippet list(rs: Row[], label?: string)}
+				<ul class="divide-border divide-y" aria-label={label}>
+					{#each rs as r (r.doc.id)}{@render item(viewOf(r), withPassage(toPage(r.doc.id), q))}{/each}
+				</ul>
+			{/snippet}
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+			<div class="mt-2" aria-busy={judging} onclick={onRowClick}>
+				{#if grouped}
+					{@const top = grouped.retained.length + grouped.related.length > 0}
+					{#if grouped.retained.length}
+						<section aria-labelledby="g-retained" class="mb-6">
+							<h3 id="g-retained" class="text-lg font-semibold">{t("search.group.retained")} <span class="text-muted-foreground text-base font-normal tabular-nums">{grouped.retained.length}</span></h3>
+							{@render list(grouped.retained)}
+						</section>
+					{/if}
+					{#if grouped.related.length}
+						<section aria-labelledby="g-related" class="mb-6">
+							<h3 id="g-related" class="text-lg font-semibold">{t("search.group.related")} <span class="text-muted-foreground text-base font-normal tabular-nums">{grouped.related.length}</span></h3>
+							{@render list(grouped.related)}
+						</section>
+					{/if}
+					{#if !top}<p class="text-muted-foreground mb-3 text-[0.9375rem]">{t("search.group.noTop")}</p>{/if}
+					{#if grouped.other.length}
+						<!-- the rest is folded, never hidden for good: a disclosure with its count -->
+						<details open={!top} class="group rounded-lg border px-3" data-group="other">
+							<summary class="focus-visible:ring-ring/50 flex min-h-11 cursor-pointer items-center gap-2 text-base font-semibold focus-visible:ring-3">{t("search.group.other", { count: grouped.other.length })}<Icon name="chevron-down" size={16} class="text-muted-foreground ml-auto motion-safe:transition-transform group-open:rotate-180" /></summary>
+							{@render list(grouped.other)}
+						</details>
+					{/if}
+				{:else if onServer}
+					<ul class="divide-border divide-y">
+						{#each shownServer as r (r.doc.id)}{@render item(viewOf(r), withPassage(toPage(r.doc.id), q))}{/each}
+					</ul>
+				{:else}
+					<ul class="divide-border divide-y">
+						{#each res.hits as h (h.doc.id)}{@render item({ doc: h.doc, titleHtml: h.title, descriptionHtml: h.description, snippetHtml: h.snippet }, withPassage(toPage(h.doc.id), q))}{/each}
+					</ul>
+				{/if}
+			</div>
+			{#if onServer && !grouped && srvRows.length > shownServer.length}
+				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>{t("search.showMore", { shown: shownServer.length, total: srvRows.length })}</button>
+			{:else if !onServer && res.total > res.hits.length}
 				<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-4 min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (limit += STEP)}>{t("search.showMore", { shown: res.hits.length, total: res.total })}</button>
 			{/if}
-			{#if engine && !res.total && !issues.length}
+			{#if engine && !total && !issues.length}
 				<div class="py-6">
 					<p class="font-medium">{noFav ? t("search.noFavsYet") : t("search.noMatch")}</p>
 					<p class="text-muted-foreground mt-1 text-[0.9375rem]">
 						{#if noFav}{t("search.noFavsYet.help")}
 						{:else}{t("search.noMatch.help")}{/if}
 					</p>
-					<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-3 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (search.q = "")}><Icon name="clear" size={16} />{t("search.clear")}</button>
+					<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 mt-3 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => search.apply("")}><Icon name="clear" size={16} />{t("search.clear")}</button>
 				</div>
 			{/if}
 		{:else}
