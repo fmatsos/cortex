@@ -1,3 +1,5 @@
 [test]
 # every test, and every cortex it spawns, sees an empty remotes.json: none may reach a real remote wiki
 preload = ["./src/test-preload.ts"]
+# the Playwright specs in tests/ui are run by `bun run test:ui`, never by bun (which matches *.spec.ts)
+pathIgnorePatterns = ["tests/**"]
