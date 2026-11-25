@@ -20,7 +20,7 @@ const QUOTES = `<path d="M4 5h6v8H4zM10 13l-4 6M14 5h6v8h-6zM20 13l-4 6"/>`;
 /** Square frame: the container of the status and outcome icons (the circle was only a container). */
 const FRAME = `<rect x="3" y="3" width="18" height="18"/>`;
 /** Shield with straight edges: verified / unverified / needs-review. */
-const SHIELD = `<path d="M12 3 4.5 6v6.5L12 21l7.5-8.5V6z"/>`;
+const SHIELD = `<path d="M4 3h16v10l-8 8-8-8z"/>`;
 const LOUPE = `<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5.5 5.5"/>`;
 const TRAY = `<path d="M4 14v6h16v-6M12 3v12M7.5 10.5 12 15l4.5-4.5"/>`;
 /** A dot: a real 2x2 filled square centred on (x, y); a zero-length segment vanishes with butt ends. */
@@ -30,7 +30,7 @@ export const ICONS = {
 	// navigation
 	home: `<path d="M4 10.5 12 3.5 20 10.5V20H4zM10 20v-6h4v6"/>`,
 	search: LOUPE,
-	graph: `<rect x="9.5" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><path d="M12 8v4M5.5 16v-4h13v4"/>`,
+	graph: `<rect x="3" y="6" width="4" height="4"/><rect x="13" y="3" width="4" height="4"/><rect x="17" y="16" width="4" height="4"/><rect x="5" y="17" width="4" height="4"/><path d="M7 7.5l6-2M15.5 7l3 9M17 18.5 9 19M6.5 17l-1-7M7 9.5l10 7"/>`,
 	tags: `<path d="M4 4h8l8.5 8.5-8 8L4 12z"/>${DOT(7.5, 7.5)}`,
 	journal: `<rect x="4" y="3" width="16" height="18"/><path d="M9 3v18M13 8h4M13 12h4M13 16h4"/>`,
 	favorites: STAR,
@@ -38,16 +38,16 @@ export const ICONS = {
 	// page types
 	concept: `<path d="M8 3h8l3 3v5l-4 4v2H9v-2l-4-4V6zM9 21h6"/>`,
 	entity: `<path d="M12 3 20 7.5v9L12 21 4 16.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9"/>`,
-	synthesis: `<rect x="4" y="3" width="5" height="5"/><rect x="15" y="3" width="5" height="5"/><rect x="8.5" y="16" width="7" height="5"/><path d="M6.5 8v4h11V8M12 12v4"/>`,
+	synthesis: `<path d="M11 8V3h10v18H11v-5M3 5h3l5 7-5 7H3M11 12h7M14 7h4M14 17h4"/>`,
 	source: `<path d="M14 3H4v18h16V9zM14 3v6h6M8 13h8M8 17h8"/>`,
 
 	// status and trust
 	draft: `<path d="M10 4H4v16h16v-6M9 11l8-8 4 4-8 8-5 1z"/>`,
 	stable: `${FRAME}<path d="m7.5 12 3 3 6-6"/>`,
 	deprecated: `${FRAME}<path d="m7 7 10 10"/>`,
-	verified: `${SHIELD}<path d="m8.5 12 2.5 2.5 4.5-4.5"/>`,
-	unverified: `${SHIELD}<path d="M9 9V8h6v4l-3 2"/>${DOT(12, 17)}`,
-	"needs-review": `${SHIELD}<path d="M12 8v5"/>${DOT(12, 17)}`,
+	verified: `${SHIELD}<path d="m8 10 3 3 5-5"/>`,
+	unverified: `${SHIELD}<path d="M8 8V6.5h7v3l-3 2"/>${DOT(12, 15)}`,
+	"needs-review": `${SHIELD}<path d="M12 6.5v5"/>${DOT(12, 15)}`,
 	stale: `<circle cx="10.5" cy="13.5" r="7.5"/><path d="M10.5 9v4.5l3 2M20 3v4"/>${DOT(20, 10.5)}`,
 
 	// actions
@@ -76,7 +76,7 @@ export const ICONS = {
 	toc: `<path d="M4 6h16M9 12h8M9 18h11"/>`,
 	"chevron-down": `<path d="m6 9 6 6 6-6"/>`,
 	back: `<path d="M20 12H4M10 6l-6 6 6 6"/>`,
-	backlink: `<path d="M3 4v8h6M6 9l3 3-3 3"/><rect x="12" y="3" width="9" height="18"/>${DOT(16.5, 9)}${DOT(16.5, 15)}`,
+	backlink: `<path d="M12 4H4v16h16v-6M21 3v8H11M15 7l-4 4 4 4"/>`,
 	related: `<rect x="3" y="3" width="7" height="10"/><rect x="14" y="11" width="7" height="10"/><path d="M10 8h7v3"/>`,
 	"external-link": `<path d="M14 4h6v6M20 4l-9 9M18 13.5V20H4V6h6.5"/>`,
 	note: `<path d="M4 3h16v12l-6 6H4zM14 21v-6h6"/>`,
