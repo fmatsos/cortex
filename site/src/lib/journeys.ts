@@ -1,5 +1,4 @@
 import { api } from "./api";
-import { serializeRoute } from "./journey";
 
 /** A saved graph journey (`route`: the page ids, in order; dates are ISO strings). */
 export type Journey = { id: string; title: string; route: string[]; created_at: string; updated_at: string };
@@ -13,12 +12,6 @@ export const removeJourney = (id: string) => api(`/api/journeys/${encodeURICompo
 export const createJourney = (title: string | undefined, route: readonly string[]) => api<Journey>("/api/journeys", { method: "POST", body: { title, route } });
 /** Replaces the route of a saved journey (its title is kept). */
 export const updateJourney = (id: string, route: readonly string[]) => api<Journey>(`/api/journeys/${encodeURIComponent(id)}`, { method: "PUT", body: { route } });
-
-/**
- * The query string that opens a journey on the graph page (`?view=journey&route=…`), built like the graph page itself writes
- * it. `id` (a saved journey) links the page to its saved copy: Save then updates that copy and says whether it is up to date.
- */
-export const journeyQuery = (route: readonly string[], id?: string): string => new URLSearchParams({ view: "journey", route: serializeRoute(route), ...(id ? { journey: id } : {}) }).toString();
 
 /**
  * What the account page can do with a saved journey: export it as Markdown (`registerJourneyActions`, once, from the layout);

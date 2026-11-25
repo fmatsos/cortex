@@ -3,7 +3,8 @@
 	import { account } from "#lib/account.svelte.js";
 	import { ApiError } from "#lib/api.js";
 	import { t } from "#lib/i18n/index.js";
-	import { exportJourney, journeyActions, journeyQuery, listJourneys, removeJourney, renameJourney, type Journey } from "#lib/journeys.js";
+	import { exportJourney, journeyActions, listJourneys, removeJourney, renameJourney, type Journey } from "#lib/journeys.js";
+	import { journeyQuery } from "#lib/journey.js";
 	import { toRoute } from "#lib/links.js";
 	import ConfirmDialog from "./confirm-dialog.svelte";
 	import { day } from "./format";
