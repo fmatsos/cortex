@@ -31,6 +31,7 @@ import { loadConfig } from "./config";
  * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
  * `GET /api/search`: the hybrid search with the site's operators, and with `judge=1` the judge's ranking (src/search-api.ts).
+ * `GET /api/status`: is the site being rebuilt (a build running or waiting), and how the last one ended; the site shows a small indicator.
  * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
  * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
  */
@@ -200,9 +201,12 @@ export async function serve(root: string, o: ServeOpts) {
   // quiet time before it lasts, joins the next build: any number of requests give one build, plus one if they came during it.
   // Callers do not wait (`void rebuild()`): a response means "accepted", the site is swapped in once the build ends.
   let building: Promise<void> | undefined, dirty = false, requests = 0, stopped = false, exporter: Subprocess | undefined;
+  // what `GET /api/status` tells: since when the site has been busy (a build running or waiting: `building` is set), and how the last build ended
+  let since: number | undefined, last: { at: string; ok: boolean; ms: number } | undefined;
   const asked = (n: number) => (n === 1 ? "1 request" : `${n} requests merged into one build`);
   const rebuild = (now = false): Promise<void> => {
     dirty = true; requests++;
+    if (!building) since = Date.now();
     return building ??= (async () => {
       try {
         for (let first = true; dirty && !stopped; first = false) {
@@ -218,12 +222,18 @@ export async function serve(root: string, o: ServeOpts) {
             if (!existsSync(join(out, "index.html"))) throw new Error("the export wrote no index.html");
             markComplete(out);
             current = out; next = 1 - next;
+            last = { at: new Date().toISOString(), ok: true, ms: Math.round(performance.now() - t0) }; // with the swap: "not building" is only seen once the new site is served
             say(`site rebuilt in ${took()} (${out}), ${asked(n)}`);
             void reindex(); // after the swap: the site never waits for the embeddings
-          } catch (e) { if (!stopped) say(`export failed after ${took()}, the previous site stays (${asked(n)}): ${(e as Error).message}`); }
+          } catch (e) {
+            if (!stopped) {
+              last = { at: new Date().toISOString(), ok: false, ms: Math.round(performance.now() - t0) };
+              say(`export failed after ${took()}, the previous site stays (${asked(n)}): ${(e as Error).message}`);
+            }
+          }
           finally { exporter = undefined; }
         }
-      } finally { building = undefined; }
+      } finally { building = undefined; since = undefined; }
     })();
   };
 
@@ -303,6 +313,14 @@ export async function serve(root: string, o: ServeOpts) {
         } catch (e) {
           return Response.json({ error: (e as Error).message }, { status: /unknown page/.test((e as Error).message) ? 404 : 500 });
         }
+      }
+      if (url.pathname === "/api/status") {
+        // is the site being rebuilt: the state of the build queue, read-only, no account. Polled by the site, so never cached
+        const headers = { "cache-control": "no-store" };
+        if (req.method === "HEAD") return new Response(null, { status: 204, headers }); // probe
+        if (req.method !== "GET") return new Response(null, { status: 405, headers });
+        const isBuilding = building !== undefined; // a build, or the quiet time before it, or one more build waiting behind it
+        return Response.json({ building: isBuilding, ...(isBuilding && since !== undefined && { since: new Date(since).toISOString() }), ...(last && { last }) }, { headers });
       }
       if (url.pathname === "/api/search") {
         // the hybrid search with the site's operators; `judge=1` also ranks the hits with the judge (search-api.ts). Always on in serve: reading, no account
