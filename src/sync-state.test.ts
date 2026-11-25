@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { plan, readServer, stateKey, toBody, type SyncState } from "../site/src/lib/sync-state";
-import { journeyQuery } from "../site/src/lib/journeys";
-import { parseRoute } from "../site/src/lib/journey";
+import { journeyQuery, parseRoute } from "../site/src/lib/journey";
 
 const local: SyncState = { theme: "dark", lang: "fr", reading: true, comfort: false, favs: ["a", "b"] };
 

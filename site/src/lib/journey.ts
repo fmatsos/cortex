@@ -9,6 +9,12 @@ export type RelationIndex = ReadonlyMap<string, Relations>;
 /** Ids joined by commas; a comma or a percent sign inside an id is percent-encoded, so `parseRoute` can split safely. */
 export const serializeRoute = (ids: readonly string[]) => ids.map((id) => id.replace(/[%,]/g, encodeURIComponent)).join(",");
 
+/**
+ * The query string that opens a journey on the graph page (`?view=journey&route=…`), built like the graph page itself writes
+ * it. `id` (a saved journey) links the page to its saved copy: Save then updates that copy and says whether it is up to date.
+ */
+export const journeyQuery = (route: readonly string[], id?: string): string => new URLSearchParams({ view: "journey", route: serializeRoute(route), ...(id ? { journey: id } : {}) }).toString();
+
 export const linked = (index: RelationIndex, a: string, b: string) => { const r = index.get(a); return !!r && (r.cites.includes(b) || r.citedBy.includes(b)); };
 
 /** The `route` parameter back to a route: an id that is unknown (or malformed), or not linked to the last kept step, is ignored. */

@@ -3,7 +3,7 @@ import { relationIndex } from "../site/src/lib/graph-model";
 import { DICTS, translate, type Key, type Locale, type Vars } from "../site/src/lib/i18n/index";
 import { defaultJourneyTitle, journeyFilename, journeyMarkdown, pathDraftMarkdown, stripFrontMatter, type JourneyPage } from "../site/src/lib/journey-markdown";
 import { parsePath } from "./reading-paths";
-import { journeyQuery } from "../site/src/lib/journeys";
+import { journeyQuery } from "../site/src/lib/journey";
 
 const SITE = "https://wiki.example.org/";
 const tr = (l: Locale) => (key: Key, vars?: Vars) => translate(DICTS[l], l, key, vars);
