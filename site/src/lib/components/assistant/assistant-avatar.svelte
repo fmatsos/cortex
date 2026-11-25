@@ -191,11 +191,12 @@
 	.nodes.front {
 		stroke: none;
 	}
+	/* owner: the travelling signal is not green (it would read as a prefrontal node): the assistant "question" colour */
 	.signal-motion {
-		fill: var(--primary, currentColor);
+		fill: var(--kind-query, currentColor);
 	}
 	.halo {
-		opacity: 0.18;
+		opacity: 0.12;
 		filter: blur(0.65px);
 	}
 	.break {
