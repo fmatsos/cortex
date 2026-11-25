@@ -34,10 +34,14 @@ export const JUDGE_SETTINGS = {
   ask_retained: { limit: "askRetained", min: 0, max: 1, int: false },
   ask_related: { limit: "askRelated", min: 0, max: 1, int: false },
   ask_candidates: { limit: "askCandidates", min: 1, max: Infinity, int: true },
+  search_retained: { limit: "searchRetained", min: 0, max: 1, int: false },
+  search_related: { limit: "searchRelated", min: 0, max: 1, int: false },
+  search_candidates: { limit: "searchCandidates", min: 1, max: Infinity, int: true },
+  concurrency: { limit: "judgeConcurrency", min: 1, max: Infinity, int: true },
 } as const;
 export type JudgeSettingName = keyof typeof JUDGE_SETTINGS;
 
-export type JudgeConfig = { url: string; key?: string; model: string; routeYes: number; dupYes: number; routeCandidates: number; dupCandidates: number; routeChars: number; askRetained: number; askRelated: number; askCandidates: number };
+export type JudgeConfig = { url: string; key?: string; model: string; routeYes: number; dupYes: number; routeCandidates: number; dupCandidates: number; routeChars: number; askRetained: number; askRelated: number; askCandidates: number; searchRetained: number; searchRelated: number; searchCandidates: number; concurrency: number };
 
 const warnedEnv = new Set<string>();
 function setting(name: JudgeSettingName, own: number | null | undefined): number {
@@ -68,20 +72,27 @@ export async function judgeConfig(root: string): Promise<JudgeConfig | undefined
     routeCandidates: setting("route_candidates", j.route_candidates), dupCandidates: setting("dup_candidates", j.dup_candidates),
     routeChars: setting("route_chars", j.route_chars),
     askRetained: setting("ask_retained", j.ask_retained), askRelated: setting("ask_related", j.ask_related), askCandidates: setting("ask_candidates", j.ask_candidates),
+    searchRetained: setting("search_retained", j.search_retained), searchRelated: setting("search_related", j.search_related), searchCandidates: setting("search_candidates", j.search_candidates),
+    concurrency: setting("concurrency", j.concurrency),
   };
+  // the environment bypasses the lint of cortex.json: a related bar above the retained one is lowered to it
+  settings.searchRelated = Math.min(settings.searchRelated, settings.searchRetained);
   if (env && (!own || own === env)) return { url: env, key: process.env.CORTEX_JUDGE_API_KEY, ...settings };
   return { ...endpoint(c, j.base_url ?? undefined), ...settings };
 }
 
+/** An answer the server gave but that this call cannot use (not a sign that the server is down). */
+class Soft extends Error {}
 let warned = false;
 const downUntil = new Map<string, number>(); // by server: a long-lived `cortex mcp` tries again after `downMs`
 
 /**
  * Answers of the judge to `questions` (by id, all asked in one call: they see the same `state`, independently), or
  * undefined when it is not available: no `judge` config, server down or slow (one warning, then left alone for `downMs`),
- * unreadable answer.
+ * unreadable answer. `isolated` (a batch of independent calls, one per candidate): an HTTP error or an unusable answer concerns
+ * that call alone and leaves the server up for the others; a timeout or a refused connection still marks it down.
  */
-export async function judge(root: string, state: unknown, questions: Record<string, Question>, timeoutMs: number = JUDGE.timeoutMs, what = "judge"): Promise<Record<string, Answer> | undefined> {
+export async function judge(root: string, state: unknown, questions: Record<string, Question>, timeoutMs: number = JUDGE.timeoutMs, what = "judge", opts: { isolated?: boolean } = {}): Promise<Record<string, Answer> | undefined> {
   const cfg = await judgeConfig(root);
   const n = Object.keys(questions).length;
   if (!cfg || !n) return;
@@ -95,17 +106,18 @@ export async function judge(root: string, state: unknown, questions: Record<stri
       body: JSON.stringify({ model: cfg.model, state, questions }),
       signal: AbortSignal.timeout(timeoutMs), timeout: false,
     });
-    if (!res.ok) throw new Error(`${cfg.url} answered ${res.status}`);
+    if (!res.ok) throw new Soft(`${cfg.url} answered ${res.status}`);
     const body = (await res.json()) as { answers?: Record<string, Answer>; usage?: { input_tokens?: number } };
     const answers = body.answers;
     for (const [id, q] of Object.entries(questions)) {
       const a = answers?.[id];
-      if (a?.type !== q.type || (a.type === "noul" ? typeof a.noul !== "number" : !a.probabilities)) throw new Error(`${cfg.url}: no usable answer for a ${q.type} question`);
+      if (a?.type !== q.type || (a.type === "noul" ? typeof a.noul !== "number" : !a.probabilities)) throw new Soft(`${cfg.url}: no usable answer for a ${q.type} question`);
     }
     note(`${call}, ${secs(t0)}${body.usage?.input_tokens != null ? `, ${body.usage.input_tokens} tokens` : ""}: ${Object.entries(answers!).map(([id, a]) => `${id} ${brief(a)}`).join(", ")}`);
     return answers;
   } catch (e) {
     note(`${call}, ${secs(t0)}: failed (${(e as Error).message})`);
+    if (opts.isolated && e instanceof Soft) return;
     downUntil.set(cfg.url, Date.now() + JUDGE.downMs);
     if (!warned) { warned = true; warn(`judge: ${(e as Error).message}. Going on without it.`); }
   }

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { checkTemplate, type NamingKey } from "./template";
+import { LIMITS } from "./limits";
 
 /**
  * cortex.json: schema, defaults, reading and linting. Imports nothing from naming.ts, schema.ts or backends/
@@ -103,14 +104,16 @@ const SHAPE = {
    * Judge: a System One model (TypeSafe's hosted Jev, or d3-mini behind llama.cpp's `POST <base_url>/systemone`) that answers
    * yes/no and choice questions (duplicate guard, ingest routing). Absent = off. base_url: default $CORTEX_JUDGE_BASE_URL, else
    * as `embed`; model: default $CORTEX_JUDGE_MODEL, else `d3-mini`. Thresholds and sizes (they depend on the model): each one
-   * default $CORTEX_JUDGE_<NAME>, else limits.ts (judge.ts JUDGE_SETTINGS).
+   * default $CORTEX_JUDGE_<NAME>, else limits.ts (judge.ts JUDGE_SETTINGS). `*_related` must not exceed `*_retained`.
    */
   judge: z.strictObject({
     base_url: str("judge.base_url"), model: str("judge.model"),
     route_yes: prob("judge.route_yes"), dup_yes: prob("judge.dup_yes"),
     route_candidates: count("judge.route_candidates"), dup_candidates: count("judge.dup_candidates"), route_chars: count("judge.route_chars"),
     ask_retained: prob("judge.ask_retained"), ask_related: prob("judge.ask_related"), ask_candidates: count("judge.ask_candidates"),
-  }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars, ask_retained, ask_related, ask_candidates), or null.' }).nullish(),
+    search_retained: prob("judge.search_retained"), search_related: prob("judge.search_related"), search_candidates: count("judge.search_candidates"),
+    concurrency: count("judge.concurrency"),
+  }, { error: '"judge" must be an object (base_url, model, route_yes, dup_yes, route_candidates, dup_candidates, route_chars, ask_retained, ask_related, ask_candidates, search_retained, search_related, search_candidates, concurrency), or null.' }).nullish(),
   /**
    * User accounts of `cortex serve` (src/auth.ts, docs in the README): sign-in through a generic OIDC provider (Authelia…),
    * GitHub (OAuth2) and/or Google (OIDC), each active only when configured AND its secret is in the environment
@@ -159,6 +162,9 @@ export const ConfigSchema = z.strictObject(SHAPE).superRefine((c, ctx) => {
   };
   check(["effort"], c.effort, c.client);
   check(["site_ask", "effort"], c.site_ask?.effort, c.site_ask?.client ?? c.client);
+  const j = c.judge;
+  if (j?.search_retained != null && j.search_related != null && j.search_related > j.search_retained)
+    ctx.addIssue({ code: "custom", path: ["judge", "search_related"], message: `"judge.search_related" (${j.search_related}) cannot exceed "judge.search_retained" (${j.search_retained}).`, input: j.search_related });
   const a = c.auth;
   if (a && (a.oidc || a.github || a.google) && !a.public_urls?.length)
     ctx.addIssue({ code: "custom", path: ["auth", "public_urls"], message: '"auth.public_urls" is required with a provider: the redirect URI is built from it (e.g. ["https://cortex.example"]).' });
@@ -185,6 +191,12 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
   if (r.data.site_ask?.client === "openai" && !r.data.site_ask.model && r.data.client !== "openai")
     return [{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }];
+  const j = r.data.judge;
+  // one of the two set alone is compared with the other's default: the related bar would be lowered at run time
+  if (j && (j.search_retained != null) !== (j.search_related != null)) {
+    const retained = j.search_retained ?? LIMITS.searchRetained, related = j.search_related ?? LIMITS.searchRelated;
+    if (related > retained) return [{ level: "warning", msg: `judge.search_related (${related}) is above judge.search_retained (${retained}): the related bar is lowered to ${retained}. Set both.` }];
+  }
   const plain = r.data.auth?.public_urls?.find((u) => u.startsWith("http:"));
   if (plain) return [{ level: "warning", msg: `auth.public_urls "${plain}" is plain http: the session cookie is not marked Secure there.` }];
   return !r.data.client && (r.data.model || r.data.effort || r.data.base_url)
