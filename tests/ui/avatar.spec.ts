@@ -97,7 +97,13 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     for (const avatar of [head, waiting]) {
       await expect(avatar.locator(".signal")).toHaveCount(1);
       await expect(avatar.locator(".halo")).toHaveCount(1);
-      await expect(avatar.locator(".halo")).toHaveCSS("opacity", "0.18");
+      await expect(avatar.locator(".halo")).toHaveCSS("opacity", "0.12");
+      const [fill, query, primary] = await avatar.locator(".signal").evaluate((el) => {
+        const probe = (v: string) => { const d = document.createElement("i"); d.style.color = `var(${v})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
+        return [getComputedStyle(el).fill, probe("--kind-query"), probe("--primary")];
+      });
+      expect(fill, "the signal takes the assistant question colour, not the green of the front nodes").toBe(query);
+      expect(fill).not.toBe(primary);
       const position = await signalPosition(avatar);
       if (still) {
         await page.waitForTimeout(300);
