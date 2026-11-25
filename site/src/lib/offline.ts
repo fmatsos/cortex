@@ -51,11 +51,11 @@ export function isTemporaryFailure(status: number): boolean {
 
 /**
  * Manifest path (relative to the scope, possibly with a leading `/`): on-demand content (a wiki page or
- * a tag page, or its data) rather than base? The base: resources, home, lists (`tags/`, `log/`, `graph/`, `search/`) and index.
+ * its data) rather than base? (Tags have no page of their own: they lead to the search.) The base: resources, home, lists (`tags/`, `log/`, `graph/`, `search/`) and index.
  */
 export function isContentPath(path: string): boolean {
 	const p = path.replace(/^\/+/, "");
-	return p.startsWith("wiki/") || (p.startsWith("tags/") && p !== "tags/" && p !== "tags/__data.json");
+	return p.startsWith("wiki/");
 }
 
 /** `_app/immutable/` entries of the cache absent from the current manifest: obsolete resources to remove from the relevant cache. */

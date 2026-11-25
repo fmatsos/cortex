@@ -16,6 +16,7 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 - **Ombre pour les couches flottantes** : menus, fenêtres contextuelles, palette, notification et tiroir modal de l'assistant prennent `--shadow-overlay` et un contour `--input` ; les surfaces de la page restent plates (T03).
 - **Icônes de marque** : `favicon.svg` (site et `assets/logo/`) est le maître 16 unités ; les PNG (favicons, apple-touch, 192, 512, 512 sombre, logo 912x256) sont rendus à la main depuis `design/brand/cortex-mark.svg` avec Chrome headless (Playwright, `channel: 'chrome'`), marque à 70 % du côté sur fond opaque pour les icônes carrées, et committés ; à refaire si la marque change (C09).
 - **Pleine largeur pour la prose** : le texte des articles occupe toute la largeur de la colonne `article` (plus de mesure à 70ch) ; les actions d'une page tiennent sur une ligne, la source originale passe en `title` du bouton.
+- **Tags vers la recherche** : un tag est toujours un lien vers `/search/?q=#tag` (articles, accueil, index `/tags/`) ; les pages `/tags/<tag>/` sont supprimées.
 
 # Partie I : revue complète
 

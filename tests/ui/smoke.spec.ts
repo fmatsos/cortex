@@ -38,3 +38,15 @@ test("the static server answers an unknown path with 404", async ({ request }) =
   // request-level only: the in-browser 404 page is covered by its own journey
   expect((await request.get("/no/such/page/")).status()).toBe(404);
 });
+
+test("tags lead to the search page filtered on the tag", async ({ page }) => {
+  // owner: a tag is always a link to /search/?q=#tag, on the tags index and on every article carrying one
+  await page.goto("/tags/");
+  const tag = page.locator('main a[href*="/search/?q=%23"]').first();
+  await expect(tag, "the tags index links each tag to the search").toBeVisible();
+  const name = (await tag.getAttribute("href"))!.split("q=")[1];
+  await tag.click();
+  await expect(page).toHaveURL(new RegExp(`/search/\\?q=${name}$`));
+  await expect(page.getByRole("main").getByRole("combobox")).toHaveValue(decodeURIComponent(name));
+  await expect(page.locator('main a[href*="/tags/"]:not([href$="/tags/"])')).toHaveCount(0);
+});
