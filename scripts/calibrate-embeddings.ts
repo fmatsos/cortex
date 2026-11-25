@@ -3,11 +3,12 @@
 //   bun scripts/calibrate-embeddings.ts [wiki root]      (run `cortex index` first: the vectors are read from .cortex/search.db)
 // Prints, in percentiles: page against page (all pairs: the « unrelated » floor), each page's nearest neighbours by rank (what `related` keeps),
 // and each page's title as a query against the sections (what the vector ranking of `search` keeps: the best one, and the best of another page),
-// then how many pairs the duplicate thresholds (`dups.warn`, `dups.cosine`) and the related rule would select.
+// then how many pairs the duplicate thresholds (`dups.warn`, `dups.cosine`) and the related rule would select, and how a page that is NOT a duplicate fares in the check of `cortex new`
+// (its title and description against the whole-page vectors of the same type: the page/page pairs overestimate those cosines).
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { EMBED, embed, embedConfig, keep, profileFor } from "../src/embed";
-import { findRoot } from "../src/lib";
+import { findRoot, parseDoc } from "../src/lib";
 
 const root = process.argv[2] ?? findRoot();
 const cfg = await embedConfig(root);
@@ -39,7 +40,16 @@ for (const p of pages) {
 }
 byRank.forEach((xs, i) => console.log(`nearest page, rank ${i + 1}          `, pct(xs)));
 console.log(`related kept (rule ${JSON.stringify(prof.related)}): per page ${pct(kept)}`);
-console.log(`pairs at or over dups.warn ${prof.dups.warn}: ${pairs.filter((x) => x >= prof.dups.warn).length}; over dups.cosine ${prof.dups.cosine}: ${pairs.filter((x) => x >= prof.dups.cosine).length}  (of ${pairs.length})\n`);
+console.log(`page/page pairs at or over dups.warn ${prof.dups.warn}: ${pairs.filter((x) => x >= prof.dups.warn).length}; over dups.cosine ${prof.dups.cosine}: ${pairs.filter((x) => x >= prof.dups.cosine).length}  (of ${pairs.length}; not what \`cortex new\` compares, see below)\n`);
+
+// The duplicate guard of `cortex new` compares the title and description of the NEW page (short) with the stored vectors of the whole pages of the same type.
+// Each Concept/Entity page is offered again as if it were new (itself left out): its best same-type neighbour is what `dups.warn` and `dups.cosine` see for a page that is NOT a duplicate.
+const fresh = pages.filter((p) => p.path.split("/")[1] !== "sources").slice(0, 200);
+const texts = await Promise.all(fresh.map(async (p) => { const d = parseDoc(p.path, await Bun.file(join(root, p.path)).text()).fm.description; return `${prof.prefix.passage}${p.title}\n${typeof d === "string" ? d : ""}`; }));
+const nv = await embed(texts, cfg, 120_000, false);
+const bestSame = fresh.map((p, i) => { const q = Float32Array.from(nv[i]); return Math.max(-1, ...pages.filter((o) => o !== p && o.path.split("/")[1] === p.path.split("/")[1]).map((o) => dot(q, o.v))); });
+console.log("new-page check: best same-type neighbour of a distinct page", pct(bestSame));
+console.log(`distinct pages \`cortex new\` would warn about (>= ${prof.dups.warn}): ${(bestSame.filter((x) => x >= prof.dups.warn).length / bestSame.length * 100).toFixed(1)} %; refuse without judge (>= ${prof.dups.cosine}): ${(bestSame.filter((x) => x >= prof.dups.cosine).length / bestSame.length * 100).toFixed(1)} %\n`);
 
 // the title of a page as a query: its own sections (should win), then the best section of another page (the floor the rule has to clear)
 const titles = pages.slice(0, 200);
