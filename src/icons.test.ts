@@ -66,7 +66,7 @@ test("lecteur de chemin : cas connus", () => {
 });
 
 const SHAPES = new Set(["path", "circle", "rect", "g"]);
-const MARGIN = 1.5; // optical margin of 2, with the tolerance of rounded endpoints
+const MARGIN = 1.5; // optical margin of 2, with the tolerance of mitered joins
 
 test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   const { document } = parseHTML(`<!doctype html><body>${iconSvg(name, { size: 20 })}`);
@@ -76,8 +76,9 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   expect(svg.getAttribute("fill")).toBe("none");
   expect(svg.getAttribute("stroke")).toBe("currentColor");
   expect(svg.getAttribute("stroke-width")).toBe("1.75");
-  expect(svg.getAttribute("stroke-linecap")).toBe("round");
-  expect(svg.getAttribute("stroke-linejoin")).toBe("round");
+  expect(svg.getAttribute("stroke-linecap")).toBe("butt");
+  expect(svg.getAttribute("stroke-linejoin")).toBe("miter");
+  expect(svg.getAttribute("stroke-miterlimit")).toBe("2");
   expect(svg.getAttribute("aria-hidden")).toBe("true"); // decorative by default
   expect(svg.getAttribute("role")).toBeNull();
 
@@ -86,7 +87,16 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
   for (const el of shapes) {
     const tag = el.tagName.toLowerCase();
     expect(SHAPES.has(tag), `élément ${tag} non prévu`).toBe(true);
-    expect(el.getAttribute("fill"), "pas de remplissage propre à une forme").toBeNull();
+    // square language: no rounded rectangle, no `ry`
+    expect(el.getAttribute("rx"), "rx interdit (angles droits)").toBeNull();
+    expect(el.getAttribute("ry"), "ry interdit (angles droits)").toBeNull();
+    if (el.getAttribute("fill") !== null) {
+      // the only own fill: a dot, a real 2x2 square (a zero-length segment vanishes with butt ends)
+      expect(tag, "seul un rect peut se remplir").toBe("rect");
+      expect(el.getAttribute("fill")).toBe("currentColor");
+      expect(el.getAttribute("stroke")).toBe("none");
+      expect([el.getAttribute("width"), el.getAttribute("height")]).toEqual(["2", "2"]);
+    } else expect(el.getAttribute("stroke"), "trait propre à une forme").toBeNull();
     if (tag === "g") continue; // transformed group (copy-link): extent computed after rotation, checked by eye
     const inside = !el.closest("g");
     if (tag === "path") {
@@ -104,6 +114,18 @@ test.each(ICON_NAMES)("l'icône %s produit un SVG valide", (name) => {
       expect(x + w).toBeLessThanOrEqual(24 - MARGIN); expect(y + h).toBeLessThanOrEqual(24 - MARGIN);
     }
   }
+});
+
+test("contrat carré : aucun rx, aucun point h.01, aucun segment de longueur nulle", () => {
+  for (const name of ICON_NAMES) {
+    const body = ICONS[name];
+    expect(body, `${name}: rx`).not.toMatch(/\brx=|\bry=/);
+    expect(body, `${name}: point h.01`).not.toMatch(/[hv]\.0\d?(?![\d])/);
+    expect(body, `${name}: segment nul`).not.toMatch(/[hv]0(?![\d.])/);
+  }
+  // dots exist where the old pack had them (list-view, fit-view, tags...)
+  expect(ICONS["list-view"].match(/<rect /g)?.length).toBe(3);
+  expect(ICONS["fit-view"]).toContain('fill="currentColor"');
 });
 
 test("iconSvg : étiquette, remplissage et trait optique", () => {
@@ -142,6 +164,9 @@ test("le composant Icon rend le même SVG (décorative par défaut, étiquetée 
     expect(out.getAttribute("aria-hidden")).toBe("true");
     expect(out.getAttribute("role")).toBeNull();
     expect(out.getAttribute("stroke-width")).toBe("1.75");
+    expect(out.getAttribute("stroke-linecap")).toBe("butt");
+    expect(out.getAttribute("stroke-linejoin")).toBe("miter");
+    expect(out.getAttribute("stroke-miterlimit")).toBe("2");
   }
   const labelled = parseHTML(`<!doctype html><body>${html({ name: "search", size: 24, label: "Rechercher" })}`).document.querySelector("svg")!;
   expect(labelled.getAttribute("role")).toBe("img");

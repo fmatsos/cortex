@@ -16,8 +16,9 @@
 	fill={filled ? "currentColor" : "none"}
 	stroke="currentColor"
 	stroke-width={strokeFor(size)}
-	stroke-linecap="round"
-	stroke-linejoin="round"
+	stroke-linecap="butt"
+	stroke-linejoin="miter"
+	stroke-miterlimit="2"
 	focusable="false"
 	role={label ? "img" : undefined}
 	aria-label={label}
