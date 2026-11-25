@@ -15,14 +15,15 @@
 	 * (status, review, partial source), description and found passage. `verified` and `needsReview` are optional: a list
 	 * that does not know them shows nothing rather than false information.
 	 * `compact`: palette form (one line, truncated excerpts, no link or button: the option carries the action).
+	 * `note`: a discreet label on how the page was found ("by meaning"), only when it helps; never a raw score.
 	 * `titleHtml`, `descriptionHtml`, `snippetHtml`: HTML already escaped by the engine (<mark> highlighting).
 	 */
 	type RowDoc = { id: string; type: string; title: string; description?: string; status?: string; verified?: boolean; needsReview?: boolean; partial?: boolean };
 	let {
-		doc, href, titleHtml, descriptionHtml, snippetHtml, compact = false, selected = false, showFav = false, showType = true, onopen,
+		doc, href, titleHtml, descriptionHtml, snippetHtml, compact = false, selected = false, showFav = false, showType = true, note, onopen,
 	}: {
 		doc: RowDoc; href?: string; titleHtml?: string; descriptionHtml?: string; snippetHtml?: string;
-		compact?: boolean; selected?: boolean; showFav?: boolean; showType?: boolean; onopen?: () => void;
+		compact?: boolean; selected?: boolean; showFav?: boolean; showType?: boolean; note?: string; onopen?: () => void;
 	} = $props();
 	const fav = $derived(favs.has(doc.id));
 	const showStatus = $derived(!!doc.status && doc.status !== "stable");
@@ -54,6 +55,7 @@
 			{#if showStatus}<StatusBadge status={doc.status!} />{/if}
 			{#if doc.needsReview}<TrustIcon icon="needs-review" label={tr("row.review")} />{/if}
 			{#if doc.partial}<TrustIcon icon="warning" label={tr("row.partial")} />{/if}
+			{#if note}<Badge variant="stable" size="sm" data-match>{note}</Badge>{/if}
 		</span>
 	</div>
 	{#if snippetHtml || desc}<p class="text-muted-foreground mt-0.5 text-sm {selected ? 'line-clamp-3' : 'line-clamp-1'}">{@html snippetHtml ?? desc}</p>{/if}
@@ -67,6 +69,7 @@
 			<div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 empty:hidden">
 				{#if showType}<TypeBadge type={doc.type} />{/if}
 				{@render trust()}
+				{#if note}<Badge variant="stable" size="sm" data-match>{note}</Badge>{/if}
 			</div>
 			{#if desc}<p class="text-muted-foreground mt-1.5 text-[0.9375rem] leading-relaxed">{@html desc}</p>{/if}
 			{#if snippetHtml}<p class="mt-1.5 text-[0.9375rem] leading-relaxed">{@html snippetHtml}</p>{/if}

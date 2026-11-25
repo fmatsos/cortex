@@ -145,6 +145,19 @@ export function ranges(text: string, hits: Set<string>, phrases: string[] = []):
 
 export const parse = parseQuery;
 
+/**
+ * Escaped text with <mark> on the query's words (as a word start: the last word is a prefix while typing) and exact phrases, for the
+ * text the server found (its excerpt carries no highlight). Without a match, the text as is.
+ */
+export function highlight(text: string, p: Parsed): string {
+	const { words, phrases } = allText(p);
+	const f = fold(text);
+	if (f.length !== text.length) return esc(text);
+	const hits = new Set<string>();
+	for (const m of f.matchAll(/[\p{L}\p{N}]+/gu)) if (words.some((w) => (w.length >= 2 ? m[0].startsWith(w) : m[0] === w))) hits.add(m[0]);
+	return mark(text, ranges(text, hits, phrases));
+}
+
 export type Hit = { doc: SearchDoc; title: string; description: string; snippet: string };
 export type FilterSuggestion = { label: string; insert: string; count?: number; hint?: string };
 
@@ -248,6 +261,27 @@ export function facetCounts(e: Engine, q: string, isFav: (id: string) => boolean
 			review: count(cur, (d) => !!d.needsReview),
 			partial: count(cur, (d) => !!d.partial),
 		},
+		tags: [...tags.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)),
+	};
+}
+
+/** The counters over a list of pages (the results as displayed, when they do not come from this index's own ranking). */
+export function facetsOf(docs: SearchDoc[], isFav: (id: string) => boolean): Facets {
+	const tally = (by: (d: SearchDoc) => string) => {
+		const out: Record<string, number> = {};
+		for (const d of docs) out[by(d)] = (out[by(d)] ?? 0) + 1;
+		return out;
+	};
+	const tags = new Map<string, { tag: string; count: number }>();
+	for (const d of docs) for (const t of d.tags) {
+		const k = fold(t), c = tags.get(k);
+		if (c) c.count++; else tags.set(k, { tag: t, count: 1 });
+	}
+	return {
+		total: docs.length,
+		type: tally((d) => d.type),
+		status: tally((d) => fold(d.status)),
+		flags: { fav: count(docs, (d) => isFav(d.id)), unverified: count(docs, (d) => !d.verified), review: count(docs, (d) => !!d.needsReview), partial: count(docs, (d) => !!d.partial) },
 		tags: [...tags.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)),
 	};
 }

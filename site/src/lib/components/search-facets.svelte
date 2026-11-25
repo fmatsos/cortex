@@ -11,7 +11,7 @@
 
 	/**
 	 * Manipulable facets: type, status, state (favorites, review, partial source) and tags, with their page count in the
-	 * query context. They read and write the same input as the field (`search.q`): a click adds or removes the matching text
+	 * query context. They read and write the same input as the field (`search.q`, as a validated search: `search.apply`): a click adds or removes the matching text
 	 * operator (`type:concept`, `#llm`…), and an operator typed by hand lights up the facet.
 	 * Type and status are single-choice (two values ANDed would never match anything); the others add up.
 	 */
@@ -20,7 +20,7 @@
 	const p = $derived(parseQuery(search.q));
 	// compared values folded ("Mémoire" and #memoire are the same tag); the type keeps its canonical form ("Concept")
 	const on = (key: Op["key"], v: string) => activeValues(p, key).has(key === "type" ? v : fold(v));
-	const toggle = (key: Op["key"], v: string) => { search.q = toggleFacet(search.q, key, v); };
+	const toggle = (key: Op["key"], v: string) => search.apply(toggleFacet(search.q, key, v));
 	const anyOps = $derived(p.ops.length > 0);
 
 	let allTags = $state(false);
@@ -87,7 +87,7 @@
 		</section>
 	{/if}
 	{#if anyOps}
-		<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => (search.q = clearOps(search.q))}>
+		<button type="button" class="hover:bg-muted focus-visible:ring-ring/50 inline-flex min-h-9 items-center gap-2 rounded-md border px-3 text-sm focus-visible:ring-3 pointer-coarse:min-h-11" onclick={() => search.apply(clearOps(search.q))}>
 			<Icon name="clear" size={16} />{tr("graph.resetFilters")}
 		</button>
 	{/if}
