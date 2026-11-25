@@ -5,8 +5,8 @@ import { version } from "$app/env";
 import { assets, immutable, prerendered } from "$app/manifest";
 import { self } from "$app/service-worker";
 import {
-	MAX_RUNTIME_ENTRIES, NETWORK_TIMEOUT_MS, cacheKey, cacheNames, isApiPath, isTemporaryFailure, isContentPath,
-	obsoleteCaches, offlineFallbackHtml, oldestToEvict, pool, staleImmutable, withTimeout,
+	MANIFEST_PLACEHOLDER, MAX_RUNTIME_ENTRIES, NETWORK_TIMEOUT_MS, cacheKey, cacheNames, diffManifests, isApiPath, isTemporaryFailure, isContentPath,
+	manifestKey, obsoleteCaches, offlineFallbackHtml, oldestToEvict, parseManifest, pool, staleImmutable, withTimeout,
 	type OfflineState, type ToWorker,
 } from "#lib/offline.js";
 
@@ -14,19 +14,30 @@ import {
 //  - the base (`_app/` resources, pages outside `wiki/`, search index, graph) is precached at installation;
 //  - wiki pages are kept as they are visited (`runtime` cache, bounded), or all at once on explicit
 //    request ("Download the whole wiki", `download-all` message).
-// `version` = fingerprint of the data AND of the frontend (CORTEX_SITE_VERSION): a change in either changes the caches.
+//
+// Incremental update. `cortex export` writes into this file, once the site is built, a manifest: a content fingerprint of
+// every file that is not under `_app/immutable/` (those are named by their content). A new version keeps the manifest of its
+// predecessor in its base cache: at installation it copies from the previous caches what has not changed (same fingerprint,
+// or an immutable file, same URL) and downloads only the rest, so that one changed page costs one page and not the whole
+// site. Without a manifest (development, older export) everything is downloaded again, as before.
+// `version` (frontend fingerprint) names the caches of a service worker without a manifest; with one, the manifest's `id`
+// does: a change to any file changes the caches.
 
 // Manifest paths are relative to the base path: they are resolved against the service worker's scope,
 // so the site works under any subpath.
 const scope = self.registration.scope;
-const names = cacheNames(scope, version);
+const MANIFEST = parseManifest(MANIFEST_PLACEHOLDER); // `export.ts` replaces the placeholder in the built file
+const names = cacheNames(scope, MANIFEST?.id ?? version);
+const MANIFEST_KEY = manifestKey(scope);
 const url = (path: string) => new URL(path, scope).href;
+const rel = (path: string) => path.replace(/^\/+/, "");
 
 const files = [...new Map([...immutable, ...assets, ...prerendered].map((f) => [url(f.path), f.path] as const))].map(([href, path]) => ({ href, path }));
 const IMMUTABLE = new Set(immutable.map((f) => url(f.path)));
 // Cascadia Code (~219 KB, real code only) is not part of the base: a page that uses it asks for it, and it is kept then
 const LAZY = /cascadia-code/;
 const CORE = files.filter((f) => !isContentPath(f.path) && !LAZY.test(f.path));
+const CORE_HREFS = new Set(CORE.map((f) => f.href));
 const WIKI = files.filter((f) => isContentPath(f.path));
 const WIKI_PAGES = WIKI.filter((f) => !f.path.endsWith("__data.json")).length;
 
@@ -35,6 +46,8 @@ const WIKI_PAGES = WIKI.filter((f) => !f.path.endsWith("__data.json")).length;
 let phase: OfflineState["phase"] = "ready"; // a service worker that answers `status` is active: its installation is finished
 let phaseMessage: string | undefined;
 let coreDone = 0;
+let coreTotal = 0; // files this installation downloads (not the ones it keeps from the previous version)
+let coreReused = 0;
 const download: OfflineState["download"] = { state: "idle", done: 0, total: 0, bytes: 0 };
 let cancelled = false;
 
@@ -47,7 +60,7 @@ async function snapshot(): Promise<OfflineState> {
 	const have = new Set([...(await core.keys()), ...(await runtime.keys())].map((r) => r.url));
 	return {
 		type: "state", version, phase, message: phaseMessage,
-		core: { done: phase === "ready" ? CORE.length : coreDone, total: CORE.length },
+		core: phase === "ready" ? { done: CORE.length, total: CORE.length, reused: coreReused } : { done: coreDone, total: coreTotal, reused: coreReused },
 		wiki: { pages: WIKI_PAGES, files: WIKI.length, cached: WIKI.filter((f) => have.has(f.href)).length },
 		download: { ...download },
 	};
@@ -62,27 +75,87 @@ const report_throttled = (force = false) => {
 	return report();
 };
 
-// --- Installation: the base only ---------------------------------------------------------------------------------------
+// --- Installation: the base, and what the previous version had kept -----------------------------------------------------
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(precache());
 });
 
+/** A previous version of this wiki's caches (still there: they are only removed at activation) and what it can give to this one. */
+type Previous = { core: Cache; runtime?: Cache; coreKeys: Set<string>; runtimeKeys: Set<string>; unchanged: ReadonlySet<string>; wholeWiki: boolean };
+
+/** The previous versions, newest first. A cache that has no manifest (older version) only gives its immutable files. */
+async function previousVersions(): Promise<Previous[]> {
+	const all = await caches.keys();
+	const previous: Previous[] = [];
+	for (const name of all.filter((n) => n.startsWith(names.prefix) && !n.endsWith(":runtime") && n !== names.core).reverse()) {
+		const core = await caches.open(name);
+		const runtime = all.includes(`${name}:runtime`) ? await caches.open(`${name}:runtime`) : undefined;
+		const stored: Record<string, string> | undefined = await core.match(MANIFEST_KEY).then((r) => r?.json(), () => undefined).catch(() => undefined);
+		const coreKeys = new Set((await core.keys()).map((r) => r.url));
+		const wiki = Object.keys(stored ?? {}).filter(isContentPath);
+		previous.push({
+			core, runtime, coreKeys, runtimeKeys: new Set((await runtime?.keys() ?? []).map((r) => r.url)),
+			unchanged: new Set(MANIFEST && stored ? diffManifests(stored, MANIFEST.files).same : []),
+			// "Download the whole wiki" was done: its new pages follow
+			wholeWiki: wiki.length > 0 && wiki.every((p) => coreKeys.has(url(p))),
+		});
+	}
+	return previous;
+}
+
+type Job = { f: (typeof files)[number]; tier: "core" | "runtime"; needed: boolean };
+
 async function precache() {
 	phase = "preparing";
-	const cache = await caches.open(names.core);
-	const have = new Set((await cache.keys()).map((r) => r.url)); // an interrupted installation resumes where it stopped
-	coreDone = CORE.filter((f) => have.has(f.href)).length;
+	coreDone = coreTotal = coreReused = 0;
+	const [cache, runtime] = await Promise.all([caches.open(names.core), caches.open(names.runtime)]);
+	// an interrupted installation resumes where it stopped (what is there belongs to this very manifest)
+	const have = new Set([...(await cache.keys()), ...(await runtime.keys())].map((r) => r.url));
 	await report_throttled(true);
 	try {
-		await pool(CORE.filter((f) => !have.has(f.href)), 6, async (f) => {
-			// `reload`: we do not want a stale copy from the browser's HTTP cache
-			const response = await fetch(new Request(f.href, { cache: "reload" }));
-			if (!response.ok) throw new Error(`${response.status} ${f.path}`);
-			await cache.put(f.href, response);
+		if (MANIFEST) await cache.put(MANIFEST_KEY, new Response(JSON.stringify(MANIFEST.files), { headers: { "content-type": "application/json" } }));
+		const previous = await previousVersions();
+		const wholeWiki = previous.some((p) => p.wholeWiki);
+		// per file: kept from a previous version (same content), or downloaded
+		const copies: { job: Job; from: Cache }[] = [];
+		const jobs: Job[] = [];
+		for (const f of files) {
+			if (have.has(f.href)) continue;
+			const holders = previous.filter((p) => p.coreKeys.has(f.href) || p.runtimeKeys.has(f.href));
+			// the base is always kept; the rest (pages, Cascadia) where the previous version had it, and all of the wiki if it had all of it
+			const tier = CORE_HREFS.has(f.href) || holders.some((p) => p.coreKeys.has(f.href)) || (wholeWiki && isContentPath(f.path)) ? "core" : holders.length ? "runtime" : undefined;
+			if (!tier) continue;
+			const job: Job = { f, tier, needed: CORE_HREFS.has(f.href) };
+			const same = holders.find((p) => IMMUTABLE.has(f.href) || p.unchanged.has(rel(f.path)));
+			if (same) copies.push({ job, from: same.coreKeys.has(f.href) ? same.core : same.runtime! });
+			else jobs.push(job);
+		}
+		await pool(copies, 8, async ({ job, from }) => {
+			try {
+				const kept = await from.match(job.f.href);
+				if (!kept) throw new Error("gone");
+				await (job.tier === "core" ? cache : runtime).put(job.f.href, kept);
+				coreReused++;
+			} catch { jobs.push(job); } // evicted in the meantime: downloaded after all
+		});
+		coreTotal = jobs.length;
+		coreDone = 0;
+		await report_throttled(true);
+		await pool(jobs, 6, async ({ f, tier, needed }) => {
+			try {
+				// `reload`: we do not want a stale copy from the browser's HTTP cache
+				const response = await fetch(new Request(f.href, { cache: "reload" }));
+				if (!response.ok) throw new Error(`${response.status} ${f.path}`);
+				await (tier === "core" ? cache : runtime).put(f.href, response);
+			} catch (error) {
+				if (needed) throw error;
+				// a page that an earlier version had kept: refreshed when it is visited again, not worth a failed installation
+			}
 			coreDone++;
 			void report_throttled();
 		});
+		for (const old of oldestToEvict(await runtime.keys(), MAX_RUNTIME_ENTRIES)) await runtime.delete(old);
 	} catch (error) {
 		phase = "error";
 		phaseMessage = error instanceof Error ? error.message : String(error);
@@ -101,7 +174,7 @@ async function precache() {
 self.addEventListener("activate", (event) => {
 	event.waitUntil((async () => {
 		// only the old versions of THIS wiki (prefix + scope): CacheStorage is shared per origin
-		for (const name of obsoleteCaches(await caches.keys(), scope, version)) await caches.delete(name);
+		for (const name of obsoleteCaches(await caches.keys(), scope, MANIFEST?.id ?? version)) await caches.delete(name);
 		// hashed resources that became obsolete in the current cache
 		const core = await caches.open(names.core);
 		for (const key of staleImmutable((await core.keys()).map((r) => r.url), scope, IMMUTABLE)) await core.delete(key);

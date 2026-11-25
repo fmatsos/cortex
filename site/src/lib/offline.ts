@@ -67,6 +67,49 @@ export function isContentPath(path: string): boolean {
 	return p.startsWith("wiki/");
 }
 
+// --- Manifest of the files (incremental update) ----------------------------------------------------------------------------
+
+/**
+ * Written by `cortex export` into `service-worker.js` once the site is built: for every file that is not under `_app/immutable/`
+ * (those are named by their content), a short fingerprint of its content, by manifest path (`wiki/a/`, `graph.json`, `` for the
+ * home page). `id` fingerprints the whole (it names the caches). The version of a service worker that has none (development, an
+ * older export) is the site's one, and its update downloads everything again.
+ */
+export type Manifest = { id: string; files: Record<string, string> };
+
+/** Placeholder of the source of the service worker, replaced by the manifest after the build (`export.ts`). */
+export const MANIFEST_PLACEHOLDER = "@@CORTEX_MANIFEST@@";
+
+/** The manifest a service worker carries, `undefined` if it has none (the placeholder was not replaced) or if it is damaged. */
+export function parseManifest(raw: string): Manifest | undefined {
+	try {
+		const m = JSON.parse(raw) as Partial<Manifest> | null;
+		return m && typeof m.id === "string" && m.files && typeof m.files === "object" ? (m as Manifest) : undefined;
+	} catch { return undefined; }
+}
+
+/** Manifest path of a file of the export: `a/index.html` is the page `a/`, `index.html` the home page `` (the URLs the service worker caches). */
+export function manifestPath(file: string): string {
+	const f = file.replace(/\\/g, "/").replace(/^\/+/, "");
+	return f === "index.html" ? "" : f.endsWith("/index.html") ? f.slice(0, -"index.html".length) : f;
+}
+
+/** Comparison of two manifests, each list sorted: what an update has to download (`added`, `changed`) and what it can keep (`same`). */
+export function diffManifests(previous: Readonly<Record<string, string>> | undefined, next: Readonly<Record<string, string>>) {
+	const prev = previous ?? {};
+	const added: string[] = [], changed: string[] = [], same: string[] = [];
+	for (const path of Object.keys(next).sort()) {
+		if (!(path in prev)) added.push(path);
+		else if (prev[path] === next[path]) same.push(path);
+		else changed.push(path);
+	}
+	const removed = Object.keys(prev).filter((path) => !(path in next)).sort();
+	return { added, changed, removed, same };
+}
+
+/** Key, in the base cache, under which a version keeps its manifest for the next one. Never a URL that anyone asks for. */
+export const manifestKey = (scope: string) => new URL("_app/cortex-manifest.json", scope).href;
+
 /** `_app/immutable/` entries of the cache absent from the current manifest: obsolete resources to remove from the relevant cache. */
 export function staleImmutable(cached: readonly string[], scope: string, known: ReadonlySet<string>): string[] {
 	const dir = new URL("_app/immutable/", scope).href;
@@ -122,7 +165,8 @@ export type OfflineState = {
 	/** `preparing`: base installation; `ready`: active (hence complete base); `error`: installation impossible */
 	phase: "preparing" | "ready" | "error";
 	message?: string;
-	core: { done: number; total: number };
+	/** base: files to download for this version (`total`) and downloaded (`done`); `reused` = kept from the previous version, not downloaded */
+	core: { done: number; total: number; reused: number };
 	wiki: { pages: number; files: number; cached: number };
 	download: { state: DownloadState; done: number; total: number; bytes: number; message?: string };
 };

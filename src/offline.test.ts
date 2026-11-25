@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
 	cacheKey, cacheNames, cachePrefix, estimateBytes, formatBytes, isApiPath, isTemporaryFailure, isContentPath, obsoleteCaches,
 	offlineFallbackHtml, oldestToEvict, percent, pool, staleImmutable, withTimeout, AVG_WIKI_FILE_BYTES,
+	diffManifests, manifestKey, manifestPath, parseManifest,
 } from "../site/src/lib/offline";
 import { setLocale } from "../site/src/lib/i18n/index";
 
@@ -115,4 +116,31 @@ test("the offline fallback page follows the locale and escapes the scope", () =>
 	setLocale("fr");
 	try { expect(offlineFallbackHtml(ROOT)).toContain("Page indisponible hors ligne"); } finally { setLocale("en"); }
 	expect(html).not.toContain("<script>");
+});
+
+test("le manifeste : un fichier de l'export devient le chemin que le service worker met en cache", () => {
+	expect(manifestPath("index.html")).toBe("");
+	expect(manifestPath("wiki/concepts/a/index.html")).toBe("wiki/concepts/a/");
+	expect(manifestPath("wiki/concepts/a/__data.json")).toBe("wiki/concepts/a/__data.json");
+	expect(manifestPath("graph.json")).toBe("graph.json");
+	expect(manifestPath("404.html")).toBe("404.html");
+	expect(manifestPath("tags\\index.html")).toBe("tags/");
+});
+
+test("le manifeste d'un service worker : lu s'il est complet, absent sinon (développement, export plus ancien)", () => {
+	expect(parseManifest(JSON.stringify({ id: "abc", files: { "": "1a" } }))).toEqual({ id: "abc", files: { "": "1a" } });
+	for (const raw of ["@@CORTEX_MANIFEST@@", "", "null", "[]", "{}", JSON.stringify({ id: "abc" }), JSON.stringify({ id: 1, files: {} })]) expect(parseManifest(raw)).toBeUndefined();
+	expect(manifestKey(ROOT)).toBe("https://wiki.example/_app/cortex-manifest.json");
+	expect(manifestKey(SUB)).toBe("https://example.org/brain/sous/_app/cortex-manifest.json");
+});
+
+test("comparer deux manifestes : ajoutés, modifiés, supprimés, identiques", () => {
+	const prev = { "": "h0", "wiki/a/": "a1", "wiki/a/__data.json": "d1", "wiki/b/": "b1", "graph.json": "g1" };
+	const next = { "": "h0", "wiki/a/": "a2", "wiki/a/__data.json": "d1", "wiki/c/": "c1", "graph.json": "g1" };
+	expect(diffManifests(prev, next)).toEqual({ added: ["wiki/c/"], changed: ["wiki/a/"], removed: ["wiki/b/"], same: ["", "graph.json", "wiki/a/__data.json"] });
+	// no previous manifest (first installation, older version): everything is to download
+	expect(diffManifests(undefined, next)).toEqual({ added: Object.keys(next).sort(), changed: [], removed: [], same: [] });
+	// identical: nothing to download
+	expect(diffManifests(next, { ...next })).toEqual({ added: [], changed: [], removed: [], same: Object.keys(next).sort() });
+	expect(diffManifests(prev, {})).toEqual({ added: [], changed: [], removed: Object.keys(prev).sort(), same: [] });
 });

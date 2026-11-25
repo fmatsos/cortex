@@ -34,6 +34,8 @@ export type SiteData = {
   tags: { tag: string; slug: string; ids: string[] }[];
   log: LogEntryData[]; // most recent first
 };
+/** `footer.json`: export date and wiki figures of the footer (read by the browser, never written into the pages: see routes/footer.json). */
+export type Footer = { generatedAt: string; pages: number; concepts: number; entities: number; syntheses: number; sources: number; tags: number; links: number; verified: number; log: number };
 export type GraphData = {
   nodes: { id: string; title: string; description: string; type: string; tags: string[]; degree: number; x: number; y: number; community: string }[];
   links: { source: string; target: string; mutual?: true }[]; // directed: source = page that contains the link; mutual: links in both directions (a single link, never two)

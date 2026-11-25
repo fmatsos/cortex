@@ -210,3 +210,45 @@ test("compileCounts: only the exact automatic text gives counts, anything else i
   expect(compileCounts("compiled: 0 page(s) created, 0 updated.")).toEqual({ created: 0, updated: 0 });
   for (const text of ["5 sources compilées → créé sources/ ×5", "compiled: 1 page(s) created, 3 updated. Extra", "Note: compiled: 1 page(s) created, 3 updated.", "compiled: 1 page created, 3 updated.", "compiled: x page(s) created, 3 updated.", ""]) expect(compileCounts(text)).toBeNull();
 });
+
+test("export: a changed page changes only its own files, the shared data and the manifest (incremental offline update)", async () => {
+  const { existsSync, readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { buildManifest, exportSite } = await import("./export");
+  const { diffManifests } = await import("../site/src/lib/offline");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  const page = (title: string, body: string) => `---\ntype: Concept\ntitle: ${title}\ndescription: Description de ${title}.\ntags: [alpha]\nstatus: stable\ngenerated: { by: test, at: 2026-11-04T10:00:00+01:00 }\n---\n${body}\n`;
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await Bun.write(join(root, "wiki/concepts/a.md"), page("Alpha", "Voir [Beta](/wiki/concepts/b.md)."));
+  await Bun.write(join(root, "wiki/concepts/b.md"), page("Beta", "Un texte."));
+  await Bun.write(join(root, "wiki/concepts/c.md"), page("Gamma", "Un autre texte."));
+  const files = (d: string) => (readdirSync(d, { recursive: true }) as string[]).filter((f) => statSync(join(d, f)).isFile()).sort();
+
+  process.env.SOURCE_DATE_EPOCH = "1793790000";
+  const one = join(root, ".cortex/one");
+  await exportSite(root, one, () => {});
+  await Bun.write(join(root, "wiki/concepts/b.md"), page("Beta", "Un texte, modifié ailleurs."));
+  process.env.SOURCE_DATE_EPOCH = "1793876400"; // another day: the footer date moves, in footer.json only
+  const two = join(root, ".cortex/two");
+  await exportSite(root, two, () => {});
+
+  // the manifest is in the service worker, and agrees with the files on disk
+  const version = JSON.parse(readFileSync(join(two, "_app/version.json"), "utf8")).version as string;
+  const m1 = buildManifest(one, JSON.parse(readFileSync(join(one, "_app/version.json"), "utf8")).version), m2 = buildManifest(two, version);
+  const sw = readFileSync(join(two, "service-worker.js"), "utf8");
+  expect(sw).not.toContain("@@CORTEX_MANIFEST@@");
+  expect(sw).toContain(m2.id); // the manifest the service worker carries (a JSON string literal)
+  expect(sw).toContain(m2.files["wiki/concepts/b/"]!);
+  expect(m1.id).not.toBe(m2.id);
+  expect(Object.keys(m2.files)).toContain("wiki/concepts/b/");
+  expect(Object.keys(m2.files)).toContain(""); // home page
+  expect(Object.keys(m2.files).some((p) => p.startsWith("_app/immutable/") || p === "service-worker.js")).toBe(false);
+
+  // the hashed resources are the very same files (frontend and wiki structure unchanged): nothing of them to download again
+  expect(files(two).filter((f) => f.startsWith("_app/immutable/"))).toEqual(files(one).filter((f) => f.startsWith("_app/immutable/")));
+  const d = diffManifests(m1.files, m2.files);
+  expect(d.added).toEqual([]);
+  expect(d.removed).toEqual([]);
+  // the page and its data, the search index and the footer figures: nothing else (the other pages are byte-identical)
+  expect(d.changed).toEqual(["footer.json", "search-index.json", "wiki/concepts/b/", "wiki/concepts/b/__data.json"]);
+  expect(existsSync(join(two, "_app/immutable"))).toBe(true);
+}, 120_000);

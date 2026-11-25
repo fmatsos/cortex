@@ -197,7 +197,7 @@
 			<DropdownMenu.Item onSelect={retry}><Icon name="retry" size={16} />{t("common.retry")}</DropdownMenu.Item>
 		{:else if phase === "preparing"}
 			<p class="text-muted-foreground px-2 pb-1 text-xs">{t("offline.preparingBase")}{sw ? ` ${t("common.percent", { n: percent(sw.core.done, sw.core.total) })}` : ""}</p>
-			{#if sw}<progress class="accent-primary mx-2 mb-1 h-2 w-[calc(100%-1rem)]" max={sw.core.total} value={sw.core.done} aria-label={t("offline.preparing")}></progress>{/if}
+			{#if sw}<progress class="accent-primary mx-2 mb-1 h-2 w-[calc(100%-1rem)]" max={Math.max(1, sw.core.total)} value={sw.core.done} aria-label={t("offline.preparing")}></progress>{/if}
 		{:else}
 			<p class="text-muted-foreground px-2 pb-1 text-xs">{offline ? t("offline.readyText.offline") : t("offline.readyText")}</p>
 

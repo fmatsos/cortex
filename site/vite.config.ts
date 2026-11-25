@@ -18,7 +18,7 @@ export default defineConfig({
       // the router shows `routes/+error.svelte` there. It loads its resources from `paths.base` (SvelteKit cannot
       // make them relative for an arbitrary address): domain root by default, CORTEX_SITE_BASE=/subpath otherwise.
       adapter: adapter({ pages: out, assets: out, fallback: "404.html" }),
-      version: { name: process.env.CORTEX_SITE_VERSION ?? "dev" }, // deterministic (fingerprint of the data and the frontend): the export is reproducible
+      version: { name: process.env.CORTEX_SITE_VERSION ?? "dev" }, // deterministic (fingerprint of the frontend, not of the data: see exportSite): the export is reproducible
       paths: { relative: true, base: process.env.CORTEX_SITE_BASE ?? "" }, // relative links and resources: works under any subpath
       prerender: {
         handleHttpError: "fail", handleMissingId: "ignore", // a broken anchor in a wiki link is harmless, a 404 is not

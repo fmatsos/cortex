@@ -5,6 +5,7 @@ import { fold } from "../site/src/lib/fold";
 import { iconUse } from "../site/src/lib/icons";
 import { buildTerms } from "../site/src/lib/search-engine";
 import { type Locale, setLocale, t } from "../site/src/lib/i18n/index";
+import { MANIFEST_PLACEHOLDER, type Manifest, manifestPath } from "../site/src/lib/offline";
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
@@ -381,19 +382,21 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
   const dataDir = join(root, ".cortex/site-data");
   const { data, graph, search } = await buildSiteDataCtx(openWiki(root), say);
   mkdirSync(dataDir, { recursive: true });
-  const parts: string[] = [];
-  const size = async (name: string, v: unknown) => { const s = JSON.stringify(v); parts.push(s); await Bun.write(join(dataDir, name), s); return s.length; };
+  const size = async (name: string, v: unknown) => { const s = JSON.stringify(v); await Bun.write(join(dataDir, name), s); return s.length; };
   await size("data.json", data);
   await size("graph.json", graph);
   const idxBytes = await size("search-index.json", search);
-  // export date and time (SOURCE_DATE_EPOCH if provided, for a reproducible export): outside the cache version
+  // export date and time (SOURCE_DATE_EPOCH if provided, for a reproducible export): outside the site version
   const at = process.env.SOURCE_DATE_EPOCH ? new Date(Number(process.env.SOURCE_DATE_EPOCH) * 1000) : new Date();
   await Bun.write(join(dataDir, "build.json"), JSON.stringify({ generatedAt: at.toISOString(), links: graph.links.length }));
   say(`${data.pages.length} pages, ${graph.links.length} links, search index ${(idxBytes / 1024).toFixed(0)} KB`);
 
   // Vite and SvelteKit are only loaded here: the other commands stay as fast
-  // version = fingerprint of the data AND the frontend: same wiki and same code, same site; either changes, the cache changes
-  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_FEATURES: JSON.stringify(data.features), CORTEX_SITE_VERSION: sha256(parts.join("") + frontendFingerprint()).slice(0, 12) };
+  // version = fingerprint of the frontend (code, assets, language and options compiled into it), NOT of the data: it is written into every
+  // page and into the hashed resources, so a data-dependent one would change every file at every export and leave no file in common
+  // with the previous site. What the data changes is told, file by file, by the offline manifest (see `stampServiceWorker`).
+  const version = sha256(frontendFingerprint() + data.locale + JSON.stringify(data.features)).slice(0, 12);
+  const vars = { CORTEX_SITE_DATA: dataDir, CORTEX_SITE_OUT: resolve(out), CORTEX_SITE_LANG: data.locale, CORTEX_SITE_FEATURES: JSON.stringify(data.features), CORTEX_SITE_VERSION: version };
   // The build is process-global (env, cwd, console) and shares site/.svelte-kit: one at a time per machine.
   const unlock = lockBuild();
   // The build reads these from the environment (SvelteKit's forked workers reload vite.config.ts): set for the build only, then restored.
@@ -416,7 +419,38 @@ export async function exportSite(root: string, out: string, say: (m: string) => 
     for (const [k, v] of Object.entries(prev)) v === undefined ? delete process.env[k] : (process.env[k] = v);
     unlock();
   }
+  stampServiceWorker(resolve(out), version);
   say(`${paint.ok("✓")} Site written to ${resolve(out)} (${((performance.now() - t0) / 1000).toFixed(1)} s)`);
+}
+
+/**
+ * Offline manifest of a built site: for each file that the service worker can cache and that is not named by its content
+ * (everything but `_app/immutable/` and the service worker itself), a short fingerprint of its content, by manifest path (see
+ * `manifestPath`). `id` fingerprints the whole, with the frontend `version`: it names the service worker's caches.
+ */
+export function buildManifest(out: string, version: string): Manifest {
+  const files: Record<string, string> = {};
+  for (const file of (readdirSync(out, { recursive: true }) as string[]).map((f) => f.split(sep).join("/")).sort()) {
+    if (file === "service-worker.js" || file.startsWith("_app/immutable/") || !statSync(join(out, file)).isFile()) continue;
+    files[manifestPath(file)] = sha256(readFileSync(join(out, file))).slice(0, 12);
+  }
+  return { id: sha256(version + JSON.stringify(files)).slice(0, 12), files };
+}
+
+/**
+ * Writes the manifest into the built `service-worker.js` (the placeholder of its source), so that the browser sees a new
+ * service worker exactly when a cacheable file changed (it compares the script, not the files it fetches) and that the new
+ * one knows, file by file, what the previous one already holds. The hashes only exist once the site is prerendered, hence
+ * after the build rather than through a Vite `define`. Refuses a build where the placeholder is not found exactly once
+ * (renamed, minified differently): the offline mode would silently download everything again.
+ */
+export function stampServiceWorker(out: string, version: string) {
+  const file = join(out, "service-worker.js");
+  const source = readFileSync(file, "utf8");
+  const placeholder = new RegExp(`["'\`]${MANIFEST_PLACEHOLDER}["'\`]`, "g");
+  if ((source.match(placeholder) ?? []).length !== 1) throw new Error(`${file}: the manifest placeholder ${MANIFEST_PLACEHOLDER} must appear exactly once (service-worker.ts).`);
+  // a JS string literal holding the JSON (`parseManifest` reads it back); the replacer function keeps `$` patterns literal
+  writeFileSync(file, source.replace(placeholder, () => JSON.stringify(JSON.stringify(buildManifest(out, version)))));
 }
 
 /**
