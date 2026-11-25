@@ -47,11 +47,13 @@
 	const entry = (b: Brief) => `${toRoute("/log")}#${b.id}`;
 </script>
 
-<ol class="mt-3 flex flex-col gap-5">
+<!-- one continuous rule for the whole block: days and briefs hang on it -->
+<ol class="border-muted-foreground/50 mt-3 ml-[3px] flex flex-col gap-5 border-l pl-5">
 	{#each days as d (d.day)}
-		<li>
+		<li class="relative">
+			<span class="bg-muted-foreground absolute top-[7px] -left-[25px] size-[9px]" aria-hidden="true"></span>
 			<h3 class="text-base font-semibold first-letter:uppercase"><time datetime={d.day}>{d.label}</time></h3>
-			<ol class="border-muted-foreground/50 mt-2 ml-[3px] flex flex-col gap-4 border-l pl-5">
+			<ol class="mt-2 flex flex-col gap-4">
 				{#each d.entries as b (b.id)}
 					{@const s = sentence(b)}
 					{@const hour = hourOf(b.at)}
