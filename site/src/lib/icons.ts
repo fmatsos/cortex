@@ -30,7 +30,7 @@ export const ICONS = {
 	// navigation
 	home: `<path d="M4 10.5 12 3.5 20 10.5V20H4zM10 20v-6h4v6"/>`,
 	search: LOUPE,
-	graph: `<rect x="3" y="6" width="4" height="4"/><rect x="13" y="3" width="4" height="4"/><rect x="17" y="16" width="4" height="4"/><rect x="5" y="17" width="4" height="4"/><path d="M7 7.5l6-2M15.5 7l3 9M17 18.5 9 19M6.5 17l-1-7M7 9.5l10 7"/>`,
+	graph: `<rect x="3" y="3" width="4" height="4"/><rect x="17" y="5" width="4" height="4"/><rect x="7" y="17" width="4" height="4"/><path d="M7 5.5l10 1M17.5 9l-7 8M8.5 17l-3-10"/>`,
 	tags: `<path d="M4 4h8l8.5 8.5-8 8L4 12z"/>${DOT(7.5, 7.5)}`,
 	journal: `<rect x="4" y="3" width="16" height="18"/><path d="M9 3v18M13 8h4M13 12h4M13 16h4"/>`,
 	favorites: STAR,
