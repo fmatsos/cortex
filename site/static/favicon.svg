@@ -1,7 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="favicon-title">
-  <title id="favicon-title">Cortex, idées connectées</title>
-  <path d="M32 12A20 20 0 0 0 14.68 42A20 20 0 0 0 49.32 42A20 20 0 0 0 32 12Z" fill="none" stroke="#075E75" stroke-width="5" stroke-linecap="round"/>
-  <g fill="#FA7067" stroke="#075E75" stroke-width="3">
-    <circle cx="32" cy="12" r="7.5"/><circle cx="14.68" cy="42" r="7.5"/><circle cx="49.32" cy="42" r="7.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="32" height="32" role="img" aria-labelledby="t">
+  <title id="t">Cortex</title>
+  <!-- Idle brain graph, front facing right. Geometry: OPTICS.tiny in assistant-avatar.svelte. -->
+  <style>
+    svg { color: #1b2120; --primary: #245849 }
+    @media (prefers-color-scheme: dark) { svg { color: #e9e7df; --primary: #a3cbb9 } }
+    .links { fill: none; stroke-width: 0.65; stroke-linecap: butt; stroke-linejoin: miter }
+  </style>
+  <g class="links" stroke="currentColor">
+    <polyline points="1.5,7 2.5,4.5 4.5,2.5 7.5,2"/>
+    <polyline points="7.5,2 9.5,2.5 11.5,3.5"/>
+    <polyline points="1.5,7 1.5,8.5 2,9.5 3,10.5"/>
+    <polyline points="3,10.5 4,12.5 4.5,14.5 7,11.5"/>
+    <polyline points="3,10.5 7,11.5"/>
+    <polyline points="7,11.5 9,11 10,10.5 10.5,9.5"/>
+    <polyline points="1.5,7 10.5,9.5"/>
+  </g>
+  <g class="links" stroke="var(--primary)">
+    <polyline points="11.5,3.5 13.5,5 14.5,7"/>
+    <polyline points="14.5,7 13.5,9 12,9.5 10.5,9.5"/>
+    <polyline points="11.5,3.5 10.5,9.5"/>
+    <polyline points="10.5,9.5 14.5,7"/>
+  </g>
+  <g fill="currentColor">
+    <circle cx="1.5" cy="7" r="0.65"/>
+    <circle cx="7.5" cy="2" r="0.65"/>
+    <circle cx="3" cy="10.5" r="0.65"/>
+    <circle cx="7" cy="11.5" r="0.65"/>
+  </g>
+  <g fill="var(--primary)">
+    <circle cx="11.5" cy="3.5" r="0.7"/>
+    <circle cx="14.5" cy="7" r="0.7"/>
+    <circle cx="10.5" cy="9.5" r="0.7"/>
   </g>
 </svg>
