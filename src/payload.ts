@@ -49,5 +49,7 @@ export async function runFromSources(root: string): Promise<number> {
     env: { ...asBun, CORTEX_ROOT: root },
     stdio: ["inherit", "inherit", "inherit"],
   });
+  // a stop sent to this process (kill, systemd) reaches the command that runs from the sources: `serve` then stops its export child too
+  for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => p.kill(sig));
   return p.exited;
 }

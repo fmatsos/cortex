@@ -121,6 +121,8 @@ async function open(file: string): Promise<Index> {
   const db = new Database(file);
   try {
     db.run("PRAGMA busy_timeout = 5000");
+    // WAL: a reader (a search, the assistant) is never blocked by the writer that indexes (`cortex serve` refreshes the embeddings while it answers); a commit stays atomic either way
+    if (file !== ":memory:") db.run("PRAGMA journal_mode = WAL");
     if ((db.query("PRAGMA user_version").get() as { user_version: number }).user_version !== INDEX_VERSION) {
       if ((db.query("SELECT count(*) AS n FROM sqlite_master").get() as { n: number }).n) throw new Error("outdated index"); // a file of another version
       create(db);

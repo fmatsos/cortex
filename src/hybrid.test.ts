@@ -45,6 +45,20 @@ test("sections: one passage per ## section, code fences and sub-sections respect
   expect(sections("no section at all")).toEqual([]);
 });
 
+test("index: WAL, so a search is never blocked by the indexing that `cortex serve` runs while it answers", async () => {
+  const root = await wiki(null);
+  (await buildIndex(root)).close();
+  const writer = new Database(join(root, ".cortex/search.db")), reader = new Database(join(root, ".cortex/search.db"), { readonly: true });
+  try {
+    expect((writer.query("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode).toBe("wal");
+    writer.run("BEGIN IMMEDIATE"); writer.run("INSERT OR REPLACE INTO meta VALUES ('k', 'v')");
+    reader.run("PRAGMA busy_timeout = 0"); // not waiting: a reader that has to wait fails at once
+    expect((reader.query("SELECT count(*) AS n FROM docs").get() as { n: number }).n).toBeGreaterThan(0); // the last committed state, while a write is open
+    writer.run("COMMIT");
+    expect(reader.query("SELECT value FROM meta WHERE key = 'k'").get()).toEqual({ value: "v" });
+  } finally { writer.close(); reader.close(); }
+});
+
 test("index: a page and a passage per section, raw sources as pages; only the changed file is indexed again", async () => {
   const root = await wiki(null);
   (await buildIndex(root)).close();
