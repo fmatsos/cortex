@@ -25,8 +25,8 @@ export type PageData = {
   backlinks: Link[];
   related: (Link & { reasons: RelatedReason[] })[];
 };
-/** A log entry: `search` = all the displayed text (type, text, page titles, ids and Source pages), folded (no accents, lowercase) for a local search by `fold(query)`; `html` = inline text; `sources` = raw ids not named in the text (with the wiki Source page that cites them, if there is one). */
-export type LogEntryData = { at: string; kind: string; html: string; pages: Link[]; sources: { id: string; page?: Link }[]; search: string };
+/** A log entry: `search` = all the displayed text (type, text, page titles, ids and Source pages), folded (no accents, lowercase) for a local search by `fold(query)`; `html` = inline text; `sources` = raw ids not named in the text (with the wiki Source page that cites them, if there is one); `sourceRefs` = all the raw ids of the entry, named in the text or not (`sources` is for the log page, `sourceRefs` for the other views); `counts` = pages created and updated, read only from the exact automatic text of a compile entry (`compiled: N page(s) created, M updated.`), otherwise null; `text` = plain text of the entry, only for the kinds told by their text (update, lint, query). */
+export type LogEntryData = { at: string; kind: string; html: string; text?: string; pages: Link[]; sources: { id: string; page?: Link }[]; sourceRefs: { id: string; page?: Link }[]; counts: { created: number; updated: number } | null; search: string };
 export type SiteData = {
   locale: "en" | "fr"; // UI language of the export (cortex.json `language`)
   features: { review: boolean; drafts: boolean }; // optional notions (cortex.json `review`, `drafts`)
