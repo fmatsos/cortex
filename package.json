@@ -18,7 +18,8 @@
   "scripts": {
     "test": "bun test",
     "test:ui": "playwright test",
-    "design": "bun scripts/build-design.ts"
+    "design": "bun scripts/build-design.ts",
+    "icons": "bun scripts/build-icons.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.318",
@@ -33,11 +34,14 @@
     "@tailwindcss/oxide-linux-x64-gnu": "4.3.4",
     "@tailwindcss/vite": "4.3.4",
     "defuddle": "0.19.6",
-    "force-graph": "^1.52.0",
     "fuse.js": "^7.5.0",
+    "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
+    "graphology-layout-forceatlas2": "^0.10.1",
     "lightningcss-darwin-arm64": "1.33.0",
     "lightningcss-linux-x64-gnu": "1.33.0",
     "linkedom": "^0.18",
+    "sigma": "^4.0.6",
     "svelte": "^5.57.3",
     "tailwind-merge": "^3.7.0",
     "tailwind-variants": "^4.0.1",
@@ -47,6 +51,7 @@
     "zod": "^4"
   },
   "devDependencies": {
+    "@phosphor-icons/core": "2.1.1",
     "@playwright/test": "^1.65.1",
     "@types/bun": "^1.4.4",
     "@types/turndown": "^5.0.6"

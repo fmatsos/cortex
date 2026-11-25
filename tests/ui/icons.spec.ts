@@ -1,8 +1,8 @@
 import { expect, test } from "./helpers";
 import { ICON_NAMES } from "../../site/src/lib/icons";
 
-// The icon pack is drawn in the square language: butt ends, mitered joins. Checked on the real rendered page.
-test("the header nav renders icons with butt ends and mitered joins", async ({ page }) => {
+// The icon pack is Phosphor Light: filled shapes painted with currentColor, no stroke. Checked on the real rendered page.
+test("the header nav renders Phosphor Light icons: filled with currentColor, no stroke", async ({ page }) => {
   await page.goto("/");
   const icon = page.getByRole("banner").locator("nav svg").first();
   await expect(icon).toBeVisible();
@@ -11,9 +11,10 @@ test("the header nav renders icons with butt ends and mitered joins", async ({ p
   expect(box?.height ?? 0).toBeGreaterThan(0);
   const style = await icon.evaluate((el) => {
     const s = getComputedStyle(el);
-    return { cap: s.strokeLinecap, join: s.strokeLinejoin, limit: s.strokeMiterlimit };
+    const u = getComputedStyle(el.querySelector("use")!);
+    return { viewBox: el.getAttribute("viewBox"), fill: s.fill === s.color, stroke: s.stroke, useFill: u.fill === s.color };
   });
-  expect(style).toEqual({ cap: "butt", join: "miter", limit: "2" });
+  expect(style).toEqual({ viewBox: "0 0 256 256", fill: true, stroke: "none", useFill: true });
 });
 
 // One inline sprite per document, holding only the symbols that document uses; each icon instance is a `<use>` of a
@@ -82,12 +83,12 @@ test("client navigation from home to an article with callouts: every use resolve
   expect(await page.locator("#cx-sprite").count()).toBe(1);
   expect(await page.locator("#cx-sprite > symbol").count(), "the callout symbols were added to the sprite").toBeGreaterThanOrEqual(before);
   for (const id of ["cx-note", "cx-warning"]) await expect(page.locator(`#${id}`)).toHaveCount(1);
-  // painted for real: the stroke reaches the symbol and the instance has a size
+  // painted for real: the fill reaches the symbol and the instance has a size
   for (const cls of ["personal-note", "callout-warning"]) {
     const icon = page.locator(`.wiki .${cls} svg.callout-icon`);
     const box = await icon.boundingBox();
     expect(box?.width).toBeGreaterThan(8);
-    expect(await icon.evaluate((el) => getComputedStyle(el.querySelector("use")!).stroke)).not.toBe("none");
+    expect(await icon.evaluate((el) => getComputedStyle(el.querySelector("use")!).fill)).not.toBe("none");
   }
 });
 
@@ -114,8 +115,8 @@ test("a header icon, drawn from the sprite, has a real size and is visible", asy
   const box = await icon.boundingBox();
   expect(box?.width).toBeGreaterThan(0);
   expect(box?.height).toBeGreaterThan(0);
-  // the stroke contract lives on the instance and reaches the symbol through <use>
-  const painted = await icon.evaluate((el) => getComputedStyle(el.querySelector("use")!).stroke);
+  // the fill (currentColor) lives on the instance and reaches the symbol through <use>
+  const painted = await icon.evaluate((el) => getComputedStyle(el.querySelector("use")!).fill);
   expect(painted).not.toBe("none");
 });
 

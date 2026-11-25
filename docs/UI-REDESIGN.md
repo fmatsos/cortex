@@ -5,7 +5,10 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 ## Décisions du propriétaire (2026-11-25)
 
 - **Design carré** : partie II.
-- **Serif pour la prose** : Source Serif 4 dans les articles et l'assistant, Source Sans 3 ailleurs.
+- **Graphe : Sigma 4 + Graphology**, placement ForceAtlas2 et communautés précalculés à l’export ; aucune physique active dans le navigateur.
+- **Polices** : Hauora Sans (OFL 1.1, quatre graisses statiques, non modifiée) pour l'interface ; Source Serif 4 reste la police des articles et des réponses de l'assistant.
+- **Code** : Cascadia Code (OFL 1.1, variable avec ligatures) pour tout le code : code en ligne et blocs des articles, réponses de l'assistant, `kbd`, tokens du design system.
+- **Icônes** : Phosphor Light (MIT, `@phosphor-icons/core`) via `design/icons.json` + `scripts/build-icons.ts`, noms inchangés (`<Icon name>`, `iconUse`, ids `cx-<nom>`) ; le jeu dessiné à la main est retiré.
 - **Pas de maquettes statiques** : C00 est remplacée par une page `/design-system/` construite tôt (tokens, polices, sprite, avatar, composants, clair et sombre). Le propriétaire valide sur cette page avant la refonte des pages (phase 2 et suivantes). C28 ne fait plus que la compléter.
 - **Playwright** accepté en dépendance de développement (C01).
 - **Wiki de recette** : une copie locale de `thoughts`, jamais l'original.
@@ -14,7 +17,8 @@ Revue Codex (gpt-6.1-sol, 2026-11-25), deux passes sur le même fil : la revue c
 - **Marque : le graphe-cerveau** (concept 5), un cerveau de profil dessiné comme un graphe de connaissances (nœuds carrés, liens droits, groupe préfrontal en vert), remplace le folio indexé comme marque et comme avatar (C08b).
 - **Exception ronde pour la marque** : les nœuds du graphe-cerveau sont de petits disques pleins (plus de carrés) dans toutes ses variantes ; ce n'est une exception qu'à la marque. Sous 40 px, un glyphe dessiné à la main (silhouette en une polyligne fermée, trois nœuds préfrontaux) remplace le graphe, et les points d'entrée de l'assistant (en-tête, champ de recherche, palette) prennent l'icône `assistant` (trois étincelles) ; l'avatar reste dans le panneau (C08c).
 - **Ombre et relief** : les couches flottantes (menus, fenêtres contextuelles, palette, notification, tiroir modal de l'assistant) prennent `--shadow-overlay` et un contour `--input` ; les surfaces de la page (cartes, sections de l'accueil, encarts latéraux des articles) et le panneau assistant ancré peuvent porter un léger relief (`--shadow-surface`, ombre de bord `--shadow-edge`), discret et sobre : à plat ne veut pas dire absolument plat (T03, T07). La largeur du panneau ancré se règle à la poignée (320 px à la moitié de la fenêtre, 720 px au plus) et se retient.
-- **Icônes de marque** : `favicon.svg` (site et `assets/logo/`) est le maître 16 unités ; les PNG (favicons, apple-touch, 192, 512, 512 sombre, logo 912x256) sont rendus à la main depuis `design/brand/cortex-mark.svg` avec Chrome headless (Playwright, `channel: 'chrome'`), marque à 70 % du côté sur fond opaque pour les icônes carrées, et committés ; à refaire si la marque change (C09).
+- **Favicon du site** : l'icône `brain` de Phosphor (graisse Bold, lisible à 16 px), verte, clair/sombre selon `prefers-color-scheme` ; seul le favicon (`site/static/favicon.svg`, `favicon-32.png`) l'utilise, la marque reste le graphe-cerveau.
+- **Icônes de marque** : `assets/logo/cortex-favicon.svg` est le maître 16 unités du graphe-cerveau ; les PNG (favicons, apple-touch, 192, 512, 512 sombre, logo 912x256) sont rendus à la main depuis `design/brand/cortex-mark.svg` avec Chrome headless (Playwright, `channel: 'chrome'`), marque à 70 % du côté sur fond opaque pour les icônes carrées, et committés ; à refaire si la marque change (C09).
 - **Pleine largeur pour la prose** : le texte des articles occupe toute la largeur de la colonne `article` (plus de mesure à 70ch) ; les actions d'une page tiennent sur une ligne, la source originale passe en `title` du bouton.
 - **Tags vers la recherche** : un tag est toujours un lien vers `/search/?q=#tag` (articles, accueil, index `/tags/`) ; les pages `/tags/<tag>/` sont supprimées.
 
@@ -649,7 +653,7 @@ Travail nécessaire :
 
 | Type | Forme retenue |
 |---|---|
-| Concept | Croix pleine orthogonale, à branches suffisamment épaisses |
+| Concept | Cercle plein (décision du propriétaire, 2026-11-25 : les Concepts restent en cercles, la croix est abandonnée) |
 | Entité | Carré plein |
 | Synthèse | Losange plein, angles nets |
 | Source | Triangle plein, angles nets |

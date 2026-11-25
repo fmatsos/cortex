@@ -6,6 +6,7 @@
 	// Sentences with inline markup stay whole in the dictionary: `code` is written between backticks and `{name}` marks a slot
 	// the template fills (a link, a highlight), so no HTML ever comes from the JSON. The page is prerendered but not linked from the navigation (kit.prerender entries default to every route).
 	import { onMount } from "svelte";
+	import { asset } from "$app/paths";
 	import { intlLocale, t } from "#lib/i18n/index.js";
 	import tokens from "../../../../design/tokens.json";
 	import { iconUse, ICON_NAMES, type IconName } from "#lib/icons.js";
@@ -124,7 +125,7 @@
 <ul><li>${x(t("ds.prose.li1"))}</li><li>${x(t("ds.prose.li2"))}</li></ul>
 <ol><li>${x(t("ds.prose.ol1"))}</li><li>${x(t("ds.prose.ol2"))}</li></ol>
 <blockquote><p>${x(t("ds.prose.quote"))}</p></blockquote>
-<table><thead><tr><th>${x(t("ds.prose.th.type"))}</th><th>${x(t("ds.prose.th.shape"))}</th><th>${x(t("ds.prose.th.color"))}</th></tr></thead><tbody><tr><td>${x(t("type.Concept"))}</td><td>${x(t("ds.prose.shape.cross"))}</td><td><code>--type-concept</code></td></tr><tr><td>${x(t("type.Entity"))}</td><td>${x(t("ds.prose.shape.square"))}</td><td><code>--type-entity</code></td></tr><tr><td>${x(t("type.Synthesis"))}</td><td>${x(t("ds.prose.shape.diamond"))}</td><td><code>--type-synthesis</code></td></tr><tr><td>${x(t("type.Source"))}</td><td>${x(t("ds.prose.shape.triangle"))}</td><td><code>--type-source</code></td></tr></tbody></table>
+<table><thead><tr><th>${x(t("ds.prose.th.type"))}</th><th>${x(t("ds.prose.th.shape"))}</th><th>${x(t("ds.prose.th.color"))}</th></tr></thead><tbody><tr><td>${x(t("type.Concept"))}</td><td>${x(t("ds.prose.shape.circle"))}</td><td><code>--type-concept</code></td></tr><tr><td>${x(t("type.Entity"))}</td><td>${x(t("ds.prose.shape.square"))}</td><td><code>--type-entity</code></td></tr><tr><td>${x(t("type.Synthesis"))}</td><td>${x(t("ds.prose.shape.diamond"))}</td><td><code>--type-synthesis</code></td></tr><tr><td>${x(t("type.Source"))}</td><td>${x(t("ds.prose.shape.triangle"))}</td><td><code>--type-source</code></td></tr></tbody></table>
 <aside class="personal-note" role="note">${calloutTitle("personal-note-title", "note", t("ds.prose.noteTitle"))}<p>${x(t("ds.prose.noteBody"))}</p></aside>
 <aside class="callout-warning" role="note">${calloutTitle("callout-warning-title", "warning", t("ds.prose.warnTitle"))}<p>${x(t("ds.prose.warnBody"))}</p></aside>`;
 
@@ -143,7 +144,7 @@
 	const TRUST: [IconName, string][] = [["verified", t("ds.trust.verified")], ["unverified", t("ds.trust.unverified")], ["needs-review", t("ds.trust.review")], ["stale", t("ds.trust.stale")], ["draft", t("ds.trust.draft")], ["deprecated", t("ds.trust.deprecated")], ["warning", t("ds.trust.partial")]];
 	const ROWS = [
 		{ id: "a", type: "Concept", title: t("ds.row.a.title"), description: t("ds.row.a.description"), status: "stable", verified: true },
-		{ id: "b", type: "Entity", title: "Source Sans 3", description: t("ds.row.b.description"), status: "draft", partial: true },
+		{ id: "b", type: "Entity", title: "Hauora Sans", description: t("ds.row.b.description"), status: "draft", partial: true },
 		{ id: "c", type: "Synthesis", title: t("ds.row.c.title"), description: t("ds.row.c.description"), status: "stable", needsReview: true },
 		{ id: "d", type: "Source", title: t("ds.row.d.title"), description: t("ds.row.d.description"), status: "deprecated" },
 	];
@@ -243,6 +244,7 @@
 	<section aria-labelledby="h-typographie" id="typographie" class="mt-14">
 		<h2 id="h-typographie" class={h2}>{t("ds.sec.typographie")}</h2>
 		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.typo.intro"))}</p>
+		<p class="{cap} mt-1 max-w-3xl">{t("ds.typo.credit")} <a href={asset("fonts/LICENSE-hauora.txt")} class="text-link underline underline-offset-4">{t("ds.licence.link")}</a></p>
 		<ul class="mt-6 border-t">
 			{#each SCALE as s (s.spec)}
 				<li class="grid gap-1 border-b py-3 md:grid-cols-[18rem_1fr] md:gap-6">
@@ -311,6 +313,7 @@
 	<section aria-labelledby="h-icones" id="icones" class="mt-14">
 		<h2 id="h-icones" class={h2}>{t("ds.sec.icones")}</h2>
 		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.icons.intro", { count: ICON_NAMES.length }))}</p>
+		<p class="{cap} mt-1 max-w-3xl">{t("ds.icons.credit")} <a href={asset("licenses/LICENSE-phosphor.txt")} class="text-link underline underline-offset-4">{t("ds.licence.link")}</a></p>
 		<ul class="mt-6 grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] border-t border-l">
 			{#each ICON_NAMES as name (name)}
 				<li class="bg-card flex flex-col items-center gap-2 border-r border-b p-3" data-icon={name}>
