@@ -34,4 +34,5 @@ test -f "$w/site/index.html"
 # a local embedding model configured but never downloaded: search stays on words (one warning on stderr), nothing is fetched
 printf '{"embed":{"provider":"local"}}\n' > cortex.json
 run search fermentation --json 2>/dev/null | grep -q Fermentation
+test ! -e "$w/home/.cache/cortex/models" # and no model was downloaded
 echo "build OK: $bin"

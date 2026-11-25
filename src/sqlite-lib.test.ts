@@ -26,8 +26,10 @@ test("a library that is missing or refused: one warning, the system's SQLite sta
   expect(lines).toHaveLength(2);
   expect(lines[0]).toContain("/nope/libsqlite3.dylib: file not found");
   const used: string[] = [];
-  expect(applySqlite({ path: arm, source: "homebrew" }, files(arm), (p) => used.push(p))).toEqual({ path: arm, source: "homebrew" });
+  expect(applySqlite({ path: arm, source: "homebrew" }, files(arm), (p) => used.push(p), "darwin")).toEqual({ path: arm, source: "homebrew" });
   expect(used).toEqual([arm]);
+  // elsewhere Bun ignores the call (checked on Linux): the state says so instead of naming a library that is not in use
+  expect(applySqlite({ path: "/x/libsqlite3.so", source: "env" }, files("/x/libsqlite3.so"), () => {}, "linux")).toEqual({ source: "env", ignored: true });
 });
 
 test("cortex with CORTEX_SQLITE_LIB on a missing file: warns once and runs on its own SQLite, search included", async () => {

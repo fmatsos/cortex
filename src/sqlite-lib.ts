@@ -10,7 +10,8 @@ import { warn } from "./style";
  *
  * Order: $CORTEX_SQLITE_LIB (a libsqlite3.dylib / .so; `system` = the system's, no detection), then on macOS only Homebrew's
  * (/opt/homebrew/opt/sqlite, /usr/local/opt/sqlite). A library that is missing or refused: one warning, the system's SQLite stays
- * (and the nearest neighbours are computed in JS). On Linux nothing changes unless the variable is set (Bun's own SQLite loads extensions).
+ * (and the nearest neighbours are computed in JS). Bun only honours `setCustomSQLite` on macOS (checked on Linux: the call succeeds and
+ * the SQLite in use stays Bun's own, which loads extensions already): elsewhere the variable is recorded as `ignored`, `cortex doctor` says so.
  */
 export const HOMEBREW_SQLITE = ["/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib", "/usr/local/opt/sqlite/lib/libsqlite3.dylib"];
 
@@ -25,10 +26,10 @@ export function pickSqlite(env: Record<string, string | undefined>, platform: st
 }
 
 /** What `applySqlite` did: the library in use (undefined = the system's), where the choice came from, and why a chosen one was not used. */
-export type SqliteState = { path?: string; source: SqliteChoice["source"]; error?: string };
+export type SqliteState = { path?: string; source: SqliteChoice["source"]; error?: string; /** asked for, but Bun uses its own SQLite on this platform */ ignored?: boolean };
 
 /** Applies the choice; never throws. Exported for the tests (the module runs it once, at import). */
-export function applySqlite(choice: SqliteChoice, exists: (p: string) => boolean = existsSync, set: (p: string) => void = (p) => Database.setCustomSQLite(p)): SqliteState {
+export function applySqlite(choice: SqliteChoice, exists: (p: string) => boolean = existsSync, set: (p: string) => void = (p) => Database.setCustomSQLite(p), platform: string = process.platform): SqliteState {
   if (!choice.path) return { source: choice.source };
   let error: string | undefined;
   if (!exists(choice.path)) error = "file not found";
@@ -37,7 +38,7 @@ export function applySqlite(choice: SqliteChoice, exists: (p: string) => boolean
     warn(`SQLite library ${choice.path}: ${error}; using the system's SQLite${process.platform === "darwin" ? " (sqlite-vec off, nearest neighbours computed in JS)" : ""}. Set CORTEX_SQLITE_LIB=system to silence this.`);
     return { source: choice.source, error };
   }
-  return { path: choice.path, source: choice.source };
+  return platform === "darwin" ? { path: choice.path, source: choice.source } : { source: choice.source, ignored: true };
 }
 
 /** The library this process uses. */
