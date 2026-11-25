@@ -712,5 +712,8 @@
 	"graph.neighbors_one": "{count} voisin",
 	"graph.neighbors_other": "{count} voisins",
 	"graph.misc": "Divers",
+	"graph.mode.label": "Présentation",
+	"graph.mode.graph": "Graphe",
+	"graph.mode.map": "Carte",
 	"graph.nearestFrame": "cadrage sur les 30 plus proches"
 }

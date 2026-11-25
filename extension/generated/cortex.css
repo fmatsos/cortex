@@ -40,6 +40,9 @@
 	--graph-edge: #7c8276;
 	--graph-edge-active: #245849;
 	--graph-label: #1b2120;
+	--map-sea: #e6ecec;
+	--map-land: #fbfaf5;
+	--map-coast: #bfc8c0;
 	--favorite: #7c5a22;
 	--signal: #a8701a;
 	--note-background: #efe7d4;
@@ -100,6 +103,9 @@
 		--graph-edge: #7e9385;
 		--graph-edge-active: #a3cbb9;
 		--graph-label: #e9e7df;
+		--map-sea: #151b1a;
+		--map-land: #26302d;
+		--map-coast: #45534d;
 		--favorite: #e4c58d;
 		--signal: #e6b85c;
 		--note-background: #332f23;
