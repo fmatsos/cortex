@@ -17,7 +17,7 @@ const SITE = join(import.meta.dir, "../site/src");
 const WANTED = `home search graph map journey tags journal favorites concept entity synthesis source draft stable deprecated verified unverified needs-review stale star
 copy-link copy-markdown success error sun moon system filter operator-tag operator-type operator-status operator-phrase operator-exclude recent clear toc
 chevron-down back backlink related external-link note warning citation citation-return kind-add kind-ingest download generated assistant kind-query kind-lint kind-update zoom-in zoom-out
-fit-view pause play close-selection list-view offline offline-ready retry new-tab language account sign-in sign-out trash rename conversation star-filled`.split(/\s+/);
+fit-view pause play close-selection list-view offline offline-ready retry new-tab language account sign-in sign-out trash rename conversation save export-markdown new-conversation star-filled`.split(/\s+/);
 
 const MAP = loadMap();
 

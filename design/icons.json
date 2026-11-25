@@ -71,7 +71,10 @@
     "sign-out": "sign-out",
     "trash": "trash",
     "rename": "pencil-simple",
-    "conversation": "chat-circle-text"
+    "conversation": "chat-circle-text",
+    "save": "floppy-disk",
+    "export-markdown": "file-arrow-down",
+    "new-conversation": "note-pencil"
   },
   "filled": {
     "star-filled": "star"

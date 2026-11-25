@@ -204,6 +204,20 @@ export async function serve(root: string, o: ServeOpts) {
           return Response.json({ error: (e as Error).message }, { status: /unknown page/.test((e as Error).message) ? 404 : 500 });
         }
       }
+      if (url.pathname === "/api/ask/render") {
+        // the answers of a saved conversation drawn again as the site shows them (no model involved): the panel resumes it
+        const askCfg = await openWiki(root).config();
+        if (!askCfg.site_ask || !askClient(askCfg)) return new Response(null, { status: 404 });
+        if (req.method !== "POST") return new Response(null, { status: 405 });
+        if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
+        const body = await req.json().then((b: { answers?: unknown }) => b ?? {}, () => ({} as { answers?: unknown }));
+        const answers = body.answers;
+        if (!Array.isArray(answers) || answers.length > 200 || answers.some((a) => typeof a !== "string") || answers.reduce((n: number, a: string) => n + a.length, 0) > 1_000_000) {
+          return Response.json({ error: "expected { answers } (up to 200 Markdown answers, 1,000,000 characters in all)" }, { status: 400 });
+        }
+        const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
+        return Response.json({ answers: (answers as string[]).map((md) => askAnswer(md, titles)) });
+      }
       if (url.pathname === "/api/ask") {
         // opt-in (the route spends tokens), and only through an SDK client: the agnostic CLI ignores the model and may keep its own tools
         const askCfg = await openWiki(root).config();

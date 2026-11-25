@@ -12,13 +12,16 @@ export const getConversation = (id: string) => api<Conversation>(`/api/conversat
 export const renameConversation = (id: string, title: string) => api<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: "PUT", body: { title } });
 export const removeConversation = (id: string) => api(`/api/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
 
+/** The first save of a conversation of the assistant (title: the visitor's, else the server takes the first question). */
+export const createConversation = (title: string | undefined, turns: ConversationTurn[]) => api<Conversation>("/api/conversations", { method: "POST", body: { title, turns } });
+/** Replaces the exchanges of a saved conversation (the next question of a resumed one, or the ones added since the last save). */
+export const updateConversation = (id: string, turns: ConversationTurn[]) => api<Conversation>(`/api/conversations/${encodeURIComponent(id)}`, { method: "PUT", body: { turns } });
+
 /**
- * Phase C plugs in here. The account page only calls `resumeConversation` / `exportConversation`; the assistant panel
- * (resume: reopen the conversation in the panel) and the Markdown export (download of the conversation) register their
- * implementation in `conversationActions`. While one is missing its button stays disabled.
+ * What the account page can do with a saved conversation. The assistant (assistant-session.ts, `registerConversationActions`)
+ * provides both: resume opens it in the panel, export downloads it as Markdown. The page only calls `resumeConversation` /
+ * `exportConversation`; until they are registered (the first render of the layout) the buttons stay inactive.
  */
 export const conversationActions: { resume?: (id: string) => void | Promise<void>; export?: (id: string) => void | Promise<void> } = {};
-// phase C: resume a saved conversation in the assistant panel
 export const resumeConversation = (id: string) => conversationActions.resume?.(id);
-// phase C: export a saved conversation as Markdown
 export const exportConversation = (id: string) => conversationActions.export?.(id);

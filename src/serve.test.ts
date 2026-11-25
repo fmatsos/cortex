@@ -136,6 +136,32 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
   } finally { server.stop(true); }
 }, 120_000);
 
+test("POST /api/ask/render: the saved answers drawn again, same origin only, off without site_ask", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-render-"));
+  mkdirSync(join(root, "wiki/concepts"), { recursive: true });
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
+  writeFileSync(join(root, "wiki/concepts/idee.md"), `---\ntype: Concept\ntitle: "Idée"\nstatus: draft\n---\n\nCorps.\n`);
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {} });
+  try {
+    const origin = `http://localhost:${server.port}`, at = `${origin}/api/ask/render`;
+    const post = (body: unknown, headers: Record<string, string> = { origin }) => fetch(at, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+    expect((await post({ answers: ["x"] }, { origin: "http://evil" })).status).toBe(403);
+    expect((await post({ answers: ["x"] }, {})).status).toBe(403);
+    expect((await post({ answers: "x" })).status).toBe(400);
+    expect((await post({ answers: [3] })).status).toBe(400);
+    const r = await post({ answers: ["Voir [Idée](/wiki/concepts/idee.md)<script>alert(1)</script>", "Rien."] });
+    expect(r.status).toBe(200);
+    const { answers } = (await r.json()) as { answers: { segments: { html?: string }[]; cited: string[] }[] };
+    expect(answers).toHaveLength(2);
+    expect(answers[0].segments.map((s) => s.html ?? "").join("")).toContain('href="wiki/concepts/idee/"');
+    expect(answers[0].segments.map((s) => s.html ?? "").join("")).not.toContain("<script");
+    expect(answers[0].cited).toEqual(["concepts/idee"]);
+    expect(answers[1].cited).toEqual([]);
+    writeFileSync(join(root, "cortex.json"), "{}");
+    expect((await post({ answers: ["x"] })).status).toBe(404);
+  } finally { server.stop(true); }
+}, 120_000);
+
 test("site_ask: its own client, model and effort; $CORTEX_ASK_API_KEY only to $CORTEX_ASK_BASE_URL", async () => {
   const { askSetup, askModel, askClient } = await import("./serve");
   const env = { u: process.env.CORTEX_ASK_BASE_URL, k: process.env.CORTEX_ASK_API_KEY };
