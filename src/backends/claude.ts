@@ -9,14 +9,14 @@ import { toLabel, toRegex, usage } from "./policy";
 export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
-    async run(root, prompt, mode, report, _check, extra = []) {
+    async run(root, prompt, mode, report, _check, extra = [], stream) {
       const { query, createSdkMcpServer, tool } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
       const { callTool, toolPack, zodShape } = await import("./tools");
       const schema = await schemaText(root);
       const refused = (reason: string) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" });
       // the cortex tool pack, in process: the same tools as every backend; Claude Code's own tools are off
-      const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: toolPack(mode).map((t) =>
+      const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: (stream?.onlyExtra ? [] : toolPack(mode)).map((t) =>
         tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused) }] })))
         .concat(extra.map((t) => tool(t.name, t.description, t.schema.shape as any, async (args: unknown) => ({ content: [{ type: "text" as const, text: await runExtra(t, args) }] })))) });
       let out: string | undefined;

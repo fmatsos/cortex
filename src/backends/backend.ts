@@ -12,10 +12,11 @@ export type { Config };
 export type Check = ((answer?: string) => Promise<string[]>) & { prompt?: (misses: string[]) => string };
 
 /**
- * A tool of one run only, beside the cortex pack (the site's questions: render_blocks). Its arguments are checked against
- * `schema` before `run`; a mismatch goes back to the model as text, so it can correct the call.
+ * A tool of one run only, beside the cortex pack (the site's questions: render_blocks, and the wiki tools that replace the
+ * pack). Its arguments are checked against `schema` before `run`; a mismatch goes back to the model as text, so it can
+ * correct the call. `read`: a reading tool, counted by `Stream.toolRounds` and taken away once they are spent.
  */
-export type ExtraTool = { name: string; description: string; schema: import("zod").ZodObject; run: (args: any) => Promise<string> };
+export type ExtraTool = { name: string; description: string; schema: import("zod").ZodObject; run: (args: any) => Promise<string>; read?: boolean };
 
 /** Runs one extra tool call: the schema first, its errors as text for the model. */
 export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
@@ -28,8 +29,11 @@ export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
  * Live view of an answer being written (the site's questions): `text` gets each piece, `reset` says that what was sent is void
  * (a new model turn), `step` the tool the agent is about to run (its name and arguments as the model sent them). `signal`: the
  * reader left, stop paying for the answer (the openai client only; without `text` the answer is not streamed, only cancellable).
+ * `onlyExtra`: no cortex pack, only the run's extra tools (the site's questions never get the file tools). `toolRounds`: turns that
+ * may run reading tools (the pack's, or the extra tools marked `read`); after them only the other extra tools are offered and the
+ * model is told to answer (the openai client only; the claude client ignores it).
  */
-export type Stream = { text?: (delta: string) => void; reset?: () => void; step?: (name: string, args: Record<string, unknown>) => void; signal?: AbortSignal };
+export type Stream = { text?: (delta: string) => void; reset?: () => void; step?: (name: string, args: Record<string, unknown>) => void; signal?: AbortSignal; toolRounds?: number; onlyExtra?: boolean };
 
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */

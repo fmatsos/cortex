@@ -374,3 +374,76 @@ test("openai: an aborted signal stops the run (request, waiting body, next turn,
     expect(seen.length).toBe(before);
   } finally { server.stop(true); }
 });
+
+test("openai: after toolRounds read turns only the run's extra tools are offered with the answer-now message; a stray call is refused, not run", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  const { blockRegistry } = await import("./answer-blocks");
+  const r = blockRegistry();
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const tools = (...c: any[]) => ({ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: c } });
+  const answers = [
+    tools(call("1", "Glob", { pattern: "wiki/*.md" })),
+    tools(call("2", "Glob", { pattern: "wiki/*.md" })),
+    tools(call("3", "Glob", { pattern: "wiki/*.md" }), call("4", "Grep", { pattern: "x" })), // the second read turn ends the reading
+    tools(call("5", "Read", { file_path: "wiki/a.md" })), // stray: refused
+    { finish_reason: "stop", message: { role: "assistant", content: "Answer." } },
+  ];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [answers[seen.length - 1]] }); } });
+  try {
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [r.tool], { toolRounds: 3 });
+    expect(out).toBe("Answer.");
+    const names = (i: number) => seen[i].tools.map((t: any) => t.function.name);
+    expect(names(0)).toContain("Read");
+    expect(names(2)).toContain("Read"); // third request: still two read turns done
+    expect(names(3)).toEqual(["render_blocks"]);
+    expect(seen[2].messages.some((m: any) => m.role === "user" && m.content.includes("reading is over"))).toBe(false);
+    expect(seen[3].messages.at(-1)).toEqual({ role: "user", content: expect.stringContaining("Your reading is over") });
+    expect(seen[4].messages.at(-1)).toEqual({ role: "tool", tool_call_id: "5", content: expect.stringContaining("refused: your reading is over") });
+    expect(names(4)).toEqual(["render_blocks"]);
+  } finally { server.stop(true); }
+});
+
+test("openai: past toolRounds without any extra tool, no tools are sent; without toolRounds nothing is capped", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  mkdirSync(join(root, "wiki"));
+  const glob = { finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [{ id: "1", type: "function", function: { name: "Glob", arguments: '{"pattern":"wiki/*.md"}' } }] } };
+  const done = { finish_reason: "stop", message: { role: "assistant", content: "ok" } };
+  let answers: any[] = [glob, done];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [answers[seen.length - 1]] }); } });
+  const run = (stream?: { toolRounds: number }) => openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, undefined, stream);
+  try {
+    await run({ toolRounds: 1 });
+    expect(seen[0].tools).toBeDefined();
+    expect("tools" in seen[1]).toBe(false);
+    expect(seen[1].messages.at(-1).content).toContain("Your reading is over");
+    seen.length = 0; answers = [glob, glob, glob, done];
+    await run();
+    expect(seen.every((b) => b.tools?.length)).toBe(true);
+  } finally { server.stop(true); }
+});
+
+test("openai: onlyExtra offers no pack tool, and the extra tools marked read are the ones the cap takes away", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const { z } = await import("zod");
+  const { blockRegistry } = await import("./answer-blocks");
+  const r = blockRegistry();
+  let ran = 0;
+  const look = { name: "look", description: "d", schema: z.object({ q: z.string() }), read: true, run: async () => (ran++, "found") };
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const tools = (...c: any[]) => ({ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: c } });
+  const answers = [tools(call("1", "look", { q: "a" })), tools(call("2", "look", { q: "b" })), tools(call("3", "Read", { file_path: "x" })), { finish_reason: "stop", message: { role: "assistant", content: "ok" } }];
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [answers[seen.length - 1]] }); } });
+  try {
+    await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [look, r.tool], { onlyExtra: true, toolRounds: 2 });
+    const names = (i: number) => seen[i].tools.map((t: any) => t.function.name);
+    expect(names(0)).toEqual(["look", "render_blocks"]); // no Read, Glob, Grep, Bash
+    expect(names(1)).toEqual(["look", "render_blocks"]);
+    expect(names(2)).toEqual(["render_blocks"]); // the cap counted the two look rounds
+    expect(ran).toBe(2);
+    expect(seen[3].messages.at(-1).content).toContain("refused: your reading is over");
+  } finally { server.stop(true); }
+});

@@ -150,7 +150,7 @@ test("POST /api/ask with Accept: application/x-ndjson: events in order, done car
   let gate = Promise.resolve();
   const said: string[] = [];
   const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: (m) => said.push(m), ask: async (_, q, __, stream) => {
-    stream?.step?.("Read", { file_path: "wiki/a.md" }); stream?.step?.("Grep", { pattern: "x".repeat(80) }); stream?.step?.("Read", { file_path: "/wiki/a.md" }); stream?.step?.("Read", { file_path: `${root}/wiki/a.md` }); stream?.step?.("Read", { file_path: "./wiki/a.md" }); stream?.step?.("Read", { file_path: "/etc/passwd" });
+    stream?.step?.("get", { path: "wiki/a.md" }); stream?.step?.("search", { q: "x".repeat(80) }); stream?.step?.("get", { path: "/wiki/a.md" }); stream?.step?.("get", { path: "./wiki/a.md" }); stream?.step?.("get", { path: "/raw/s.md" }); stream?.step?.("related", { path: "/wiki/a.md" });
     stream?.text?.("Hel"); stream?.text?.("lo"); stream?.reset?.(); stream?.text?.("Hi");
     // "b" and "p" run until the client leaves, "slow" does not look at the signal: the lock follows the run, not the client
     if (q === "b" || q === "p") await new Promise((_, no) => stream?.signal?.addEventListener("abort", () => no(new Error("aborted"))));
@@ -168,7 +168,7 @@ test("POST /api/ask with Accept: application/x-ndjson: events in order, done car
     expect(events.map((e) => e.t)).toEqual(["step", "step", "step", "step", "step", "step", "delta", "delta", "reset", "delta", "done"]);
     const read = { kind: "read", path: "wiki/a.md", title: "A page" };
     // "/wiki/x.md" (as the prompt lists the pages), under the root, and "./": the same page; outside the wiki: work
-    expect(events.slice(0, 6).map((e) => e.step)).toEqual([read, { kind: "search", query: "x".repeat(60) }, read, read, read, { kind: "work" }]);
+    expect(events.slice(0, 6).map((e) => e.step)).toEqual([read, { kind: "search", query: "x".repeat(60) }, read, read, { kind: "work" }, { kind: "work" }]);
     expect(events[6].text + events[7].text).toBe("Hello");
     const json = (await (await post("a")).json()) as Record<string, unknown>; // no Accept: the JSON path, same payload
     expect(events[10]).toEqual({ t: "done", ...json });

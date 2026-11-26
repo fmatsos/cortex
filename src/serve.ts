@@ -8,7 +8,7 @@ import { EXTRA_TOOLS, type Check, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
 import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./prompts";
-import { historyPart, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
+import { historyPart, pagesPart, relevantPages, wikiTools, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
 import { searchSite } from "./search-api";
@@ -84,16 +84,16 @@ export function askAnswer(md: string, titles: Map<string, string>) {
 }
 /**
  * What the agent is doing, as the site words it (structured, never free text from the model): a tool about to run, or "pages"
- * (choosing the pages). `titles`: wiki path → title. A page read outside the wiki is only "work". The path is read as the tool
- * does (callTool): under `root` when absolute there, else relative to it even with a leading "/" (the prompt lists "/wiki/x.md").
+ * (choosing the pages). `titles`: wiki path → title. The path is read as the `get` tool does: relative to the root even with a
+ * leading "/" (the prompt lists "/wiki/x.md"). `related` is only "work".
  */
-export function stepOf(name: string, args: Record<string, unknown>, titles: Map<string, string>, root: string) {
+export function stepOf(name: string, args: Record<string, unknown>, titles: Map<string, string>) {
   if (name === "pages") return { kind: "pages" };
   if (name === "render_blocks") return { kind: "layout" };
   const arg = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
-  if (name === "Grep" || name === "Glob") return { kind: "search", query: arg("pattern").slice(0, 60) };
-  const raw = arg("file_path"), path = raw.startsWith(`${root}/`) ? raw.slice(root.length + 1) : raw.replace(/^\.?\//, "");
-  if (name === "Read" && /^wiki\/.+\.md$/.test(path)) return { kind: "read", path, title: titles.get(path) };
+  if (name === "search") return { kind: "search", query: arg("q").slice(0, 60) };
+  const path = arg("path").trim().replace(/^\.?\/+/, "");
+  if (name === "get" && /^wiki\/.+\.md$/.test(path)) return { kind: "read", path, title: titles.get(path) };
   return { kind: "work" };
 }
 const MAX_QUESTION = 500;
@@ -127,13 +127,13 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
     hits = (all.length ? all : await find(true)).map((h) => `/${h.path} « ${h.title} »`);
   }
   const ask = askSetup(cfg);
-  // display blocks through a tool: only the clients that take a run's own tools (the others answer in plain Markdown)
+  // the wiki tools and the display blocks go through the run's own tools: only the clients that take them (the others answer in plain Markdown)
   const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
   // a long answer written without any block goes back once more to the model, in the same conversation (openai client)
   const laidOut: Check | undefined = blocks && Object.assign(async (answer = "") => (!blocks.used() && answer.length > LIMITS.askBlocksAfterChars ? ["no display block"] : []), { prompt: () => askSitePromptPart("ask-site-blocks-missing", {}) });
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [blocks.tool], stream);
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds });
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 
@@ -413,7 +413,7 @@ export async function serve(root: string, o: ServeOpts) {
               void answer({
                 text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
                 reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
-                step: (name, args) => send({ t: "step", step: stepOf(name, args, known, root) }),
+                step: (name, args) => send({ t: "step", step: stepOf(name, args, known) }),
                 signal: left.signal,
               }).then(
                 (r) => send({ t: "done", ...r }),

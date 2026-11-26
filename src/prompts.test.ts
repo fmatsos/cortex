@@ -48,3 +48,12 @@ test("MCP instructions are derived from language", () => {
   expect(mcpInstructions("English")).toContain("wiki in English");
   expect(() => buildServer("/nonexistent", "French")).not.toThrow();
 });
+
+test("site question: the pages given in full are not read again, the wiki tools are named, the reading-over message exists", () => {
+  const ask = prompt("ask-site", { question: "Q", pages: "P", history: "", blocks: "" });
+  expect(ask).toContain("already read");
+  expect(ask).toMatch(/search .*get .*related/);
+  expect(ask).not.toMatch(/Grep|Glob|raw\//);
+  expect(prompt("ask-site-core", {})).toContain("do not get them again");
+  expect(prompt("ask-site-reading-over", {})).toContain("Answer now");
+});

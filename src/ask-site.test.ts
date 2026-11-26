@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { compactAnswer, coreOf, historyPart, pagesPart } from "./ask-site";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { compactAnswer, coreOf, historyPart, pagesPart, wikiTools } from "./ask-site";
+import { runExtra } from "./backends/backend";
+import { stepOf } from "./serve";
 import type { Page } from "./doc";
 
 const page = (path: string, body = "corps"): Page => ({ path, fm: { type: "Concept", title: path }, body, issues: [] }) as unknown as Page;
@@ -49,4 +54,30 @@ test("history: the last N exchanges (2N messages) are kept, the older ones left 
   expect(part).not.toContain("R2");
   expect(part).toContain("User: Q3\n\nAssistant: R3\n\nUser: Q4\n\nAssistant: R4");
   expect(historyPart(turns, 4)).toContain("Q1");
+});
+
+test("wikiTools: search, get, related, all reading; get refuses anything outside wiki/", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-wikitools-"));
+  mkdirSync(join(root, "wiki"));
+  mkdirSync(join(root, "raw"));
+  await Bun.write(join(root, "wiki/a.md"), "---\ntype: Concept\ntitle: A\n---\nPage A\n");
+  await Bun.write(join(root, "raw/s.md"), "secret source\n");
+  const tools = wikiTools(root);
+  expect(tools.map((t) => t.name)).toEqual(["search", "get", "related"]);
+  expect(tools.every((t) => t.read)).toBe(true);
+  const get = tools.find((t) => t.name === "get")!;
+  expect(await runExtra(get, { path: "/wiki/a.md" })).toContain("Page A");
+  const hits = JSON.parse(await runExtra(tools[0], { q: "Page" }));
+  expect(Array.isArray(hits) && hits.every((h: any) => h.path.startsWith("/wiki/"))).toBe(true);
+  expect(await runExtra(tools[2], { path: "/wiki/a.md" })).toBe("[]");
+  for (const path of ["/raw/s.md", "raw/s.md", "wiki/../raw/s.md", "../x.md", "/etc/passwd"]) expect(await runExtra(get, { path })).toStartWith("error:");
+});
+
+test("stepOf: search, get and related as the site words them", () => {
+  const titles = new Map([["wiki/a.md", "A"]]);
+  expect(stepOf("search", { q: "mot clé" }, titles)).toEqual({ kind: "search", query: "mot clé" });
+  expect(stepOf("get", { path: "/wiki/a.md" }, titles)).toEqual({ kind: "read", path: "wiki/a.md", title: "A" });
+  expect(stepOf("get", { path: "/raw/s.md" }, titles)).toEqual({ kind: "work" });
+  expect(stepOf("related", { path: "/wiki/a.md" }, titles)).toEqual({ kind: "work" });
+  expect(stepOf("render_blocks", {}, titles)).toEqual({ kind: "layout" });
 });

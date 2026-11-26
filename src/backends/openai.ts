@@ -3,6 +3,7 @@ import { z } from "zod";
 import { LIMITS } from "../limits";
 import { callTool, toolPack } from "./tools";
 import { endpoint } from "../config";
+import { prompt as promptText } from "../prompts";
 
 export { part } from "./tools";
 
@@ -36,6 +37,9 @@ const jsonSchema = (schema: z.ZodType) => {
 const CUT = `Your last answer exceeded the output limit (${LIMITS.llmMaxTokens} tokens) and was cut: none of its tool calls ran. ` +
   "Send fewer calls at once, and write a long page in parts: WritePage with the start, then Append for the rest.";
 
+/** What the model hears when it still calls a tool the reading cap took away: the call did not run. */
+const READING_OVER = "refused: your reading is over, this tool is no longer offered. Answer now from what you have read.";
+
 /**
  * `ep`: the server and its key, by default `endpoint` (config.ts): `base_url` of cortex.json, else $OPENAI_BASE_URL, else a
  * local Ollama; $OPENAI_API_KEY only to a URL the environment names. The site's questions pass their own (serve.ts askSetup).
@@ -47,11 +51,14 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
     async run(root, prompt, mode, report, check, extra = [], stream) {
       if (!cfg.model) throw new Error(`the openai client needs a model: cortex config set model <name>.`);
       const { schemaText } = await import("../schema");
-      const tools = [...toolPack(mode), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
+      const tools = [...(stream?.onlyExtra ? [] : toolPack(mode)), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
       const own = new Map(extra.map((t) => [t.name, t]));
+      const isRead = (name: string) => !own.has(name) || !!own.get(name)!.read; // the pack's tools and the extra tools marked `read`
+      const extraTools = tools.filter((t) => !isRead(t.function.name)); // all that stays offered once `stream.toolRounds` read rounds are done
       const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
       const { url, key } = ep, signal = stream?.signal;
       let fixes = 0, cuts = 0, text = "", keep = false; // text: the parts of a final answer cut by the output limit; keep: the next turn goes on with it
+      let reads = 0, capped = false; // reads: turns that ran reading tools; capped: past stream.toolRounds, only the extra tools that do not read are offered
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
         signal?.throwIfAborted(); // the reader left: no new request
         if (turn && !keep) stream?.reset?.(); // a new turn (tool round, check resend): what was shown is provisional
@@ -59,10 +66,11 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
         // server's prompt cache keeps the prefix on the turns in between
         if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
+        const offered = capped ? extraTools : tools;
         const res = await fetch(`${url}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
+          body: JSON.stringify({ model: cfg.model, messages, ...(offered.length && { tools: offered }), max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(LIMITS.llmRequestMs)]) : AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {
@@ -97,12 +105,17 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         }
         for (const c of msg.tool_calls) {
           signal?.throwIfAborted();
+          if (capped && isRead(c.function.name)) { messages.push({ role: "tool", tool_call_id: c.id, content: READING_OVER }); continue; }
           let args: Record<string, any>;
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
           stream?.step?.(c.function.name, args);
           const x = own.get(c.function.name);
           const content = x ? await runExtra(x, args) : await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }));
           messages.push({ role: "tool", tool_call_id: c.id, content });
+        }
+        if (stream?.toolRounds && !capped && msg.tool_calls.some((c: any) => isRead(c.function.name)) && ++reads >= stream.toolRounds) {
+          capped = true;
+          messages.push({ role: "user", content: promptText("ask-site-reading-over", {}) });
         }
       }
       throw new Error(`openai agent stopped after ${LIMITS.agentTurns} turns.`);

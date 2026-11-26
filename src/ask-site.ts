@@ -1,8 +1,14 @@
+import { join } from "node:path";
+import { z } from "zod";
+import type { ExtraTool } from "./backends/backend";
 import { openWiki } from "./context";
-import { pageId, type Page } from "./doc";
+import { fromResource, pageId, toResource, type Page } from "./doc";
 import { clip, judgeConfig, type JudgeConfig } from "./judge";
 import { scorePages } from "./judge-scores";
 import { LIMITS } from "./limits";
+import { getFile, relatedForAgent } from "./mcp";
+import { related } from "./lib";
+import { isUnder } from "./paths";
 import { prompt } from "./prompts";
 import { search } from "./search";
 import { flattenBlocks } from "./answer-blocks";
@@ -118,3 +124,32 @@ export function historyPart(history: readonly Turn[], exchanges: number): string
   const lines = recent.map((t) => (t.role === "user" ? `User: ${t.text}` : `Assistant: ${compactAnswer(t.text)}`));
   return `${prompt("ask-site-history", {})}\n\n${lines.join("\n\n")}`;
 }
+
+/**
+ * The only way the site's agent reads the wiki (the cortex tool pack is off for it): the MCP tools of mcp.ts, wiki only (never
+ * raw/), on the same hybrid search. All three read, so `LIMITS.askToolRounds` counts them.
+ */
+export const wikiTools = (root: string): ExtraTool[] => [
+  {
+    name: "search", read: true,
+    description: "Hybrid search in the wiki (words and meaning; one result per page, with the extract of its best section). Use 2 or 3 key terms, never the whole question.",
+    schema: z.object({ q: z.string().describe("search terms"), limit: z.number().int().min(1).max(20).optional().describe("maximum number of results (default 8)") }),
+    run: async ({ q, limit }: { q: string; limit?: number }) =>
+      JSON.stringify((await search(root, q, { in: "wiki", limit: limit ?? 8 })).map((h) => ({ path: toResource(h.path), title: h.title, snippet: h.snippet })), null, 1),
+  },
+  {
+    name: "get", read: true,
+    description: "Reads the content of a wiki page, for example /wiki/concepts/x.md: a page found by search or related.",
+    schema: z.object({ path: z.string().describe("path of the page, with or without a leading \"/\"") }),
+    run: async ({ path }: { path: string }) => {
+      if (!isUnder(root, "wiki", join(root, fromResource(path)))) throw new Error(`Path refused: ${path} (expected: a .md under wiki/)`);
+      return getFile(root, path);
+    },
+  },
+  {
+    name: "related", read: true,
+    description: "Wiki pages related to a page: outgoing links, backlinks, shared sources and tags, ranked by strength with the reason.",
+    schema: z.object({ path: z.string().describe("wiki page, for example /wiki/concepts/x.md"), limit: z.number().int().min(1).max(20).optional().describe("maximum number of pages (default 8)") }),
+    run: async ({ path, limit }: { path: string; limit?: number }) => JSON.stringify(relatedForAgent(related(await openWiki(root).pages(), path), limit ?? 8), null, 1),
+  },
+];
