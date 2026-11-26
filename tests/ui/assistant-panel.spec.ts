@@ -168,16 +168,46 @@ test.describe("desktop 1440", () => {
     await page.locator("#assistant-toggle").click();
     await page.locator("#assistant-q").fill("Why?");
     await page.locator("#assistant-q").press("Enter");
-    await expect(panel(page).getByText(/consulte le wiki|reading the wiki/)).toBeVisible(); // before any step: the generic wording
+    await expect(panel(page).getByText(/Consultation du wiki|Reading the wiki/)).toBeVisible(); // before any step: the generic wording
     await page.evaluate(() => (window as any).emit({ t: "step", step: { kind: "search", query: "alpha" } }));
     await expect(panel(page).getByText(/Recherche de « alpha »|Searching the wiki for “alpha”/)).toBeVisible();
     await page.evaluate(() => (window as any).emit({ t: "step", step: { kind: "read", path: "wiki/a.md", title: "Page A" } }));
+    // typed from the left: the whole wording is there once the typing ends, and the previous line has left
     await expect(panel(page).getByText(/Lecture de « Page A »|Reading “Page A”/)).toBeVisible();
     await expect(panel(page).getByText(/Recherche de « alpha »|Searching the wiki for “alpha”/)).toHaveCount(0);
+    await expect(panel(page).locator("[data-step-line] > span")).toHaveCount(1); // the outgoing line is gone once the transition ends
+    expect(await panel(page).locator("[data-step-line] > span").evaluate((el) => getComputedStyle(el).animationName)).toMatch(/sweep/); // the shimmer, in motion
     expect(await panel(page).getByText(/Page A/).evaluate((el) => !!el.closest("[aria-live], [role=status]"))).toBe(false);
     await page.evaluate(() => (window as any).emit({ t: "delta", text: "Some draft" }));
     await expect(panel(page).getByText("Some draft")).toBeVisible();
     await expect(panel(page).getByText(/Rédaction de la réponse|Writing the answer/)).toBeVisible();
     expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/step|partial/);
+  });
+
+  test.describe("reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+    test("the step line changes at once and its text is plain: no sweep, no slide", async ({ page }) => {
+      await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD" ? route.fulfill({ status: 204 }) : route.abort());
+      await page.addInitScript(() => {
+        const native = window.fetch.bind(window), enc = new TextEncoder();
+        window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).includes("/api/ask") && init?.method === "POST") {
+            const body = new ReadableStream({ start: (c) => { (window as any).emit = (e: object) => c.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } });
+            return Promise.resolve(new Response(body, { headers: { "content-type": "application/x-ndjson" } }));
+          }
+          return native(input, init);
+        }) as typeof fetch;
+      });
+      await page.goto("/graph");
+      await page.locator("#assistant-toggle").click();
+      await page.locator("#assistant-q").fill("Why?");
+      await page.locator("#assistant-q").press("Enter");
+      await expect(panel(page).locator("[data-step-line] > span")).toHaveCount(1);
+      await page.evaluate(() => (window as any).emit({ t: "step", step: { kind: "search", query: "alpha" } }));
+      const line = panel(page).locator("[data-step-line] > span");
+      // at once: the whole wording and a single line, with no typing to wait for
+      await expect.poll(() => line.allTextContents(), { timeout: 1000 }).toEqual([expect.stringMatching(/Recherche de « alpha »|Searching the wiki for “alpha”/)]);
+      expect(await line.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+    });
   });
 });

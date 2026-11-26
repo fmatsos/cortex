@@ -131,7 +131,7 @@ test.describe("header", () => {
     await open(page, m);
     await field(page).fill("Slow one?");
     await field(page).press("Enter");
-    await expect(panel(page).getByText("The assistant is reading the wiki")).toBeVisible();
+    await expect(panel(page).getByText("Reading the wiki")).toBeVisible();
     await disabled(button(page, SAVE)); await disabled(button(page, EXPORT)); await disabled(button(page, NEW));
     release();
     await expect(button(page, SAVE)).toBeEnabled();

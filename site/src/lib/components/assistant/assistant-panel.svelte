@@ -7,6 +7,7 @@
 	import AssistantDialogs from "./assistant-dialogs.svelte";
 	import { AssistantFlow } from "./assistant-flow.svelte.js";
 	import AssistantHeader from "./assistant-header.svelte";
+	import StepLine from "./step-line.svelte";
 	import { assistant, MAX_QUESTION, type Step, type Turn } from "#lib/assistant.svelte.js";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
 	import { toPage, toRoute } from "#lib/links.js";
@@ -193,10 +194,10 @@
 							<!-- provisional text, as written (raw Markdown): the finished answer replaces it; not announced -->
 							<div class="bg-card shadow-surface mt-3 border p-3">
 								<p class="text-sm break-words whitespace-pre-wrap" lang={contentLang}>{turn.partial}</p>
-								<div class="text-muted-foreground mt-3 flex items-center gap-3 text-sm"><ActivityIndicator />{#if turn.step}<span>{stepText(turn.step)}</span>{/if}</div>
+								<div class="text-muted-foreground mt-3 flex items-center gap-3 text-sm"><ActivityIndicator />{#if turn.step}<StepLine text={stepText(turn.step)} />{/if}</div>
 							</div>
 						{:else}
-							<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><span>{#if turn.step}{stepText(turn.step)}{:else}{t("assistant.waiting")}{/if}</span></div>
+							<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><StepLine text={turn.step ? stepText(turn.step) : t("assistant.waiting")} /></div>
 						{/if}
 					{:else if turn.error}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">

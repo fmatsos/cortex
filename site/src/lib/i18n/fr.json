@@ -570,7 +570,7 @@
 	"assistant.tone.info": "À noter",
 	"assistant.tone.success": "À retenir",
 	"assistant.tone.warning": "Attention",
-	"assistant.waiting": "L'assistant consulte le wiki. Cela prend en général 10 à 30 secondes.",
+	"assistant.waiting": "Consultation du wiki… (10 à 30 s)",
 	"assistant.welcome": "Posez une question sur le wiki.",
 	"assistant.welcomeHint": "L'assistant répond à partir des pages du wiki et cite celles qu'il utilise. La conversation reste ouverte d'une page à l'autre.",
 	"assistant.ai.unknown": "Réponse générée par IA à partir du wiki : vérifiez-la dans les pages citées.",
