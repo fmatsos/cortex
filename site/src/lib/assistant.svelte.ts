@@ -15,8 +15,8 @@ export type Segment = { html: string } | { block: Block };
 /** `md`: the answer as written, sent back as history; retained and related: the pages the judge chose, by id. */
 export type Answer = { segments: Segment[]; md: string; cited: string[]; retained: string[]; related: string[]; model?: string };
 export type AskErrorKind = "busy" | "off" | "invalid" | "failed" | "network";
-/** `at`: when the answer came (ISO), kept in the saved copy. */
-export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string };
+/** `at`: when the answer came (ISO), kept in the saved copy. `partial`: the text written so far while the answer streams in (provisional, never kept). */
+export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string };
 /** The saved copy this conversation continues: its id, its name, the exchanges it holds (`keys`) and when it was created. */
 export type SavedLink = { id: string; title: string; keys: string; created_at: string };
 /** A turn as `POST /api/conversations` takes it. */
@@ -104,14 +104,41 @@ class Assistant {
 		this.turns = [...this.turns, turn];
 		this.draft = "";
 		if (!turn.pending) { this.save(); return false; }
-		const settle = (change: Partial<Turn>) => { this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, ...change, pending: false } : t)); this.save(); };
+		const settle = (change: Partial<Turn>) => { this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, ...change, pending: false, partial: undefined } : t)); this.save(); };
+		const done = (b: any) => {
+			if (!Array.isArray(b.segments)) return settle({ error: "failed" });
+			const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+			settle({ at: new Date().toISOString(), answer: { segments: b.segments, md: String(b.md ?? ""), cited: ids(b.cited), retained: ids(b.retained), related: ids(b.related), model: b.model } });
+		};
 		void (async () => {
 			try {
-				const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ q, history }) });
-				const b = await r.json().catch(() => ({}));
-				if (!r.ok || !Array.isArray(b.segments)) return settle({ error: r.ok ? "failed" : askErrorKind(r.status) });
-				const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-				settle({ at: new Date().toISOString(), answer: { segments: b.segments, md: String(b.md ?? ""), cited: ids(b.cited), retained: ids(b.retained), related: ids(b.related), model: b.model } });
+				const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }) });
+				if (!r.ok || !r.body || !r.headers.get("content-type")?.includes("application/x-ndjson")) {
+					const b = await r.json().catch(() => ({}));
+					return r.ok ? done(b) : settle({ error: askErrorKind(r.status) });
+				}
+				// one JSON event per line: the text so far (shown a few times a second, not saved), then the final payload
+				let partial = "", buf = "", final: any, timer: ReturnType<typeof setTimeout> | undefined;
+				const show = () => { timer = undefined; this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial } : t)); };
+				const line = (l: string) => {
+					if (!l.trim()) return;
+					const e = JSON.parse(l);
+					if (e.t === "delta") { partial += String(e.text ?? ""); timer ??= setTimeout(show, 60); }
+					else if (e.t === "reset") { clearTimeout(timer); partial = ""; show(); }
+					else if (e.t === "done") final = e;
+					else if (e.t === "error") final = {};
+				};
+				const reader = r.body.getReader(), dec = new TextDecoder();
+				for (let c = await reader.read(); !c.done; c = await reader.read()) {
+					buf += dec.decode(c.value, { stream: true });
+					const lines = buf.split("\n");
+					buf = lines.pop()!;
+					lines.forEach(line);
+				}
+				line(buf + dec.decode());
+				clearTimeout(timer);
+				if (!final) throw new Error("stream cut");
+				done(final);
 			} catch { settle({ error: "network" }); }
 		})();
 		return true;

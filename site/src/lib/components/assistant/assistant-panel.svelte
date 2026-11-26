@@ -186,7 +186,15 @@
 				<article data-turn={turn.id} class="scroll-mt-4" aria-label={turn.q}>
 					<p class="bg-muted ml-8 rounded-lg px-3 py-2 text-sm break-words">{turn.q}</p>
 					{#if turn.pending}
-						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><span>{t("assistant.waiting")}</span></div>
+						{#if turn.partial}
+							<!-- provisional text, as written (raw Markdown): the finished answer replaces it; not announced -->
+							<div class="bg-card shadow-surface mt-3 border p-3">
+								<p class="text-sm break-words whitespace-pre-wrap" lang={contentLang}>{turn.partial}</p>
+								<div class="text-muted-foreground mt-3 flex items-center gap-3 text-sm"><ActivityIndicator /></div>
+							</div>
+						{:else}
+							<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><span>{t("assistant.waiting")}</span></div>
+						{/if}
 					{:else if turn.error}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
 							<Icon name="error" size={20} />

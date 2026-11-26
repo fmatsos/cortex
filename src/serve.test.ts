@@ -136,6 +136,44 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
   } finally { server.stop(true); }
 }, 120_000);
 
+test("POST /api/ask with Accept: application/x-ndjson: events in order, done carries the JSON payload, the lock is freed after done, and after an abort only once the run ends", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
+  mkdirSync(join(root, "wiki"), { recursive: true });
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
+  let hold!: () => void;
+  let gate = Promise.resolve();
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q, __, stream) => {
+    stream?.text("Hel"); stream?.text("lo"); stream?.reset(); stream?.text("Hi");
+    await gate;
+    return { md: `${q}: Hi` };
+  } });
+  try {
+    const at = `http://localhost:${server.port}/api/ask`, origin = `http://localhost:${server.port}`;
+    const post = (q: string, accept?: string, signal?: AbortSignal) => fetch(at, { method: "POST", signal, headers: { "content-type": "application/json", origin, ...(accept && { accept }) }, body: JSON.stringify({ q }) });
+    const nd = "application/x-ndjson";
+    const r = await post("a", nd);
+    expect(r.headers.get("content-type")).toBe("application/x-ndjson; charset=utf-8");
+    expect(r.headers.get("x-accel-buffering")).toBe("no");
+    const events = (await r.text()).trim().split("\n").map((l) => JSON.parse(l));
+    expect(events.map((e) => e.t)).toEqual(["delta", "delta", "reset", "delta", "done"]);
+    expect(events[0].text + events[1].text).toBe("Hello");
+    const json = (await (await post("a")).json()) as Record<string, unknown>; // no Accept: the JSON path, same payload
+    expect(events[4]).toEqual({ t: "done", ...json });
+    // an aborted client does not free the lock: the run goes on (and is paid) until it ends
+    gate = new Promise<void>((res) => (hold = res));
+    const ctl = new AbortController();
+    const pending = await post("b", nd, ctl.signal);
+    await pending.body!.getReader().read(); // the first delta: the run is on
+    ctl.abort();
+    await Bun.sleep(100);
+    expect((await post("c")).status).toBe(429);
+    hold();
+    await Bun.sleep(100);
+    gate = Promise.resolve();
+    expect((await post("d")).status).toBe(200);
+  } finally { server.stop(true); }
+}, 30_000);
+
 test("POST /api/ask/render: the saved answers drawn again, same origin only, off without site_ask", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-render-"));
   mkdirSync(join(root, "wiki/concepts"), { recursive: true });

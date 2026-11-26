@@ -301,3 +301,42 @@ test("openai: a check with its own prompt sends the final answer back in the sam
     expect(seen).toHaveLength(3);
   } finally { server.stop(true); }
 });
+
+test("openai: a streamed answer (SSE) is put back together, only content deltas reach the stream, tool calls arrive in fragments, reset between turns", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const sse = (...chunks: object[]) => new Response([...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), "data: [DONE]\n\n"].join(""), { headers: { "content-type": "text/event-stream" } });
+  const d = (delta: object, finish_reason: string | null = null) => ({ choices: [{ index: 0, delta, finish_reason }] });
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) {
+    seen.push(await req.json());
+    return seen.length === 1
+      ? sse(d({ reasoning_content: "hmm" }), d({ content: "Let me " }), d({ content: "look." }), d({ tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "Glob", arguments: '{"patt' } }] }), d({ tool_calls: [{ index: 0, function: { arguments: 'ern":"wiki/*.md"}' } }] }, "tool_calls"))
+      : sse(d({ role: "assistant", content: "Fi" }), d({ content: "nal" }, "stop"));
+  } });
+  try {
+    const events: string[] = [];
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [], { text: (t) => events.push(t), reset: () => events.push("|reset|") });
+    expect(out).toBe("Final");
+    expect(events).toEqual(["Let me ", "look.", "|reset|", "Fi", "nal"]);
+    expect(seen[0].stream).toBe(true);
+    const call = seen[1].messages.at(-2).tool_calls[0];
+    expect(call.id).toBe("c1");
+    expect(call.function).toEqual({ name: "Glob", arguments: '{"pattern":"wiki/*.md"}' });
+    expect(seen[1].messages.at(-1).role).toBe("tool"); // the reassembled call ran
+  } finally { server.stop(true); }
+});
+
+test("openai: without a stream no stream parameter is sent, and a JSON answer to a streamed request is still read", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }] }); } });
+  try {
+    const b = openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` });
+    expect(await b.run(root, "q", "read")).toBe("ok");
+    expect("stream" in seen[0]).toBe(false);
+    const got: string[] = [];
+    expect(await b.run(root, "q", "read", undefined, undefined, [], { text: (t) => got.push(t), reset: () => {} })).toBe("ok");
+    expect(seen[1].stream).toBe(true);
+    expect(got).toEqual([]);
+  } finally { server.stop(true); }
+});

@@ -135,4 +135,19 @@ test.describe("desktop 1440", () => {
     expect(bar.width).toBe("thin");
     expect(bar.color).not.toBe("auto");
   });
+
+  test("a streamed answer (NDJSON): the final event replaces the provisional text, and no partial text is kept", async ({ page }) => {
+    const done = { t: "done", segments: [{ html: "<p>Final answer.</p>" }], md: "Final answer.", cited: [], retained: [], related: [], model: "test-model" };
+    await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD"
+      ? route.fulfill({ status: 204 })
+      : route.fulfill({ contentType: "application/x-ndjson; charset=utf-8", body: [{ t: "delta", text: "Draft" }, { t: "reset" }, { t: "delta", text: "Fin" }, done].map((e) => JSON.stringify(e)).join("\n") + "\n" }));
+    await page.goto("/graph");
+    await page.locator("#assistant-toggle").click();
+    await page.locator("#assistant-q").fill("Why?");
+    await page.locator("#assistant-q").press("Enter");
+    await expect(panel(page).getByText("Final answer.")).toBeVisible();
+    await expect(panel(page).getByText("Draft")).toHaveCount(0);
+    const kept = await page.evaluate(() => Object.values(sessionStorage).join(""));
+    expect(kept).not.toContain("partial");
+  });
 });

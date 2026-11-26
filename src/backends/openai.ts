@@ -44,22 +44,24 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
   return {
     // no CLI to start: interactive only through $CORTEX_AGENT
     interactive: interactiveWith(() => { throw new Error("the openai client runs in batch only: use --batch (or set $CORTEX_AGENT)."); }),
-    async run(root, prompt, mode, report, check, extra = []) {
+    async run(root, prompt, mode, report, check, extra = [], stream) {
       if (!cfg.model) throw new Error(`the openai client needs a model: cortex config set model <name>.`);
       const { schemaText } = await import("../schema");
       const tools = [...toolPack(mode), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
       const own = new Map(extra.map((t) => [t.name, t]));
       const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
       const { url, key } = ep;
-      let fixes = 0, cuts = 0, text = ""; // text: the parts of a final answer cut by the output limit
+      let fixes = 0, cuts = 0, text = "", keep = false; // text: the parts of a final answer cut by the output limit; keep: the next turn goes on with it
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
+        if (turn && !keep) stream?.reset(); // a new turn (tool round, check resend): what was shown is provisional
+        keep = false;
         // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
         // server's prompt cache keeps the prefix on the turns in between
         if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
         const res = await fetch(`${url}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...cache(url), ...route(url), ...thinking(cfg.effort) }),
+          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...(stream && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
           signal: AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {
@@ -72,14 +74,13 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
           const hint = /(not|n't) support.{0,20}tool/i.test(t) ? " (the model must support tool calling)" : "";
           throw new Error(`${url} answered ${res.status}: ${t.length > 300 ? `${t.slice(0, 300)}…` : t}${hint}`);
         }
-        const body = await res.json();
-        const msg = body.choices?.[0]?.message;
-        if (!msg) throw new Error(`${url}: answer without a message: ${JSON.stringify(body).slice(0, 300)}`);
-        if (body.choices[0].finish_reason === "length") {
+        const { msg, finish } = await reply(res, url, stream?.text);
+        if (finish === "length") {
           // nothing of a cut answer is used as is: its tool calls may be incomplete, its text goes on in the next turn
           if (cuts++ >= LIMITS.cutRetries) throw new Error(`the model's answer exceeded ${LIMITS.llmMaxTokens} tokens ${LIMITS.cutRetries} times: raise LIMITS.llmMaxTokens.`);
           if (msg.tool_calls?.length) { messages.push({ role: "user", content: CUT }); continue; }
           text += msg.content ?? "";
+          keep = true;
           messages.push({ role: "assistant", content: msg.content ?? "" }, { role: "user", content: "Your answer was cut by the output limit. Continue exactly where it stopped, without repeating anything." });
           continue;
         }
@@ -104,6 +105,47 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
       throw new Error(`openai agent stopped after ${LIMITS.agentTurns} turns.`);
     },
   };
+}
+
+/**
+ * One model turn as the loop reads it: `{ msg, finish }`. A streamed answer (`stream: true`, server-sent events) is put back
+ * together here: the `content` deltas also go to `onText` (never the reasoning), the tool calls arrive in fragments by index.
+ * A server that ignores `stream` answers in JSON: read as such.
+ */
+async function reply(res: Response, url: string, onText?: (delta: string) => void): Promise<{ msg: any; finish?: string }> {
+  if (!onText || !res.headers.get("content-type")?.includes("text/event-stream")) {
+    const body = await res.json();
+    const msg = body.choices?.[0]?.message;
+    if (!msg) throw new Error(`${url}: answer without a message: ${JSON.stringify(body).slice(0, 300)}`);
+    return { msg, finish: body.choices[0].finish_reason };
+  }
+  let content = "", finish: string | undefined, buf = "";
+  const calls: { id?: string; type: "function"; function: { name: string; arguments: string } }[] = [];
+  const line = (l: string) => {
+    if (!l.startsWith("data:") || l.slice(5).trim() === "[DONE]") return;
+    const chunk = JSON.parse(l.slice(5));
+    if (chunk.error) throw new Error(`${url}: ${JSON.stringify(chunk.error).slice(0, 300)}`);
+    const c = chunk.choices?.[0];
+    if (!c) return;
+    if (c.delta?.content) { content += c.delta.content; onText(c.delta.content); }
+    for (const t of c.delta?.tool_calls ?? []) {
+      const k = (calls[t.index ?? 0] ??= { type: "function", function: { name: "", arguments: "" } });
+      if (t.id) k.id = t.id;
+      k.function.name += t.function?.name ?? "";
+      k.function.arguments += t.function?.arguments ?? "";
+    }
+    if (c.finish_reason) finish = c.finish_reason;
+  };
+  const dec = new TextDecoder();
+  for await (const part of res.body as unknown as AsyncIterable<Uint8Array>) {
+    buf += dec.decode(part, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop()!;
+    lines.forEach((l) => line(l.trimEnd()));
+  }
+  line((buf + dec.decode()).trim());
+  const tool_calls = calls.filter(Boolean);
+  return { msg: { role: "assistant", content: content || null, ...(tool_calls.length && { tool_calls }) }, finish };
 }
 
 /** Empties the tool results but the last two (read again if needed); false when nothing is left to elide. */

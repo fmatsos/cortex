@@ -24,14 +24,18 @@ export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
   try { return await t.run(r.data); } catch (e) { return `error: ${(e as Error).message}`; }
 }
 
+/** Live view of an answer being written (the site's questions): `text` gets each piece, `reset` says that what was sent is void (a new model turn). */
+export type Stream = { text: (delta: string) => void; reset: () => void };
+
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */
   interactive(prompt: string): string[];
   /**
    * Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool
    * call). `extra`: tools of this run only; the openai and claude clients offer them, the others ignore them (`EXTRA_TOOLS`).
+   * `stream`: the answer as it is written; only the openai client sends it, the others ignore it.
    */
-  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check, extra?: ExtraTool[]): Promise<string>;
+  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check, extra?: ExtraTool[], stream?: Stream): Promise<string>;
 }
 
 /** The clients that offer a run's extra tools to the model. */

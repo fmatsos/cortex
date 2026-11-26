@@ -4,7 +4,7 @@ import { join, resolve, sep } from "node:path";
 import type { Subprocess } from "bun";
 import { openWiki } from "./context";
 import { answerSegments, blockRegistry } from "./answer-blocks";
-import { EXTRA_TOOLS, type Check } from "./backends/backend";
+import { EXTRA_TOOLS, type Check, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
 import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./prompts";
@@ -45,7 +45,7 @@ export type ServeOpts = {
   embeddings?: (root: string) => Promise<{ embedded: number; removed: number } | undefined>;
 };
 /** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
-export type AskFn = (root: string, question: string, history: Turn[]) => Promise<{ md: string; core?: Core }>;
+export type AskFn = (root: string, question: string, history: Turn[], stream?: Stream) => Promise<{ md: string; core?: Core }>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
@@ -96,7 +96,7 @@ export function turnsOf(value: unknown): Turn[] {
  * are given in full (ask-site.ts); without one, the site search's hits (BM25 fused with the embeddings when `embed` is on).
  * Not `askCtx`: no tree hashing, and process.env stays untouched.
  */
-export const agentAsk: AskFn = async (root, question, history) => {
+export const agentAsk: AskFn = async (root, question, history, stream) => {
   const cfg = await openWiki(root).config();
   const core = await relevantPages(root, question, lastQuestion(history));
   let hits: string[] = [];
@@ -113,7 +113,7 @@ export const agentAsk: AskFn = async (root, question, history) => {
   const { backendFor } = await import("./backends");
   // a long answer written without any block goes back once more to the model, in the same conversation (openai client)
   const laidOut: Check | undefined = blocks && Object.assign(async (answer = "") => (!blocks.used() && answer.length > LIMITS.askBlocksAfterChars ? ["no display block"] : []), { prompt: () => askSitePromptPart("ask-site-blocks-missing", {}) });
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [blocks.tool]);
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [blocks.tool], stream);
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 
@@ -370,12 +370,33 @@ export async function serve(root: string, o: ServeOpts) {
         if (asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
         asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
-        try {
-          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history));
+        const answer = async (stream?: Stream) => {
+          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history), stream);
           const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           // the pages under the answer: retained and related are chosen by code (the judge), never by what the model wrote
           const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];
-          return Response.json({ ...askAnswer(md, titles), md, retained: ids(core?.retained), related: ids(core?.related), model: askModel(askCfg) ?? askClient(askCfg) });
+          return { ...askAnswer(md, titles), md, retained: ids(core?.retained), related: ids(core?.related), model: askModel(askCfg) ?? askClient(askCfg) };
+        };
+        // the site reads the answer as it is written: one JSON event per line (delta, reset, then done with the payload below, or error)
+        if (req.headers.get("accept")?.includes("application/x-ndjson")) {
+          const enc = new TextEncoder();
+          let ctrl: ReadableStreamDefaultController<Uint8Array>;
+          let gone = false; // the client left: the run is not aborted (it holds the lock until it ends), only its events stop
+          const send = (e: object) => { if (!gone) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
+          const out = new ReadableStream<Uint8Array>({
+            start(c) {
+              ctrl = c;
+              void answer({ text: (text) => send({ t: "delta", text }), reset: () => send({ t: "reset" }) }).then(
+                (r) => send({ t: "done", ...r }),
+                (e) => { say(`ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
+              ).finally(() => { asking = false; try { c.close(); } catch { /* already cancelled */ } });
+            },
+            cancel() { gone = true; },
+          });
+          return new Response(out, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-cache", "x-accel-buffering": "no" } });
+        }
+        try {
+          return Response.json(await answer());
         } catch (e) {
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });
