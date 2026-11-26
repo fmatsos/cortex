@@ -24,8 +24,11 @@ export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
   try { return await t.run(r.data); } catch (e) { return `error: ${(e as Error).message}`; }
 }
 
-/** Live view of an answer being written (the site's questions): `text` gets each piece, `reset` says that what was sent is void (a new model turn). */
-export type Stream = { text: (delta: string) => void; reset: () => void };
+/**
+ * Live view of an answer being written (the site's questions): `text` gets each piece, `reset` says that what was sent is void
+ * (a new model turn), `step` the tool the agent is about to run (its name and arguments as the model sent them).
+ */
+export type Stream = { text: (delta: string) => void; reset: () => void; step?: (name: string, args: Record<string, unknown>) => void };
 
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */

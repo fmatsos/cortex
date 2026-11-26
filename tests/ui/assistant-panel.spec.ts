@@ -140,7 +140,7 @@ test.describe("desktop 1440", () => {
     const done = { t: "done", segments: [{ html: "<p>Final answer.</p>" }], md: "Final answer.", cited: [], retained: [], related: [], model: "test-model" };
     await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD"
       ? route.fulfill({ status: 204 })
-      : route.fulfill({ contentType: "application/x-ndjson; charset=utf-8", body: [{ t: "delta", text: "Draft" }, { t: "reset" }, { t: "delta", text: "Fin" }, done].map((e) => JSON.stringify(e)).join("\n") + "\n" }));
+      : route.fulfill({ contentType: "application/x-ndjson; charset=utf-8", body: [{ t: "step", step: { kind: "read", path: "wiki/a.md", title: "A" } }, { t: "delta", text: "Draft" }, { t: "reset" }, { t: "delta", text: "Fin" }, done].map((e) => JSON.stringify(e)).join("\n") + "\n" }));
     await page.goto("/graph");
     await page.locator("#assistant-toggle").click();
     await page.locator("#assistant-q").fill("Why?");
@@ -149,5 +149,35 @@ test.describe("desktop 1440", () => {
     await expect(panel(page).getByText("Draft")).toHaveCount(0);
     const kept = await page.evaluate(() => Object.values(sessionStorage).join(""));
     expect(kept).not.toContain("partial");
+  });
+
+  test("while the answer streams, one line says what the agent is doing, changed in place, outside any live region", async ({ page }) => {
+    await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD" ? route.fulfill({ status: 204 }) : route.abort());
+    // a held stream: the page's own fetch answers the POST with a body the test writes to
+    await page.addInitScript(() => {
+      const native = window.fetch.bind(window), enc = new TextEncoder();
+      window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("/api/ask") && init?.method === "POST") {
+          const body = new ReadableStream({ start: (c) => { (window as any).emit = (e: object) => c.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } });
+          return Promise.resolve(new Response(body, { headers: { "content-type": "application/x-ndjson" } }));
+        }
+        return native(input, init);
+      }) as typeof fetch;
+    });
+    await page.goto("/graph");
+    await page.locator("#assistant-toggle").click();
+    await page.locator("#assistant-q").fill("Why?");
+    await page.locator("#assistant-q").press("Enter");
+    await expect(panel(page).getByText(/consulte le wiki|reading the wiki/)).toBeVisible(); // before any step: the generic wording
+    await page.evaluate(() => (window as any).emit({ t: "step", step: { kind: "search", query: "alpha" } }));
+    await expect(panel(page).getByText(/Recherche de « alpha »|Searching the wiki for “alpha”/)).toBeVisible();
+    await page.evaluate(() => (window as any).emit({ t: "step", step: { kind: "read", path: "wiki/a.md", title: "Page A" } }));
+    await expect(panel(page).getByText(/Lecture de « Page A »|Reading “Page A”/)).toBeVisible();
+    await expect(panel(page).getByText(/Recherche de « alpha »|Searching the wiki for “alpha”/)).toHaveCount(0);
+    expect(await panel(page).getByText(/Page A/).evaluate((el) => !!el.closest("[aria-live], [role=status]"))).toBe(false);
+    await page.evaluate(() => (window as any).emit({ t: "delta", text: "Some draft" }));
+    await expect(panel(page).getByText("Some draft")).toBeVisible();
+    await expect(panel(page).getByText(/Rédaction de la réponse|Writing the answer/)).toBeVisible();
+    expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/step|partial/);
   });
 });

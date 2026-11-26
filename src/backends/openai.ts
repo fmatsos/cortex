@@ -97,6 +97,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         for (const c of msg.tool_calls) {
           let args: Record<string, any>;
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
+          stream?.step?.(c.function.name, args);
           const x = own.get(c.function.name);
           const content = x ? await runExtra(x, args) : await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }));
           messages.push({ role: "tool", tool_call_id: c.id, content });

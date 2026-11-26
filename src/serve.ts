@@ -78,6 +78,20 @@ export function askAnswer(md: string, titles: Map<string, string>) {
   const cited = [...new Set([...md.matchAll(/\]\(\/?(wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]).filter((p) => titles.has(p)))].map(pageId);
   return { segments: answerSegments(md, titles), cited };
 }
+/**
+ * What the agent is doing, as the site words it (structured, never free text from the model): a tool about to run, or "pages"
+ * (choosing the pages). `titles`: wiki path → title. A page read outside the wiki is only "work". The path is read as the tool
+ * does (callTool): under `root` when absolute there, else relative to it even with a leading "/" (the prompt lists "/wiki/x.md").
+ */
+export function stepOf(name: string, args: Record<string, unknown>, titles: Map<string, string>, root: string) {
+  if (name === "pages") return { kind: "pages" };
+  if (name === "render_blocks") return { kind: "layout" };
+  const arg = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
+  if (name === "Grep" || name === "Glob") return { kind: "search", query: arg("pattern").slice(0, 60) };
+  const raw = arg("file_path"), path = raw.startsWith(`${root}/`) ? raw.slice(root.length + 1) : raw.replace(/^\.?\//, "");
+  if (name === "Read" && /^wiki\/.+\.md$/.test(path)) return { kind: "read", path, title: titles.get(path) };
+  return { kind: "work" };
+}
 const MAX_QUESTION = 500;
 /** An earlier answer comes back as the site received it: long, but bounded (ask-site.ts cuts it again for the prompt). */
 const MAX_TURN = 40_000;
@@ -97,6 +111,7 @@ export function turnsOf(value: unknown): Turn[] {
  * Not `askCtx`: no tree hashing, and process.env stays untouched.
  */
 export const agentAsk: AskFn = async (root, question, history, stream) => {
+  stream?.step?.("pages", {});
   const cfg = await openWiki(root).config();
   const core = await relevantPages(root, question, lastQuestion(history));
   let hits: string[] = [];
@@ -377,16 +392,17 @@ export async function serve(root: string, o: ServeOpts) {
           const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];
           return { ...askAnswer(md, titles), md, retained: ids(core?.retained), related: ids(core?.related), model: askModel(askCfg) ?? askClient(askCfg) };
         };
-        // the site reads the answer as it is written: one JSON event per line (delta, reset, then done with the payload below, or error)
+        // the site reads the answer as it is written: one JSON event per line (step, delta, reset, then done with the payload below, or error)
         if (req.headers.get("accept")?.includes("application/x-ndjson")) {
           const enc = new TextEncoder();
+          const known = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           let ctrl: ReadableStreamDefaultController<Uint8Array>;
           let gone = false; // the client left: the run is not aborted (it holds the lock until it ends), only its events stop
           const send = (e: object) => { if (!gone) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
           const out = new ReadableStream<Uint8Array>({
             start(c) {
               ctrl = c;
-              void answer({ text: (text) => send({ t: "delta", text }), reset: () => send({ t: "reset" }) }).then(
+              void answer({ text: (text) => send({ t: "delta", text }), reset: () => send({ t: "reset" }), step: (name, args) => send({ t: "step", step: stepOf(name, args, known, root) }) }).then(
                 (r) => send({ t: "done", ...r }),
                 (e) => { say(`ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
               ).finally(() => { asking = false; try { c.close(); } catch { /* already cancelled */ } });

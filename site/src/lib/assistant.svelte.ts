@@ -15,8 +15,10 @@ export type Segment = { html: string } | { block: Block };
 /** `md`: the answer as written, sent back as history; retained and related: the pages the judge chose, by id. */
 export type Answer = { segments: Segment[]; md: string; cited: string[]; retained: string[]; related: string[]; model?: string };
 export type AskErrorKind = "busy" | "off" | "invalid" | "failed" | "network";
-/** `at`: when the answer came (ISO), kept in the saved copy. `partial`: the text written so far while the answer streams in (provisional, never kept). */
-export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string };
+/** What the agent is doing (the server's `step` event): the panel words it; `path` and `title` of a page read, `query` of a search. */
+export type Step = { kind: "pages" | "read" | "search" | "layout" | "write" | "work"; path?: string; title?: string; query?: string };
+/** `at`: when the answer came (ISO), kept in the saved copy. `partial`, `step`: the text written so far and what the agent is doing while the answer is on its way (provisional, never kept). */
+export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string; step?: Step };
 /** The saved copy this conversation continues: its id, its name, the exchanges it holds (`keys`) and when it was created. */
 export type SavedLink = { id: string; title: string; keys: string; created_at: string };
 /** A turn as `POST /api/conversations` takes it. */
@@ -104,7 +106,7 @@ class Assistant {
 		this.turns = [...this.turns, turn];
 		this.draft = "";
 		if (!turn.pending) { this.save(); return false; }
-		const settle = (change: Partial<Turn>) => { this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, ...change, pending: false, partial: undefined } : t)); this.save(); };
+		const settle = (change: Partial<Turn>) => { this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, ...change, pending: false, partial: undefined, step: undefined } : t)); this.save(); };
 		const done = (b: any) => {
 			if (!Array.isArray(b.segments)) return settle({ error: "failed" });
 			const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
@@ -118,13 +120,14 @@ class Assistant {
 					return r.ok ? done(b) : settle({ error: askErrorKind(r.status) });
 				}
 				// one JSON event per line: the text so far (shown a few times a second, not saved), then the final payload
-				let partial = "", buf = "", final: any, timer: ReturnType<typeof setTimeout> | undefined;
-				const show = () => { timer = undefined; this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial } : t)); };
+				let partial = "", step: Step | undefined, buf = "", final: any, timer: ReturnType<typeof setTimeout> | undefined;
+				const show = () => { timer = undefined; this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial, step } : t)); };
 				const line = (l: string) => {
 					if (!l.trim()) return;
 					const e = JSON.parse(l);
-					if (e.t === "delta") { partial += String(e.text ?? ""); timer ??= setTimeout(show, 60); }
-					else if (e.t === "reset") { clearTimeout(timer); partial = ""; show(); }
+					if (e.t === "delta") { partial += String(e.text ?? ""); step = { kind: "write" }; timer ??= setTimeout(show, 60); }
+					else if (e.t === "step") { step = e.step; show(); }
+					else if (e.t === "reset") { clearTimeout(timer); partial = ""; step = { kind: "work" }; show(); }
 					else if (e.t === "done") final = e;
 					else if (e.t === "error") final = {};
 				};

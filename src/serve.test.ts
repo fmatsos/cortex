@@ -139,10 +139,12 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
 test("POST /api/ask with Accept: application/x-ndjson: events in order, done carries the JSON payload, the lock is freed after done, and after an abort only once the run ends", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
   mkdirSync(join(root, "wiki"), { recursive: true });
+  writeFileSync(join(root, "wiki/a.md"), `---\ntype: Concept\ntitle: "A page"\nstatus: draft\n---\n\nBody.\n`);
   writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
   let hold!: () => void;
   let gate = Promise.resolve();
   const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q, __, stream) => {
+    stream?.step?.("Read", { file_path: "wiki/a.md" }); stream?.step?.("Grep", { pattern: "x".repeat(80) }); stream?.step?.("Read", { file_path: "/wiki/a.md" }); stream?.step?.("Read", { file_path: `${root}/wiki/a.md` }); stream?.step?.("Read", { file_path: "./wiki/a.md" }); stream?.step?.("Read", { file_path: "/etc/passwd" });
     stream?.text("Hel"); stream?.text("lo"); stream?.reset(); stream?.text("Hi");
     await gate;
     return { md: `${q}: Hi` };
@@ -155,10 +157,13 @@ test("POST /api/ask with Accept: application/x-ndjson: events in order, done car
     expect(r.headers.get("content-type")).toBe("application/x-ndjson; charset=utf-8");
     expect(r.headers.get("x-accel-buffering")).toBe("no");
     const events = (await r.text()).trim().split("\n").map((l) => JSON.parse(l));
-    expect(events.map((e) => e.t)).toEqual(["delta", "delta", "reset", "delta", "done"]);
-    expect(events[0].text + events[1].text).toBe("Hello");
+    expect(events.map((e) => e.t)).toEqual(["step", "step", "step", "step", "step", "step", "delta", "delta", "reset", "delta", "done"]);
+    const read = { kind: "read", path: "wiki/a.md", title: "A page" };
+    // "/wiki/x.md" (as the prompt lists the pages), under the root, and "./": the same page; outside the wiki: work
+    expect(events.slice(0, 6).map((e) => e.step)).toEqual([read, { kind: "search", query: "x".repeat(60) }, read, read, read, { kind: "work" }]);
+    expect(events[6].text + events[7].text).toBe("Hello");
     const json = (await (await post("a")).json()) as Record<string, unknown>; // no Accept: the JSON path, same payload
-    expect(events[4]).toEqual({ t: "done", ...json });
+    expect(events[10]).toEqual({ t: "done", ...json });
     // an aborted client does not free the lock: the run goes on (and is paid) until it ends
     gate = new Promise<void>((res) => (hold = res));
     const ctl = new AbortController();

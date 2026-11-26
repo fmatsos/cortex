@@ -315,9 +315,9 @@ test("openai: a streamed answer (SSE) is put back together, only content deltas 
   } });
   try {
     const events: string[] = [];
-    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [], { text: (t) => events.push(t), reset: () => events.push("|reset|") });
+    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [], { text: (t) => events.push(t), reset: () => events.push("|reset|"), step: (n, a) => events.push(`${n} ${JSON.stringify(a)}`) });
     expect(out).toBe("Final");
-    expect(events).toEqual(["Let me ", "look.", "|reset|", "Fi", "nal"]);
+    expect(events).toEqual(["Let me ", "look.", `Glob {"pattern":"wiki/*.md"}`, "|reset|", "Fi", "nal"]); // the step comes before the tool runs, the reset with the next turn
     expect(seen[0].stream).toBe(true);
     const call = seen[1].messages.at(-2).tool_calls[0];
     expect(call.id).toBe("c1");
