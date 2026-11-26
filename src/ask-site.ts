@@ -107,9 +107,9 @@ export function compactAnswer(answer: string, max: number = LIMITS.askHistoryCha
   return cited.length ? `${kept}\n[Pages cited in this answer: ${cited.join(", ")}]` : kept;
 }
 
-/** The earlier turns, most recent last, before the new question; empty without history. */
-export function historyPart(history: readonly Turn[]): string {
-  const recent = history.slice(-LIMITS.askHistoryTurns);
+/** The last `exchanges` (a question and its answer) of the earlier turns, most recent last, before the new question; empty without history. */
+export function historyPart(history: readonly Turn[], exchanges: number): string {
+  const recent = history.slice(-2 * exchanges);
   if (!recent.length) return "";
   const lines = recent.map((t) => (t.role === "user" ? `User: ${t.text}` : `Assistant: ${compactAnswer(t.text)}`));
   return `${prompt("ask-site-history", {})}\n\n${lines.join("\n\n")}`;

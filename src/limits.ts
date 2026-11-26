@@ -87,8 +87,7 @@ export const LIMITS = {
   askJudgeChars: 2500,
   /** Site question: characters of retained pages given in full; the retained pages beyond it are only named. */
   askReadingChars: 40_000,
-  /** Site question: earlier turns of the conversation sent with the question, and characters kept of each earlier answer. */
-  askHistoryTurns: 8,
+  /** Site question: characters kept of each earlier answer in the history sent with the question. */
   askHistoryChars: 4000,
   /** Site question: an answer longer than this written without any display block is sent back once to be laid out. */
   askBlocksAfterChars: 600,

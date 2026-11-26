@@ -547,6 +547,7 @@
 	"assistant.example.synthesis": "What are the takeaways of “{title}”?",
 	"assistant.examples": "For example",
 	"assistant.hint": "Enter sends, Shift+Enter starts a new line.",
+	"assistant.history.limit": "This conversation has reached {n} exchanges, the assistant's memory limit: beyond it, the oldest are no longer sent to it and it forgets them. Restate the useful context in your question, or start a new conversation.",
 	"assistant.label": "Your question",
 	"assistant.new": "New conversation",
 	"assistant.open": "Open the assistant",

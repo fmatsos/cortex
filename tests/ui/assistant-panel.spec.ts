@@ -184,6 +184,41 @@ test.describe("desktop 1440", () => {
     expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/step|partial/);
   });
 
+  test("a notice appears once the answered exchanges reach the history depth the server announced, and not before", async ({ page }) => {
+    const done = { segments: [{ html: "<p>An answer.</p>" }], md: "An answer.", cited: [], retained: [], related: [] };
+    await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD"
+      ? route.fulfill({ status: 204, headers: { "x-ask-history-turns": "2" } })
+      : route.fulfill({ contentType: "application/json", body: JSON.stringify(done) }));
+    await page.goto("/graph");
+    await page.locator("#assistant-toggle").click();
+    const notice = panel(page).getByText(/Cette conversation a atteint 2 échanges|This conversation has reached 2 exchanges/);
+    for (const q of ["One?", "Two?"]) {
+      await expect(notice).toHaveCount(0);
+      await page.locator("#assistant-q").fill(q);
+      await page.locator("#assistant-q").press("Enter");
+      await expect(panel(page).getByText("An answer.")).toHaveCount(q === "One?" ? 1 : 2);
+    }
+    await expect(notice).toHaveCount(1);
+    expect(await notice.evaluate((el) => !!el.closest("[role=status]"))).toBe(true); // announced politely, once
+    await page.locator("#assistant-q").fill("Three?");
+    await page.locator("#assistant-q").press("Enter");
+    await expect(panel(page).getByText("An answer.")).toHaveCount(3);
+    await expect(notice).toHaveCount(1); // persistent, never repeated
+  });
+
+  test("without the header (an older server) no notice appears, however long the conversation", async ({ page }) => {
+    const done = { segments: [{ html: "<p>An answer.</p>" }], md: "An answer.", cited: [], retained: [], related: [] };
+    await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD" ? route.fulfill({ status: 204 }) : route.fulfill({ contentType: "application/json", body: JSON.stringify(done) }));
+    await page.goto("/graph");
+    await page.locator("#assistant-toggle").click();
+    for (const q of ["One?", "Two?", "Three?"]) {
+      await page.locator("#assistant-q").fill(q);
+      await page.locator("#assistant-q").press("Enter");
+    }
+    await expect(panel(page).getByText("An answer.")).toHaveCount(3);
+    await expect(panel(page).getByText(/échanges|exchanges/)).toHaveCount(0);
+  });
+
   test.describe("reduced motion", () => {
     test.use({ reducedMotion: "reduce" });
     test("the step line changes at once and its text is plain: no sweep, no slide", async ({ page }) => {

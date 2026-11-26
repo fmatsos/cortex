@@ -104,7 +104,12 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
     writeFileSync(join(root, "cortex.json"), JSON.stringify({ site_ask: {} }));
     expect((await fetch(at, { method: "HEAD" })).status).toBe(404); // nor without an SDK client
     writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
-    expect((await fetch(at, { method: "HEAD" })).status).toBe(204);
+    const probe = await fetch(at, { method: "HEAD" });
+    expect(probe.status).toBe(204);
+    expect(probe.headers.get("x-ask-history-turns")).toBe("10"); // the depth of the history, for the panel's warning
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: { history_turns: 3 } }));
+    expect((await fetch(at, { method: "GET" })).headers.get("x-ask-history-turns")).toBe("3");
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
     expect((await post({ q: "x" }, { origin: "http://evil" })).status).toBe(403);
     expect((await post({ q: "x" }, {})).status).toBe(403); // no Origin: not the site
     expect((await post({ q: "x".repeat(501) })).status).toBe(400);
@@ -204,6 +209,22 @@ test("POST /api/ask/render: the saved answers drawn again, same origin only, off
     expect((await post({ answers: ["x"] })).status).toBe(404);
   } finally { server.stop(true); }
 }, 120_000);
+
+test("site_ask.history_turns: the config, else the client's default, else 10; turnsOf keeps 2N messages", async () => {
+  const { askHistoryTurns, HISTORY_TURNS, turnsOf } = await import("./serve");
+  expect(askHistoryTurns({ client: "claude", site_ask: {} })).toBe(10);
+  HISTORY_TURNS.claude = 6;
+  try {
+    expect(askHistoryTurns({ client: "claude", site_ask: {} })).toBe(6);
+    expect(askHistoryTurns({ client: "codex", site_ask: {} })).toBe(10);
+    expect(askHistoryTurns({ client: "claude", site_ask: { history_turns: 3 } })).toBe(3);
+    expect(askHistoryTurns({ client: "codex", site_ask: { client: "claude" } })).toBe(6); // the asking client's
+  } finally { delete HISTORY_TURNS.claude; }
+  const msgs = Array.from({ length: 30 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: `m${i}` }));
+  expect(turnsOf(msgs, 10)).toHaveLength(20);
+  expect(turnsOf(msgs, 10)[0].text).toBe("m10");
+  expect(turnsOf(msgs, 1)).toHaveLength(2);
+});
 
 test("site_ask: its own client, model and effort; $CORTEX_ASK_API_KEY only to $CORTEX_ASK_BASE_URL", async () => {
   const { askSetup, askModel, askClient } = await import("./serve");

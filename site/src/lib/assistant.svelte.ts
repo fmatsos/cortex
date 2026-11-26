@@ -40,6 +40,8 @@ export const keysOf = (turns: Turn[]) => turns.map((t) => t.id).join(",");
 class Assistant {
 	/** The server answers questions (HEAD probe): a static host has no /api/. */
 	api = $state(false);
+	/** Earlier exchanges the server sends on to the agent (`x-ask-history-turns` of the probe); null: unknown (an older server). */
+	historyTurns = $state<number | null>(null);
 	open = $state(false);
 	turns = $state<Turn[]>([]);
 	draft = $state("");
@@ -57,6 +59,8 @@ class Assistant {
 	get pending() { return this.turns.some((t) => t.pending); }
 	/** The exchanges that got an answer: what is saved and exported (a failed or waiting one is not). */
 	get complete() { return this.turns.filter((t) => t.answer); }
+	/** The conversation holds as many answered exchanges as the server passes on: the next ones push the oldest out of the agent's memory. */
+	get historyFull() { return this.historyTurns !== null && this.complete.length >= this.historyTurns; }
 	/** Something to save or export, and nothing on its way. */
 	get canSave() { return !this.pending && this.complete.length > 0; }
 	/** Answered exchanges that the saved copy does not hold (a new one, or a conversation never saved). */
@@ -76,7 +80,11 @@ class Assistant {
 				this.saved = link && typeof link.id === "string" && typeof link.keys === "string" ? { id: link.id, title: String(link.title ?? ""), keys: link.keys, created_at: String(link.created_at ?? "") } : null;
 			}
 		} catch { /* storage unavailable */ }
-		fetch("/api/ask", { method: "HEAD" }).then((r) => (this.api = r.status === 204), () => {});
+		fetch("/api/ask", { method: "HEAD" }).then((r) => {
+			this.api = r.status === 204;
+			const n = Number(r.headers.get("x-ask-history-turns"));
+			this.historyTurns = Number.isInteger(n) && n > 0 ? n : null;
+		}, () => {});
 	}
 
 	private save() {

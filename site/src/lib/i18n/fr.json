@@ -547,6 +547,7 @@
 	"assistant.example.synthesis": "Que retenir de « {title} » ?",
 	"assistant.examples": "Par exemple",
 	"assistant.hint": "Entrée envoie, Maj+Entrée va à la ligne.",
+	"assistant.history.limit": "Cette conversation a atteint {n} échanges, la limite de mémoire de l'assistant : au-delà, les plus anciens ne lui sont plus transmis et il les oublie. Rappelez le contexte utile dans votre question, ou démarrez une nouvelle conversation.",
 	"assistant.label": "Votre question",
 	"assistant.new": "Nouvelle conversation",
 	"assistant.open": "Ouvrir l'assistant",

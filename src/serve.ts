@@ -49,6 +49,10 @@ export type AskFn = (root: string, question: string, history: Turn[], stream?: S
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
+/** Earlier exchanges sent per client, for one whose provider defines a turn limit; the others get 10 (`site_ask.history_turns` wins). */
+export const HISTORY_TURNS: Record<string, number> = {};
+/** Exchanges (a question and its answer) of the conversation sent with each question: `site_ask.history_turns`, else the client's, else 10. */
+export const askHistoryTurns = (cfg: Config) => cfg.site_ask?.history_turns ?? HISTORY_TURNS[askClient(cfg) ?? ""] ?? 10;
 /** The client that answers the site's questions: `site_ask.client`, else the global one. */
 export const askClient = (cfg: Config) => cfg.site_ask?.client ?? cfg.client;
 /** The model that answers the site's questions (also shown on the site, next to the answer); the global one only for the global client. */
@@ -96,10 +100,10 @@ const MAX_QUESTION = 500;
 /** An earlier answer comes back as the site received it: long, but bounded (ask-site.ts cuts it again for the prompt). */
 const MAX_TURN = 40_000;
 
-/** The earlier turns the site sent, the malformed ones dropped. */
-export function turnsOf(value: unknown): Turn[] {
+/** The earlier turns the site sent (the last `exchanges` of them), the malformed ones dropped. */
+export function turnsOf(value: unknown, exchanges: number): Turn[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(-LIMITS.askHistoryTurns).flatMap((t) => {
+  return value.slice(-2 * exchanges).flatMap((t) => {
     const { role, text } = (t ?? {}) as Record<string, unknown>;
     return (role === "user" || role === "assistant") && typeof text === "string" && text.trim() ? [{ role, text: text.slice(0, MAX_TURN) }] : [];
   });
@@ -124,7 +128,7 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   const ask = askSetup(cfg);
   // display blocks through a tool: only the clients that take a run's own tools (the others answer in plain Markdown)
   const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
-  const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history), blocks: !!blocks });
+  const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
   // a long answer written without any block goes back once more to the model, in the same conversation (openai client)
   const laidOut: Check | undefined = blocks && Object.assign(async (answer = "") => (!blocks.used() && answer.length > LIMITS.askBlocksAfterChars ? ["no display block"] : []), { prompt: () => askSitePromptPart("ask-site-blocks-missing", {}) });
@@ -375,7 +379,7 @@ export async function serve(root: string, o: ServeOpts) {
         // opt-in (the route spends tokens), and only through an SDK client: the agnostic CLI ignores the model and may keep its own tools
         const askCfg = await openWiki(root).config();
         if (!askCfg.site_ask || !askClient(askCfg)) return new Response(null, { status: 404 });
-        if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its ask button
+        if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204, headers: { "x-ask-history-turns": String(askHistoryTurns(askCfg)) } }); // probe: the site shows its ask button, and the depth of the history
         if (req.method !== "POST") return new Response(null, { status: 405 });
         // a browser always sends Origin on a POST fetch: no Origin is a script, not the site
         if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
@@ -386,7 +390,7 @@ export async function serve(root: string, o: ServeOpts) {
         asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
         const answer = async (stream?: Stream) => {
-          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history), stream);
+          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history, askHistoryTurns(askCfg)), stream);
           const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           // the pages under the answer: retained and related are chosen by code (the judge), never by what the model wrote
           const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];

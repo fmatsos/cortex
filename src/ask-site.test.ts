@@ -38,6 +38,15 @@ test("history: a long earlier answer is cut, saying so, and keeps the pages it c
   const cut = compactAnswer(md, 30);
   expect(cut).toContain("left out of the history");
   expect(cut).toContain("[Pages cited in this answer: /wiki/a.md, /wiki/b.md]");
-  expect(historyPart([])).toBe("");
-  expect(historyPart([{ role: "user", text: "Q1" }, { role: "assistant", text: "R1" }])).toContain("User: Q1\n\nAssistant: R1");
+  expect(historyPart([], 10)).toBe("");
+  expect(historyPart([{ role: "user", text: "Q1" }, { role: "assistant", text: "R1" }], 10)).toContain("User: Q1\n\nAssistant: R1");
+});
+
+test("history: the last N exchanges (2N messages) are kept, the older ones left out", () => {
+  const turns = [1, 2, 3, 4].flatMap((i) => [{ role: "user" as const, text: `Q${i}` }, { role: "assistant" as const, text: `R${i}` }]);
+  const part = historyPart(turns, 2);
+  expect(part).not.toContain("Q2");
+  expect(part).not.toContain("R2");
+  expect(part).toContain("User: Q3\n\nAssistant: R3\n\nUser: Q4\n\nAssistant: R4");
+  expect(historyPart(turns, 4)).toContain("Q1");
 });

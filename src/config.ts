@@ -91,11 +91,12 @@ const SHAPE = {
    * Absent = off (the route spends tokens). client: default the global one; model: default the client's cheapest (claude:
    * haiku, codex: gpt-6-luna), otherwise the global `model` when the client is the global one; effort: none sent by default;
    * base_url (openai client): default $CORTEX_ASK_BASE_URL, else as the openai client. $CORTEX_ASK_API_KEY only goes to $CORTEX_ASK_BASE_URL.
+   * history_turns: earlier exchanges (question + answer) sent with each question; default the client's own limit (serve.ts), else 10.
    */
   site_ask: z.strictObject({
     client: z.enum(CLIENT_NAMES, { error: (i) => `unknown site_ask.client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
-    base_url: str("site_ask.base_url"), model: str("site_ask.model"), effort: str("site_ask.effort"),
-  }, { error: '"site_ask" must be an object (client, base_url, model, effort), or null.' }).nullish(),
+    base_url: str("site_ask.base_url"), model: str("site_ask.model"), effort: str("site_ask.effort"), history_turns: count("site_ask.history_turns"),
+  }, { error: '"site_ask" must be an object (client, base_url, model, effort, history_turns), or null.' }).nullish(),
   /** Review notion (verified pages, « to review again », « mark as reviewed »). Absent = off: the site shows none of it. */
   review: z.boolean({ error: '"review" must be true, false or null.' }).nullish(),
   /** Draft status. Absent = off: the site shows draft pages as stable and offers no draft filter. */

@@ -73,4 +73,7 @@ test("site_ask: client, base_url, model, effort; effort checked against site_ask
   expect(lintConfig({ client: "codex", site_ask: { client: "claude", effort: "ultra" } })[0].level).toBe("error");
   expect(lintConfig({ client: "claude", site_ask: { client: "openai" } })).toEqual([{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }]);
   expect(lintConfig({ site_ask: { temperature: 1 } })[0].level).toBe("error");
+  expect(lintConfig({ client: "claude", site_ask: { history_turns: 6 } })).toEqual([]);
+  expect(lintConfig({ client: "claude", site_ask: { history_turns: 0 } })[0].msg).toContain("site_ask.history_turns");
+  expect(lintConfig({ client: "claude", site_ask: { history_turns: 1.5 } })[0].level).toBe("error");
 });

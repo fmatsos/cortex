@@ -230,6 +230,12 @@
 			{/each}
 		</div>
 		<p class="sr-only" role="status">{status}</p>
+		<!-- the region stays, its content comes once: announced politely when the conversation reaches the server's history depth -->
+		<div role="status">
+			{#if assistant.historyFull}
+				<p class="bg-warning-background text-warning-foreground mx-3 mb-2 flex items-start gap-2 rounded-md border px-3 py-2 text-sm"><Icon name="error" size={20} class="mt-0.5 shrink-0" />{t("assistant.history.limit", { n: assistant.historyTurns })}</p>
+			{/if}
+		</div>
 
 		<form class="border-t p-3" onsubmit={(e) => { e.preventDefault(); send(); }}>
 			<label for="assistant-q" class="sr-only">{t("assistant.label")}</label>
