@@ -11,13 +11,14 @@ const signalPosition = (avatar: Locator) => avatar.locator(".signal").evaluate((
   return [matrix.e, matrix.f];
 });
 
-test("the header mark is the graph-brain, an inline drawing with no image", async ({ page }) => {
+test("the header carries the wordmark alone; the home mark is the graph-brain, an inline drawing with no image", async ({ page }) => {
   await page.goto("/");
-  const mark = page.getByRole("banner").locator("svg.folio").first();
+  await expect(page.getByRole("banner").locator("svg.folio")).toHaveCount(0);
+  const mark = page.locator("main svg.folio").first();
   await expect(mark).toBeVisible();
   const box = await mark.boundingBox();
-  expect(box?.width).toBe(32);
-  expect(box?.height).toBe(32);
+  expect(box?.width).toBe(72);
+  expect(box?.height).toBe(72);
   await expect(mark).toHaveAttribute("data-optic", "mark");
   await expect(mark).toHaveAttribute("viewBox", "0 0 32 32");
   await expect(mark).toHaveAttribute("aria-hidden", "true");
@@ -49,7 +50,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.emulateMedia({ reducedMotion });
     await page.goto("/");
     await expect(page.locator("svg.folio").first()).toBeVisible();
-    expect(await page.locator("svg.folio").count()).toBeGreaterThan(1);
+    expect(await page.locator("svg.folio").count()).toBeGreaterThan(0);
     expect(await running(page)).toBe(0);
   });
 }
@@ -77,56 +78,81 @@ async function ask(page: Page) {
   return panel;
 }
 
+// The panel no longer wears the avatar: while a question is pending it shows a CSS-only activity indicator (three squares, one
+// lit at a time); the avatar's own states are specimens of the design-system page.
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   const still = reducedMotion === "reduce";
-  test(`the assistant avatar follows idle, pending, answer (${reducedMotion})`, async ({ page }) => {
+  test(`the panel shows an activity indicator while pending, and no avatar (${reducedMotion})`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion });
     const release = await mockAsk(page, "answer");
     await page.goto("/");
     await page.locator("#assistant-toggle").click();
-    const head = page.locator("#assistant-panel header svg.folio");
-    await expect(head).toHaveAttribute("data-state", "idle");
+    await expect(page.locator("#assistant-panel svg.folio")).toHaveCount(0);
 
     await page.locator("#assistant-q").fill("What is in the wiki?");
     await page.locator("#assistant-q").press("Enter");
-    await expect(head).toHaveAttribute("data-state", "pending");
-    const waiting = page.locator("#assistant-panel article svg.folio");
-    await expect(waiting).toHaveAttribute("data-state", "pending");
+    const waiting = page.locator("#assistant-panel article .activity");
+    await expect(waiting).toHaveCount(1);
     await expect(waiting).toHaveAttribute("aria-hidden", "true");
-    await expect(head).toHaveAttribute("data-optic", "mark");
-    for (const avatar of [head, waiting]) {
-      await expect(avatar.locator(".signal")).toHaveCount(1);
-      await expect(avatar.locator(".halo")).toHaveCount(1);
-      await expect(avatar.locator(".halo")).toHaveCSS("opacity", "0.12");
-      const [fill, query, primary] = await avatar.locator(".signal").evaluate((el) => {
-        const probe = (v: string) => { const d = document.createElement("i"); d.style.color = `var(${v})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
-        return [getComputedStyle(el).fill, probe("--signal"), probe("--primary")];
-      });
-      expect(fill, "the signal takes its own ochre (--signal), not the green of the front nodes").toBe(query);
-      expect(fill).not.toBe(primary);
-      const position = await signalPosition(avatar);
-      if (still) {
-        await page.waitForTimeout(300);
-        expect(await signalPosition(avatar), "the reduced-motion signal stays still").toEqual(position);
-      } else {
-        await expect.poll(() => signalPosition(avatar), "the dot travels along the graph").not.toEqual(position);
-      }
+    expect((await waiting.boundingBox())?.width).toBe(18);
+    await expect(waiting.locator("i")).toHaveCount(3);
+    const lit = () => waiting.locator("i").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
+    if (still) {
+      expect(await waiting.locator("i").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName))).toEqual(Array(3).fill("none"));
+      const before = await lit();
+      await page.waitForTimeout(300);
+      expect(await lit(), "the reduced-motion indicator stays still").toEqual(before);
+    } else {
+      expect(await waiting.locator("i").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationIterationCount))).toEqual(Array(3).fill("infinite"));
+      const before = await lit();
+      await expect.poll(lit, "the light steps from one square to the next").not.toEqual(before);
     }
     // the state text stays in the panel
     await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);
 
-    await expect(waiting).toHaveAttribute("width", "40"); // owner: one size below the former 48
     release();
-    await expect(head).toHaveAttribute("data-state", "answer");
+    await expect(page.locator("#assistant-panel article .activity")).toHaveCount(0);
+    await expect(page.locator("#assistant-panel svg.folio")).toHaveCount(0);
     // owner: the answer prose reads at the size of the question
     const sizes = await page.locator("#assistant-panel article").last().evaluate((t) => [getComputedStyle(t.querySelector("p")!).fontSize, getComputedStyle(t.querySelector(".wiki")!).fontSize]);
     expect(sizes[1]).toBe(sizes[0]);
-    await expect(head.locator(".signal, .halo")).toHaveCount(0);
+    // the answer sits on a card, set apart from the question's muted bubble
+    const [bubble, card] = await page.locator("#assistant-panel article").last().evaluate((t) => [getComputedStyle(t.querySelector("p")!).backgroundColor, getComputedStyle(t.querySelector(".wiki")!.closest(".bg-card")!).backgroundColor]);
+    expect(card).not.toBe(bubble);
+  });
+}
+
+for (const reducedMotion of ["no-preference", "reduce"] as const) {
+  const still = reducedMotion === "reduce";
+  test(`the avatar specimens: pending has a signal that travels, answer has larger nodes (${reducedMotion})`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion });
+    await page.goto("/design-system/");
+    const pending = page.locator('svg.folio[width="48"][data-state="pending"]');
+    await expect(pending).toHaveAttribute("aria-hidden", "true");
+    await expect(pending).toHaveAttribute("data-optic", "mark");
+    await expect(pending.locator(".signal")).toHaveCount(1);
+    await expect(pending.locator(".halo")).toHaveCount(1);
+    await expect(pending.locator(".halo")).toHaveCSS("opacity", "0.12");
+    const [fill, query, primary] = await pending.locator(".signal").evaluate((el) => {
+      const probe = (v: string) => { const d = document.createElement("i"); d.style.color = `var(${v})`; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; };
+      return [getComputedStyle(el).fill, probe("--signal"), probe("--primary")];
+    });
+    expect(fill, "the signal takes its own ochre (--signal), not the green of the front nodes").toBe(query);
+    expect(fill).not.toBe(primary);
+    const position = await signalPosition(pending);
+    if (still) {
+      await page.waitForTimeout(300);
+      expect(await signalPosition(pending), "the reduced-motion signal stays still").toEqual(position);
+    } else {
+      await expect.poll(() => signalPosition(pending), "the dot travels along the graph").not.toEqual(position);
+    }
+
+    const answer = page.locator('svg.folio[width="48"][data-state="answer"]');
+    await expect(answer.locator(".signal, .halo")).toHaveCount(0);
     // all four front nodes animate once, then stay larger than at rest
-    await expect(head.locator(".nf")).toHaveCount(4);
-    expect(await head.locator(".nf").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationIterationCount))).toEqual(Array(4).fill("1"));
-    await expect(head.locator(".nf").first()).toHaveCSS("transform", /^matrix\(1\.[1-9]/);
-    await expect.poll(() => running(page), "the front nodes grow once, then everything is still").toBe(0);
+    await expect(answer.locator(".nf")).toHaveCount(4);
+    expect(await answer.locator(".nf").evaluateAll((els) => els.map((el) => getComputedStyle(el).animationIterationCount))).toEqual(Array(4).fill("1"));
+    await expect(answer.locator(".nf").first()).toHaveCSS("transform", /^matrix\(1\.[1-9]/);
   });
 }
 
@@ -167,16 +193,18 @@ test("the 16-unit master of the mark (favicon, under 24 px) keeps the silhouette
   expect((small.match(/r="0.7"/g) ?? []).length).toBe(3);
 });
 
-test("a failed question puts the avatar in its error composition, still", async ({ page }) => {
-  const release = await mockAsk(page, "error");
-  const panel = await ask(page);
-  release();
-  const head = panel.locator("header svg.folio");
-  await expect(head).toHaveAttribute("data-state", "error");
+test("the error avatar specimen is in its error composition, still; a failed question shows its message, with no avatar", async ({ page }) => {
+  await page.goto("/design-system/");
+  const head = page.locator('svg.folio[width="48"][data-state="error"]');
   await expect(head.locator(".break")).toHaveCount(1);
   await expect(head.locator(".break")).toHaveAttribute("r", "0.65");
   await expect(head.locator(".links polyline")).toHaveCount(21);
   await expect(head.locator(".signal, .halo")).toHaveCount(0);
-  expect(await running(page)).toBe(0);
+
+  const release = await mockAsk(page, "error");
+  const panel = await ask(page);
+  release();
+  await expect(panel.locator("article .activity")).toHaveCount(0);
+  await expect(panel.locator("svg.folio")).toHaveCount(0);
   await expect(panel.locator("[role=status]")).toHaveText(/./);
 });

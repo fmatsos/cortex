@@ -13,7 +13,6 @@
 	import { lang } from "#lib/lang.svelte.js";
 	import { intlLocale, t } from "#lib/i18n/index.js";
 	import Icon from "#lib/components/icon.svelte";
-	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import SiteNav, { type NavItem } from "#lib/components/site-nav.svelte";
@@ -116,7 +115,7 @@
 		<!-- a rebuild of the site (cortex serve only): a dot hung beside the mark while it runs (out of the flow: the row never wraps
 		     differently), a reload offer under it when it ends -->
 		<div class="relative inline-flex">
-			<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexMark size={32} /><CortexWordmark /></a>
+			<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexWordmark /></a>
 			<BuildStatus />
 		</div>
 		<SiteNav items={nav} />

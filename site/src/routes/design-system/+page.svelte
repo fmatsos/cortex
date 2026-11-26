@@ -13,6 +13,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
+	import ActivityIndicator from "#lib/components/assistant/activity-indicator.svelte";
 	import AssistantAvatar, { type AvatarState } from "#lib/components/assistant/assistant-avatar.svelte";
 	import TypeBadge from "#lib/components/type-badge.svelte";
 	import KindBadge from "#lib/components/kind-badge.svelte";
@@ -527,7 +528,7 @@
 		<h3 class={h3}>{t("ds.brand.mark")}</h3>
 		<div class="{box} flex flex-wrap items-center gap-x-12 gap-y-6">
 			<div>
-				<span class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight"><CortexMark size={24} /><CortexWordmark /></span>
+				<span class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight"><CortexWordmark /></span>
 				<p class={cap}>{t("ds.brand.header")}</p>
 			</div>
 			<div>
@@ -554,5 +555,16 @@
 			{@render rich(t("ds.avatar.reducedMotion"))}
 			{#if reduced !== null}<span data-motion={reduced ? "reduce" : "no-preference"}> {reduced ? t("ds.avatar.systemReduce") : t("ds.avatar.systemAllow")}</span>{/if}
 		</p>
+		<h3 class={h3}>{t("ds.activity.heading")}</h3>
+		<div class="{box} flex flex-wrap items-center gap-x-12 gap-y-6">
+			<div class="flex items-end gap-6">
+				{#each [16, 24, 32] as s (s)}<div><ActivityIndicator size={s} /><p class={cap}>{s} px</p></div>{/each}
+			</div>
+			<div>
+				<p class="text-muted-foreground flex items-center gap-3 text-sm"><ActivityIndicator /><span>{t("assistant.waiting")}</span></p>
+				<p class="{cap} mt-1">{t("ds.activity.inline")}</p>
+			</div>
+		</div>
+		<p class="{cap} mt-3 max-w-3xl">{@render rich(t("ds.activity.desc"))}</p>
 	</section>
 </div>

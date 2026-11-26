@@ -2,7 +2,7 @@
 	import { onMount, tick, untrack } from "svelte";
 	import { afterNavigate } from "$app/navigation";
 	import Icon from "#lib/components/icon.svelte";
-	import AssistantAvatar, { type AvatarState } from "./assistant-avatar.svelte";
+	import ActivityIndicator from "./activity-indicator.svelte";
 	import AnswerBlock from "./answer-block.svelte";
 	import AssistantDialogs from "./assistant-dialogs.svelte";
 	import { AssistantFlow } from "./assistant-flow.svelte.js";
@@ -145,11 +145,6 @@
 		if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
 	}
 	const over = $derived(assistant.draft.trim().length > MAX_QUESTION);
-	// the avatar follows the last turn: waiting, failed, answered, else at rest
-	const avatar = $derived.by((): AvatarState => {
-		const last = assistant.turns.at(-1);
-		return !last ? "idle" : last.pending ? "pending" : last.error ? "error" : last.answer ? "answer" : "idle";
-	});
 	// announced outside the busy list: start, then ready or failure (the answer itself is not read out)
 	const status = $derived.by(() => {
 		const last = assistant.turns.at(-1);
@@ -169,7 +164,7 @@
 			onpointerdown={onDown} onpointermove={onMove} onpointerup={onUp} onpointercancel={onUp} onlostpointercapture={onUp} ondblclick={() => set(DEFAULT)} onkeydown={onHandleKey}></div>
 	{/if}
 	<div class="flex h-full flex-col">
-		<AssistantHeader {flow} {avatar} onclose={close} />
+		<AssistantHeader {flow} onclose={close} />
 
 		<div bind:this={list} class="min-h-0 flex-1 space-y-8 overflow-y-auto p-4" aria-busy={assistant.pending}>
 			{#if !assistant.turns.length}
@@ -191,7 +186,7 @@
 				<article data-turn={turn.id} class="scroll-mt-4" aria-label={turn.q}>
 					<p class="bg-muted ml-8 rounded-lg px-3 py-2 text-sm break-words">{turn.q}</p>
 					{#if turn.pending}
-						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><AssistantAvatar state="pending" size={40} /><span>{t("assistant.waiting")}</span></div>
+						<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><span>{t("assistant.waiting")}</span></div>
 					{:else if turn.error}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
 							<Icon name="error" size={20} />
@@ -201,20 +196,23 @@
 							{/if}
 						</div>
 					{:else if turn.answer}
-						<div class="mt-3 text-sm" lang={contentLang}>
-							{#each turn.answer.segments as s, i (i)}
-								{#if "block" in s}<AnswerBlock block={s.block} {fix} />{:else}<div class="wiki">{@html fix(s.html)}</div>{/if}
-							{/each}
-						</div>
-						{#each lists(turn) as l (l.key)}
-							<h3 class="mt-4 text-sm font-semibold">{l.label}</h3>
-							<ul class="mt-1 space-y-1 text-sm">
-								{#each l.docs as d (d.id)}
-									<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" /><span lang={contentLang}>{d.title}</span></a></li>
+						<!-- the answer sits on a card (surface, border, light relief) so that it reads apart from the question's muted bubble -->
+						<div class="bg-card shadow-surface mt-3 border p-3">
+							<div class="text-sm [&>:first-child]:mt-0 [&>:last-child]:mb-0" lang={contentLang}>
+								{#each turn.answer.segments as s, i (i)}
+									{#if "block" in s}<AnswerBlock block={s.block} {fix} />{:else}<div class="wiki">{@html fix(s.html)}</div>{/if}
 								{/each}
-							</ul>
-						{/each}
-						<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs"><Icon name="generated" size={16} class="shrink-0" />{turn.answer.model ? t("assistant.ai", { model: turn.answer.model }) : t("assistant.ai.unknown")}</p>
+							</div>
+							{#each lists(turn) as l (l.key)}
+								<h3 class="mt-4 text-sm font-semibold">{l.label}</h3>
+								<ul class="mt-1 space-y-1 text-sm">
+									{#each l.docs as d (d.id)}
+										<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" /><span lang={contentLang}>{d.title}</span></a></li>
+									{/each}
+								</ul>
+							{/each}
+							<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs"><Icon name="generated" size={16} class="shrink-0" />{turn.answer.model ? t("assistant.ai", { model: turn.answer.model }) : t("assistant.ai.unknown")}</p>
+						</div>
 					{/if}
 				</article>
 			{/each}

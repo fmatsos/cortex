@@ -3,13 +3,12 @@
 	import { assistant } from "#lib/assistant.svelte.js";
 	import Icon from "#lib/components/icon.svelte";
 	import { t } from "#lib/i18n/index.js";
-	import AssistantAvatar, { type AvatarState } from "./assistant-avatar.svelte";
 	import type { AssistantFlow } from "./assistant-flow.svelte.js";
 	import HeaderAction from "./header-action.svelte";
 
-	// The panel's header: the avatar, the title with the state of the conversation beneath it, then four square icon buttons
+	// The panel's header: the title with the state of the conversation beneath it, then four square icon buttons
 	// (save, export as Markdown, new conversation, close) and, under them, the short message that says what just happened.
-	let { flow, avatar, onclose }: { flow: AssistantFlow; avatar: AvatarState; onclose: () => void } = $props();
+	let { flow, onclose }: { flow: AssistantFlow; onclose: () => void } = $props();
 	const signedIn = $derived(!!account.me);
 	// the state is shown with an account only (without one nothing is saved anywhere) and once there is an exchange to speak of
 	const state = $derived(!signedIn || !assistant.complete.length ? "" : assistant.dirty ? "unsaved" : "saved");
@@ -17,7 +16,6 @@
 
 <header class="border-b">
 	<div class="flex items-center gap-2 px-4 py-2">
-		<AssistantAvatar state={avatar} size={32} />
 		<div class="min-w-0 flex-1">
 			<h2 id="assistant-title" class="truncate text-base leading-tight font-semibold">{t("assistant.title")}</h2>
 			<!-- always present, so that a change of its text is announced -->
