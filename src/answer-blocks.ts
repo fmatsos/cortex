@@ -54,6 +54,9 @@ export function blockRegistry() {
   return { tool, assemble, used: () => blocks.size > 0 };
 }
 
+/** Streamed text as a draft: a block is only named in it (`{{bloc-1}}`, maybe half written), the final answer draws it. */
+export const draftMarkdown = (md: string) => md.replace(PLACEHOLDER, "").replace(/\{\{[^}]*\}?$/, "");
+
 /** A block as plain Markdown: what the history carries, and what is shown when a fence does not parse. */
 export function blockMarkdown(b: Block): string {
   const head = "title" in b && b.title ? `**${b.title}**\n\n` : "";

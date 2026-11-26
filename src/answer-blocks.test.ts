@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { answerSegments, blockRegistry, flattenBlocks } from "./answer-blocks";
+import { answerSegments, blockRegistry, draftMarkdown, flattenBlocks } from "./answer-blocks";
 import { runExtra } from "./backends/backend";
 
 const titles = new Map([["wiki/concepts/bun.md", "Bun"]]);
@@ -32,4 +32,10 @@ test("answer segments: prose and blocks in order, text fields rendered and sanit
   const last = (s[2] as { html: string }).html;
   expect(last).toContain("cortex-ui"); // an unreadable fence is shown, never dropped
   expect(last).not.toContain("wiki/nope"); // a pages block with no existing page is dropped
+});
+
+test("draftMarkdown: block names, whole or half written at the end, are dropped from the streamed text; the rest is untouched", () => {
+  expect(draftMarkdown("Intro\n\n{{bloc-1}}\n\nSuite {{ bloc-2 }} fin")).toBe("Intro\n\n\n\nSuite  fin");
+  for (const half of ["{{", "{{blo", "{{bloc-1", "{{bloc-1}"]) expect(draftMarkdown(`Texte ${half}`)).toBe("Texte ");
+  expect(draftMarkdown("a `{x}` b")).toBe("a `{x}` b");
 });

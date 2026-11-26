@@ -16,6 +16,14 @@ async function mockAsk(page: Page) {
   return posts;
 }
 
+// The assistant's entry points exist only once the page has hydrated and the HEAD probe answered. Text typed before that stays in the
+// DOM but never reaches the field's state (the Svelte bind is not attached yet), so a fill must wait for the toggle: it is the
+// signal that the page is live (it was the flake of the tests below, under load).
+async function visit(page: Page, path: string) {
+  await page.goto(path);
+  await expect(page.locator("#assistant-toggle")).toBeVisible();
+}
+
 const headerField = (page: Page) => page.getByRole("banner").locator("input[role=combobox]");
 const draft = (page: Page) => page.locator("#assistant-q");
 const prefs = (page: Page) => page.getByRole("banner").getByRole("button", { name: /^(Preferences|Préférences)/ });
@@ -26,7 +34,7 @@ test.describe("desktop 1440", () => {
 
   test("the header button shows the sparkles icon and its label, and opens and closes the panel", async ({ page }) => {
     await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     const toggle = page.locator("#assistant-toggle");
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveText("Assistant");
@@ -52,7 +60,7 @@ test.describe("desktop 1440", () => {
 
   test("the button in the header field opens the panel with the typed text, nothing is sent", async ({ page }) => {
     const posts = await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     const field = headerField(page);
     await field.fill("how does context rot happen");
     await expect(page.getByRole("banner").getByRole("button", { name: ASK }).locator("svg use")).toHaveAttribute("href", "#cx-assistant");
@@ -69,7 +77,7 @@ test.describe("desktop 1440", () => {
 
   test("an empty field opens the panel empty", async ({ page }) => {
     const posts = await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     await page.getByRole("banner").getByRole("button", { name: ASK }).click();
     await expect(page.locator("#assistant-panel")).toBeVisible();
     await expect(draft(page)).toHaveValue("");
@@ -78,7 +86,7 @@ test.describe("desktop 1440", () => {
 
   test("the palette offers the assistant first for a question, by keyboard, without sending", async ({ page }) => {
     const posts = await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     const field = headerField(page);
     await field.fill("what is in the wiki about context?");
     const item = page.locator("[role=listbox]").getByRole("option", { name: ASK });
@@ -96,7 +104,7 @@ test.describe("desktop 1440", () => {
 
   test("for plain search words the item comes after the suggestions, the first ArrowDown still lands on the search", async ({ page }) => {
     await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     const field = headerField(page);
     await field.fill("context");
     const options = page.locator("[role=listbox] [role=option]");
@@ -112,7 +120,7 @@ test.describe("desktop 1440", () => {
   for (const path of ["/", "/search"]) {
     test(`the large field of ${path} has its button, with the label`, async ({ page }) => {
       const posts = await mockAsk(page);
-      await page.goto(path);
+      await visit(page, path);
       const field = page.locator("main input[role=combobox]");
       await field.fill("context rot");
       const btn = page.getByRole("main").getByRole("button", { name: ASK });
@@ -126,7 +134,7 @@ test.describe("desktop 1440", () => {
 
   test("Enter searches as before, Ctrl+Enter sends the typed text to the assistant", async ({ page }) => {
     const posts = await mockAsk(page);
-    await page.goto("/graph");
+    await visit(page, "/graph");
     const field = headerField(page);
     await field.fill("context");
     await field.press("Enter");
@@ -134,7 +142,7 @@ test.describe("desktop 1440", () => {
     expect(posts).toEqual([]);
     await expect(page.locator("#assistant-panel")).toBeHidden();
 
-    await page.goto("/graph");
+    await visit(page, "/graph");
     await field.fill("context rot");
     await field.press("ArrowDown"); // a highlighted suggestion does not change where Ctrl+Enter goes
     await field.press("Control+Enter");
@@ -152,7 +160,7 @@ test.describe("desktop 1440", () => {
 
   test("Ctrl+Enter on the home field also reaches the assistant", async ({ page }) => {
     const posts = await mockAsk(page);
-    await page.goto("/");
+    await visit(page, "/");
     const field = page.locator("main input[role=combobox]");
     await field.fill("context rot");
     await field.press("Control+Enter");
@@ -167,7 +175,7 @@ for (const width of [390, 320]) {
 
     test("the header keeps the assistant by its name, without overflow", async ({ page }) => {
       await mockAsk(page);
-      await page.goto("/graph");
+      await visit(page, "/graph");
       const toggle = page.getByRole("button", { name: "Assistant", exact: true });
       await expect(toggle).toBeVisible();
       // the label collapses: the icon alone shows, the name stays
@@ -181,7 +189,7 @@ for (const width of [390, 320]) {
 
     test("the home field keeps its assistant button, without overflow", async ({ page }) => {
       await mockAsk(page);
-      await page.goto("/");
+      await visit(page, "/");
       await expect(page.getByRole("main").getByRole("button", { name: ASK })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     });

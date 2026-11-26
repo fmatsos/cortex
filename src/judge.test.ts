@@ -194,17 +194,45 @@ test("site question: each page judged alone, retained and related by threshold, 
   try {
     const root = await wiki(server.port!, { judge: { ask_retained: 0.6, ask_related: 0.3 } });
     verdict = (b) => ({ relevant: { type: "noul", noul: b.state.page.title === "Chat" ? 0.9 : b.state.page.title === "Félin" ? 0.4 : 0.1 } });
-    const core = await relevantPages(root, "Le chat dort-il ?", "Et le chien ?");
+    const core = await relevantPages(root, "Le chat dort-il ?", [{ role: "user", text: "Et le chien ?" }]);
     expect(core?.retained.map((r) => r.id)).toEqual(["concepts/cat1"]);
     expect(core?.related.map((r) => r.id)).toEqual(["concepts/cat2"]);
     expect(core?.documents[0]?.text).toBe("x");
     expect(calls.every((c) => Object.keys(c.body.questions).length === 1 && c.body.state.request.earlier === "Et le chien ?")).toBe(true);
     const n = calls.length;
     expect(n).toBeGreaterThanOrEqual(2);
-    await relevantPages(root, "Le chat dort-il ?", "Et le chien ?");
+    await relevantPages(root, "Le chat dort-il ?", [{ role: "user", text: "Et le chien ?" }]);
     expect(calls.length).toBe(n); // the same question: no new call
     verdict = () => new Response("down", { status: 500 });
     expect(await relevantPages(root, "Le félin mange-t-il ?")).toBeUndefined();
+  } finally { server.stop(true); }
+});
+
+test("site question: the pages cited in the earlier answers are candidates beside the search hits, the judge gets every earlier question", async () => {
+  const { relevantPages } = await import("./ask-site");
+  const server = fake();
+  try {
+    const root = await wiki(server.port!, { judge: { ask_candidates: 2 } });
+    verdict = () => ({ relevant: { type: "noul", noul: 0.1 } });
+    const long = "Et le chien ? ".repeat(100);
+    const history = [
+      { role: "user" as const, text: long }, { role: "assistant" as const, text: "Voir [Chien](/wiki/concepts/dog.md) et [Rien](/wiki/concepts/nope.md)." },
+      { role: "user" as const, text: "Et son voisin ?" }, { role: "assistant" as const, text: "Voir [Chien](/wiki/concepts/dog.md) et [Garfield](/wiki/entities/cat3.md)." },
+    ];
+    await relevantPages(root, "Le chat dort-il ?", history);
+    const judged = calls.map((c) => c.body.state.page.title).sort();
+    expect(judged).toEqual([...new Set(judged)]); // each page once, even cited twice or found by the search
+    expect(judged).toContain("Chien"); // cited earlier, whatever the search found
+    expect(judged).toContain("Garfield");
+    expect(judged.length).toBeLessThanOrEqual(4); // the search's two hits and at most as many cited pages; the missing one is dropped
+    const earlier = calls[0]!.body.state.request.earlier as string;
+    expect(earlier.split("\n")).toEqual([`${long.slice(0, LIMITS.askEarlierChars)}…`, "Et son voisin ?"]); // most recent last, each clipped
+    expect(calls.every((c) => c.body.state.request.earlier === earlier)).toBe(true);
+    expect(calls[0]!.body.questions.relevant.instructions).toContain("earlier questions");
+    // no history: no `earlier`, as before
+    calls = [];
+    await relevantPages(root, "Le chat dort-il ?");
+    expect(calls.every((c) => !("earlier" in c.body.state.request))).toBe(true);
   } finally { server.stop(true); }
 });
 

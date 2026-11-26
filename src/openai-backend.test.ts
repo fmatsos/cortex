@@ -340,3 +340,37 @@ test("openai: without a stream no stream parameter is sent, and a JSON answer to
     expect(got).toEqual([]);
   } finally { server.stop(true); }
 });
+
+test("openai: an aborted signal stops the run (request, waiting body, next turn, tool calls); a signal alone does not turn streaming on", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const enc = new TextEncoder();
+  const seen: any[] = [];
+  // the first request: a chunk of text, then the server hangs (the model is slow); the second one answers a tool call
+  const server = Bun.serve({ port: 0, idleTimeout: 0, async fetch(req) {
+    seen.push(await req.json());
+    if (seen.length === 1) {
+      return new Response(new ReadableStream({ start(c) { c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: "Let me" } }] })}\n\n`)); } }), { headers: { "content-type": "text/event-stream" } });
+    }
+    return Response.json({ choices: [{ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "Glob", arguments: '{"pattern":"wiki/*.md"}' } }] } }] });
+  } });
+  try {
+    const b = openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` });
+    // aborted while the answer is being read
+    const ctl = new AbortController();
+    const run = b.run(root, "q", "read", undefined, undefined, [], { text: () => ctl.abort(), reset: () => {}, signal: ctl.signal });
+    const t0 = Date.now();
+    await expect(run).rejects.toThrow();
+    expect(ctl.signal.aborted).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(2000); // not the request timeout
+    // aborted at the first tool call of a turn (a signal alone: no `stream` parameter, JSON answer): no further request
+    const late = new AbortController();
+    const before2 = seen.length;
+    await expect(b.run(root, "q", "read", undefined, undefined, [], { signal: late.signal, step: () => late.abort() })).rejects.toThrow();
+    expect(seen.length).toBe(before2 + 1);
+    expect("stream" in seen[before2]).toBe(false);
+    // already aborted: nothing is even sent
+    const before = seen.length;
+    await expect(b.run(root, "q", "read", undefined, undefined, [], { signal: AbortSignal.abort() })).rejects.toThrow();
+    expect(seen.length).toBe(before);
+  } finally { server.stop(true); }
+});

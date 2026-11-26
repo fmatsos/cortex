@@ -125,18 +125,37 @@ test.describe("header", () => {
     await expect(state(page)).toHaveAttribute("aria-live", "polite");
   });
 
-  test("while an answer is on its way, Save, Export and New wait for it", async ({ page }) => {
+  test("while an answer is on its way, Save and Export wait for it; New is open and drops it", async ({ page }) => {
     let release!: () => void;
     const m = newMock({ gate: new Promise<void>((r) => (release = r)) });
     await open(page, m);
     await field(page).fill("Slow one?");
     await field(page).press("Enter");
     await expect(panel(page).getByText("Reading the wiki")).toBeVisible();
-    await disabled(button(page, SAVE)); await disabled(button(page, EXPORT)); await disabled(button(page, NEW));
+    await disabled(button(page, SAVE)); await disabled(button(page, EXPORT));
+    await expect(button(page, NEW)).toBeEnabled();
     release();
     await expect(button(page, SAVE)).toBeEnabled();
     await expect(button(page, EXPORT)).toBeEnabled();
     await expect(button(page, NEW)).toBeEnabled();
+  });
+
+  test("New conversation while an answer is on its way aborts it and starts over, and the late answer never comes back", async ({ page }) => {
+    let release!: () => void;
+    const m = newMock({ gate: new Promise<void>((r) => (release = r)) });
+    await open(page, m);
+    await field(page).fill("Slow one?");
+    await field(page).press("Enter");
+    await expect(panel(page).getByText("Reading the wiki")).toBeVisible();
+    await button(page, NEW).click();
+    await expect(panel(page).locator("article")).toHaveCount(0);
+    await expect(panel(page).getByText("Reading the wiki")).toHaveCount(0);
+    release();
+    // the new conversation takes questions at once and holds only its own answer
+    await ask(page, "Next?");
+    await expect(panel(page).locator("article")).toHaveCount(1);
+    await expect(panel(page).locator("article")).toContainText('Answer to "Next?"');
+    await expect(panel(page).getByText("Slow one?")).toHaveCount(0);
   });
 
   for (const [label, providers] of [["a static site", null], ["a server with no provider", []]] as const) {

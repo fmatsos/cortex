@@ -90,7 +90,6 @@ export class AssistantFlow {
 
 	/** Starts over at once when nothing would be lost; otherwise asks first (what is lost: not saved, or no account to save to). */
 	startNew() {
-		if (assistant.pending) return;
 		if (assistant.complete.length && (assistant.dirty || !account.me)) this.newOpen = true;
 		else this.reset();
 	}

@@ -12,6 +12,44 @@ const widthOf = (page: Page) => panel(page).evaluate((el) => el.getBoundingClien
 const varOf = (page: Page) => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--assistant-width").trim());
 const mainWidth = (page: Page) => page.locator("main").first().evaluate((el) => el.getBoundingClientRect().width);
 
+// A held NDJSON stream the test writes to: the page's own fetch answers each POST with a fresh body. `emit` writes an event,
+// `cut` breaks the connection, and an abort of the request errors the body the way a real fetch does (and is counted).
+async function heldStream(page: Page) {
+  await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD" ? route.fulfill({ status: 204 }) : route.abort());
+  await page.addInitScript(() => {
+    const native = window.fetch.bind(window), enc = new TextEncoder(), w = window as any;
+    w.aborts = 0;
+    w.bodies = [];
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/ask") && init?.method === "POST") {
+        w.bodies.push(JSON.parse(String(init.body)));
+        const body = new ReadableStream({
+          start: (c) => {
+            w.emit = (e: object) => c.enqueue(enc.encode(`${JSON.stringify(e)}\n`));
+            w.end = () => c.close();
+            w.cut = () => c.error(new TypeError("network error"));
+            init.signal?.addEventListener("abort", () => { w.aborts++; c.error(new DOMException("Aborted", "AbortError")); });
+          },
+        });
+        return Promise.resolve(new Response(body, { headers: { "content-type": "application/x-ndjson" } }));
+      }
+      return native(input, init);
+    }) as typeof fetch;
+  });
+}
+const emit = (page: Page, e: object) => page.evaluate((ev) => (window as any).emit(ev), e);
+// the final event, then the end of the body: the answer is taken once the stream is over
+const finish = (page: Page, e: object) => page.evaluate((ev) => { (window as any).emit(ev); (window as any).end(); }, { t: "done", ...e });
+const STOP = /Arrêter la réponse|Stop the answer/, STOPPED = /Réponse interrompue|Answer stopped/;
+async function askHeld(page: Page, q = "Why?") {
+  await heldStream(page);
+  await page.goto("/graph");
+  await page.locator("#assistant-toggle").click();
+  await page.locator("#assistant-q").fill(q);
+  await page.locator("#assistant-q").press("Enter");
+  await expect(panel(page).getByRole("button", { name: STOP })).toBeVisible();
+}
+
 async function open(page: Page) {
   await mockAsk(page);
   await page.goto("/graph");
@@ -182,6 +220,68 @@ test.describe("desktop 1440", () => {
     await expect(panel(page).getByText("Some draft")).toBeVisible();
     await expect(panel(page).getByText(/Rédaction de la réponse|Writing the answer/)).toBeVisible();
     expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/step|partial/);
+  });
+
+  test("a draft event is drawn like the answer (blocks and prose), replaces the raw text, and a reset voids it; nothing of it is kept", async ({ page }) => {
+    await askHeld(page);
+    await emit(page, { t: "delta", text: "raw **text**" });
+    await expect(panel(page).getByText("raw **text**")).toBeVisible(); // an older server: the raw Markdown
+    await emit(page, { t: "draft", segments: [{ html: "<p>Rendered <strong>draft</strong></p>" }, { block: { type: "callout", tone: "info", html: "<p>A note</p>" } }] });
+    const card = panel(page).locator("article .wiki").first();
+    await expect(card.locator("strong")).toHaveText("draft");
+    await expect(panel(page).getByText("raw **text**")).toHaveCount(0);
+    await expect(panel(page).getByText("A note")).toBeVisible();
+    // the draft sits in no live region: the screen reader does not hear each update
+    expect(await card.evaluate((el) => !!el.closest("[aria-live], [role=status]"))).toBe(false);
+    expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/draft|Rendered/);
+    await emit(page, { t: "reset" });
+    await expect(panel(page).getByText("Rendered")).toHaveCount(0);
+    await expect(panel(page).getByRole("button", { name: STOP })).toBeVisible(); // still waiting
+    await finish(page, { segments: [{ html: "<p>Final <strong>answer</strong></p>" }], md: "Final **answer**", cited: [], retained: [], related: [], model: "m" });
+    await expect(panel(page).locator("article .wiki strong")).toHaveText("answer");
+    await expect(panel(page).getByRole("button", { name: STOP })).toHaveCount(0);
+    await expect(panel(page).getByRole("button", { name: /Envoyer la question|Send the question/ })).toBeVisible();
+  });
+
+  test("Stop aborts the request, keeps the draft with a notice and Retry, and the stopped turn is not history", async ({ page }) => {
+    await askHeld(page);
+    await emit(page, { t: "draft", segments: [{ html: "<p>Half an answer</p>" }] });
+    await expect(panel(page).getByText("Half an answer")).toBeVisible();
+    const stop = panel(page).getByRole("button", { name: STOP });
+    await stop.focus();
+    await page.keyboard.press("Enter"); // by keyboard
+    await expect.poll(() => page.evaluate(() => (window as any).aborts)).toBe(1);
+    const notice = panel(page).locator("article").getByText(STOPPED);
+    await expect(notice).toBeVisible();
+    await expect(panel(page).getByText("Half an answer")).toBeVisible();
+    await expect(panel(page).getByRole("button", { name: STOP })).toHaveCount(0);
+    await expect(panel(page).getByRole("button", { name: /Réessayer|Retry/ })).toBeVisible();
+    await expect(page.locator("#assistant-q")).toBeFocused();
+    // announced politely by the panel's status line, not by the card
+    await expect(panel(page).locator("p[role=status]")).toHaveText(STOPPED);
+    expect(await notice.evaluate((el) => !!el.closest("[role=status]"))).toBe(false);
+    expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/Half an answer|partial|draft/);
+    // the next question goes at once, and carries no history from the stopped turn
+    await page.locator("#assistant-q").fill("Again?");
+    await page.locator("#assistant-q").press("Enter");
+    await expect(panel(page).getByRole("button", { name: STOP })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).bodies.map((b: any) => [b.q, b.history]))).toEqual([["Why?", []], ["Again?", []]]);
+  });
+
+  test("a cut stream keeps what arrived with the network error; Retry replaces the turn", async ({ page }) => {
+    await askHeld(page);
+    await emit(page, { t: "delta", text: "Some words" });
+    await page.evaluate(() => (window as any).cut());
+    await expect(panel(page).locator("article").getByText(/Le serveur ne répond pas|The server does not answer/)).toBeVisible();
+    await expect(panel(page).getByText("Some words")).toBeVisible();
+    expect(await page.evaluate(() => (window as any).aborts)).toBe(0);
+    expect(await page.evaluate(() => Object.values(sessionStorage).join(""))).not.toMatch(/Some words|partial/);
+    await panel(page).getByRole("button", { name: /Réessayer|Retry/ }).click();
+    await expect(panel(page).getByRole("button", { name: STOP })).toBeVisible();
+    await finish(page, { segments: [{ html: "<p>Whole answer</p>" }], md: "Whole answer", cited: [], retained: [], related: [] });
+    await expect(panel(page).getByText("Whole answer")).toBeVisible();
+    await expect(panel(page).getByText("Some words")).toHaveCount(0);
+    await expect(panel(page).locator("article")).toHaveCount(1);
   });
 
   test("a notice appears once the answered exchanges reach the history depth the server announced, and not before", async ({ page }) => {

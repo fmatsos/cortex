@@ -8,7 +8,7 @@
 	import { AssistantFlow } from "./assistant-flow.svelte.js";
 	import AssistantHeader from "./assistant-header.svelte";
 	import StepLine from "./step-line.svelte";
-	import { assistant, MAX_QUESTION, type Step, type Turn } from "#lib/assistant.svelte.js";
+	import { assistant, MAX_QUESTION, type Segment, type Step, type Turn } from "#lib/assistant.svelte.js";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { typeIcon } from "#lib/type-meta.js";
@@ -144,6 +144,10 @@
 	// what the agent is doing now: one line, changed in place, not announced (the status line below says start and end only)
 	const stepText = (s: Step) => t(`assistant.step.${s.kind}`, { title: s.title ?? s.path ?? "", query: s.query ?? "" });
 
+	const stop = () => { assistant.stop(); void tick().then(() => area?.focus()); };
+	// the answer ends by itself while Stop has focus: Stop goes away, focus goes to the question field (not lost to the dialog)
+	let stopButton = $state<HTMLButtonElement>();
+	$effect.pre(() => { if (!assistant.pending && stopButton && document.activeElement === stopButton) void tick().then(() => area?.focus()); });
 	const send = () => { if (assistant.ask(assistant.draft)) void tick().then(() => area?.focus()); };
 	function onKey(e: KeyboardEvent) {
 		if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
@@ -158,6 +162,18 @@
 </script>
 
 <svelte:window bind:innerWidth={vw} />
+
+<!-- the segments of an answer, as drawn by the server; the draft of a pending one uses the same markup, so the switch is seamless -->
+{#snippet segments(list: Segment[], fix: (html: string) => string)}
+	<div class="text-sm [&>:first-child]:mt-0 [&>:last-child]:mb-0" lang={contentLang}>
+		{#each list as s, i (i)}
+			{#if "block" in s}<AnswerBlock block={s.block} {fix} />{:else}<div class="wiki">{@html fix(s.html)}</div>{/if}
+		{/each}
+	</div>
+{/snippet}
+{#snippet provisional(turn: Turn, fix: (html: string) => string)}
+	{#if turn.draft?.length}{@render segments(turn.draft, fix)}{:else}<p class="text-sm break-words whitespace-pre-wrap" lang={contentLang}>{turn.partial}</p>{/if}
+{/snippet}
 
 <dialog bind:this={dialog} id={PANEL_ID} aria-labelledby="assistant-title" class="assistant" oncancel={(e) => { e.preventDefault(); close(); }}
 	onkeydown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !dialog?.matches(":modal")) { e.preventDefault(); close(); } }}>
@@ -190,16 +206,20 @@
 				<article data-turn={turn.id} class="scroll-mt-4" aria-label={turn.q}>
 					<p class="bg-muted ml-8 rounded-lg px-3 py-2 text-sm break-words">{turn.q}</p>
 					{#if turn.pending}
-						{#if turn.partial}
-							<!-- provisional text, as written (raw Markdown): the finished answer replaces it; not announced -->
+						{#if turn.draft?.length || turn.partial}
+							<!-- provisional text, not announced: the rendered draft when the server sends one (as the answer will be drawn), else the raw Markdown; the finished answer replaces it -->
 							<div class="bg-card shadow-surface mt-3 border p-3">
-								<p class="text-sm break-words whitespace-pre-wrap" lang={contentLang}>{turn.partial}</p>
+								{@render provisional(turn, fix)}
 								<div class="text-muted-foreground mt-3 flex items-center gap-3 text-sm"><ActivityIndicator />{#if turn.step}<StepLine text={stepText(turn.step)} />{/if}</div>
 							</div>
 						{:else}
 							<div class="text-muted-foreground mt-4 flex items-center gap-3 text-sm"><ActivityIndicator /><StepLine text={turn.step ? stepText(turn.step) : t("assistant.waiting")} /></div>
 						{/if}
 					{:else if turn.error}
+						{#if turn.draft?.length || turn.partial}
+							<!-- stopped or cut: what had arrived stays (for this page only), above the notice -->
+							<div class="bg-card shadow-surface mt-3 border p-3">{@render provisional(turn, fix)}</div>
+						{/if}
 						<div class="bg-warning-background text-warning-foreground mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
 							<Icon name="error" size={20} />
 							<span class="min-w-48 flex-1">{t(`assistant.error.${turn.error}`, { max: MAX_QUESTION })}</span>
@@ -210,11 +230,7 @@
 					{:else if turn.answer}
 						<!-- the answer sits on a card (surface, border, light relief) so that it reads apart from the question's muted bubble -->
 						<div class="bg-card shadow-surface mt-3 border p-3">
-							<div class="text-sm [&>:first-child]:mt-0 [&>:last-child]:mb-0" lang={contentLang}>
-								{#each turn.answer.segments as s, i (i)}
-									{#if "block" in s}<AnswerBlock block={s.block} {fix} />{:else}<div class="wiki">{@html fix(s.html)}</div>{/if}
-								{/each}
-							</div>
+							{@render segments(turn.answer.segments, fix)}
 							{#each lists(turn) as l (l.key)}
 								<h3 class="mt-4 text-sm font-semibold">{l.label}</h3>
 								<ul class="mt-1 space-y-1 text-sm">
@@ -243,9 +259,16 @@
 			<div class="focus-within:outline-ring flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:outline-2 focus-within:outline-offset-2">
 				<textarea bind:this={area} id="assistant-q" rows="2" bind:value={assistant.draft} onkeydown={onKey} placeholder={t("assistant.placeholder")} aria-invalid={over} aria-describedby="assistant-hint"
 					class="max-h-40 min-h-11 flex-1 resize-none bg-transparent text-sm outline-none field-sizing-content"></textarea>
-				<button type="submit" class="bg-primary text-primary-foreground inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50 pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={assistant.pending || !assistant.draft.trim() || over}>
-					<Icon name="kind-query" size={20} />
-				</button>
+				{#if assistant.pending}
+					<!-- Stop takes the place of Send while an answer is on its way (one question at a time); a plain square, like the activity glyph -->
+					<button bind:this={stopButton} type="button" class="hover:bg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11" aria-label={t("assistant.stop")} title={t("assistant.stop")} onclick={stop}>
+						<span class="size-3 bg-current" aria-hidden="true"></span>
+					</button>
+				{:else}
+					<button type="submit" class="bg-primary text-primary-foreground inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50 pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={!assistant.draft.trim() || over}>
+						<Icon name="kind-query" size={20} />
+					</button>
+				{/if}
 			</div>
 			<p id="assistant-hint" class="text-muted-foreground mt-1 text-xs {over ? 'text-destructive' : ''}">{over ? t("assistant.error.invalid", { max: MAX_QUESTION }) : assistant.pending ? t("assistant.busy") : t("assistant.hint")}</p>
 		</form>

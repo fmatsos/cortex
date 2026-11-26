@@ -31,7 +31,7 @@
 				<HeaderAction icon="save" label={signedIn ? t("assistant.save") : t("assistant.save.signIn")} disabled={!assistant.canSave || flow.busy} onclick={() => flow.save()} />
 			{/if}
 			<HeaderAction icon="export-markdown" label={t("assistant.export")} disabled={!assistant.canSave} onclick={() => void flow.export()} />
-			<HeaderAction icon="new-conversation" label={t("assistant.new")} disabled={!assistant.turns.length || assistant.pending} onclick={() => flow.startNew()} />
+			<HeaderAction icon="new-conversation" label={t("assistant.new")} disabled={!assistant.turns.length} onclick={() => flow.startNew()} />
 			<HeaderAction icon="clear" label={t("assistant.close")} onclick={onclose} />
 		</div>
 	</div>

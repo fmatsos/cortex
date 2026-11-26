@@ -3,12 +3,12 @@ import { rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { Subprocess } from "bun";
 import { openWiki } from "./context";
-import { answerSegments, blockRegistry } from "./answer-blocks";
+import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
 import { EXTRA_TOOLS, type Check, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
 import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./prompts";
-import { historyPart, lastQuestion, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
+import { historyPart, pagesPart, relevantPages, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
 import { searchSite } from "./search-api";
@@ -117,7 +117,8 @@ export function turnsOf(value: unknown, exchanges: number): Turn[] {
 export const agentAsk: AskFn = async (root, question, history, stream) => {
   stream?.step?.("pages", {});
   const cfg = await openWiki(root).config();
-  const core = await relevantPages(root, question, lastQuestion(history));
+  const core = await relevantPages(root, question, history);
+  stream?.signal?.throwIfAborted(); // the reader left while the pages were judged: the agent never starts
   let hits: string[] = [];
   if (!core) {
     // a question rarely has all its words in one page ("qu'est-ce que…"): then any of them, BM25 ranking the pages that have most
@@ -396,28 +397,37 @@ export async function serve(root: string, o: ServeOpts) {
           const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];
           return { ...askAnswer(md, titles), md, retained: ids(core?.retained), related: ids(core?.related), model: askModel(askCfg) ?? askClient(askCfg) };
         };
-        // the site reads the answer as it is written: one JSON event per line (step, delta, reset, then done with the payload below, or error)
+        // the site reads the answer as it is written: one JSON event per line (step, delta, draft, reset, then done with the payload below, or error)
         if (req.headers.get("accept")?.includes("application/x-ndjson")) {
           const enc = new TextEncoder();
           const known = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           let ctrl: ReadableStreamDefaultController<Uint8Array>;
-          let gone = false; // the client left: the run is not aborted (it holds the lock until it ends), only its events stop
-          const send = (e: object) => { if (!gone) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
+          const left = new AbortController(); // the client left: the run stops (it would be paid for nobody) and frees the lock as it settles
+          const send = (e: object) => { if (!left.signal.aborted) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
+          // the text so far, drawn as the final answer is (same renderer, so already sanitized), at most every 200 ms and always the last state
+          let draft = "", timer: ReturnType<typeof setTimeout> | undefined;
+          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(draftMarkdown(draft), known) }); } catch { /* half-written Markdown: the next draft will do */ } };
           const out = new ReadableStream<Uint8Array>({
             start(c) {
               ctrl = c;
-              void answer({ text: (text) => send({ t: "delta", text }), reset: () => send({ t: "reset" }), step: (name, args) => send({ t: "step", step: stepOf(name, args, known, root) }) }).then(
+              void answer({
+                text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
+                reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
+                step: (name, args) => send({ t: "step", step: stepOf(name, args, known, root) }),
+                signal: left.signal,
+              }).then(
                 (r) => send({ t: "done", ...r }),
-                (e) => { say(`ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
-              ).finally(() => { asking = false; try { c.close(); } catch { /* already cancelled */ } });
+                (e) => { say(left.signal.aborted ? "ask: aborted, the client left" : `ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
+              ).finally(() => { clearTimeout(timer); asking = false; try { c.close(); } catch { /* already cancelled */ } });
             },
-            cancel() { gone = true; },
+            cancel() { left.abort(); clearTimeout(timer); },
           });
           return new Response(out, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-cache", "x-accel-buffering": "no" } });
         }
         try {
-          return Response.json(await answer());
+          return Response.json(await answer({ signal: req.signal }));
         } catch (e) {
+          if (req.signal.aborted) { say("ask: aborted, the client left"); return new Response(null, { status: 499 }); }
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });
         } finally { asking = false; }

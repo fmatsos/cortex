@@ -89,6 +89,8 @@ export const LIMITS = {
   askReadingChars: 40_000,
   /** Site question: characters kept of each earlier answer in the history sent with the question. */
   askHistoryChars: 4000,
+  /** Site question: characters kept of each earlier question given to the judge. */
+  askEarlierChars: 300,
   /** Site question: an answer longer than this written without any display block is sent back once to be laid out. */
   askBlocksAfterChars: 600,
   /** Judge: simultaneous calls of one batch (a search, a site question): a hosted model rate-limits, a local server queues. */

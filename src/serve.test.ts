@@ -141,17 +141,20 @@ test("POST /api/ask: opt-in, same origin only, one at a time, sanitized answer w
   } finally { server.stop(true); }
 }, 120_000);
 
-test("POST /api/ask with Accept: application/x-ndjson: events in order, done carries the JSON payload, the lock is freed after done, and after an abort only once the run ends", async () => {
+test("POST /api/ask with Accept: application/x-ndjson: events in order, done carries the JSON payload, the lock is freed after done, an abort stops the run and frees the lock once it settles", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
   mkdirSync(join(root, "wiki"), { recursive: true });
   writeFileSync(join(root, "wiki/a.md"), `---\ntype: Concept\ntitle: "A page"\nstatus: draft\n---\n\nBody.\n`);
   writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
   let hold!: () => void;
   let gate = Promise.resolve();
-  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q, __, stream) => {
+  const said: string[] = [];
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: (m) => said.push(m), ask: async (_, q, __, stream) => {
     stream?.step?.("Read", { file_path: "wiki/a.md" }); stream?.step?.("Grep", { pattern: "x".repeat(80) }); stream?.step?.("Read", { file_path: "/wiki/a.md" }); stream?.step?.("Read", { file_path: `${root}/wiki/a.md` }); stream?.step?.("Read", { file_path: "./wiki/a.md" }); stream?.step?.("Read", { file_path: "/etc/passwd" });
-    stream?.text("Hel"); stream?.text("lo"); stream?.reset(); stream?.text("Hi");
-    await gate;
+    stream?.text?.("Hel"); stream?.text?.("lo"); stream?.reset?.(); stream?.text?.("Hi");
+    // "b" and "p" run until the client leaves, "slow" does not look at the signal: the lock follows the run, not the client
+    if (q === "b" || q === "p") await new Promise((_, no) => stream?.signal?.addEventListener("abort", () => no(new Error("aborted"))));
+    else if (q === "slow") await gate;
     return { md: `${q}: Hi` };
   } });
   try {
@@ -169,18 +172,61 @@ test("POST /api/ask with Accept: application/x-ndjson: events in order, done car
     expect(events[6].text + events[7].text).toBe("Hello");
     const json = (await (await post("a")).json()) as Record<string, unknown>; // no Accept: the JSON path, same payload
     expect(events[10]).toEqual({ t: "done", ...json });
-    // an aborted client does not free the lock: the run goes on (and is paid) until it ends
+    // a client that leaves aborts the run: the lock is free as soon as it settles, and the abort is logged as such, not as an error
     gate = new Promise<void>((res) => (hold = res));
     const ctl = new AbortController();
     const pending = await post("b", nd, ctl.signal);
-    await pending.body!.getReader().read(); // the first delta: the run is on
+    await pending.body!.getReader().read(); // the first event: the run is on
     ctl.abort();
+    await Bun.sleep(100);
+    expect(said).toContain("ask: aborted, the client left");
+    expect((await post("c")).status).toBe(200); // a run that ignores the signal would still hold the lock
+    // the plain JSON path: req.signal
+    const plain = new AbortController();
+    const plainReq = post("p", undefined, plain.signal).catch((e) => e.name);
+    await Bun.sleep(100);
+    plain.abort();
+    expect(await plainReq).toBe("AbortError");
+    await Bun.sleep(100);
+    expect(said.filter((m) => m === "ask: aborted, the client left")).toHaveLength(2);
+    // a run that does not stop keeps the lock until it ends
+    const slow = new AbortController();
+    const held = await post("slow", nd, slow.signal);
+    await held.body!.getReader().read();
+    slow.abort();
     await Bun.sleep(100);
     expect((await post("c")).status).toBe(429);
     hold();
     await Bun.sleep(100);
     gate = Promise.resolve();
     expect((await post("d")).status).toBe(200);
+  } finally { server.stop(true); }
+}, 30_000);
+
+test("POST /api/ask streaming: draft events carry the text so far as rendered segments (throttled, block names dropped), cleared on reset", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
+  mkdirSync(join(root, "wiki"), { recursive: true });
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "claude", site_ask: {} }));
+  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {}, ask: async (_, q, __, stream) => {
+    for (const t of ["Hello **bo", "ld** <script>x</script>\n\n{{bloc-1}}\n\n{{blo"]) stream?.text?.(t);
+    await Bun.sleep(350); // past the 200 ms throttle: one draft for the two deltas
+    stream?.reset?.();
+    stream?.text?.("Fresh");
+    await Bun.sleep(350);
+    stream?.text?.(" end");
+    return { md: `${q}: done` }; // the last delta was not drawn yet: done replaces it
+  } });
+  try {
+    const origin = `http://localhost:${server.port}`;
+    const r = await fetch(`${origin}/api/ask`, { method: "POST", headers: { "content-type": "application/json", origin, accept: "application/x-ndjson" }, body: JSON.stringify({ q: "a" }) });
+    const events = (await r.text()).trim().split("\n").map((l) => JSON.parse(l));
+    expect(events.map((e) => e.t)).toEqual(["delta", "delta", "draft", "reset", "delta", "draft", "delta", "done"]); // deltas stay, backward compatible
+    const html = (e: { segments: { html?: string }[] }) => e.segments.map((s) => s.html ?? "").join("");
+    expect(html(events[2])).toContain("<strong>bold</strong>");
+    expect(html(events[2])).not.toContain("<script");
+    expect(html(events[2])).not.toContain("bloc");
+    expect(html(events[5])).toContain("Fresh");
+    expect(html(events[5])).not.toContain("Hello"); // reset cleared the text
   } finally { server.stop(true); }
 }, 30_000);
 

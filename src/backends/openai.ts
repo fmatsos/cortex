@@ -50,10 +50,11 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
       const tools = [...toolPack(mode), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
       const own = new Map(extra.map((t) => [t.name, t]));
       const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
-      const { url, key } = ep;
+      const { url, key } = ep, signal = stream?.signal;
       let fixes = 0, cuts = 0, text = "", keep = false; // text: the parts of a final answer cut by the output limit; keep: the next turn goes on with it
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
-        if (turn && !keep) stream?.reset(); // a new turn (tool round, check resend): what was shown is provisional
+        signal?.throwIfAborted(); // the reader left: no new request
+        if (turn && !keep) stream?.reset?.(); // a new turn (tool round, check resend): what was shown is provisional
         keep = false;
         // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
         // server's prompt cache keeps the prefix on the turns in between
@@ -61,8 +62,8 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         const res = await fetch(`${url}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...(stream && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
-          signal: AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
+          body: JSON.stringify({ model: cfg.model, messages, tools, max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(LIMITS.llmRequestMs)]) : AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {
           const t = await res.text();
@@ -95,6 +96,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
           continue;
         }
         for (const c of msg.tool_calls) {
+          signal?.throwIfAborted();
           let args: Record<string, any>;
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
           stream?.step?.(c.function.name, args);

@@ -14,11 +14,16 @@ export type Block =
 export type Segment = { html: string } | { block: Block };
 /** `md`: the answer as written, sent back as history; retained and related: the pages the judge chose, by id. */
 export type Answer = { segments: Segment[]; md: string; cited: string[]; retained: string[]; related: string[]; model?: string };
-export type AskErrorKind = "busy" | "off" | "invalid" | "failed" | "network";
+/** `stopped`: the visitor stopped the answer on its way (never an HTTP status). */
+export type AskErrorKind = "busy" | "off" | "invalid" | "failed" | "network" | "stopped";
 /** What the agent is doing (the server's `step` event): the panel words it; `path` and `title` of a page read, `query` of a search. */
 export type Step = { kind: "pages" | "read" | "search" | "layout" | "write" | "work"; path?: string; title?: string; query?: string };
-/** `at`: when the answer came (ISO), kept in the saved copy. `partial`, `step`: the text written so far and what the agent is doing while the answer is on its way (provisional, never kept). */
-export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string; step?: Step };
+/**
+ * `at`: when the answer came (ISO), kept in the saved copy. `partial`, `draft`, `step`: the text written so far (raw), the same
+ * text rendered (segments, like an answer's) and what the agent is doing while the answer is on its way. Provisional: never
+ * saved; a turn that stops or is cut keeps `partial` and `draft` on screen for this page, next to its error.
+ */
+export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string; draft?: Segment[]; step?: Step };
 /** The saved copy this conversation continues: its id, its name, the exchanges it holds (`keys`) and when it was created. */
 export type SavedLink = { id: string; title: string; keys: string; created_at: string };
 /** A turn as `POST /api/conversations` takes it. */
@@ -55,6 +60,8 @@ class Assistant {
 	generation = 0;
 	private probed = false;
 	private next = 1;
+	/** Aborts the request of the answer on its way (the server then stops the run and frees its one-question lock). */
+	private ctl?: AbortController;
 
 	get pending() { return this.turns.some((t) => t.pending); }
 	/** The exchanges that got an answer: what is saved and exported (a failed or waiting one is not). */
@@ -88,7 +95,7 @@ class Assistant {
 	}
 
 	private save() {
-		try { sessionStorage.setItem(KEY, JSON.stringify({ turns: this.turns.filter((t) => !t.pending), open: this.open, saved: this.saved })); } catch { /* storage unavailable: kept for this page only */ }
+		try { sessionStorage.setItem(KEY, JSON.stringify({ turns: this.turns.filter((t) => !t.pending).map(({ partial, draft, step, ...t }) => t), open: this.open, saved: this.saved })); } catch { /* storage unavailable: kept for this page only */ }
 	}
 
 	setOpen(open: boolean) { this.open = open; this.save(); }
@@ -114,28 +121,37 @@ class Assistant {
 		this.turns = [...this.turns, turn];
 		this.draft = "";
 		if (!turn.pending) { this.save(); return false; }
-		const settle = (change: Partial<Turn>) => { this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, ...change, pending: false, partial: undefined, step: undefined } : t)); this.save(); };
+		const ctl = (this.ctl = new AbortController());
+		// the text so far (raw, then rendered) and the step: what a cut or failed turn keeps on screen
+		let partial = "", draft: Segment[] | undefined, step: Step | undefined, timer: ReturnType<typeof setTimeout> | undefined;
+		const settle = (change: Partial<Turn>) => {
+			if (this.ctl === ctl) this.ctl = undefined;
+			this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial: undefined, draft: undefined, step: undefined, ...change, pending: false } : t));
+			this.save();
+		};
+		const keep = (error: AskErrorKind) => { clearTimeout(timer); settle({ error, partial: partial || undefined, draft }); };
 		const done = (b: any) => {
-			if (!Array.isArray(b.segments)) return settle({ error: "failed" });
+			if (!Array.isArray(b.segments)) return keep("failed");
 			const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 			settle({ at: new Date().toISOString(), answer: { segments: b.segments, md: String(b.md ?? ""), cited: ids(b.cited), retained: ids(b.retained), related: ids(b.related), model: b.model } });
 		};
 		void (async () => {
 			try {
-				const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }) });
+				const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }), signal: ctl.signal });
 				if (!r.ok || !r.body || !r.headers.get("content-type")?.includes("application/x-ndjson")) {
 					const b = await r.json().catch(() => ({}));
 					return r.ok ? done(b) : settle({ error: askErrorKind(r.status) });
 				}
-				// one JSON event per line: the text so far (shown a few times a second, not saved), then the final payload
-				let partial = "", step: Step | undefined, buf = "", final: any, timer: ReturnType<typeof setTimeout> | undefined;
-				const show = () => { timer = undefined; this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial, step } : t)); };
+				// one JSON event per line: the text so far and its rendering (shown a few times a second, not saved), then the final payload
+				let buf = "", final: any;
+				const show = () => { timer = undefined; this.turns = this.turns.map((t) => (t.id === turn.id ? { ...t, partial, draft, step } : t)); };
 				const line = (l: string) => {
 					if (!l.trim()) return;
 					const e = JSON.parse(l);
 					if (e.t === "delta") { partial += String(e.text ?? ""); step = { kind: "write" }; timer ??= setTimeout(show, 60); }
 					else if (e.t === "step") { step = e.step; show(); }
-					else if (e.t === "reset") { clearTimeout(timer); partial = ""; step = { kind: "work" }; show(); }
+					else if (e.t === "draft") { if (Array.isArray(e.segments)) { draft = e.segments; timer ??= setTimeout(show, 60); } }
+					else if (e.t === "reset") { clearTimeout(timer); partial = ""; draft = undefined; step = { kind: "work" }; show(); }
 					else if (e.t === "done") final = e;
 					else if (e.t === "error") final = {};
 				};
@@ -150,7 +166,7 @@ class Assistant {
 				clearTimeout(timer);
 				if (!final) throw new Error("stream cut");
 				done(final);
-			} catch { settle({ error: "network" }); }
+			} catch { keep(ctl.signal.aborted ? "stopped" : "network"); }
 		})();
 		return true;
 	}
@@ -162,9 +178,12 @@ class Assistant {
 		this.ask(turn.q);
 	}
 
-	/** A new conversation; refused while an answer is on its way (it would come back into the new one). */
+	/** Stops the answer on its way: its turn settles as stopped, keeping what had arrived. */
+	stop() { this.ctl?.abort(); }
+
+	/** A new conversation; an answer on its way is aborted first (it must not come back into the new one). */
 	clear() {
-		if (this.pending) return;
+		this.ctl?.abort();
 		this.turns = [];
 		this.saved = null;
 		this.generation++;

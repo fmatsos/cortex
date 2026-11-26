@@ -108,7 +108,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       await expect.poll(lit, "the light steps from one square to the next").not.toEqual(before);
     }
     // the state text stays in the panel
-    await expect(page.locator("#assistant-panel [role=status]")).toHaveText(/./);
+    await expect(page.locator("#assistant-panel p[role=status]")).toHaveText(/./);
 
     release();
     await expect(page.locator("#assistant-panel article .activity")).toHaveCount(0);
@@ -206,5 +206,5 @@ test("the error avatar specimen is in its error composition, still; a failed que
   release();
   await expect(panel.locator("article .activity")).toHaveCount(0);
   await expect(panel.locator("svg.folio")).toHaveCount(0);
-  await expect(panel.locator("[role=status]")).toHaveText(/./);
+  await expect(panel.locator("p[role=status]")).toHaveText(/./);
 });

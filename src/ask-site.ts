@@ -23,7 +23,7 @@ export type Core = { retained: PageRef[]; related: PageRef[]; documents: (PageRe
 const RELEVANT = [
   "Decide whether `page` should be read to answer `request.question`.",
   "Judge what the question asks about, not only its topic: a page on the same subject that says nothing about what is asked is not relevant.",
-  "`request.earlier`, when present, is the previous question of the conversation.",
+  "`request.earlier`, when present, lists the earlier questions of the conversation, one per line, the most recent last.",
   "Yes: the page contains at least one statement that answers what the question asks.",
   "No: the page shares the topic or words of the question, but none of its statements answers what is asked.",
 ].join(" ");
@@ -56,24 +56,29 @@ export function coreOf(judged: { page: Page; relevance: number }[], t: { retaine
   return core;
 }
 
-/** The previous question of the conversation: a follow-up such as « et pour Bun ? » means nothing without it. */
-export const lastQuestion = (history: readonly Turn[]) => history.findLast((t) => t.role === "user")?.text;
+/** The wiki pages an answer links to (`/wiki/x.md`), once each: what the history tells the agent, and what a follow-up may mean. */
+const citedPages = (answer: string) => [...new Set([...flattenBlocks(answer).matchAll(/\]\((\/wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]!))];
 
 /**
  * The pages the answer rests on, judged against the question; undefined without a judge, or when no page could be judged (the
- * agent then works from the search hits, as before). A page whose call failed is left out, the judged ones count. The search
- * takes the earlier question too, the judge keeps them apart.
+ * agent then works from the search hits, as before). A page whose call failed is left out, the judged ones count. `history`:
+ * the earlier turns. A follow-up such as « et pour Bun ? » means nothing alone, and may refer to any exchange of the window:
+ * the search takes the last earlier question too, the pages cited in the earlier answers are candidates beside its hits, and
+ * the judge gets all the earlier questions.
  */
-export async function relevantPages(root: string, question: string, earlier?: string): Promise<Core | undefined> {
+export async function relevantPages(root: string, question: string, history: readonly Turn[] = []): Promise<Core | undefined> {
   const jc = await judgeConfig(root);
   if (!jc) return;
-  const query = earlier ? `${earlier} ${question}` : question;
+  const asked = history.filter((t) => t.role === "user").map((t) => clip(t.text, LIMITS.askEarlierChars));
+  const query = asked.length ? `${asked.at(-1)} ${question}` : question;
   // a question rarely has all its words in one page: any of them (BM25 weighs the rare ones). All of them left the lexical side
   // with 0 to 2 pages, so the semantic side filled the candidates alone, and the fallback to `any` never fired
   const hits = await search(root, query, { in: "wiki", limit: jc.askCandidates, any: true }).catch(() => []);
   const byPath = new Map((await openWiki(root).pages()).map((p) => [p.path, p]));
-  const pages = hits.map((h) => byPath.get(h.path)).filter((p): p is Page => !!p);
-  const request = earlier ? { question, earlier } : { question };
+  // the most recent answers' pages first, as many as the search offers: the judge is paid per page
+  const cited = history.filter((t) => t.role === "assistant").reverse().flatMap((t) => citedPages(t.text)).map((p) => p.slice(1));
+  const pages = [...new Set([...hits.map((h) => h.path), ...[...new Set(cited)].slice(0, jc.askCandidates)])].map((p) => byPath.get(p)).filter((p): p is Page => !!p);
+  const request = asked.length ? { question, earlier: asked.join("\n") } : { question };
   const scores = await relevance(root, jc, request, pages);
   const judged = pages.flatMap((page, i) => (scores[i] === undefined ? [] : [{ page, relevance: scores[i]! }]));
   if (pages.length && !judged.length) return;
@@ -101,8 +106,7 @@ export function pagesPart(core: Core | undefined, hits: string[]): string {
  * their answer "was cut"), with every page it cited.
  */
 export function compactAnswer(answer: string, max: number = LIMITS.askHistoryChars): string {
-  const md = flattenBlocks(answer);
-  const cited = [...new Set([...md.matchAll(/\]\((\/wiki\/[^)\s#]+\.md)/g)].map((m) => m[1]))];
+  const md = flattenBlocks(answer), cited = citedPages(answer);
   const kept = md.length > max ? `${md.slice(0, max)}\n[Rest of this answer left out of the history; the person received it whole.]` : md;
   return cited.length ? `${kept}\n[Pages cited in this answer: ${cited.join(", ")}]` : kept;
 }

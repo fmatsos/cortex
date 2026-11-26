@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ComponentProps } from "svelte";
 import { compile } from "svelte/compiler";
 import { parseHTML } from "linkedom";
 import { ICON_NAMES, ICONS, SPRITE_ID, VIEW_BOX, ensureSymbol, ensureSymbols, iconKey, iconSvg, iconUse, referencedIcons, spriteMarkup, symbolId, symbolMarkup, type IconName } from "../site/src/lib/icons";
@@ -96,6 +97,8 @@ test("iconSvg : étiquette et variante pleine", () => {
   expect(iconKey("star")).toBe("star");
 });
 
+type IconProps = ComponentProps<typeof import("../site/src/lib/components/icon.svelte").default>;
+
 // Compiles the Svelte components for server rendering, once for the whole file.
 async function ssr() {
   Bun.plugin({
@@ -109,7 +112,7 @@ async function ssr() {
   });
   const { render } = await import("svelte/server");
   const { default: Icon } = await import("../site/src/lib/components/icon.svelte");
-  return { icon: (props: Record<string, unknown>) => render(Icon, { props }).body };
+  return { icon: (props: ComponentProps<typeof Icon>) => render(Icon, { props }).body };
 }
 
 // The sprite is per page: only the symbols a document references, from one markup function shared by build and client.
@@ -214,7 +217,7 @@ test("le composant Icon : un <use> du sprite, sans géométrie ; décorative par
   }
   // no instance repeats any icon geometry: it is written once, in the sprite
   for (const body of Object.values(ICONS)) expect(all).not.toContain(body);
-  const doc = (props: Record<string, unknown>) => parseHTML(`<!doctype html><body>${icon(props)}`).document.querySelector("svg")!;
+  const doc = (props: IconProps) => parseHTML(`<!doctype html><body>${icon(props)}`).document.querySelector("svg")!;
   const labelled = doc({ name: "search", size: 24, label: "Rechercher" });
   expect(labelled.getAttribute("role")).toBe("img");
   expect(labelled.getAttribute("aria-label")).toBe("Rechercher");
