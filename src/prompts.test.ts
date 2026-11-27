@@ -56,7 +56,8 @@ test("site question: the pages given in full are not read again, the wiki tools 
   expect(ask).not.toMatch(/Grep|Glob|raw\//);
   expect(prompt("ask-site-core", {})).toContain("do not get them again");
   expect(prompt("ask-site-reading-over", {})).toContain("Answer now");
-  expect(prompt("ask-site-reading-over", {})).toContain("call render_blocks now or answer in plain Markdown");
+  expect(prompt("ask-site-reading-over", {})).toContain("call render_blocks now, then write the answer");
   expect(prompt("ask-site-blocks", {})).toContain("same turn as your last reading calls");
+  expect(prompt("ask-site-blocks", {})).toContain("always at least one block"); // every answer is laid out
   expect(() => prompt("ask-site-blocks-missing", {})).toThrow("prompt not found"); // no send-back any more
 });

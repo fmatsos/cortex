@@ -43,7 +43,7 @@ export function blockRegistry() {
   const blocks = new Map<string, Block>();
   const tool: ExtraTool = {
     name: "render_blocks",
-    description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Returns one name per block ({{bloc-1}}); call it once, as soon as the reading shows the answer's shape, then write the answer and put each name on its own line where its block belongs. A second call only adds blocks: earlier names stay valid.",
+    description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Every answer uses it (at least one block). Returns one name per block ({{bloc-1}}); call it once, as soon as the reading shows the answer's shape, then write the answer and put each name on its own line where its block belongs. A second call only adds blocks: earlier names stay valid.",
     schema: z.object({ blocks: z.array(BLOCK).min(1).max(6) }),
     run: async ({ blocks: list }: { blocks: Block[] }) => {
       const names = list.map((b) => { const id = `bloc-${blocks.size + 1}`; blocks.set(id, b); return `{{${id}}} (${b.type})`; });
