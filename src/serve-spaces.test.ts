@@ -552,3 +552,22 @@ test("read-only: what waits in a space's inbox/ is not taken in while it is read
   expect(said.find((m) => m.startsWith("inbox:"))).toContain("read-only");
   expect(readdirSync(join(root, "spaces/ro/inbox"))).toEqual(["waiting.url"]);
 });
+
+test("a space served alone (--space) is read-only too", async () => {
+  const root = instance(["ro", "other"], AUTH);
+  const db = openAccounts(accountsFile(root)); setSpace(db, "ro", { read_only: true }); db.close();
+  const alone = await start(join(root, "spaces/ro"));
+  expect((await alone.send("HEAD", "/api/verify")).status).toBe(409);
+  expect((await alone.send("POST", "/api/verify", { id: "x" })).status).toBe(409);
+  const other = await start(join(root, "spaces/other"));
+  expect((await other.send("HEAD", "/api/verify")).status).toBe(204);
+});
+
+test("archiving right after a sync leaves no export or inbox writing into the moved folder", async () => {
+  const { root, ada, post, send, origin } = await manage();
+  expect((await post("/api/sync", {}, {})).status).toBe(200); // both spaces start to rebuild
+  expect((await send("POST", "/s/mine/api/space/archive", { confirm: "mine" }, { origin, ...ada.cookie })).status).toBe(200);
+  await Bun.sleep(400); // longer than the quiet time and a fake build
+  expect(existsSync(join(root, "spaces/mine"))).toBe(false); // nothing recreated it
+  expect((await send("POST", "/api/spaces/mine/restore", undefined, { origin, ...ada.cookie })).status).toBe(200); // so the name is free to restore
+});

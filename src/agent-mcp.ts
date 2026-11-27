@@ -3,7 +3,6 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import type { Mode } from "./backends/backend";
 import { callTool, toolPack, zodShape } from "./backends/tools";
-import { assertWritable } from "./read-only";
 import pkg from "../package.json";
 
 /**
@@ -21,6 +20,5 @@ export function buildAgentServer(root: string, mode: Mode): McpServer {
 
 export async function serveAgentMcp(root: string, mode: Mode) {
   console.log = console.error; // stdout is the protocol
-  if (mode === "write") assertWritable(root); // never on a read-only space
   serveStdio(() => buildAgentServer(root, mode));
 }

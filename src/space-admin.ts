@@ -28,8 +28,8 @@ export type AdminDeps = {
   /** One git or file change at a time for the whole server. */
   serial: <T>(f: () => Promise<T> | T) => Promise<T>;
   sync: boolean;
-  /** Stops the space's site and takes it off the routes (after its folder moved). */
-  unmount: (name: string) => void;
+  /** Takes the space's site off the routes and stops it, waiting for its build to end (before its folder moves). */
+  unmount: (name: string) => Promise<void>;
 };
 
 const MAX_TITLE = 120;
@@ -107,8 +107,8 @@ export function spaceAdmin(d: AdminDeps) {
     if (existsSync(join(spaceRoot(d.root, name), ".git"))) return fail(409, "this space is its own git repository: archiving it from the web could lose work that is not pushed. Use cortex space archive on the server.");
     try {
       await d.serial(async () => {
+        await d.unmount(name); // first: no export or inbox of this space may write into the folder once it moved
         await archiveSpace(d.root, name, d.sync);
-        d.unmount(name);
       });
     } catch (e) { d.say(`space ${name}: archive failed: ${(e as Error).message}`); return fail(500, `the space could not be archived: ${(e as Error).message}`); }
     d.say(`space ${name} archived by ${user.name ?? user.id}`);

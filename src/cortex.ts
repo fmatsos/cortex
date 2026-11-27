@@ -95,7 +95,8 @@ try {
   const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" || (cmd === "serve" && !o.space) || spaces ? instanceOrRoot() : findRoot(process.cwd(), o.space);
   // a read-only space (cortex space set <name> --read-only true) takes no write: refused up front, whatever writes (the agent included)
   const writes = ["add", "inbox", "new", "index", "compile"].includes(cmd!) || (isLogAdd) || (cmd === "links" && o.write) || (cmd === "ask" && o.file) || (cmd === "schema" && o.write);
-  if (writes && !(o["dry-run"] && (cmd === "add" || cmd === "inbox"))) (await import("./read-only")).assertWritable(root);
+  // (not for the agent's own cortex commands: they run in a sandbox where the accounts' database cannot be opened, and `run` of agent.ts refused to start the agent on a read-only space)
+  if (writes && !process.env.CORTEX_IN_AGENT && !(o["dry-run"] && (cmd === "add" || cmd === "inbox"))) (await import("./read-only")).assertWritable(root);
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {

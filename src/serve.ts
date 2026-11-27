@@ -21,7 +21,7 @@ import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
-import { readOnlyMessage } from "./read-only";
+import { readOnlyMessage, readOnlyReason } from "./read-only";
 import { addedPaths, addSpace, archiveSpace, restoreSpace } from "./space";
 import { spaceAdmin } from "./space-admin";
 
@@ -223,6 +223,8 @@ type Site = {
   /** What `POST /api/sync` does: pull, then rebuild and take in the inbox (both queued, not awaited). */
   sync(): Promise<void>;
   stop(): void;
+  /** `stop`, then waits until the export child has exited and the build loop has ended: nothing of this site writes into its folder afterwards. */
+  halt(): Promise<void>;
   /** The build folder served now (for the journal). */
   current(): string | undefined;
 };
@@ -297,6 +299,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
 
   /** `cortex inbox`, then (sync) the new sources committed and pushed; the site rebuilt when something was added. */
   const ingest = () => serial(async () => {
+    if (stopped) return; // archived: its folder is no longer ours
     const why = readOnly();
     if (why) return say(`inbox: ${why}`); // a read-only space takes in nothing: what waits in inbox/ stays there
     pull();
@@ -332,6 +335,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
     // stopping the server stops the export child too (it holds site/.export.lock)
     stop() { stopped = true; exporter?.kill(); },
     current: () => current,
+    async halt() { site.stop(); await exporter?.exited.catch(() => {}); await building?.catch(() => {}); },
     async fetch(req, srv, url) {
       if (url.pathname === "/api/verify") {
         const why = readOnly(); // a read-only space: the probe answers 409 (the site tells why instead of offering the button), a review is refused
@@ -507,7 +511,7 @@ export async function serve(root: string, o: ServeOpts) {
     }
     if (!sites.size) throw new Error("no space to serve: cortex space add <name> first.");
   } else {
-    sites.set("", await makeSite(root, o, shared));
+    sites.set("", await makeSite(root, o, shared, "", () => readOnlyReason(root))); // a space served alone (--space) is still read-only if it is set so
     previous = await sites.get("")!.start();
   }
 
@@ -516,8 +520,8 @@ export async function serve(root: string, o: ServeOpts) {
    * a private space stays hidden when the store fails, when sign-in is not configured (nobody can be a member) or when cortex.json is broken.
    */
   const access = async (name: string, req: Request): Promise<"ok" | "denied" | "error"> => {
-    const store = accounts.store();
     try {
+      const store = accounts.store();
       if (spaceVisibility(store, name) === "open") return "ok";
       const user = await accounts.userOf(req);
       return user && memberRole(store, name, user.id) ? "ok" : "denied";
@@ -646,7 +650,7 @@ export async function serve(root: string, o: ServeOpts) {
     return Response.json({ name, url: `/s/${name}/` }, { headers: noStore });
   };
 
-  const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: (name) => { sites.get(name)?.stop(); sites.delete(name); } });
+  const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: async (name) => { const site = sites.get(name); sites.delete(name); await site?.halt(); } });
 
   const server = Bun.serve({
     port: o.port,

@@ -92,11 +92,11 @@ export function upsertUser(db: Database, provider: string, subject: string, name
 
 /**
  * Deletes the account: the cascade removes its sessions, state, conversations and journeys, and its memberships go with it. The
- * last owner of a space cannot leave this way (the space would have nobody to administer it): the names of those spaces come back
- * and nothing is deleted; they archive the space or name another owner first.
+ * last owner of a live space cannot leave this way (the space would have nobody to administer it): the names of those spaces come back
+ * and nothing is deleted; they archive the space or name another owner first. An archived space does not hold them back (they leave it, and it is restored from the command line).
  */
 export const deleteUser = (db: Database, id: string): string[] => db.transaction(() => {
-  const blocked = (db.query("select m.space from space_members m where m.user_id = $id and m.role = 'owner' and (select count(*) from space_members o where o.space = m.space and o.role = 'owner') = 1 order by m.space").all({ id }) as { space: string }[]).map((r) => r.space);
+  const blocked = (db.query("select m.space from space_members m where m.user_id = $id and m.role = 'owner' and (select count(*) from space_members o where o.space = m.space and o.role = 'owner') = 1 and not exists (select 1 from spaces s where s.name = m.space and s.archived_at is not null) order by m.space").all({ id }) as { space: string }[]).map((r) => r.space);
   if (blocked.length) return blocked;
   db.query("delete from space_members where user_id = $id").run({ id });
   db.query("delete from users where id = $id").run({ id });
@@ -172,8 +172,8 @@ export const memberRole = (db: Database, space: string, userId: string): Role | 
   (db.query("select role from space_members where space = $space and user_id = $userId").get({ space, userId }) as { role: Role } | null)?.role;
 /** Adds a member; someone already in the space keeps their role (use `setMemberRole`). */
 export const addSpaceMember = (db: Database, space: string, userId: string, role: Role = "member") => { db.query("insert or ignore into space_members (space, user_id, role) values ($space, $userId, $role)").run({ space, userId, role }); };
-/** Whether `userId` owns a space (an archived one has no member left). */
-export const ownsASpace = (db: Database, userId: string) => !!db.query("select 1 from space_members where user_id = $userId and role = 'owner' limit 1").get({ userId });
+/** Whether `userId` owns a live space (an archived one does not count). */
+export const ownsASpace = (db: Database, userId: string) => !!db.query("select 1 from space_members m where m.user_id = $userId and m.role = 'owner' and not exists (select 1 from spaces s where s.name = m.space and s.archived_at is not null) limit 1").get({ userId });
 
 /** `last-owner`: the change would leave the space without an owner (checked and written in one transaction). */
 export type MemberChange = "ok" | "unknown" | "last-owner";

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFi
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { accountsFile, addSpaceMember, deleteUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, spaceVisibility, upsertUser } from "./accounts";
+import { accountsFile, addSpaceMember, archiveSpaceRows, deleteUser, forgetSpace, getSpace, memberRole, openAccounts, ownsASpace, removeSpaceMember, setMemberRole, setSpace, spaceMembers, spaceVisibility, upsertUser } from "./accounts";
 import { confine } from "./backends/sandbox";
 import { configFile, lintConfig, loadConfig } from "./config";
 import { findRoot, instanceRoot, listSpaces } from "./lib";
@@ -274,6 +274,24 @@ describe("cortex space", () => {
     db.close();
   });
 
+  test("migrate on an instance that already has its space only hands over the saved rows (the production case)", () => {
+    const root = instance(["veille"], { default_space: "veille" });
+    openAccounts(accountsFile(root)).close();
+    const old = new Database(accountsFile(root));
+    old.run("insert into users values ('u1', 'github', '1', 'Ada', null, 1, 1)");
+    old.run("insert into conversations (id, user_id, title, turns, exchanges, search, created_at, updated_at) values ('c1', 'u1', 'Q', '[]', 0, 'q', 1, 1)");
+    old.run("insert into user_state values ('u1', '{\"theme\":\"dark\",\"favs\":[\"wiki/x\"]}', 1)");
+    old.close();
+    expect(cortex(root, ["space", "migrate", "nope"]).code).toBe(2); // not a space of this instance
+    expect(cortex(root, ["space", "migrate", "veille"]).code).toBe(0);
+    expect(cortex(root, ["space", "migrate", "veille"]).code).toBe(0); // again: nothing left to move
+    const db = openAccounts(accountsFile(root));
+    expect(db.query("select space from conversations").all()).toEqual([{ space: "veille" }]);
+    expect(db.query("select data from space_state where space = 'veille'").all()).toEqual([{ data: '{"favs":["wiki/x"]}' }]);
+    expect(db.query("select data from user_state").all()).toEqual([{ data: '{"theme":"dark"}' }]);
+    db.close();
+  });
+
   test("migrate without git is a plain rename, and an existing default_space is kept", () => {
     const root = tmp();
     writeFileSync(join(root, "cortex.json"), '{"default_space":"pro"}');
@@ -422,6 +440,15 @@ describe("sandbox of a multi-space instance", () => {
     expect(run(`echo x > ${join(root, "spaces/pro/wiki/new.md")}`)!.exitCode).toBe(0);
     expect(run(`echo x > ${join(root, "spaces/pro/raw/new.md")}`)!.exitCode).not.toBe(0);
     expect(run(`echo x > ${join(root, "cortex.json")}`)!.exitCode).not.toBe(0);
+  });
+
+  test.skipIf(!bwrap)("linux: cortex commands of the agent still write under the sandbox of a multi-space instance that has accounts (the read-only guard cannot open the database there)", () => {
+    const root = instance(["pro"]);
+    openAccounts(accountsFile(root)).close(); // .cortex/accounts.db: read-only for the agent
+    const env = { ...process.env, NO_COLOR: "1", CORTEX_IN_AGENT: "1", CORTEX_ROOT: join(root, "spaces/pro") } as Record<string, string>;
+    const p = Bun.spawnSync(confine(join(root, "spaces/pro"), ["bun", CLI, "log", "add", "add", "from the agent"], "write"), { cwd: join(root, "spaces/pro"), env, stdout: "pipe", stderr: "pipe" });
+    if (p.exitCode !== 0 && /bwrap:|Operation not permitted/.test(p.stderr.toString()) && !/cortex|read-only/.test(p.stderr.toString())) return; // no user namespaces here
+    expect([p.exitCode, p.stderr.toString()]).toEqual([0, expect.not.stringContaining("read-only")]);
   });
 
   test("macos: writes denied under the instance but the wiki, reads denied under the other spaces", () => {
@@ -630,6 +657,19 @@ describe("visibility and roles", () => {
     db.close();
   });
 
+  test("an owner whose only spaces are archived can delete their account; an archived space does not open the creation gate", () => {
+    const db = openAccounts(join(tmp(), "a.db")), ada = user(db, "1");
+    addSpaceMember(db, "s", ada, "owner"); addSpaceMember(db, "t", ada, "owner");
+    expect(ownsASpace(db, ada)).toBe(true);
+    archiveSpaceRows(db, "s", 1);
+    expect(deleteUser(db, ada)).toEqual(["t"]); // t is live
+    archiveSpaceRows(db, "t", 1);
+    expect(ownsASpace(db, ada)).toBe(false);
+    expect(deleteUser(db, ada)).toEqual([]);
+    expect(spaceMembers(db, "s")).toEqual([]);
+    db.close();
+  });
+
   test("forgetting a space removes its people, visibility and title: a later space of that name inherits nothing", () => {
     const db = openAccounts(join(tmp(), "a.db")), ada = user(db, "1");
     setSpace(db, "s", { visibility: "private", title: "Secret" }); addSpaceMember(db, "s", ada, "owner");
@@ -695,8 +735,7 @@ describe("visibility and roles", () => {
     const remote = exec("index", "--space", "a");
     expect([remote.exitCode, remote.stderr.toString()]).toEqual([expect.any(Number), expect.stringContaining("read-only")]);
     expect(remote.exitCode).not.toBe(0);
-    // the agent never runs in write mode there, and its tool server for a write run does not start
-    expect(cortex(root, ["mcp", "--agent", "write", "--space", "a"]).err).toContain("read-only");
+    // the agent never runs in write mode there: agent.ts refuses before it starts one (its own cortex commands run in a sandbox, where the guard cannot open the database)
     const m = await (async () => { const e = { ...process.env, CORTEX_ROOT: root } as Record<string, string>; delete e.CORTEX_SPACE; return e; })();
     const proc = Bun.spawn(["bun", CLI, "mcp"], { env: m, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();

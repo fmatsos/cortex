@@ -198,7 +198,13 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
     }
     case "migrate": {
       checkName(name);
-      if (isMultiSpace(instance)) throw usage("spaces/ already exists: nothing to migrate.");
+      if (isMultiSpace(instance)) {
+        // the wiki already became a space: only what the accounts saved before the spaces (space '') is left to give it
+        if (!listSpaces(instance).includes(name!) || !existsSync(accountsFile(instance))) throw usage("spaces/ already exists: nothing to migrate.");
+        withAccounts(instance, (db) => moveToSpace(db, name!, Date.now()));
+        console.log(`${paint.ok("✓")} the conversations, journeys and favorites saved before the spaces now belong to ${name}.`);
+        return;
+      }
       const present = SPACE_PATHS.filter((p) => existsSync(join(instance, p)));
       if (!present.includes("wiki") && !present.includes("raw")) throw usage("no wiki/ nor raw/ at the root: nothing to migrate (cortex space add <name>).");
       const dir = spaceRoot(instance, name!), inGit = Bun.spawnSync(["git", "-C", instance, "rev-parse", "--is-inside-work-tree"], { stdout: "pipe", stderr: "pipe" }).exitCode === 0;

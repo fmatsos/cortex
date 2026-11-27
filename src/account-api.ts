@@ -243,7 +243,7 @@ export function accountRoute(d: AccountDeps): AccountRoute {
         if (method === "GET") return json({ id: user.id, name: user.name, email: user.email, provider: user.provider });
         if (method === "DELETE") {
           const owned = db.deleteUser(store, user.id);
-          return owned.length ? fail(409, `you are the only owner of ${owned.join(", ")}: archive ${owned.length > 1 ? "them" : "it"} or name another owner first.`) : clearSession(json({ ok: true }));
+          return owned.length ? fail(409, `you are the only owner of ${owned.join(", ")}: name another owner first (or archive ${owned.length > 1 ? "them" : "it"}).`) : clearSession(json({ ok: true }));
         }
         return fail(405, "method not allowed");
       }
