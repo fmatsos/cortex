@@ -5,6 +5,7 @@
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { longDay } from "#lib/changes.js";
 	import { toPage, toRoute } from "#lib/links.js";
+	import { spaceApi } from "#lib/space.js";
 	import { loadDone, queueHref, saveQueue } from "#lib/review-queue.js";
 	import { contentLang, t } from "#lib/i18n/index.js";
 
@@ -19,7 +20,7 @@
 
 	onMount(() => {
 		done = loadDone();
-		fetch("/api/verify", { method: "HEAD" }).then((r) => (api = r.status === 204), () => {});
+		fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => (api = r.status === 204), () => {});
 	});
 	// the article reached from here offers the next page of this very list
 	$effect(() => saveQueue(pending.map(({ id, title }) => ({ id, title }))));

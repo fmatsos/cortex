@@ -4,13 +4,15 @@
 	import ConfirmDialog from "#lib/components/account/confirm-dialog.svelte";
 	import ConversationsSection from "#lib/components/account/conversations-section.svelte";
 	import JourneysSection from "#lib/components/account/journeys-section.svelte";
+	import SpacesSection from "#lib/components/account/spaces-section.svelte";
+	import { spaces } from "#lib/spaces.svelte.js";
 	import Icon from "#lib/components/icon.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import * as Empty from "#lib/components/ui/empty/index.js";
 	import { toRoute } from "#lib/links.js";
 	import { t } from "#lib/i18n/index.js";
 
-	// The account page: identity, sign-out and deletion, then the saved conversations and journeys. Prerendered as an empty
+	// The account page: identity, sign-out and deletion, the spaces (several-space servers), then the saved conversations and journeys. Prerendered as an empty
 	// shell; everything else is loaded in the browser (the account only exists on a `cortex serve` with sign-in).
 	let deleting = $state(false);
 	const me = $derived(account.me);
@@ -39,6 +41,7 @@
 			</div>
 		</section>
 
+		{#if spaces.available}<SpacesSection />{/if}
 		<ConversationsSection />
 		<JourneysSection />
 

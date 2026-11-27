@@ -1,4 +1,5 @@
 import { isEmpty, matches, parseQuery, type Parsed } from "./query";
+import { spaceApi } from "./space";
 import { rank, type Engine } from "./search-engine";
 import type { SearchDoc } from "./types";
 
@@ -18,7 +19,7 @@ export type Judged = Hybrid & { judged: boolean; model?: string; reason?: NotJud
 export const SERVER_LIMIT = 50;
 /** Wait before the single new attempt of a judged search that found the server busy (429). */
 export const RETRY_MS = 1500;
-const API = "/api/search";
+const api = () => spaceApi("/api/search");
 
 /** The search text of a query: only a query with free words or a phrase has something for the meaning to work on. */
 export const worthAsking = (q: string): boolean => /[\p{L}\p{N}]/u.test(q) && hasFreeText(parseQuery(q));
@@ -35,7 +36,7 @@ let failedAt = 0;
 export function probe(fetcher: typeof fetch = fetch): Promise<boolean> {
 	if (probing) return probing;
 	if (Date.now() - failedAt < 30_000 && failedAt) return Promise.resolve(false);
-	const p = fetcher(API, { method: "HEAD" }).then((r) => r.status === 204, () => { failedAt = Date.now(); probing = undefined; return false; });
+	const p = fetcher(api(), { method: "HEAD" }).then((r) => r.status === 204, () => { failedAt = Date.now(); probing = undefined; return false; });
 	return (probing = p);
 }
 /** For tests. */
@@ -59,7 +60,7 @@ const sleep = (ms: number, signal: AbortSignal) => new Promise<void>((ok, no) =>
 export class Busy extends Error {}
 
 async function call(q: string, judge: boolean, signal: AbortSignal, fetcher: typeof fetch): Promise<Judged> {
-	const url = `${API}?q=${encodeURIComponent(q)}&limit=${SERVER_LIMIT}${judge ? "&judge=1" : ""}`;
+	const url = `${api()}?q=${encodeURIComponent(q)}&limit=${SERVER_LIMIT}${judge ? "&judge=1" : ""}`;
 	const r = await fetcher(url, { signal, headers: { accept: "application/json" } });
 	if (r.status === 429) throw new Busy();
 	if (!r.ok) throw new Error(`HTTP ${r.status}`);

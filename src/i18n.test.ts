@@ -4,7 +4,8 @@ import { join } from "node:path";
 import en from "../site/src/lib/i18n/en.json";
 import fr from "../site/src/lib/i18n/fr.json";
 import { chooseLocale, DICTS, translate } from "../site/src/lib/i18n/index";
-import { storageKey } from "../site/src/lib/storage";
+import { spaceApi, spaceName, spacePrefix } from "../site/src/lib/space";
+import { spaceKey, storageKey } from "../site/src/lib/storage";
 import { resolveContentLang, resolveLocale } from "./export";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -62,6 +63,22 @@ test("storageKey: cortex:<name>, moving a value left under the old brain:<name> 
   // no storage, or one that throws: just the key
   expect(storageKey("theme", undefined)).toBe("cortex:theme");
   expect(storageKey("theme", { getItem: () => { throw new Error("denied"); }, setItem() {}, removeItem() {} })).toBe("cortex:theme");
+});
+
+test("spacePrefix and spaceKey: under /s/<space>/ the space's API and local data are its own; anywhere else nothing changes", () => {
+  const at = (pathname?: string) => { (globalThis as { location?: unknown }).location = pathname === undefined ? undefined : { pathname }; };
+  try {
+    at("/s/pro/wiki/a/");
+    expect([spacePrefix(), spaceName(), spaceApi("/api/ask"), spaceKey("favs")]).toEqual(["/s/pro", "pro", "/s/pro/api/ask", "cortex:favs@pro"]);
+    at("/s/pro");
+    expect(spacePrefix()).toBe("/s/pro");
+    for (const p of ["/", "/wiki/s/pro/", "/s/", "/s/Pro/", "/s/-x/", "/share/", `/s/${"x".repeat(41)}/`]) {
+      at(p);
+      expect([spacePrefix(), spaceApi("/api/ask"), spaceKey("favs")]).toEqual(["", "/api/ask", "cortex:favs"]); // a legacy or static site keeps its keys and URLs
+    }
+    at(undefined); // prerender: no location
+    expect(spacePrefix()).toBe("");
+  } finally { delete (globalThis as { location?: unknown }).location; }
 });
 
 test("app.html applies the remembered language before the app loads, with the key lang.svelte.ts writes", () => {

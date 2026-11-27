@@ -28,6 +28,8 @@
 	import { registerJourneyActions } from "#lib/journeys.js";
 	import AuthNotice from "#lib/components/auth-notice.svelte";
 	import BuildStatus from "#lib/components/build-status.svelte";
+	import SpaceSwitcher from "#lib/components/space-switcher.svelte";
+	import { spaces } from "#lib/spaces.svelte.js";
 
 	let { children } = $props();
 	// what the account page can do with a saved conversation (resume in the panel, export) and journey (export): before its first render
@@ -45,7 +47,7 @@
 	// favorites, search history, theme and language: specific to this browser (localStorage); an account, when the server has
 	// one, then keeps theme, language and favorites (account.init reads the stores, so it comes after them)
 	onMount(() => {
-		theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init();
+		theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init().then(() => spaces.load());
 		fetch(resolve("/footer.json")).then((r) => (r.ok ? r.json() : undefined)).then((v: Footer | undefined) => { f = v; }, () => {});
 		return stop;
 	});
@@ -118,6 +120,7 @@
 			<a href={toRoute("/")} class="inline-flex items-center gap-2 py-1 font-semibold tracking-tight" aria-current={page.route.id === "/" ? "page" : undefined}><CortexWordmark /></a>
 			<BuildStatus />
 		</div>
+		<SpaceSwitcher />
 		<SiteNav items={nav} />
 		<!-- search | assistant | preferences. Narrow: a row of its own below the mark and the navigation; wide: the search takes the room left -->
 		<div class="flex items-center gap-2 {pageSearch ? 'ml-auto' : 'basis-full @7xl:ml-auto @7xl:basis-auto @7xl:flex-1'}">

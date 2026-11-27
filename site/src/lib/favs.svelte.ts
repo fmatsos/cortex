@@ -1,7 +1,7 @@
 // Favorites: specific to each browser (the site is static), stored in localStorage.
-import { storageKey } from "./storage";
+import { spaceKey } from "./storage";
 
-const KEY = storageKey("favs");
+const KEY = spaceKey("favs");
 let ids = $state<string[]>([]);
 let failed = $state(false); // the last write failed: favorites only last for this session
 let removed = $state<string | null>(null); // last favorite removed, to undo it

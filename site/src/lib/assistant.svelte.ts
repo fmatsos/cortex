@@ -1,4 +1,5 @@
-import { storageKey } from "./storage";
+import { spaceApi } from "./space";
+import { spaceKey } from "./storage";
 
 /** Longest question the server accepts (src/serve.ts MAX_QUESTION): checked before sending. */
 export const MAX_QUESTION = 500;
@@ -33,7 +34,7 @@ export type SavedTurn = { question: string; answer: string; pages?: string[]; at
 export const askErrorKind = (status: number): AskErrorKind =>
 	status === 429 ? "busy" : status === 404 ? "off" : status === 400 ? "invalid" : "failed";
 
-const KEY = storageKey("assistant");
+const KEY = spaceKey("assistant");
 /** What identifies the exchanges of a conversation: their numbers (never reused, so an answer asked again is a new one). */
 export const keysOf = (turns: Turn[]) => turns.map((t) => t.id).join(",");
 
@@ -87,7 +88,7 @@ class Assistant {
 				this.saved = link && typeof link.id === "string" && typeof link.keys === "string" ? { id: link.id, title: String(link.title ?? ""), keys: link.keys, created_at: String(link.created_at ?? "") } : null;
 			}
 		} catch { /* storage unavailable */ }
-		fetch("/api/ask", { method: "HEAD" }).then((r) => {
+		fetch(spaceApi("/api/ask"), { method: "HEAD" }).then((r) => {
 			this.api = r.status === 204;
 			const n = Number(r.headers.get("x-ask-history-turns"));
 			this.historyTurns = Number.isInteger(n) && n > 0 ? n : null;
@@ -137,7 +138,7 @@ class Assistant {
 		};
 		void (async () => {
 			try {
-				const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }), signal: ctl.signal });
+				const r = await fetch(spaceApi("/api/ask"), { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }), signal: ctl.signal });
 				if (!r.ok || !r.body || !r.headers.get("content-type")?.includes("application/x-ndjson")) {
 					const b = await r.json().catch(() => ({}));
 					return r.ok ? done(b) : settle({ error: askErrorKind(r.status) });

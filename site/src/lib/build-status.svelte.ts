@@ -1,4 +1,5 @@
 import { t } from "./i18n/index";
+import { spaceApi } from "./space";
 
 /** `GET /api/status` of `cortex serve` (src/serve.ts): the site is being rebuilt (a build running or waiting) and how the last one ended. */
 export type BuildStatus = { building: boolean; since?: string; last?: { at: string; ok: boolean; ms: number } };
@@ -70,7 +71,7 @@ class BuildState {
 		this.inFlight = true;
 		let status: BuildStatus | undefined, gone = false;
 		try {
-			const r = await fetch("/api/status", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(8000) });
+			const r = await fetch(spaceApi("/api/status"), { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(8000) });
 			if (r.status === 404 || r.status === 405) gone = true; // no such route: a static site
 			else if (r.ok) status = asStatus(await r.json().catch(() => undefined)) ?? undefined;
 		} catch { /* below */ }

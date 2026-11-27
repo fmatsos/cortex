@@ -5,7 +5,7 @@
 	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 	import { type OfflineState, estimateBytes, formatBytes, isOfflineState, percent } from "#lib/offline.js";
 	import type { IconName } from "#lib/icons.js";
-	import { storageKey } from "#lib/storage.js";
+	import { spaceKey } from "#lib/storage.js";
 	import { t } from "#lib/i18n/index.js";
 
 	// Offline mode status. It owns the service worker state and gives its menu section to the caller (the preferences menu):
@@ -15,7 +15,7 @@
 	// visitor is offline or a download runs. A state found at load (offline mode ready, installation failed) is for screen
 	// readers only: it must not stay on screen. No permanent floating button.
 	let { children }: { children?: Snippet<[{ section: Snippet; refresh: () => void; offline: boolean; attention: boolean }]> } = $props();
-	const KEY = storageKey("offline-ready");
+	const KEY = spaceKey("offline-ready");
 	const MESSAGE_MS = 4000;
 
 	let offline = $state(false);

@@ -7,7 +7,7 @@
 	import { dayOfMs, FIRST_DAYS, FIRST_MAX, longDay, parseSeen, since, watermark } from "#lib/changes.js";
 	import { dayLabel, groupDays } from "#lib/log-view.js";
 	import { toPage, toRoute } from "#lib/links.js";
-	import { storageKey } from "#lib/storage.js";
+	import { spaceKey } from "#lib/storage.js";
 	import { contentLang, t } from "#lib/i18n/index.js";
 
 	// « Since my last visit »: the reference point is the newest change date the visitor has seen, kept in this browser only
@@ -20,7 +20,7 @@
 	let heading = $state<HTMLElement | null>(null);
 
 	onMount(() => {
-		try { seen = parseSeen(localStorage.getItem(storageKey("changes-seen"))); } catch { persisted = false; }
+		try { seen = parseSeen(localStorage.getItem(spaceKey("changes-seen"))); } catch { persisted = false; }
 	});
 
 	const newest = $derived(watermark(data.changes));
@@ -32,7 +32,7 @@
 
 	async function markSeen() {
 		if (newest === undefined) return;
-		try { localStorage.setItem(storageKey("changes-seen"), String(newest)); persisted = true; } catch { persisted = false; }
+		try { localStorage.setItem(spaceKey("changes-seen"), String(newest)); persisted = true; } catch { persisted = false; }
 		seen = newest; // kept for this visit even when storage refuses
 		preview = false;
 		confirmed = true;

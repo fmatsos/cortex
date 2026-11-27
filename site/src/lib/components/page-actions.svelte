@@ -5,6 +5,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { graphFocus, shareUrl } from "#lib/article.js";
 	import { toRoute } from "#lib/links.js";
+	import { spaceApi } from "#lib/space.js";
 	import { t } from "#lib/i18n/index.js";
 
 	// Actions of an article: Favorite and the main action (read the original source, on a Source page) stay visible;
@@ -19,13 +20,13 @@
 	let { id, md, original, reviewable = false, onreviewed }: { id: string; md: string; original?: { url: string; domain: string }; reviewable?: boolean; onreviewed?: (r: Reviewed) => void } = $props();
 	let api = $state(false), reviewingId = $state<string | null>(null);
 	const reviewing = $derived(reviewingId === id);
-	$effect(() => { fetch("/api/verify", { method: "HEAD" }).then((r) => (api = r.status === 204), () => {}); });
+	$effect(() => { fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => (api = r.status === 204), () => {}); });
 	const review = async () => {
 		const target = id;
 		reviewingId = target;
 		message = "";
 		try {
-			const r = await fetch("/api/verify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: target }) });
+			const r = await fetch(spaceApi("/api/verify"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: target }) });
 			const b = await r.json().catch(() => ({}));
 			if (!r.ok) throw new Error(b.error ?? r.statusText);
 			onreviewed?.({ id: target, by: b.by, at: new Date().toISOString() });

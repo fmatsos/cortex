@@ -1,4 +1,5 @@
 import { ApiError } from "./api";
+import { spaceApi } from "./space";
 import { assistant, keysOf, type Segment, type SavedTurn, type Turn } from "./assistant.svelte";
 import { conversationActions, createConversation, getConversation, updateConversation, type Conversation } from "./conversations";
 import { conversationFilename, conversationMarkdown, normalizeTitle } from "./conversation-markdown";
@@ -74,7 +75,7 @@ const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": 
 async function drawAll(mds: string[]): Promise<Segment[][]> {
 	const plain = (md: string): Segment[] => [{ html: `<p class="whitespace-pre-wrap">${escape(md)}</p>` }];
 	try {
-		const res = await fetch("/api/ask/render", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: mds }) });
+		const res = await fetch(spaceApi("/api/ask/render"), { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: mds }) });
 		const body = (await res.json().catch(() => ({}))) as { answers?: { segments?: Segment[] }[] };
 		if (!res.ok || !Array.isArray(body.answers) || body.answers.length !== mds.length) return mds.map(plain);
 		return body.answers.map((a, i) => (Array.isArray(a?.segments) ? a.segments : plain(mds[i]!)));
