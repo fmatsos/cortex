@@ -19,11 +19,11 @@ import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
-import { configFile, loadConfig, readConfig, writeConfig } from "./config";
+import { checkContent, configFile, contentOf, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { readOnlyMessage, readOnlyReason } from "./read-only";
-import { addedPaths, addSpace, archiveSpace, restoreSpace } from "./space";
-import { spaceAdmin } from "./space-admin";
+import { addedPaths, addSpace, archiveSpace, recordable, restoreSpace } from "./space";
+import { checkTitle, spaceAdmin } from "./space-admin";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -544,31 +544,35 @@ export async function serve(root: string, o: ServeOpts) {
     const user = await accounts.userOf(req);
     if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
     if (!(await mayCreate(user))) return Response.json({ error: "creating a space is for the owners of a space (site_spaces.create in cortex.json)." }, { status: 403, headers: noStore });
-    const body = await req.json().then((b: { name?: unknown; schema?: unknown }) => b ?? {}, () => ({} as { name?: unknown; schema?: unknown }));
-    const { name, schema } = body;
-    if (typeof name !== "string" || !SPACE_NAME.test(name) || (schema != null && schema !== "notes")) // the schema is never a path from the web
-      return Response.json({ error: 'expected { name, schema? }: a name of lowercase letters, digits and dashes (40 at most, starting with a letter or digit); schema, if any, is "notes".' }, { status: 400, headers: noStore });
+    const body = await req.json().then((b: Record<string, unknown> | null) => b ?? {}, () => ({} as Record<string, unknown>));
+    const { name } = body, bad = (error: string) => Response.json({ error }, { status: 400, headers: noStore });
+    if (typeof name !== "string" || !SPACE_NAME.test(name) || "schema" in body) // a schema is never a path from the web
+      return bad("expected { name, title?, content? }: a name of lowercase letters, digits and dashes (40 at most, starting with a letter or digit); content, if any, is a list of resources and notes.");
+    const title = body.title === undefined ? undefined : checkTitle(body.title), kind = body.content == null ? undefined : checkContent(body.content);
+    if (title && "error" in title) return bad(title.error);
+    if (kind && "error" in kind) return bad(kind.error);
+    const content = kind?.content;
     if (sites.has(name) || creating.has(name) || existsSync(spaceRoot(root, name))) return Response.json({ error: `space ${name} already exists.` }, { status: 409, headers: noStore });
     const store = accounts.store();
     if (getSpace(store, name)?.archived_at) return Response.json({ error: `space ${name} is archived: restore it, or pick another name.` }, { status: 409, headers: noStore });
     creating.add(name);
     let site: Site | undefined;
     try {
-      await addSpace(root, name, undefined, schema ?? undefined); // what `cortex space add` does
+      await addSpace(root, name, undefined, { content }); // what `cortex space add` does
       forgetSpace(store, name); // nothing of an earlier space of that name carries over
-      setSpace(store, name, { visibility: "private" });
+      setSpace(store, name, { visibility: "private", ...(title && { title: title.title }) });
       addSpaceMember(store, name, user.id, "owner");
       site = await mount(name);
       await site.start();
       sites.set(name, site);
     } catch (e) {
       site?.stop(); rmSync(spaceRoot(root, name), { recursive: true, force: true }); forgetSpace(store, name);
-      if (schema) await readConfig(root).then((c) => { delete (c.spaces as Record<string, unknown> | undefined)?.[name]; return writeConfig(configFile(root), c); }).catch(() => {});
+      if (content) await readConfig(root).then((c) => { delete (c.spaces as Record<string, unknown> | undefined)?.[name]; return writeConfig(configFile(root), c); }).catch(() => {});
       say(`space ${name}: ${(e as Error).message}`);
       return Response.json({ error: `the space could not be created: ${(e as Error).message}` }, { status: 500, headers: noStore });
     } finally { creating.delete(name); }
     say(`space ${name} created for ${user.name ?? user.id}`);
-    if (o.sync) await serial(async () => commitAndPush(root, `space: add ${name}`, await addedPaths(root, name, schema))).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
+    if (o.sync) await serial(async () => commitAndPush(root, `space: add ${name}`, await addedPaths(root, name, content && recordable(content)))).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
     return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
   };
 
@@ -666,7 +670,8 @@ export async function serve(root: string, o: ServeOpts) {
         if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
         const names = await visible(req);
         const info = (name: string) => { try { return getSpace(accounts.store(), name); } catch { return undefined; } };
-        return Response.json({ spaces: names.map((name) => { const row = info(name); return { name, title: row?.title ?? null, read_only: row?.read_only ?? false }; }), canCreate: await (async () => { const user = await accounts.userOf(req); return !!user && (await accounts.configured()) && (await mayCreate(user)); })(), default: (await landing(names)) ?? null }, { headers: noStore });
+        const config = await loadConfig(root).catch(() => ({} as Config));
+        return Response.json({ spaces: names.map((name) => { const row = info(name); return { name, title: row?.title ?? null, read_only: row?.read_only ?? false, content: contentOf(config, name) }; }), canCreate: await (async () => { const user = await accounts.userOf(req); return !!user && (await accounts.configured()) && (await mayCreate(user)); })(), default: (await landing(names)) ?? null }, { headers: noStore });
       }
       const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
       if (at) {

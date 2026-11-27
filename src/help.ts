@@ -3,7 +3,9 @@ import { CONFIG_KEYS } from "./config";
 /** `cortex --help`; the agent is shown its allowed lines (backends/policy.ts). */
 export const HELP = `cortex — second brain
 
-  cortex add <url|file|-> [--note "why I keep this"] [--via freedium (then archive.ph, Wayback)] [--linked-from <id>] [--dry-run]
+  cortex add <url|file|-> [--note "why I keep this"] [--as note|resource] [--via freedium (then archive.ph, Wayback)] [--linked-from <id>] [--dry-run]
+                                               (a URL or PDF is a resource, "-" (stdin) a note, a text file a resource unless --as note;
+                                               a space refuses a kind its content does not include)
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N] [--space a,b|all]   (--space a,b or all: several spaces, one fused list)
   cortex index
@@ -31,9 +33,9 @@ export const HELP = `cortex — second brain
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
-  cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name>
+  cortex space list | add <name> [--repo <git url>] [--content resources|notes|resources,notes] [--schema <file>] | migrate <name>
   cortex space archive <name> | restore <name> [--sync]  |  cortex space list --archived
-  cortex space set <name> [--visibility open|private] [--title "…"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]
+  cortex space set <name> [--content resources|notes|resources,notes] [--visibility open|private] [--title "…"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]
                                                (spaces: isolated wikis under spaces/<name>/, sharing cortex.json; add --repo clones one
                                                into its own git repository; migrate moves a wiki/ + raw/ at the root into a space;
                                                a private space is for its members alone, owners administer it)

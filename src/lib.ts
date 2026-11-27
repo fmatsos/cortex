@@ -22,6 +22,11 @@ export function findInstance(from = process.cwd()): string | undefined {
 export const instanceRoot = (root: string) => findInstance(root) ?? root;
 /** Whether the instance is multi-space: it has a `spaces/` folder (otherwise legacy, wiki/ and raw/ at its root). */
 export const isMultiSpace = (instance: string) => existsSync(join(instance, "spaces"));
+/** Name of the space a content root is (`spaces/<name>` of its instance); undefined for a legacy wiki or the instance itself. */
+export function spaceNameOf(root: string): string | undefined {
+  const [dir, name, deeper] = relative(instanceRoot(root), resolve(root)).split(sep);
+  return dir === "spaces" && name && !deeper ? name : undefined;
+}
 export const spaceRoot = (instance: string, name: string) => join(instance, "spaces", name);
 /** Spaces of an instance, by name. */
 export const listSpaces = (instance: string): string[] =>

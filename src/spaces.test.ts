@@ -129,31 +129,62 @@ describe("shared config", () => {
     expect(errors({ site_spaces: { create: "owners", more: 1 } }).length).toBe(1);
   });
 
-  test("spaces.<name>.schema: the built-in notes, or a path; a bare unknown name is refused", () => {
+  test("spaces.<name>.schema is a path; spaces.<name>.content is a non-empty list of resources and notes, without duplicates", () => {
     const errors = (c: object) => lintConfig(c).filter((i) => i.level === "error").map((i) => i.msg);
-    expect(errors({ spaces: { pro: { schema: "notes" }, perso: { schema: "schemas/perso.md" }, a: { schema: "x.md" } } })).toEqual([]);
-    expect(errors({ spaces: { pro: { schema: "veille" } } })).toEqual(['unknown built-in schema "veille" in "spaces.<name>.schema" (notes), or give a path to a .md file.']);
-    expect(errors({ schema: "bogus" })[0]).toContain('unknown built-in schema "bogus"');
-    expect(errors({ schema: "notes" })).toEqual([]);
+    expect(errors({ spaces: { perso: { schema: "schemas/perso.md" }, a: { schema: "x.md" } }, schema: "g.md" })).toEqual([]);
+    expect(errors({ spaces: { pro: { schema: "notes" } } })[0]).toContain('"spaces.<name>.schema" "notes" must be a path to a .md file');
+    expect(errors({ schema: "bogus" })[0]).toContain('"schema" "bogus" must be a path');
+    expect(errors({ spaces: { a: { content: ["resources"] }, b: { content: ["notes"] }, c: { content: ["notes", "resources"] }, d: {} } })).toEqual([]);
+    for (const bad of [[], ["blog"], ["notes", "notes"], "notes", [1], true]) expect(errors({ spaces: { a: { content: bad } } })).toEqual(['"spaces.<name>.content" must be a non-empty list without duplicates of "resources", "notes".']);
+    expect(errors({ content: ["notes"] })[0]).toContain("unknown property"); // per space only
   });
 });
 
 describe("cortex space", () => {
-  test("add --schema notes records it, writes the space's agent file from it, and refuses a bad value before creating anything", async () => {
+  test("add --content records it (not the default), writes the space's agent file from it, and refuses a bad value before creating anything", async () => {
     const root = tmp();
     writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "codex" }));
-    expect(cortex(root, ["space", "add", "pro", "--schema", "notes"]).out).toContain("space pro created (schema: notes)");
+    expect(cortex(root, ["space", "add", "pro", "--content", "notes"]).out).toContain("space pro created (content: notes)");
+    expect(cortex(root, ["space", "add", "mix", "--content", "notes,resources"]).code).toBe(0);
     expect(cortex(root, ["space", "add", "veille"]).code).toBe(0);
-    expect(await loadConfig(root)).toEqual({ client: "codex", spaces: { pro: { schema: "notes" } } });
-    expect(readFileSync(join(root, "spaces/pro/AGENTS.md"), "utf8")).toContain("a space of personal notes");
-    expect(readFileSync(join(root, "spaces/veille/AGENTS.md"), "utf8")).toContain("the second brain"); // no schema: the built-in default
+    expect(cortex(root, ["space", "add", "plain", "--content", "resources"]).code).toBe(0);
+    expect(await loadConfig(root)).toEqual({ client: "codex", spaces: { pro: { content: ["notes"] }, mix: { content: ["resources", "notes"] } } }); // in the canonical order // the default is not recorded
+    const agent = (n: string) => readFileSync(join(root, `spaces/${n}/AGENTS.md`), "utf8");
+    expect(agent("pro")).toContain("a space of personal notes");
+    expect(agent("pro")).not.toContain("notes:begin");
+    expect(agent("mix")).toContain("the second brain");
+    expect(agent("mix")).toContain("## From notes to pages");
+    expect(agent("veille")).toContain("the second brain"); // no content: resources, the built-in default
+    expect(agent("veille")).not.toContain("From notes to pages");
     expect(existsSync(join(root, "AGENTS.md"))).toBe(false);
-    for (const bad of ["veille", "absent.md"]) {
-      const r = cortex(root, ["space", "add", "x", "--schema", bad]);
-      expect([r.code, existsSync(join(root, "spaces/x"))]).toEqual([2, false]);
+    for (const bad of [["--content", "blog"], ["--content", "notes,notes"], ["--content", ""], ["--schema", "notes"], ["--schema", "absent.md"]]) {
+      const r = cortex(root, ["space", "add", "x", ...bad]);
+      expect([bad.join(" "), r.code, existsSync(join(root, "spaces/x"))]).toEqual([bad.join(" "), 2, false]);
     }
     expect(cortex(root, ["schema"], { CORTEX_SPACE: "pro" }).out).toContain("a space of personal notes");
     expect(cortex(join(root, "spaces/veille"), ["schema"]).out).toContain("the second brain");
+    expect(cortex(root, ["space", "list"]).out).toBe("  mix  open  resources+notes\n  plain  open  resources\n  pro  open  notes\n  veille  open  resources\n");
+  });
+
+  test("space set --content changes what a space holds, rewrites its agent file, keeps what is there, and drops the default from cortex.json", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "codex" }));
+    expect(cortex(root, ["space", "add", "a"]).code).toBe(0);
+    mkdirSync(join(root, "spaces/a/wiki"), { recursive: true });
+    writeFileSync(join(root, "spaces/a/wiki/p.md"), "---\ntype: Concept\ntitle: P\n---\nx\n");
+    const agent = () => readFileSync(join(root, "spaces/a/AGENTS.md"), "utf8");
+    expect(cortex(root, ["space", "set", "a", "--content", "notes,resources"]).out).toContain("space a holds resources and notes");
+    expect((await loadConfig(root)).spaces).toEqual({ a: { content: ["resources", "notes"] } }); // canonical order
+    expect(agent()).toContain("## From notes to pages");
+    expect(cortex(root, ["space", "set", "a", "--content", "notes"]).code).toBe(0);
+    expect(agent()).toContain("a space of personal notes");
+    expect(cortex(root, ["space", "set", "a", "--content", "resources"]).code).toBe(0);
+    expect(agent()).not.toContain("From notes to pages");
+    expect((await loadConfig(root)).spaces).toBeUndefined(); // the default leaves no entry
+    expect(existsSync(join(root, "spaces/a/wiki/p.md"))).toBe(true);
+    for (const bad of ["", "blog", "notes,notes"]) expect(cortex(root, ["space", "set", "a", "--content", bad]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "nope", "--content", "notes"]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "a"]).code).toBe(2);
   });
 
   test("add creates an empty space with its index and journal; list marks the default; a name is validated", () => {
@@ -165,12 +196,12 @@ describe("cortex space", () => {
     expect(cortex(root, ["space", "add", "veille"]).code).toBe(2); // exists
     expect(cortex(root, ["space", "add", "Bad Name"]).code).toBe(2);
     expect(cortex(root, ["space", "add", "pro"]).code).toBe(0);
-    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open\n  veille  open\n");
+    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open  resources\n  veille  open  resources\n");
     writeFileSync(join(root, "cortex.json"), '{"default_space":"veille"}');
-    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open\n* veille  open\n");
+    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open  resources\n* veille  open  resources\n");
     expect(cortex(root, ["space", "nope"]).code).toBe(2);
     // from inside a space, `space` still acts on the instance
-    expect(cortex(join(root, "spaces/pro"), ["space", "list"]).out).toBe("  pro  open\n* veille  open\n");
+    expect(cortex(join(root, "spaces/pro"), ["space", "list"]).out).toBe("  pro  open  resources\n* veille  open  resources\n");
   });
 
   test("add refuses a legacy wiki that still has wiki/ at its root: migrate first", () => {
@@ -332,15 +363,19 @@ describe("git per space", () => {
     expect(sh(work, "status", "--porcelain")).toContain("spaces/b/wiki/other.md");
   });
 
-  test("cortex space add --sync commits the new space's wiki, raw and agent file (cortex.json for a schema)", () => {
+  test("cortex space add --sync commits the new space's wiki, raw and agent file (cortex.json for a content)", () => {
     const d = tmp(), bare = remoteWith(d, "inst", { "cortex.json": "{}", "spaces/a/wiki/p.md": "1\n" });
     sh(d, "clone", "-q", bare, "work");
     const work = join(d, "work");
-    expect(cortex(work, ["space", "add", "n", "--schema", "notes", "--sync"]).code).toBe(0);
+    expect(cortex(work, ["space", "add", "n", "--content", "notes", "--sync"]).code).toBe(0);
     expect(sh(d, `--git-dir=${bare}`, "ls-tree", "-r", "--name-only", "main")).toEqual(expect.stringContaining("spaces/n/raw/.gitkeep")); // empty: `show` cannot tell it
     for (const f of ["spaces/n/CLAUDE.md", "spaces/n/wiki/index.md"]) expect(show(bare, f)).not.toBe("");
-    expect(show(bare, "cortex.json")).toContain('"schema": "notes"');
+    expect(show(bare, "cortex.json")).toContain('"notes"');
     expect(sh(work, "log", "-1", "--format=%s")).toBe("space: add n");
+    expect(cortex(work, ["space", "set", "n", "--content", "resources,notes", "--sync"]).code).toBe(0); // the agent file and cortex.json, committed
+    expect(sh(work, "log", "-1", "--format=%s")).toBe("space: n holds resources and notes");
+    expect(show(bare, "spaces/n/CLAUDE.md")).toContain("From notes to pages");
+    expect(show(bare, "cortex.json")).toContain('"resources"');
     expect(cortex(work, ["space", "add", "m"]).code).toBe(0); // without --sync: left to the user, as before
     expect(show(bare, "spaces/m/CLAUDE.md")).toBe("");
   });
@@ -769,7 +804,7 @@ describe("visibility and roles", () => {
     expect(cortex(root, ["space", "archive", "a"]).code).toBe(0);
     expect(existsSync(join(root, "spaces/a"))).toBe(false);
     expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).default_space ?? null).toBeNull();
-    expect(cortex(root, ["space", "list"]).out).toBe("* b  open\n"); // the only one left is the default
+    expect(cortex(root, ["space", "list"]).out).toBe("* b  open  resources\n"); // the only one left is the default
     expect(cortex(root, ["--space", "a", "ls"]).code).toBe(2); // nothing reads it, search included
     expect(cortex(root, ["space", "list", "--archived"]).out).toMatch(/^a  archived \d{8}-\d{6}\n$/);
     const r = cortex(root, ["space", "add", "a"]);

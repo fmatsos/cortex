@@ -54,13 +54,23 @@ function checkIssuer(v: string): string | undefined {
   if (u.protocol !== "https:" && !(u.protocol === "http:" && isLoopbackHost(u.hostname))) return `"auth.oidc.issuer" "${v}" must be an https:// URL.`;
   if (u.search || u.hash) return `"auth.oidc.issuer" "${v}" must not have a query or fragment.`;
 }
-/** Built-in schemas a `schema` value can name instead of a file (src/schema-notes.md). */
-export const BUILT_IN_SCHEMAS = ["notes"] as const;
-/** `schema` / `spaces.<name>.schema`: a file (has a `/` or `.md`) relative to the instance root, or a built-in name. */
+/** `schema` / `spaces.<name>.schema`: a custom schema, a file (has a `/` or `.md`) relative to the instance root. */
 const schemaRef = (k: string) => str(k).superRefine((v, ctx) => {
-  if (v && !v.includes("/") && !v.includes(".md") && !(BUILT_IN_SCHEMAS as readonly string[]).includes(v))
-    ctx.addIssue({ code: "custom", message: `unknown built-in schema "${v}" in "${k}" (${BUILT_IN_SCHEMAS.join(", ")}), or give a path to a .md file.`, input: v });
+  if (v && !v.includes("/") && !v.includes(".md"))
+    ctx.addIssue({ code: "custom", message: `"${k}" "${v}" must be a path to a .md file, relative to the instance root (what a space holds is its "content").`, input: v });
 });
+/** What a space holds: external `resources` (URLs, PDFs, documents), the user's own `notes`, or both. */
+export const CONTENTS = ["resources", "notes"] as const;
+export type Content = (typeof CONTENTS)[number];
+/** Without `content`, a space holds resources. */
+export const DEFAULT_CONTENT: readonly Content[] = ["resources"];
+const contentError = `"spaces.<name>.content" must be a non-empty list without duplicates of ${CONTENTS.map((c) => `"${c}"`).join(", ")}.`;
+const content = z.array(z.enum(CONTENTS, { error: contentError }), { error: contentError }).min(1, { error: contentError }).refine((v) => new Set(v).size === v.length, { error: contentError }).nullish();
+/** `content` as the value to write (canonical order), or an error message: one validator for `cortex space`, the site and lint. */
+export function checkContent(v: unknown): { content: Content[] } | { error: string } {
+  const r = content.safeParse(v);
+  return r.success && r.data ? { content: CONTENTS.filter((c) => r.data!.includes(c)) } : { error: contentError };
+}
 const text = (k: string) => z.string({ error: `"${k}" must be a non-empty string.` }).trim().min(1, { error: `"${k}" must be a non-empty string.` });
 const refined = (k: string, check: (v: string) => string | undefined) => text(k).superRefine((v, ctx) => { const e = check(v); if (e) ctx.addIssue({ code: "custom", message: e, input: v }); });
 const list = <T extends z.ZodType>(k: string, item: T, what: string) => z.array(item, { error: `"${k}" must be a list of ${what}.` }).min(1, { error: `"${k}" needs at least one entry (an empty list would refuse everyone): leave the provider out instead.` });
@@ -157,10 +167,11 @@ const SHAPE = {
   default_space: str("default_space").refine((v) => v == null || SPACE_NAME.test(v), { error: `"default_space" must be a space name (${SPACE_NAME}).` }),
   /**
    * Per-space settings, by space name. repo: the space is its own git repository (cloned by `cortex space add --repo`, ignored by the instance's).
-   * schema: the agent schema of the space, instead of the global one (a path relative to the instance root, or the built-in `notes`).
+   * content: what the space holds, `["resources"]` (default), `["notes"]` or both: it picks the agent schema and the kind of source `add` accepts.
+   * schema: a custom agent schema for the space, instead of the global one (a path relative to the instance root): it overrides `content`.
    */
-  spaces: z.record(z.string(), z.strictObject({ repo: str("spaces.<name>.repo"), schema: schemaRef("spaces.<name>.schema") }, { error: '"spaces.<name>" must be an object (repo, schema).' }), {
-    error: '"spaces" must be an object: one entry (repo, schema) per space name, or null.',
+  spaces: z.record(z.string(), z.strictObject({ repo: str("spaces.<name>.repo"), content, schema: schemaRef("spaces.<name>.schema") }, { error: '"spaces.<name>" must be an object (repo, content, schema).' }), {
+    error: '"spaces" must be an object: one entry (repo, content, schema) per space name, or null.',
   }).nullish().superRefine((v, ctx) => {
     for (const n of Object.keys(v ?? {})) if (!SPACE_NAME.test(n)) ctx.addIssue({ code: "custom", message: `"spaces" has an invalid space name "${n}" (${SPACE_NAME}).`, input: n });
   }),
@@ -286,3 +297,6 @@ export const agentFile = (client?: Client) => (client && client !== "claude" ? "
 
 /** Agent file of this wiki (CLAUDE.md or AGENTS.md, per the configured client). */
 export const agentFileFor = async (root: string) => agentFile((await loadConfig(root)).client);
+
+/** What the space `name` holds (`spaces.<name>.content`, default resources). */
+export const contentOf = (c: Config, name?: string): readonly Content[] => (name && c.spaces?.[name]?.content) || DEFAULT_CONTENT;

@@ -2,17 +2,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createInvite, getSpace, listInvites, memberRole, removeSpaceMember, revokeInvite, setMemberRole, setSpace, spaceMembers, type Role, type User } from "./accounts";
-import { loadConfig } from "./config";
+import { checkContent, contentOf, loadConfig } from "./config";
 import { spaceRoot } from "./lib";
-import { archiveSpace } from "./space";
+import { archiveSpace, setContent } from "./space";
 
 /**
  * The administration API of one space, under `/s/<space>/api/space` (`serve` calls it after the visibility check, so a visitor who may not
  * see the space never gets here): 404 to anyone who is not a member, 403 to a member who is not an owner (on anything that changes), a
  * same-origin request for every change. The slug is immutable: `title` is the display name.
  *
- *   GET    /api/space                 name, title, visibility, read_only, kind, storage, members, you
- *   PATCH  /api/space                 { title?, visibility?, read_only? }
+ *   GET    /api/space                 name, title, visibility, read_only, content, custom_schema, storage, members, you
+ *   PATCH  /api/space                 { title?, visibility?, read_only?, content? }
  *   PATCH  /api/space/members/<id>    { role }          DELETE /api/space/members/<id>
  *   GET    /api/space/invites         pending invitations
  *   POST   /api/space/invites         { role? } -> a single-use link, valid 7 days (the link is the secret: nothing is e-mailed, no e-mail is matched)
@@ -33,6 +33,12 @@ export type AdminDeps = {
 };
 
 const MAX_TITLE = 120;
+/** A display title as the accounts keep it (trimmed, one line, null for none), or an error message: `PATCH` and `POST /api/spaces`. */
+export function checkTitle(v: unknown): { title: string | null } | { error: string } {
+  if (v !== null && typeof v !== "string") return { error: '"title" must be a string or null.' };
+  const t = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+  return [...t].length > MAX_TITLE ? { error: `"title" is at most ${MAX_TITLE} characters.` } : { title: t || null };
+}
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const fail = (status: number, error: string) => json({ error }, status);
 const readJson = (req: Request) => req.json().then((b) => (b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : {}), () => ({} as Record<string, unknown>));
@@ -63,10 +69,9 @@ export function spaceAdmin(d: AdminDeps) {
       if (method !== "PATCH") return fail(405, "method not allowed");
       const body = await readJson(req), patch: Parameters<typeof setSpace>[2] = {};
       if (body.title !== undefined) {
-        if (body.title !== null && typeof body.title !== "string") return fail(400, '"title" must be a string or null.');
-        const t = typeof body.title === "string" ? body.title.replace(/\s+/g, " ").trim() : "";
-        if ([...t].length > MAX_TITLE) return fail(400, `"title" is at most ${MAX_TITLE} characters.`);
-        patch.title = t || null;
+        const t = checkTitle(body.title);
+        if ("error" in t) return fail(400, t.error);
+        patch.title = t.title;
       }
       if (body.visibility !== undefined) {
         if (body.visibility !== "open" && body.visibility !== "private") return fail(400, '"visibility" must be "open" or "private".');
@@ -76,8 +81,14 @@ export function spaceAdmin(d: AdminDeps) {
         if (typeof body.read_only !== "boolean") return fail(400, '"read_only" must be true or false.');
         patch.read_only = body.read_only;
       }
-      if (!Object.keys(patch).length) return fail(400, "expected { title?, visibility?, read_only? }.");
-      setSpace(store, name, patch);
+      const kind = body.content === undefined ? undefined : checkContent(body.content);
+      if (kind && "error" in kind) return fail(400, kind.error);
+      if (!Object.keys(patch).length && !kind) return fail(400, "expected { title?, visibility?, read_only?, content? }.");
+      if (Object.keys(patch).length) setSpace(store, name, patch);
+      if (kind) {
+        try { await d.serial(() => setContent(d.root, name, kind.content, d.sync)); }
+        catch (e) { d.say(`space ${name}: content not saved: ${(e as Error).message}`); return fail(500, `the content could not be saved: ${(e as Error).message}`); }
+      }
       return info(name, role);
     }
 
@@ -120,10 +131,9 @@ export function spaceAdmin(d: AdminDeps) {
     function members(n: string) { return spaceMembers(store, n).map((x) => ({ id: x.id, name: x.name ?? x.email, role: x.role })); }
     async function info(n: string, you: Role) {
       const row = getSpace(store, n), config = await loadConfig(d.root).catch(() => ({} as Awaited<ReturnType<typeof loadConfig>>));
-      const ref = config.spaces?.[n]?.schema ?? config.schema;
       return json({
         name: n, title: row?.title ?? null, visibility: row?.visibility ?? "open", read_only: row?.read_only ?? false,
-        kind: ref === "notes" ? "notes" : ref ? "custom" : "watch",
+        content: contentOf(config, n), custom_schema: !!(config.spaces?.[n]?.schema ?? config.schema),
         storage: existsSync(join(spaceRoot(d.root, n), ".git")) ? "own repo" : "instance",
         members: members(n), you,
       });

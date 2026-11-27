@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { Database } from "bun:sqlite";
 import { accountsFile, addSpaceMember, archiveSpaceRows, moveToSpace, restoreSpaceRows, findUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, type Role } from "./accounts";
 import { regenerateCtx } from "./catalog";
-import { agentFileFor, BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
+import { agentFileFor, checkContent, configFile, contentOf, DEFAULT_CONTENT, lintConfig, loadConfig, readConfig, writeConfig, type Content } from "./config";
 import { openWiki } from "./context";
 import { CortexError, isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { writeSchema } from "./schema";
@@ -11,7 +11,7 @@ import { paint } from "./style";
 import { commitAndPush, git } from "./sync";
 
 const usage = (msg: string) => new CortexError(msg, "usage");
-const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name> | set <name> [--visibility open|private] [--title \"…\"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]";
+const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--content resources,notes] [--schema <file>] | migrate <name> | set <name> [--content resources,notes] [--visibility open|private] [--title \"…\"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]";
 const MAX_TITLE = 120;
 
 /** The accounts' database for the length of `f`. */
@@ -20,9 +20,9 @@ function withAccounts<T>(instance: string, f: (db: Database) => T): T {
   try { return f(db); } finally { db.close(); }
 }
 
-/** What the creation of a space (never an own-repo one) puts in the instance's repository: its wiki/, raw/ and agent file, and cortex.json when it records a schema. */
-export const addedPaths = async (instance: string, name: string, schema?: string | null) =>
-  [...(schema ? ["cortex.json"] : []), `spaces/${name}/wiki`, `spaces/${name}/raw`, `spaces/${name}/${await agentFileFor(spaceRoot(instance, name))}`];
+/** What the creation of a space (never an own-repo one) puts in the instance's repository: its wiki/, raw/ and agent file, and cortex.json when it records a content or a schema. */
+export const addedPaths = async (instance: string, name: string, recorded?: unknown) =>
+  [...(recorded ? ["cortex.json"] : []), `spaces/${name}/wiki`, `spaces/${name}/raw`, `spaces/${name}/${await agentFileFor(spaceRoot(instance, name))}`];
 
 /** What a space owns at the instance root of a legacy wiki (everything else there is shared by the instance). */
 const SPACE_PATHS = ["wiki", "raw", "paths", "inbox"];
@@ -34,15 +34,25 @@ const checkName = (name?: string) => {
   return name;
 };
 
-/** Creates `spaces/<name>/` (an empty wiki, or the clone of `repo`) with its agent file: what `cortex space add` does, and `POST /api/spaces` of `cortex serve` (never with a repo). `schema` is recorded under `spaces.<name>`. */
-export async function addSpace(instance: string, name: string | undefined, repo?: string, schema?: string) {
+/** What `spaces.<name>` records of a content: nothing for the default one. */
+export const recordable = (content: readonly Content[]) => (content.length === 1 && content[0] === DEFAULT_CONTENT[0] ? undefined : content);
+
+/** `--content resources,notes` as a list, or a usage error. */
+export const parseContent = (v: string) => {
+  const r = checkContent(v.split(",").map((s) => s.trim()));
+  if ("error" in r) throw usage(`--content expects resources, notes or resources,notes.`);
+  return r.content;
+};
+
+/** Creates `spaces/<name>/` (an empty wiki, or the clone of `repo`) with its agent file: what `cortex space add` does, and `POST /api/spaces` of `cortex serve` (never with a repo). `content` and `schema` are recorded under `spaces.<name>` (`content` unless it is the default). */
+export async function addSpace(instance: string, name: string | undefined, repo?: string, o: { content?: Content[]; schema?: string } = {}) {
   checkName(name);
-  const dir = spaceRoot(instance, name!);
+  const dir = spaceRoot(instance, name!), { schema } = o, content = o.content && recordable(o.content);
   if (existsSync(dir)) throw usage(`space ${name} already exists.`);
   if (schema) { // checked before anything is created: a bad value must not leave a half-made space
     const e = lintConfig({ spaces: { [name!]: { schema } } }).find((i) => i.level === "error");
     if (e) throw usage(e.msg);
-    if (!(BUILT_IN_SCHEMAS as readonly string[]).includes(schema) && !existsSync(resolve(instance, schema))) throw usage(`schema not found: ${schema} (relative to the instance root).`);
+    if (!existsSync(resolve(instance, schema))) throw usage(`schema not found: ${schema} (relative to the instance root).`);
   }
   if (!isMultiSpace(instance) && (existsSync(join(instance, "wiki")) || existsSync(join(instance, "raw"))))
     throw usage(`this wiki has wiki/ and raw/ at its root: cortex space migrate <name> moves them into a space first.`);
@@ -59,11 +69,25 @@ export async function addSpace(instance: string, name: string | undefined, repo?
     const ignore = join(instance, ".gitignore"), text = existsSync(ignore) ? readFileSync(ignore, "utf8") : "", line = `/spaces/${name}/`;
     if (!text.split("\n").includes(line)) writeFileSync(ignore, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
   }
-  if (repo || schema) {
+  if (repo || content || schema) {
     const config = await readConfig(instance);
-    await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { ...(repo && { repo }), ...(schema && { schema }) } } });
+    await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { ...(repo && { repo }), ...(content && { content }), ...(schema && { schema }) } } });
   }
   await writeSchema(dir, false); // the agent file of this space (CLAUDE.md or AGENTS.md), from its effective schema
+}
+
+/**
+ * Records what the space `name` holds (omitted from `spaces.<name>` when it is the default) and rewrites its agent file from the new
+ * schema (an agent file edited by hand is replaced, as by `cortex schema --write`). With `sync`, commits cortex.json and the agent file.
+ * Nothing is moved or deleted: the pages and sources of a kind no longer enabled stay where they are.
+ */
+export async function setContent(instance: string, name: string, content: Content[], sync = false): Promise<void> {
+  const { spaces: all, ...rest } = await readConfig(instance), { content: _, ...entry } = ((all as Record<string, Record<string, unknown>> | undefined)?.[name] ?? {});
+  const next = { ...entry, ...(recordable(content) && { content }) }, spaces = { ...(all as object), [name]: next } as Record<string, unknown>;
+  if (!Object.keys(next).length) delete spaces[name];
+  await writeConfig(configFile(instance), { ...rest, ...(Object.keys(spaces).length && { spaces }) });
+  const { file } = await writeSchema(spaceRoot(instance, name), true);
+  if (sync) commitSpacePaths(instance, `space: ${name} holds ${content.join(" and ")}`, ["cortex.json", `spaces/${name}/${file}`]);
 }
 
 /** Archived spaces wait here, out of `spaces/` (so nothing serves or searches them): `.cortex/archive/<name>-<yyyymmdd-hhmmss>/`. */
@@ -118,11 +142,11 @@ export function restoreSpace(instance: string, name: string, sync = false): void
 }
 
 /** cortex space list|add|migrate|set|member|archive|restore, run at the instance root (the folder holding cortex.json). */
-export async function spaceCmd(instance: string, [sub, name, action, ref]: string[], opts: { repo?: string; schema?: string; visibility?: string; title?: string; role?: string; "read-only"?: string; sync?: boolean; archived?: boolean }) {
+export async function spaceCmd(instance: string, [sub, name, action, ref]: string[], opts: { repo?: string; content?: string; schema?: string; visibility?: string; title?: string; role?: string; "read-only"?: string; sync?: boolean; archived?: boolean }) {
   const known = () => { if (!listSpaces(instance).includes(checkName(name))) throw usage(`unknown space: ${name} (spaces: ${listSpaces(instance).join(", ") || "none"}).`); return name!; };
   switch (sub) {
     case "list": {
-      const config = await readConfig(instance), names = listSpaces(instance);
+      const config = await readConfig(instance), names = listSpaces(instance), loaded = await loadConfig(instance).catch(() => ({}));
       const def = typeof config.default_space === "string" ? config.default_space : names.length === 1 ? names[0] : undefined;
       if (opts.archived) {
         const dirs = archivedDirs(instance);
@@ -134,7 +158,7 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
       if (!names.length) console.log(paint.dim("No space (cortex space add <name>)."));
       for (const n of names) {
         const r = rows.get(n);
-        console.log(`${n === def ? "*" : " "} ${n}  ${r?.visibility ?? "open"}${r?.read_only ? "  read-only" : ""}${r?.title ? `  "${r.title}"` : ""}${existsSync(join(spaceRoot(instance, n), ".git")) ? paint.dim("  (own repo)") : ""}`);
+        console.log(`${n === def ? "*" : " "} ${n}  ${r?.visibility ?? "open"}${r?.read_only ? "  read-only" : ""}${r?.title ? `  "${r.title}"` : ""}  ${contentOf(loaded, n).join("+")}${existsSync(join(spaceRoot(instance, n), ".git")) ? paint.dim("  (own repo)") : ""}`);
       }
       return;
     }
@@ -150,21 +174,25 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
       return;
     case "add":
       if (existsSync(accountsFile(instance)) && withAccounts(instance, (db) => getSpace(db, checkName(name))?.archived_at)) throw usage(`space ${name} is archived: cortex space restore ${name}, or archive it for good under another name.`);
-      await addSpace(instance, name, opts.repo, opts.schema);
+      const content = opts.content === undefined ? undefined : parseContent(opts.content);
+      await addSpace(instance, name, opts.repo, { content, schema: opts.schema });
       if (existsSync(accountsFile(instance))) withAccounts(instance, (db) => forgetSpace(db, name!)); // nothing of an earlier space of that name carries over
-      if (opts.sync && !opts.repo) commitSpacePaths(instance, `space: add ${name}`, await addedPaths(instance, name!, opts.schema)); // a clone is its own repository's
-      console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
+      if (opts.sync && !opts.repo) commitSpacePaths(instance, `space: add ${name}`, await addedPaths(instance, name!, (content && recordable(content)) || opts.schema)); // a clone is its own repository's
+      console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${content ? ` (content: ${content.join(", ")})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
       return;
     case "set": {
       known();
-      const { visibility, title } = opts, ro = opts["read-only"];
-      if (visibility === undefined && title === undefined && ro === undefined) throw usage(USAGE);
+      const { visibility, title } = opts, ro = opts["read-only"], content = opts.content === undefined ? undefined : parseContent(opts.content);
+      if (visibility === undefined && title === undefined && ro === undefined && !content) throw usage(USAGE);
       if (ro !== undefined && ro !== "true" && ro !== "false") throw usage("--read-only expects true or false.");
       if (visibility !== undefined && visibility !== "open" && visibility !== "private") throw usage("--visibility expects open or private.");
       const t = title === undefined ? undefined : title.replace(/\s+/g, " ").trim();
       if (t !== undefined && [...t].length > MAX_TITLE) throw usage(`--title is at most ${MAX_TITLE} characters.`);
-      withAccounts(instance, (db) => setSpace(db, name!, { ...(visibility && { visibility }), ...(t !== undefined && { title: t || null }), ...(ro !== undefined && { read_only: ro === "true" }) }));
-      console.log(`${paint.ok("✓")} space ${name}${visibility ? `: ${visibility}` : ""}${ro !== undefined ? `${visibility ? "," : ":"} ${ro === "true" ? "read-only" : "writable"}` : ""}${t !== undefined ? (t ? `, title "${t}"` : ", title cleared") : ""}.`);
+      if (visibility !== undefined || title !== undefined || ro !== undefined)
+        withAccounts(instance, (db) => setSpace(db, name!, { ...(visibility && { visibility }), ...(t !== undefined && { title: t || null }), ...(ro !== undefined && { read_only: ro === "true" }) }));
+      if (content) await setContent(instance, name!, content, opts.sync);
+      if (content) console.log(`${paint.ok("✓")} space ${name} holds ${content.join(" and ")}: its agent file is rewritten; what is already there stays.`);
+      if (visibility !== undefined || title !== undefined || ro !== undefined) console.log(`${paint.ok("✓")} space ${name}${visibility ? `: ${visibility}` : ""}${ro !== undefined ? `${visibility ? "," : ":"} ${ro === "true" ? "read-only" : "writable"}` : ""}${t !== undefined ? (t ? `, title "${t}"` : ", title cleared") : ""}.`);
       return;
     }
     case "member": {

@@ -21,7 +21,7 @@ const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
 const AUTH = { auth: { public_urls: ["http://localhost"], github: { client_id: "x", allow: [1] } } };
 /** An entry of GET /api/spaces for a space with no title and not read-only. */
-const plain = (name: string) => ({ name, title: null, read_only: false });
+const plain = (name: string) => ({ name, title: null, read_only: false, content: ["resources"] });
 const ANYONE = { ...AUTH, site_spaces: { create: "anyone" } };
 const SECRET = "CORTEX_GITHUB_CLIENT_SECRET";
 let saved: string | undefined;
@@ -207,19 +207,27 @@ test("POST /api/spaces is for the owners of a space unless site_spaces.create is
   expect((await s2.post("/api/spaces", { name: "eves" }, { origin: s2.origin, ...eve.cookie })).status).toBe(201);
 });
 
-test("POST /api/spaces with schema: \"notes\" records it and writes the space's agent file; any other schema is a 400", async () => {
+test("POST /api/spaces { name, title?, content? }: content is recorded unless it is the default and writes the agent file; a schema, or a bad content or title, is a 400", async () => {
   const root = instance(["first"], ANYONE);
   const ada = person(root, "1");
-  const { post, origin } = await start(root);
+  const { post, get, origin } = await start(root);
   const create = (body: object) => post("/api/spaces", body, { origin, ...ada.cookie });
-  for (const schema of ["../../etc/passwd", "schemas/x.md", "veille", "", 3, true]) expect((await create({ name: "mine", schema })).status).toBe(400);
+  for (const extra of [{ schema: "notes" }, { schema: "schemas/x.md" }, { schema: null }, { content: [] }, { content: ["blog"] }, { content: ["notes", "notes"] }, { content: "notes" }, { content: 3 }, { title: 3 }, { title: "x".repeat(121) }]) {
+    const r = await create({ name: "mine", ...extra });
+    expect([JSON.stringify(extra), r.status, typeof (await r.json()).error]).toEqual([JSON.stringify(extra), 400, "string"]);
+  }
   expect(existsSync(join(root, "spaces/mine"))).toBe(false);
-  expect((await create({ name: "mine", schema: "notes" })).status).toBe(201);
-  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { schema: "notes" } });
+  expect((await create({ name: "mine", title: "  Mes   notes ", content: ["notes"] })).status).toBe(201);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { content: ["notes"] } });
   expect(readFileSync(join(root, "spaces/mine/CLAUDE.md"), "utf8")).toContain("a space of personal notes");
-  expect((await create({ name: "plain", schema: null })).status).toBe(201); // a watch space: no schema key
-  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { schema: "notes" } });
+  expect((await create({ name: "both", content: ["notes", "resources"] })).status).toBe(201);
+  expect(readFileSync(join(root, "spaces/both/CLAUDE.md"), "utf8")).toContain("## From notes to pages");
+  expect((await create({ name: "plain", content: null })).status).toBe(201); // resources, the default: no content key
+  expect((await create({ name: "plain2", content: ["resources"] })).status).toBe(201);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { content: ["notes"] }, both: { content: ["resources", "notes"] } });
   expect(readFileSync(join(root, "spaces/plain/CLAUDE.md"), "utf8")).toContain("the second brain");
+  const listed = (await (await get("/api/spaces", ada.cookie)).json()).spaces as { name: string; title: string | null; content: string[] }[];
+  expect(listed.map((x) => [x.name, x.title, x.content]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([["both", null, ["resources", "notes"]], ["first", null, ["resources"]], ["mine", "Mes notes", ["notes"]], ["plain", null, ["resources"]], ["plain2", null, ["resources"]]]);
 });
 
 test("POST /api/spaces: a space whose first build fails is not left behind", async () => {
@@ -230,8 +238,8 @@ test("POST /api/spaces: a space whose first build fails is not left behind", asy
   expect(r.status).toBe(500);
   expect(existsSync(join(root, "spaces/boom"))).toBe(false);
   expect(members(root, "boom")).toEqual([]);
-  expect((await post("/api/spaces", { name: "boom", schema: "notes" }, { origin, ...ada.cookie })).status).toBe(500);
-  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces ?? {}).toEqual({}); // its schema is not left in cortex.json
+  expect((await post("/api/spaces", { name: "boom", content: ["notes"] }, { origin, ...ada.cookie })).status).toBe(500);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces ?? {}).toEqual({}); // its content is not left in cortex.json
   expect((await get("/s/boom/", ada.cookie)).status).toBe(404);
   expect(said.some((m) => m.startsWith("space boom:"))).toBe(true);
 });
@@ -261,15 +269,16 @@ test("GET /s/<space>/api/space: members only (404 to anyone else, whatever the v
   const { ada, bob, eve, get, root } = await manage();
   const info = await isJson(await get("/s/mine/api/space", ada.cookie));
   expect(info.status).toBe(200);
-  expect(info.body).toMatchObject({ name: "mine", title: null, visibility: "private", read_only: false, kind: "watch", storage: "instance", you: "owner" });
+  expect(info.body).toMatchObject({ name: "mine", title: null, visibility: "private", read_only: false, content: ["resources"], custom_schema: false, storage: "instance", you: "owner" });
+  expect(info.body).not.toHaveProperty("kind");
   expect(info.body.members.map((m: { id: string; role: string }) => [m.id, m.role])).toEqual([[ada.id, "owner"], [bob.id, "member"]]);
   expect((await isJson(await get("/s/mine/api/space", bob.cookie))).body.you).toBe("member"); // a member reads, never changes
   for (const who of [undefined, eve.cookie, { cookie: "cortex_session=forged" }]) expect((await get("/s/mine/api/space", who)).status).toBe(404);
   expect((await get("/s/open/api/space", eve.cookie)).status).toBe(404); // open, but not a member: nothing to administer from the web
   expect((await get("/s/open/api/space")).status).toBe(404);
   mkdirSync(join(root, "spaces/mine/.git"));
-  writeFileSync(join(root, "cortex.json"), JSON.stringify({ ...ANYONE, spaces: { mine: { schema: "notes" } } }));
-  expect((await isJson(await get("/s/mine/api/space", ada.cookie))).body).toMatchObject({ kind: "notes", storage: "own repo" });
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ ...ANYONE, spaces: { mine: { content: ["notes", "resources"], schema: "schemas/mine.md" } } }));
+  expect((await isJson(await get("/s/mine/api/space", ada.cookie))).body).toMatchObject({ content: ["notes", "resources"], custom_schema: true, storage: "own repo" });
 });
 
 test("PATCH /s/<space>/api/space: owners set the title, the visibility and read-only; the slug never changes", async () => {
@@ -294,6 +303,28 @@ test("PATCH /s/<space>/api/space: owners set the title, the visibility and read-
   expect((await patch({ title: "x" }, ada.cookie, { origin: "https://evil.example" })).status).toBe(403);
   expect((await isJson(await get("/s/mine/api/space", ada.cookie))).body.title).toBeNull();
   expect((await send("PUT", "/s/mine/api/space", {}, { origin, ...ada.cookie })).status).toBe(405);
+});
+
+test("PATCH /s/<space>/api/space { content }: owners only, validated before anything is applied, rewrites the agent file and cortex.json (the default leaves no entry)", async () => {
+  const { ada, bob, eve, send, origin, root } = await manage();
+  const patch = (body: unknown, who: Record<string, string> = ada.cookie, h: Record<string, string> = { origin }) => send("PATCH", "/s/mine/api/space", body, { ...h, ...who });
+  const config = () => JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces;
+  const agent = () => readFileSync(join(root, "spaces/mine/CLAUDE.md"), "utf8");
+  expect((await isJson(await patch({ content: ["notes", "resources"] }))).body).toMatchObject({ content: ["resources", "notes"], custom_schema: false }); // alone: not an empty patch
+  expect(config()).toEqual({ mine: { content: ["resources", "notes"] } });
+  expect(agent()).toContain("## From notes to pages");
+  expect((await isJson(await patch({ content: ["notes"], title: "Notes" }))).body).toMatchObject({ content: ["notes"], title: "Notes" });
+  expect(agent()).toContain("a space of personal notes");
+  for (const bad of [[], ["blog"], ["notes", "notes"], "notes", null, 3]) expect([JSON.stringify(bad), (await patch({ content: bad })).status]).toEqual([JSON.stringify(bad), 400]);
+  expect((await patch({ content: ["resources"], title: 3 })).status).toBe(400); // one bad field: nothing is applied
+  expect(config()).toEqual({ mine: { content: ["notes"] } });
+  expect((await patch({ content: ["resources"] }, bob.cookie)).status).toBe(403); // a member
+  expect((await patch({ content: ["resources"] }, eve.cookie)).status).toBe(404); // a stranger
+  expect((await patch({ content: ["resources"] }, ada.cookie, {})).status).toBe(403); // no Origin
+  expect(config()).toEqual({ mine: { content: ["notes"] } });
+  expect((await isJson(await patch({ content: ["resources"] }))).body.content).toEqual(["resources"]);
+  expect(config()).toBeUndefined(); // the default is not recorded, the empty entry is dropped
+  expect(agent()).toContain("the second brain");
 });
 
 test("members: owners change roles and remove people; the last owner stays; a stranger cannot", async () => {
@@ -460,7 +491,7 @@ test("the share target: /s/<space>/share/ delivers into that space (behind its v
   expect([inbox("a").length, inbox("b").length, inbox("priv").length]).toEqual([1, 1, 1]); // each in its own space; the default one got the root's
 });
 
-test("with --sync the creation commit holds the space's wiki, raw and agent file (and cortex.json for a schema)", async () => {
+test("with --sync the creation commit holds the space's wiki, raw and agent file (and cortex.json for a content)", async () => {
   const d = mkdtempSync(join(tmpdir(), "cortex-spaces-sync-")), sh = (cwd: string, ...a: string[]) => { const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, stderr: "pipe", stdout: "pipe" }); if (r.exitCode) throw new Error(r.stderr.toString()); return r.stdout.toString().trim(); };
   sh(d, "init", "-q", "--bare", "-b", "main", "remote.git"); sh(d, "clone", "-q", "remote.git", "seed");
   mkdirSync(join(d, "seed/spaces/first/wiki"), { recursive: true });
@@ -468,14 +499,18 @@ test("with --sync the creation commit holds the space's wiki, raw and agent file
   sh(join(d, "seed"), "add", "-A"); sh(join(d, "seed"), "commit", "-qm", "init"); sh(join(d, "seed"), "push", "-q", "-u", "origin", "main");
   sh(d, "clone", "-q", "remote.git", "work");
   const root = join(d, "work"), ada = person(root, "1");
-  const { post, origin } = await start(root, true);
-  expect((await post("/api/spaces", { name: "mine", schema: "notes" }, { origin, ...ada.cookie })).status).toBe(201);
+  const { post, send, origin } = await start(root, true);
+  expect((await post("/api/spaces", { name: "mine", content: ["notes"] }, { origin, ...ada.cookie })).status).toBe(201);
   const files = sh(d, "--git-dir=remote.git", "ls-tree", "-r", "--name-only", "main").split("\n");
   expect(files).toEqual(expect.arrayContaining(["spaces/mine/CLAUDE.md", "spaces/mine/wiki/index.md", "spaces/mine/raw/.gitkeep", "cortex.json"]));
-  expect(sh(d, "--git-dir=remote.git", "show", "main:cortex.json")).toContain('"schema": "notes"');
+  expect(sh(d, "--git-dir=remote.git", "show", "main:cortex.json")).toContain('"notes"');
   expect(sh(d, "--git-dir=remote.git", "show", "main:spaces/mine/CLAUDE.md")).toContain("a space of personal notes");
   expect((await post("/api/spaces", { name: "plain" }, { origin, ...ada.cookie })).status).toBe(201);
   expect(sh(d, "--git-dir=remote.git", "ls-tree", "-r", "--name-only", "main")).toContain("spaces/plain/CLAUDE.md");
+  expect((await send("PATCH", "/s/mine/api/space", { content: ["resources", "notes"] }, { origin, ...ada.cookie })).status).toBe(200); // a change of content is committed with its agent file
+  expect(sh(d, "--git-dir=remote.git", "show", "main:spaces/mine/CLAUDE.md")).toContain("the second brain");
+  expect(sh(d, "--git-dir=remote.git", "show", "main:cortex.json")).toContain('"resources"');
+  expect(sh(join(d, "work"), "log", "-1", "--format=%s")).toBe("space: mine holds resources and notes");
 });
 
 test("the service worker of a space answers right after its creation, and while it is rebuilt; every 404 under /s/<name>/ says which branch answered", async () => {

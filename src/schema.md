@@ -39,6 +39,7 @@ type: RawSource
 title: "Original title"
 url: https://…                # absent for a personal note
 kind: article                 # article | social | pdf | video | audio | image | note | repo | thread
+content: resource             # resource | note (set by the CLI: an outside source, or the human's own writing)
 sha256: …                     # filled in by the CLI
 blob: .cortex/blobs/…         # optional binary original, outside git
 fetched_at: 2026-11-04T09:12:00+01:00
