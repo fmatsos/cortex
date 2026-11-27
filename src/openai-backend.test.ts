@@ -459,10 +459,10 @@ test("openai: tool_choice required is sent until a block is registered, then omi
   // the same run without the option: never sent
   const r2 = blockRegistry();
   expect(await play([tools(call("1", "look", { q: "a" })), tools(call("2", "render_blocks", facts)), text], undefined, [look, r2.tool])).toEqual([undefined, undefined, undefined]);
-  // render_blocks refused every time: required stops after askToolRounds + 2 turns, the model may answer
+  // render_blocks refused every time: required stops once askLayoutCalls calls are spent (no tool is offered), the model may answer
   const r3 = blockRegistry({ titles: new Map() });
   const bad = { blocks: [{ type: "pages", items: [{ path: "/nope", summary: "s" }] }] };
-  const n = LIMITS.askToolRounds + 2;
+  const n = LIMITS.askLayoutCalls;
   const choices = await play([...Array.from({ length: n }, (_, i) => tools(call(String(i), "render_blocks", bad))), text], r3.ready, [r3.tool]);
   expect(choices).toEqual([...Array(n).fill("required"), undefined]);
   expect(r3.ready()).toBe(false);
@@ -480,4 +480,52 @@ test("openai: the system prompt is the wiki schema, or `stream.system` when the 
   };
   expect(await first()).toEqual({ role: "system", content: await schemaText(root) });
   expect(await first({ system: "short" })).toEqual({ role: "system", content: "short" });
+});
+
+test("openai: a model that lays out for ever gets no tool after askLayoutCalls calls and writes the answer; a normal run is unchanged", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const { blockRegistry } = await import("./answer-blocks");
+  const call = (id: string, args: object) => ({ id, type: "function", function: { name: "render_blocks", arguments: JSON.stringify(args) } });
+  const tools = (...c: any[]) => ({ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: c } });
+  const facts = { blocks: [{ type: "facts", items: [{ label: "A", value: "1" }] }] };
+  const bad = { blocks: [{ type: "pages", items: [{ path: "/nope", summary: "s" }] }] };
+  // the fake server calls render_blocks as long as it is offered, and answers when no tool is: `limit` runs it, then the answer
+  const play = async (args: object, r: ReturnType<typeof blockRegistry>) => {
+    const seen: any[] = [];
+    const server = Bun.serve({ port: 0, async fetch(req) {
+      const body = await req.json(); seen.push(body);
+      return Response.json({ choices: [body.tools ? tools(call(String(seen.length), args)) : { finish_reason: "stop", message: { role: "assistant", content: "Answer. {{bloc-1}}" } }] });
+    } });
+    let out = "";
+    try { out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [r.tool], { onlyExtra: true, toolRounds: 4, blocksReady: r.ready }); }
+    finally { server.stop(true); }
+    return { out, seen };
+  };
+  const n = LIMITS.askLayoutCalls;
+  // blocks registered every time: n calls, then a request with no tools and no tool_choice, then the answer, blocks drawn
+  const r = blockRegistry();
+  const a = await play(facts, r);
+  expect(a.seen).toHaveLength(n + 1);
+  expect(a.seen.slice(0, n).every((b) => b.tools?.length === 1)).toBe(true);
+  expect("tools" in a.seen[n]).toBe(false);
+  expect("tool_choice" in a.seen[n]).toBe(false);
+  expect(a.seen[n].messages.at(-1)).toEqual({ role: "user", content: expect.stringContaining("no tool is offered any more") });
+  expect(a.out).toBe("Answer. {{bloc-1}}");
+  expect(r.assemble(a.out)).toContain("cortex-ui");
+  // no block ever registered (every call refused): the answer goes out without blocks and without a placeholder
+  const r2 = blockRegistry({ titles: new Map() });
+  const b = await play(bad, r2);
+  expect(b.seen).toHaveLength(n + 1);
+  expect("tools" in b.seen[n]).toBe(false);
+  expect(r2.ready()).toBe(false);
+  expect(r2.assemble(b.out)).toBe("Answer.");
+  // normal run: one render_blocks, then the answer; tools offered on both requests
+  const r3 = blockRegistry(), seen: any[] = [];
+  const script = [tools(call("1", facts)), { finish_reason: "stop", message: { role: "assistant", content: "ok {{bloc-1}}" } }];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [script[seen.length - 1]] }); } });
+  try { expect(await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [r3.tool], { onlyExtra: true, toolRounds: 4, blocksReady: r3.ready })).toBe("ok {{bloc-1}}"); }
+  finally { server.stop(true); }
+  expect(seen).toHaveLength(2);
+  expect(seen.every((x) => x.tools?.length === 1)).toBe(true);
+  expect(seen.some((x) => x.messages.some((m: any) => m.role === "user" && m.content.includes("no tool is offered any more")))).toBe(false);
 });

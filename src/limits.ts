@@ -93,6 +93,8 @@ export const LIMITS = {
   askEarlierChars: 300,
   /** Site question: turns that may read (Read, Grep, Glob); then only the display tool is offered and the model must answer from what it has read (the pages are already given in full). */
   askToolRounds: 4,
+  /** Site question: calls of the display tool (render_blocks) before no tool at all is offered and the model must write the answer (a model that lays out for ever never answers; observed: 98 calls in a row). */
+  askLayoutCalls: 3,
   /** Judge: simultaneous calls of one batch (a search, a site question): a hosted model rate-limits, a local server queues. */
   judgeConcurrency: 6,
   /** Judge: scores kept in `.cortex/judge.db`, forgotten after this many days… */

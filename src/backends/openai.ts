@@ -40,6 +40,9 @@ const CUT = `Your last answer exceeded the output limit (${LIMITS.llmMaxTokens} 
 /** What the model hears when it still calls a tool the reading cap took away: the call did not run. */
 const READING_OVER = "refused: your reading is over, this tool is no longer offered. Answer now from what you have read.";
 
+/** What the model hears when it still calls a tool after the layout calls (`LIMITS.askLayoutCalls`) are spent: no tool is offered, the call did not run. */
+const LAYOUT_OVER = "refused: no tool is offered any more. Write the answer now.";
+
 /**
  * `ep`: the server and its key, by default `endpoint` (config.ts): `base_url` of cortex.json, else $OPENAI_BASE_URL, else a
  * local Ollama; $OPENAI_API_KEY only to a URL the environment names. The site's questions pass their own (serve.ts askSetup).
@@ -59,6 +62,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
       const { url, key } = ep, signal = stream?.signal;
       let fixes = 0, cuts = 0, text = "", keep = false; // text: the parts of a final answer cut by the output limit; keep: the next turn goes on with it
       let reads = 0, capped = false; // reads: turns that ran reading tools; capped: past stream.toolRounds, only the extra tools that do not read are offered
+      let layouts = 0, over = false; // layouts: calls of the extra tools that do not read (render_blocks); over: past LIMITS.askLayoutCalls, no tool at all is offered
       for (let turn = 0; turn < LIMITS.agentTurns; turn++) {
         signal?.throwIfAborted(); // the reader left: no new request
         if (turn && !keep) stream?.reset?.(); // a new turn (tool round, check resend): what was shown is provisional
@@ -66,7 +70,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         // before the request, not after a 400: one rewrite of the old results when the context nears its budget, so the
         // server's prompt cache keeps the prefix on the turns in between
         if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
-        const offered = capped ? extraTools : tools;
+        const offered = over ? [] : capped ? extraTools : tools;
         // no block registered yet: the model must call a tool (reading, or render_blocks), never answer bare; bounded, so a model that never gets a block through still answers
         const required = !!offered.length && stream?.blocksReady?.() === false && turn < LIMITS.askToolRounds + 2;
         const res = await fetch(`${url}/chat/completions`, {
@@ -107,7 +111,9 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         }
         for (const c of msg.tool_calls) {
           signal?.throwIfAborted();
+          if (over) { messages.push({ role: "tool", tool_call_id: c.id, content: LAYOUT_OVER }); continue; } // a stray call with no tool offered
           if (capped && isRead(c.function.name)) { messages.push({ role: "tool", tool_call_id: c.id, content: READING_OVER }); continue; }
+          if (!isRead(c.function.name)) layouts++; // counted before it runs: a call that fails (bad arguments, refused blocks) still counts
           let args: Record<string, any>;
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
           stream?.step?.(c.function.name, args);
@@ -118,6 +124,11 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         if (stream?.toolRounds && !capped && msg.tool_calls.some((c: any) => isRead(c.function.name)) && ++reads >= stream.toolRounds) {
           capped = true;
           messages.push({ role: "user", content: promptText("ask-site-reading-over", {}) });
+        }
+        // the model keeps laying out: the next turn has no tools, so it can only write (no block registered: the answer goes out without blocks)
+        if (!over && layouts >= LIMITS.askLayoutCalls) {
+          over = true;
+          messages.push({ role: "user", content: promptText("ask-site-layout-over", {}) });
         }
       }
       throw new Error(`openai agent stopped after ${LIMITS.agentTurns} turns.`);

@@ -71,6 +71,9 @@ Pages the system retained for this question, most relevant first, given in full:
 ## ask-site-reading-over
 Your reading is over: search, get and related are no longer offered. Answer now from what you have read, and say plainly what the wiki does not cover. If you have not prepared blocks yet, call render_blocks now, then write the answer with their names.
 
+## ask-site-layout-over
+Enough layout: no tool is offered any more. Write the answer now, from what you have read and the blocks you have prepared, each name on its own line where its block belongs; if you prepared none, write it without blocks and never write a block name.
+
 ## ask-site-unread
 Also retained, left out here for length (get them when they matter):
 

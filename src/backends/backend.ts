@@ -33,7 +33,7 @@ export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
  * may run reading tools (the pack's, or the extra tools marked `read`); after them only the other extra tools are offered and the
  * model is told to answer (the openai client only; the claude client ignores it). `blocksReady`: false until a display block is
  * registered; meanwhile the openai client sends `tool_choice: "required"` (for `LIMITS.askToolRounds + 2` turns at most), so the
- * model cannot answer without calling a tool; the claude client ignores it. `system`: the system prompt of the run, in place of the
+ * model cannot answer without calling a tool; the claude client ignores it. After `LIMITS.askLayoutCalls` calls of the extra tools that do not read, the openai client offers no tool at all: the model can only write its answer (with the blocks it has, or none). `system`: the system prompt of the run, in place of the
  * wiki schema (the schema is for writing pages; the site's questions only read).
  */
 export type Stream = { text?: (delta: string) => void; reset?: () => void; step?: (name: string, args: Record<string, unknown>) => void; signal?: AbortSignal; toolRounds?: number; onlyExtra?: boolean; blocksReady?: () => boolean; system?: string };
