@@ -281,7 +281,7 @@ try {
       break;
     }
     case "space":
-      await (await import("./space")).spaceCmd(root, args, { repo: o.repo });
+      await (await import("./space")).spaceCmd(root, args, { repo: o.repo, schema: o.schema });
       break;
     case "config":
       finish(await configCmd(root, args), false);

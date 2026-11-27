@@ -121,11 +121,36 @@ describe("shared config", () => {
     expect(errors({ default_space: "veille", spaces: { veille: { repo: "x" }, pro: {} } })).toEqual([]);
     expect(errors({ default_space: "Not Valid" })[0]).toContain("default_space");
     expect(errors({ spaces: { "Bad Name": {} } })[0]).toContain("invalid space name");
-    expect(errors({ spaces: { a: { repo: "x", branch: "y" } } }).length).toBe(1); // strict: only repo
+    expect(errors({ spaces: { a: { repo: "x", branch: "y" } } }).length).toBe(1); // strict: only repo, schema
+  });
+
+  test("spaces.<name>.schema: the built-in notes, or a path; a bare unknown name is refused", () => {
+    const errors = (c: object) => lintConfig(c).filter((i) => i.level === "error").map((i) => i.msg);
+    expect(errors({ spaces: { pro: { schema: "notes" }, perso: { schema: "schemas/perso.md" }, a: { schema: "x.md" } } })).toEqual([]);
+    expect(errors({ spaces: { pro: { schema: "veille" } } })).toEqual(['unknown built-in schema "veille" in "spaces.<name>.schema" (notes), or give a path to a .md file.']);
+    expect(errors({ schema: "bogus" })[0]).toContain('unknown built-in schema "bogus"');
+    expect(errors({ schema: "notes" })).toEqual([]);
   });
 });
 
 describe("cortex space", () => {
+  test("add --schema notes records it, writes the space's agent file from it, and refuses a bad value before creating anything", async () => {
+    const root = tmp();
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ client: "codex" }));
+    expect(cortex(root, ["space", "add", "pro", "--schema", "notes"]).out).toContain("space pro created (schema: notes)");
+    expect(cortex(root, ["space", "add", "veille"]).code).toBe(0);
+    expect(await loadConfig(root)).toEqual({ client: "codex", spaces: { pro: { schema: "notes" } } });
+    expect(readFileSync(join(root, "spaces/pro/AGENTS.md"), "utf8")).toContain("a space of personal notes");
+    expect(readFileSync(join(root, "spaces/veille/AGENTS.md"), "utf8")).toContain("the second brain"); // no schema: the built-in default
+    expect(existsSync(join(root, "AGENTS.md"))).toBe(false);
+    for (const bad of ["veille", "absent.md"]) {
+      const r = cortex(root, ["space", "add", "x", "--schema", bad]);
+      expect([r.code, existsSync(join(root, "spaces/x"))]).toEqual([2, false]);
+    }
+    expect(cortex(root, ["schema"], { CORTEX_SPACE: "pro" }).out).toContain("a space of personal notes");
+    expect(cortex(join(root, "spaces/veille"), ["schema"]).out).toContain("the second brain");
+  });
+
   test("add creates an empty space with its index and journal; list marks the default; a name is validated", () => {
     const root = tmp();
     writeFileSync(join(root, "cortex.json"), "{}");

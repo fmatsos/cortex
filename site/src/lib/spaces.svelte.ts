@@ -23,9 +23,9 @@ class Spaces {
 		} catch { this.available = false; }
 	}
 
-	/** Creates a space and returns its URL. Throws `ApiError` (400 invalid name, 409 exists, 401 signed out, 403 refused). */
-	async create(name: string): Promise<string> {
-		return (await api<{ url: string }>("/api/spaces", { method: "POST", body: { name } })).url;
+	/** Creates a space (`schema: "notes"` for a space of personal notes) and returns its URL. Throws `ApiError` (400 invalid, 409 exists, 401 signed out, 403 refused). */
+	async create(name: string, schema?: "notes"): Promise<string> {
+		return (await api<{ url: string }>("/api/spaces", { method: "POST", body: schema ? { name, schema } : { name } })).url;
 	}
 }
 

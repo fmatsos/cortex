@@ -1,14 +1,15 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { regenerateCtx } from "./catalog";
-import { configFile, readConfig, writeConfig } from "./config";
+import { BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
 import { openWiki } from "./context";
 import { CortexError, isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
+import { writeSchema } from "./schema";
 import { paint } from "./style";
 import { git } from "./sync";
 
 const usage = (msg: string) => new CortexError(msg, "usage");
-const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] | migrate <name>";
+const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name>";
 
 /** What a space owns at the instance root of a legacy wiki (everything else there is shared by the instance). */
 const SPACE_PATHS = ["wiki", "raw", "paths", "inbox"];
@@ -20,11 +21,16 @@ const checkName = (name?: string) => {
   return name;
 };
 
-/** Creates `spaces/<name>/` (an empty wiki, or the clone of `repo`): what `cortex space add` does, and `POST /api/spaces` of `cortex serve` (never with a repo). */
-export async function addSpace(instance: string, name: string | undefined, repo?: string) {
+/** Creates `spaces/<name>/` (an empty wiki, or the clone of `repo`) with its agent file: what `cortex space add` does, and `POST /api/spaces` of `cortex serve` (never with a repo). `schema` is recorded under `spaces.<name>`. */
+export async function addSpace(instance: string, name: string | undefined, repo?: string, schema?: string) {
   checkName(name);
   const dir = spaceRoot(instance, name!);
   if (existsSync(dir)) throw usage(`space ${name} already exists.`);
+  if (schema) { // checked before anything is created: a bad value must not leave a half-made space
+    const e = lintConfig({ spaces: { [name!]: { schema } } }).find((i) => i.level === "error");
+    if (e) throw usage(e.msg);
+    if (!(BUILT_IN_SCHEMAS as readonly string[]).includes(schema) && !existsSync(resolve(instance, schema))) throw usage(`schema not found: ${schema} (relative to the instance root).`);
+  }
   if (!isMultiSpace(instance) && (existsSync(join(instance, "wiki")) || existsSync(join(instance, "raw"))))
     throw usage(`this wiki has wiki/ and raw/ at its root: cortex space migrate <name> moves them into a space first.`);
   mkdirSync(join(instance, "spaces"), { recursive: true });
@@ -39,13 +45,16 @@ export async function addSpace(instance: string, name: string | undefined, repo?
   if (repo) { // the instance's own git must not see the clone
     const ignore = join(instance, ".gitignore"), text = existsSync(ignore) ? readFileSync(ignore, "utf8") : "", line = `/spaces/${name}/`;
     if (!text.split("\n").includes(line)) writeFileSync(ignore, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
-    const config = await readConfig(instance);
-    await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { repo } } });
   }
+  if (repo || schema) {
+    const config = await readConfig(instance);
+    await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { ...(repo && { repo }), ...(schema && { schema }) } } });
+  }
+  await writeSchema(dir, false); // the agent file of this space (CLAUDE.md or AGENTS.md), from its effective schema
 }
 
 /** cortex space list|add|migrate, run at the instance root (the folder holding cortex.json). */
-export async function spaceCmd(instance: string, [sub, name]: string[], opts: { repo?: string }) {
+export async function spaceCmd(instance: string, [sub, name]: string[], opts: { repo?: string; schema?: string }) {
   switch (sub) {
     case "list": {
       const config = await readConfig(instance), names = listSpaces(instance);
@@ -55,8 +64,8 @@ export async function spaceCmd(instance: string, [sub, name]: string[], opts: { 
       return;
     }
     case "add":
-      await addSpace(instance, name, opts.repo);
-      console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}: spaces/${name}/`);
+      await addSpace(instance, name, opts.repo, opts.schema);
+      console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
       return;
     case "migrate": {
       checkName(name);

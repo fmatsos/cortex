@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { accountsFile, addSpaceMember, createSession, openAccounts, randomToken, sha256, spaceMembers, upsertUser } from "./accounts";
@@ -158,6 +158,21 @@ test("POST /api/spaces: same origin, signed in, a valid new name; the creator is
   expect(((await (await get("/api/spaces", bob.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "first" }]);
 });
 
+test("POST /api/spaces with schema: \"notes\" records it and writes the space's agent file; any other schema is a 400", async () => {
+  const root = instance(["first"], AUTH);
+  const ada = person(root, "1");
+  const { post, origin } = await start(root);
+  const create = (body: object) => post("/api/spaces", body, { origin, ...ada.cookie });
+  for (const schema of ["../../etc/passwd", "schemas/x.md", "veille", "", 3, true]) expect((await create({ name: "mine", schema })).status).toBe(400);
+  expect(existsSync(join(root, "spaces/mine"))).toBe(false);
+  expect((await create({ name: "mine", schema: "notes" })).status).toBe(201);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { schema: "notes" } });
+  expect(readFileSync(join(root, "spaces/mine/CLAUDE.md"), "utf8")).toContain("a space of personal notes");
+  expect((await create({ name: "plain", schema: null })).status).toBe(201); // a watch space: no schema key
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces).toEqual({ mine: { schema: "notes" } });
+  expect(readFileSync(join(root, "spaces/plain/CLAUDE.md"), "utf8")).toContain("the second brain");
+});
+
 test("POST /api/spaces: a space whose first build fails is not left behind", async () => {
   const root = instance(["first"], AUTH);
   const ada = person(root, "1");
@@ -166,6 +181,8 @@ test("POST /api/spaces: a space whose first build fails is not left behind", asy
   expect(r.status).toBe(500);
   expect(existsSync(join(root, "spaces/boom"))).toBe(false);
   expect(members(root, "boom")).toEqual([]);
+  expect((await post("/api/spaces", { name: "boom", schema: "notes" }, { origin, ...ada.cookie })).status).toBe(500);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces ?? {}).toEqual({}); // its schema is not left in cortex.json
   expect((await get("/s/boom/", ada.cookie)).status).toBe(404);
   expect(said.some((m) => m.startsWith("space boom:"))).toBe(true);
 });

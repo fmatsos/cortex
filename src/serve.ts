@@ -19,7 +19,7 @@ import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
 import { addSpaceMember, deleteSpaceMembers, spaceMembers } from "./accounts";
-import { loadConfig } from "./config";
+import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { addSpace } from "./space";
 
@@ -513,25 +513,28 @@ export async function serve(root: string, o: ServeOpts) {
     if (!(await accounts.configured())) return Response.json({ error: "sign-in is not configured: spaces are created with cortex space add." }, { status: 403, headers: noStore });
     const user = await accounts.userOf(req);
     if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
-    const name = await req.json().then((b: { name?: unknown }) => b?.name, () => undefined);
-    if (typeof name !== "string" || !SPACE_NAME.test(name)) return Response.json({ error: "expected { name }: lowercase letters, digits and dashes, at most 40, starting with a letter or digit." }, { status: 400, headers: noStore });
+    const body = await req.json().then((b: { name?: unknown; schema?: unknown }) => b ?? {}, () => ({} as { name?: unknown; schema?: unknown }));
+    const { name, schema } = body;
+    if (typeof name !== "string" || !SPACE_NAME.test(name) || (schema != null && schema !== "notes")) // the schema is never a path from the web
+      return Response.json({ error: 'expected { name, schema? }: a name of lowercase letters, digits and dashes (40 at most, starting with a letter or digit); schema, if any, is "notes".' }, { status: 400, headers: noStore });
     if (sites.has(name) || creating.has(name) || existsSync(spaceRoot(root, name))) return Response.json({ error: `space ${name} already exists.` }, { status: 409, headers: noStore });
     creating.add(name);
     const store = accounts.store();
     let site: Site | undefined;
     try {
-      await addSpace(root, name); // what `cortex space add` does
+      await addSpace(root, name, undefined, schema ?? undefined); // what `cortex space add` does
       addSpaceMember(store, name, user.id);
       site = await mount(name);
       await site.start();
       sites.set(name, site);
     } catch (e) {
       site?.stop(); rmSync(spaceRoot(root, name), { recursive: true, force: true }); deleteSpaceMembers(store, name);
+      if (schema) await readConfig(root).then((c) => { delete (c.spaces as Record<string, unknown> | undefined)?.[name]; return writeConfig(configFile(root), c); }).catch(() => {});
       say(`space ${name}: ${(e as Error).message}`);
       return Response.json({ error: `the space could not be created: ${(e as Error).message}` }, { status: 500, headers: noStore });
     } finally { creating.delete(name); }
     say(`space ${name} created for ${user.name ?? user.id}`);
-    if (o.sync) await serial(() => commitAndPush(root, `space: add ${name}`, [`spaces/${name}/wiki`, `spaces/${name}/raw`])).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
+    if (o.sync) await serial(() => commitAndPush(root, `space: add ${name}`, [...(schema ? ["cortex.json"] : []), `spaces/${name}/wiki`, `spaces/${name}/raw`])).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
     return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
   };
 
