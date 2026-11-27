@@ -1,5 +1,5 @@
-import { renameSync } from "node:fs";
-import { CONFIG_KEYS, configFile, lintConfig, readConfig, type ConfigIssue } from "./config";
+import { join } from "node:path";
+import { CONFIG_KEYS, configFile, lintConfig, readConfig, writeConfig, type ConfigIssue } from "./config";
 import { CortexError } from "./lib";
 import { collector, type Result } from "./print";
 import { paint } from "./style";
@@ -10,14 +10,8 @@ const NUMBERS = new Set(["max_tags", "fetch_timeout"]);
 /** cortex config init|lint|get|set|remove. Every write is validated before being made. Returns what to print; throws on misuse. */
 export async function configCmd(root: string, [sub, key, value]: string[]): Promise<Result> {
   const { say, done } = collector();
-  const f = configFile(root);
-  const save = async (c: Record<string, unknown>) => {
-    const e = lintConfig(c).filter((i) => i.level === "error");
-    if (e.length) throw new Error(e.map((i) => i.msg).join(" "));
-    // tmp + rename: cortex.json marks the root, a half-written one would break every command
-    await Bun.write(`${f.name}.tmp`, JSON.stringify(c, null, 2) + "\n");
-    renameSync(`${f.name}.tmp`, f.name!);
-  };
+  const f = sub === "init" ? Bun.file(join(root, "cortex.json")) : configFile(root); // init creates the instance where it is called
+  const save = (c: Record<string, unknown>) => writeConfig(f, c);
   const checkKey = () => {
     if (!(CONFIG_KEYS as readonly string[]).includes(key ?? "")) throw new CortexError(`Expected a property: ${CONFIG_KEYS.join(", ")}.`, "usage");
   };
@@ -51,7 +45,7 @@ export async function configCmd(root: string, [sub, key, value]: string[]): Prom
     case "set":
       checkKey();
       if (!value) throw new CortexError(`Usage: cortex config set ${key} <value>`, "usage");
-      if (key === "parser" || key === "embed" || key === "auth") throw new CortexError(`${key} holds nested settings: edit it in cortex.json (see the README).`, "usage");
+      if (key === "parser" || key === "embed" || key === "auth" || key === "spaces") throw new CortexError(`${key} holds nested settings: edit it in cortex.json (see the README).`, "usage");
       await save({ ...(await readConfig(root)), [key]: NUMBERS.has(key) && /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value });
       return done(true);
     case "remove": {

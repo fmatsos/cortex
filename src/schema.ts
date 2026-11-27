@@ -1,16 +1,17 @@
 import { join, resolve } from "node:path";
 import { agentFileFor, loadConfig } from "./config";
+import { instanceRoot } from "./lib";
 import SCHEMA from "./schema.md" with { type: "text" }; // embedded: a compiled binary has no src/ next to it
 
 /** Wiki language when `language` is unset in cortex.json. */
 export const DEFAULT_LANGUAGE = "English";
 
-/** Effective schema: the file named by `schema` in cortex.json (relative to the root), else the built-in one; `{{language}}` filled from `language`. */
+/** Effective schema: the file named by `schema` in cortex.json (relative to the instance root), else the built-in one; `{{language}}` filled from `language`. */
 export async function schemaText(root: string): Promise<string> {
   const c = await loadConfig(root);
   let text = SCHEMA;
   if (c.schema) {
-    const f = Bun.file(resolve(root, c.schema));
+    const f = Bun.file(resolve(instanceRoot(root), c.schema));
     if (!(await f.exists())) throw new Error(`schema not found: ${c.schema} (schema key of cortex.json)`);
     text = await f.text();
   }

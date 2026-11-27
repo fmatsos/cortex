@@ -52,11 +52,13 @@ const WHO = "cortex-remote";
 export function changedPaths(root: string): string[] {
   const r = Bun.spawnSync(["git", "-C", root, "status", "--porcelain=v1", "-z", "-uall", "--", ...SYNC_PATHS], { stdout: "pipe", stderr: "pipe", env: process.env });
   if (r.exitCode !== 0) throw new Error(`git status: ${r.stderr.toString().trim()}`);
-  // -z: "XY path", NUL-separated, unquoted; a rename or copy is followed by its old name, staged too
-  const out: string[] = [], parts = r.stdout.toString().split("\0").filter(Boolean);
+  // -z: "XY path", NUL-separated, unquoted; a rename or copy is followed by its old name, staged too.
+  // The paths are relative to the repository top, not to `root` (a space inside the instance's repo): back to `root`, whose pathspecs `git add` reads.
+  const prefix = git(root, "rev-parse", "--show-prefix"), out: string[] = [], parts = r.stdout.toString().split("\0").filter(Boolean);
+  const own = (p: string) => { if (p.startsWith(prefix)) out.push(p.slice(prefix.length)); }; // a rename from another folder: not ours
   for (let i = 0; i < parts.length; i++) {
-    out.push(parts[i]!.slice(3));
-    if (/^[RC]/.test(parts[i]!)) out.push(parts[++i]!);
+    own(parts[i]!.slice(3));
+    if (/^[RC]/.test(parts[i]!)) own(parts[++i]!);
   }
   return out;
 }

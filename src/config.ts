@@ -1,7 +1,9 @@
+import { renameSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { checkTemplate, type NamingKey } from "./template";
 import { LIMITS } from "./limits";
+import { instanceRoot, SPACE_NAME } from "./lib";
 
 /**
  * cortex.json: schema, defaults, reading and linting. Imports nothing from naming.ts, schema.ts or backends/
@@ -140,6 +142,14 @@ const SHAPE = {
       allow: list("auth.google.allow", text("auth.google.allow").refine((v) => /^[^@\s]+@[^@\s]+$/.test(v), { error: '"auth.google.allow" holds e-mail addresses.' }), "e-mail addresses"),
     }, "client_id, allow").nullish(),
   }, { error: (i) => i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" in "auth" (public_urls, oidc, github, google).` : '"auth" must be an object (public_urls, oidc, github, google), or null.' }).nullish(),
+  /** Space used when none is chosen (--space, $CORTEX_SPACE, the folder): multi-space instances (`spaces/`), see `cortex space`. */
+  default_space: str("default_space").refine((v) => v == null || SPACE_NAME.test(v), { error: `"default_space" must be a space name (${SPACE_NAME}).` }),
+  /** Per-space settings, by space name. repo: the space is its own git repository (cloned by `cortex space add --repo`, ignored by the instance's). */
+  spaces: z.record(z.string(), z.strictObject({ repo: str("spaces.<name>.repo") }, { error: '"spaces.<name>" must be an object (repo).' }), {
+    error: '"spaces" must be an object: one entry (repo) per space name, or null.',
+  }).nullish().superRefine((v, ctx) => {
+    for (const n of Object.keys(v ?? {})) if (!SPACE_NAME.test(n)) ctx.addIssue({ code: "custom", message: `"spaces" has an invalid space name "${n}" (${SPACE_NAME}).`, input: n });
+  }),
   /** Page parsers' settings. parser.social.linkedin: CSS selectors LinkedIn is read with outside JSON-LD (link card, activity page, carousel), updated here when LinkedIn's page changes. Unset keys: social/linkedin.ts defaults. */
   parser: z.strictObject({
     social: z.strictObject({
@@ -221,13 +231,22 @@ export function endpoint(c: Config, own?: string): { url: string; key?: string }
   };
 }
 
-export const configFile = (root: string) => Bun.file(join(root, "cortex.json"));
+/** cortex.json of the instance the content root belongs to (a space never has its own). */
+export const configFile = (root: string) => Bun.file(join(instanceRoot(root), "cortex.json"));
 
 /** Raw content of cortex.json ({} if absent); invalid JSON = error. */
 export async function readConfig(root: string): Promise<Record<string, unknown>> {
   const f = configFile(root);
   if (!(await f.exists())) return {};
   try { return await f.json(); } catch { throw new Error("cortex.json: invalid JSON."); }
+}
+
+/** Writes cortex.json after validating it; tmp + rename, since cortex.json marks the root and a half-written one would break every command. */
+export async function writeConfig(file: ReturnType<typeof Bun.file>, c: Record<string, unknown>) {
+  const e = lintConfig(c).filter((i) => i.level === "error");
+  if (e.length) throw new Error(e.map((i) => i.msg).join(" "));
+  await Bun.write(`${file.name}.tmp`, JSON.stringify(c, null, 2) + "\n");
+  renameSync(`${file.name}.tmp`, file.name!);
 }
 
 /** Per-command `--model` / `--effort` (cortex.ts): applied over cortex.json by every `loadConfig` of this process. */

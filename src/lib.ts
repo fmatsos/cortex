@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { RelatedReason } from "../site/src/lib/types";
 import { fromResource, type Page, type RawSource, toPage, toRawSource } from "./doc";
 
@@ -8,13 +8,52 @@ export class CortexError extends Error {
   constructor(message: string, readonly code: "usage" | "notfound" | "refused" | "external") { super(message); }
 }
 
-/** Wiki root: $CORTEX_ROOT, otherwise the nearest parent directory holding cortex.json. */
-export function findRoot(from = process.cwd()): string {
-  if (process.env.CORTEX_ROOT) return process.env.CORTEX_ROOT;
-  for (let d = from; ; d = dirname(d)) {
+/** Name of a space: a folder of `spaces/` holding its own wiki/, raw/ and .cortex/. */
+export const SPACE_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/** Instance root: the nearest ancestor of `from` (itself included) holding cortex.json (config and accounts live there), or undefined. */
+export function findInstance(from = process.cwd()): string | undefined {
+  for (let d = resolve(from); ; d = dirname(d)) {
     if (existsSync(join(d, "cortex.json"))) return d;
-    if (dirname(d) === d) throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it), set CORTEX_ROOT, or configure a remote wiki: cortex remote add <name> <user@host>.");
+    if (dirname(d) === d) return undefined;
   }
+}
+/** The instance a content root belongs to: the root itself in a legacy wiki, the parent instance for a space (`root` itself when no cortex.json is found). */
+export const instanceRoot = (root: string) => findInstance(root) ?? root;
+/** Whether the instance is multi-space: it has a `spaces/` folder (otherwise legacy, wiki/ and raw/ at its root). */
+export const isMultiSpace = (instance: string) => existsSync(join(instance, "spaces"));
+export const spaceRoot = (instance: string, name: string) => join(instance, "spaces", name);
+/** Spaces of an instance, by name. */
+export const listSpaces = (instance: string): string[] =>
+  isMultiSpace(instance) ? readdirSync(join(instance, "spaces"), { withFileTypes: true }).filter((e) => e.isDirectory() && SPACE_NAME.test(e.name)).map((e) => e.name).sort() : [];
+
+/**
+ * Content root (where wiki/ and raw/ live): $CORTEX_ROOT, otherwise the instance found from `from`. A legacy instance
+ * (no `spaces/`) is its own content root. In a multi-space instance it is `spaces/<name>/`: the space the folder is inside,
+ * otherwise `space` (--space), $CORTEX_SPACE, `default_space` of cortex.json, the only space. $CORTEX_ROOT may point into
+ * a space (what the child processes of cortex receive) or at the instance.
+ */
+export function findRoot(from = process.cwd(), space?: string): string {
+  const env = process.env.CORTEX_ROOT, start = env || from, inst = findInstance(start);
+  if (!inst) {
+    if (env) return env;
+    throw new Error("cortex.json not found: run cortex inside the wiki (cortex config init creates it), set CORTEX_ROOT, or configure a remote wiki: cortex remote add <name> <user@host>.");
+  }
+  if (!isMultiSpace(inst)) return env || inst;
+  const names = listSpaces(inst), [dir, inside] = relative(inst, resolve(start)).split(sep);
+  if (dir === "spaces" && inside && SPACE_NAME.test(inside)) {
+    if (space && space !== inside) throw new CortexError(`--space ${space}: this folder is inside the space ${inside}.`, "usage");
+    return spaceRoot(inst, inside);
+  }
+  let name = space ?? (process.env.CORTEX_SPACE || undefined);
+  if (!name) {
+    try { name = JSON.parse(readFileSync(join(inst, "cortex.json"), "utf8")).default_space ?? undefined; } catch { /* a broken cortex.json is reported by the commands that read it */ }
+  }
+  name ??= names.length === 1 ? names[0] : undefined;
+  const list = names.length ? names.join(", ") : "none: cortex space add <name>";
+  if (!name) throw new CortexError(`several spaces: choose one with --space <name> or $CORTEX_SPACE, or set default_space (spaces: ${list}).`, "usage");
+  if (!names.includes(name)) throw new CortexError(`unknown space: ${name} (spaces: ${list}).`, "usage");
+  return spaceRoot(inst, name);
 }
 
 /** A parsed .md file: the frontmatter as YAML gave it. `toPage` / `toRawSource` (doc.ts) type it. */

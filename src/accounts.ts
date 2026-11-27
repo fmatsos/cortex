@@ -2,16 +2,17 @@ import { Database } from "bun:sqlite";
 import "./sqlite-lib"; // before any Database: it chooses the SQLite library
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { instanceRoot } from "./lib";
 
 /**
  * The accounts' storage (`cortex serve`): users, sessions, preferences, saved assistant conversations and graph journeys, in
- * one SQLite file, `.cortex/accounts.db` of the wiki root. Never under `.cortex/serve/`: serve empties one of its two build
+ * one SQLite file, `.cortex/accounts.db` of the instance root (a multi-space instance has one for all its spaces). Never under `.cortex/serve/`: serve empties one of its two build
  * folders at each rebuild. `.cortex/` is not versioned (serve --sync commits `raw/` and `wiki/` only).
  *
  * Every read and write of user data is filtered by `user_id`: another user's row is simply not found (the routes answer 404).
  * Times are milliseconds since the epoch; the API turns them into ISO strings.
  */
-export const accountsFile = (root: string) => join(root, ".cortex/accounts.db");
+export const accountsFile = (root: string) => join(instanceRoot(root), ".cortex/accounts.db");
 
 const SCHEMA = `
 create table if not exists users (
