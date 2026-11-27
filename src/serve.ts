@@ -4,10 +4,10 @@ import { join, resolve, sep } from "node:path";
 import type { Subprocess } from "bun";
 import { openWiki } from "./context";
 import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
-import { EXTRA_TOOLS, type Check, type Stream } from "./backends/backend";
+import { EXTRA_TOOLS, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
-import { askSitePrompt, prompt as askSitePromptPart, scopePrefix } from "./prompts";
+import { askSitePrompt, scopePrefix } from "./prompts";
 import { historyPart, pagesPart, relevantPages, wikiTools, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
@@ -44,8 +44,10 @@ export type ServeOpts = {
   /** The page embeddings' refresh (injectable for tests). Default: embed.ts. */
   embeddings?: (root: string) => Promise<{ embedded: number; removed: number } | undefined>;
 };
+/** `draft`: set by the agent that prepares display blocks, so the live draft can draw them (the text so far in, Markdown with the blocks out). */
+export type AskStream = Stream & { draft?: (md: string) => string };
 /** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
-export type AskFn = (root: string, question: string, history: Turn[], stream?: Stream) => Promise<{ md: string; core?: Core }>;
+export type AskFn = (root: string, question: string, history: Turn[], stream?: AskStream) => Promise<{ md: string; core?: Core }>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
@@ -131,9 +133,8 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
-  // a long answer written without any block goes back once more to the model, in the same conversation (openai client)
-  const laidOut: Check | undefined = blocks && Object.assign(async (answer = "") => (!blocks.used() && answer.length > LIMITS.askBlocksAfterChars ? ["no display block"] : []), { prompt: () => askSitePromptPart("ask-site-blocks-missing", {}) });
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, laidOut, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds });
+  if (blocks && stream) stream.draft = blocks.draft; // the live draft draws the blocks the agent prepared, where the text names them
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds });
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 
@@ -390,7 +391,7 @@ export async function serve(root: string, o: ServeOpts) {
         if (asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
         asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
-        const answer = async (stream?: Stream) => {
+        const answer = async (stream?: AskStream) => {
           const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history, askHistoryTurns(askCfg)), stream);
           const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           // the pages under the answer: retained and related are chosen by code (the judge), never by what the model wrote
@@ -406,16 +407,17 @@ export async function serve(root: string, o: ServeOpts) {
           const send = (e: object) => { if (!left.signal.aborted) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
           // the text so far, drawn as the final answer is (same renderer, so already sanitized), at most every 200 ms and always the last state
           let draft = "", timer: ReturnType<typeof setTimeout> | undefined;
-          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(draftMarkdown(draft), known) }); } catch { /* half-written Markdown: the next draft will do */ } };
+          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(live.draft?.(draft) ?? draftMarkdown(draft), known) }); } catch { /* half-written Markdown: the next draft will do */ } };
+          const live: AskStream = {
+            text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
+            reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
+            step: (name, args) => send({ t: "step", step: stepOf(name, args, known) }),
+            signal: left.signal,
+          };
           const out = new ReadableStream<Uint8Array>({
             start(c) {
               ctrl = c;
-              void answer({
-                text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
-                reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
-                step: (name, args) => send({ t: "step", step: stepOf(name, args, known) }),
-                signal: left.signal,
-              }).then(
+              void answer(live).then(
                 (r) => send({ t: "done", ...r }),
                 (e) => { say(left.signal.aborted ? "ask: aborted, the client left" : `ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
               ).finally(() => { clearTimeout(timer); asking = false; try { c.close(); } catch { /* already cancelled */ } });

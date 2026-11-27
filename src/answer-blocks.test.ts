@@ -34,8 +34,35 @@ test("answer segments: prose and blocks in order, text fields rendered and sanit
   expect(last).not.toContain("wiki/nope"); // a pages block with no existing page is dropped
 });
 
-test("draftMarkdown: block names, whole or half written at the end, are dropped from the streamed text; the rest is untouched", () => {
+test("draftMarkdown: with no block known, names whole or half written are dropped from the streamed text; the rest is untouched", () => {
   expect(draftMarkdown("Intro\n\n{{bloc-1}}\n\nSuite {{ bloc-2 }} fin")).toBe("Intro\n\n\n\nSuite  fin");
   for (const half of ["{{", "{{blo", "{{bloc-1", "{{bloc-1}"]) expect(draftMarkdown(`Texte ${half}`)).toBe("Texte ");
   expect(draftMarkdown("a `{x}` b")).toBe("a `{x}` b");
+});
+
+test("registry draft: a known block is drawn where it is named (once), an unknown or half-written name dropped, an unnamed block left out; assemble keeps it for the end and the registry stays reusable", async () => {
+  const r = blockRegistry();
+  await runExtra(r.tool, { blocks: [{ type: "facts", items: [{ label: "V", value: "1" }] }, { type: "callout", tone: "info", text: "Note" }] });
+  const d = r.draft("Intro\n\n{{bloc-1}}\n\nSuite {{ bloc-1 }} {{bloc-9}} fin {{bloc-");
+  expect(d.match(/```cortex-ui/g)).toHaveLength(1); // bloc-1 once, bloc-2 not named yet
+  expect(d).toContain('"facts"');
+  expect(d).not.toContain("bloc");
+  expect(d).toEndWith("fin ");
+  const s = answerSegments(d, titles);
+  expect(s.map((x) => ("block" in x ? x.block.type : "html"))).toEqual(["html", "facts", "html"]);
+  const text = "Intro\n\n{{bloc-1}}\n\nSuite";
+  const final = r.assemble(text);
+  expect(final.match(/```cortex-ui/g)).toHaveLength(2); // the unnamed callout closes the answer
+  expect(r.assemble(text)).toBe(final); // nothing is consumed by a call
+  expect(r.assemble(`${text}\n\n{{bloc-2}}`)).toBe(r.draft(`${text}\n\n{{bloc-2}}`).trim()); // all named: the last draft is the final answer
+});
+
+test("render_blocks called twice: the second call adds blocks, numbering goes on, the names of the first stay valid", async () => {
+  const r = blockRegistry();
+  await runExtra(r.tool, { blocks: [{ type: "facts", items: [{ label: "V", value: "1" }] }] });
+  const second = await runExtra(r.tool, { blocks: [{ type: "callout", tone: "warning", text: "Attention" }] });
+  expect(second).toContain("{{bloc-2}} (callout)");
+  const md = r.assemble("A\n\n{{bloc-1}}\n\nB\n\n{{bloc-2}}");
+  expect(md.indexOf('"facts"')).toBeLessThan(md.indexOf('"callout"'));
+  expect(md.match(/```cortex-ui/g)).toHaveLength(2);
 });

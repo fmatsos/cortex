@@ -46,10 +46,9 @@ Answer from the wiki only, never filling a gap with a guess. Give the most compl
 {{blocks}}
 
 ## ask-site-blocks
-render_blocks prepares display blocks that the site draws inside the answer. Any answer longer than a short paragraph uses it: one to three blocks, where the content has that shape: values that differ by case (a table, or facts for a single case); one variant per tool or per case, each a few paragraphs long (tabs); an ordered process (steps); a limit, an exception, a contradiction between pages or an open point (one callout, tone warning); the two to five pages that carry the answer (pages, one sentence each: it is not a list of sources, the site lists them under the answer). Once your reading is done, and before writing any of the answer, call render_blocks once with every block; then write the answer once, from top to bottom, with each block's name ({{bloc-1}}) on its own line where it belongs. A block replaces the prose it holds: never repeat its content and never refer to it ("ci-dessus", "le tableau suivant"); keep plain Markdown for short lists and explanations. Every label and text of a block is in the wiki's language.
+render_blocks prepares display blocks that the site draws inside the answer. Use it when the content has one of these shapes: values that differ by case (a table, or facts for a single case); one variant per tool or per case, each a few paragraphs long (tabs); an ordered process (steps); a limit, an exception, a contradiction between pages or an open point (one callout, tone warning); the two to five pages that carry the answer (pages, one sentence each: it is not a list of sources, the site lists them under the answer). One to three blocks is plenty; if no block fits, answer in plain Markdown, which is fine.
 
-## ask-site-blocks-missing
-Your answer is longer than a short paragraph but uses no display block. Call render_blocks now with one to three blocks that fit this answer (a table, steps, facts, tabs, a callout, the key pages), then write the whole answer again from the start, with each block's name on its own line where it belongs, without repeating the blocks' content in the prose.
+Call render_blocks once, as soon as your reading has shown the shape of the answer, with every block: in the same turn as your last reading calls (several tool calls at once), not in a turn of its own after the reading. Your next turn is then the answer only: write it once, from top to bottom, with each block's name ({{bloc-1}}) on its own line where it belongs. A block replaces the prose it holds: never repeat its content and never refer to it ("ci-dessus", "le tableau suivant"); keep plain Markdown for short lists and explanations. Every label and text of a block is in the wiki's language.
 
 ## ask-site-history
 Earlier turns of this conversation (the new question may build on them):
@@ -67,7 +66,7 @@ The system judged no page of the wiki certain to answer this question. Get the r
 Pages the system retained for this question, most relevant first, given in full: base the answer on them and cite each one that bears on it; they are already read: do not get them again. Search only for what they leave open (2 or 3 key terms, never the whole question), then answer.
 
 ## ask-site-reading-over
-Your reading is over: search, get and related are no longer offered. Answer now from what you have read, and say plainly what the wiki does not cover.
+Your reading is over: search, get and related are no longer offered. Answer now from what you have read, and say plainly what the wiki does not cover. If you have not prepared blocks, either call render_blocks now or answer in plain Markdown.
 
 ## ask-site-unread
 Also retained, left out here for length (get them when they matter):

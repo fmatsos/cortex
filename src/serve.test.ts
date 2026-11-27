@@ -230,6 +230,63 @@ test("POST /api/ask streaming: draft events carry the text so far as rendered se
   } finally { server.stop(true); }
 }, 30_000);
 
+/** An openai-compatible server that streams (SSE) one scripted turn per request, `pause` ms between the chunks of a turn. */
+function scriptedModel(turns: { chunks: object[] }[], seen: any[], pause = 0) {
+  return Bun.serve({ port: 0, async fetch(req) {
+    seen.push(await req.json());
+    const turn = turns[seen.length - 1]!;
+    const body = new ReadableStream({ async start(c) {
+      for (const ch of turn.chunks) { c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(ch)}\n\n`)); await Bun.sleep(pause); }
+      c.enqueue(new TextEncoder().encode("data: [DONE]\n\n")); c.close();
+    } });
+    return new Response(body, { headers: { "content-type": "text/event-stream" } });
+  } });
+}
+const delta = (d: object, finish_reason: string | null = null) => ({ choices: [{ index: 0, delta: d, finish_reason }] });
+
+test("site agent: a long answer written without any block is the final answer (no send-back); with blocks prepared, drafts draw them in place and done matches the last draft", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-ask-"));
+  mkdirSync(join(root, "wiki"), { recursive: true });
+  const post = async (cfgUrl: string, q: string) => {
+    writeFileSync(join(root, "cortex.json"), JSON.stringify({ site_ask: { client: "openai", model: "m", base_url: cfgUrl } }));
+    const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: () => {} });
+    try {
+      const origin = `http://localhost:${server.port}`;
+      const r = await fetch(`${origin}/api/ask`, { method: "POST", headers: { "content-type": "application/json", origin, accept: "application/x-ndjson" }, body: JSON.stringify({ q }) });
+      return (await r.text()).trim().split("\n").map((l) => JSON.parse(l));
+    } finally { server.stop(true); }
+  };
+  // 1. a long answer, no block: one request only
+  const long = "Une réponse longue sans aucun bloc. ".repeat(40);
+  const seenA: any[] = [];
+  const a = scriptedModel([{ chunks: [delta({ content: long }), delta({}, "stop")] }], seenA);
+  try {
+    const events = await post(`http://127.0.0.1:${a.port}/v1`, "q");
+    expect(seenA).toHaveLength(1);
+    const done = events.at(-1);
+    expect(done.t).toBe("done");
+    expect(done.md).toBe(long.trim());
+  } finally { a.stop(true); }
+  // 2. blocks prepared in the first turn, named in the answer of the second
+  const seenB: any[] = [];
+  const call = { index: 0, id: "c1", type: "function", function: { name: "render_blocks", arguments: JSON.stringify({ blocks: [{ type: "facts", items: [{ label: "Version", value: "1.4" }] }] }) } };
+  const b = scriptedModel([
+    { chunks: [delta({ tool_calls: [call] }, "tool_calls")] },
+    { chunks: [delta({ content: "Intro.\n\n{{bloc-1}}\n\nSui" }), delta({ content: "te" }), delta({}, "stop")] },
+  ], seenB, 400);
+  try {
+    const events = await post(`http://127.0.0.1:${b.port}/v1`, "q");
+    expect(seenB).toHaveLength(2);
+    const drafts = events.filter((e) => e.t === "draft"), done = events.at(-1);
+    const kinds = (segs: any[]) => segs.map((x) => ("block" in x ? x.block.type : "html"));
+    expect(drafts.length).toBeGreaterThan(0);
+    expect(kinds(drafts.at(-1).segments)).toEqual(["html", "facts", "html"]); // the block is drawn in place while the text is written
+    expect(JSON.stringify(drafts.at(-1).segments)).not.toContain("bloc-");
+    expect(kinds(done.segments)).toEqual(["html", "facts", "html"]);
+    expect(done.segments.find((x: any) => "block" in x)).toEqual(drafts.at(-1).segments.find((x: any) => "block" in x)); // the switch to the final answer changes nothing
+  } finally { b.stop(true); }
+}, 30_000);
+
 test("POST /api/ask/render: the saved answers drawn again, same origin only, off without site_ask", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-render-"));
   mkdirSync(join(root, "wiki/concepts"), { recursive: true });

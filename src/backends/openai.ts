@@ -100,7 +100,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
           if (!errors.length) return text + (msg.content ?? "");
           fixes++;
           report?.({ level: "info", text: `${errors.length} error(s), sent back to the model (pass ${fixes}/${LIMITS.lintFixPasses})`, mark: "  ↻" });
-          messages.push({ role: "user", content: check!.prompt?.(errors) ?? `The work is not complete (cortex lint and the compile check). Fix them with Edit or Write, then answer again:\n${errors.join("\n")}` });
+          messages.push({ role: "user", content: `The work is not complete (cortex lint and the compile check). Fix them with Edit or Write, then answer again:\n${errors.join("\n")}` });
           continue;
         }
         for (const c of msg.tool_calls) {

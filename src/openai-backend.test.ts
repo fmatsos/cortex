@@ -280,28 +280,6 @@ test("openai: a run's extra tool is offered with its JSON schema and runs beside
   } finally { server.stop(true); }
 });
 
-test("openai: a check with its own prompt sends the final answer back in the same conversation (a long answer without blocks)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
-  mkdirSync(join(root, "wiki"));
-  const { blockRegistry } = await import("./answer-blocks");
-  const r = blockRegistry();
-  const check = Object.assign(async (answer = "") => (!r.used() && answer.length > 20 ? ["no display block"] : []), { prompt: () => "LAY IT OUT" });
-  const call = { id: "1", type: "function", function: { name: "render_blocks", arguments: JSON.stringify({ blocks: [{ type: "steps", items: [{ title: "a" }, { title: "b" }] }] }) } };
-  const answers = [
-    { finish_reason: "stop", message: { role: "assistant", content: "Une longue réponse sans aucun bloc." } },
-    { finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call] } },
-    { finish_reason: "stop", message: { role: "assistant", content: "Réécrite.\n\n{{bloc-1}}" } },
-  ];
-  const seen: any[] = [];
-  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [answers[seen.length - 1]] }); } });
-  try {
-    const out = await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, check, [r.tool]);
-    expect(seen[1].messages.at(-1)).toEqual({ role: "user", content: "LAY IT OUT" });
-    expect(out).toBe("Réécrite.\n\n{{bloc-1}}"); // the first version is not kept
-    expect(seen).toHaveLength(3);
-  } finally { server.stop(true); }
-});
-
 test("openai: a streamed answer (SSE) is put back together, only content deltas reach the stream, tool calls arrive in fragments, reset between turns", async () => {
   const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
   const sse = (...chunks: object[]) => new Response([...chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), "data: [DONE]\n\n"].join(""), { headers: { "content-type": "text/event-stream" } });

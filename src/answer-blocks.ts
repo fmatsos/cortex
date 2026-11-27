@@ -29,33 +29,42 @@ export type Block = z.infer<typeof BLOCK>;
 const LANG = "cortex-ui";
 const FENCE = new RegExp("```" + LANG + "\\n([\\s\\S]*?)\\n```", "g");
 const PLACEHOLDER = /\{\{\s*(bloc-\d+)\s*\}\}/g;
+const HALF_NAME = /\{\{[^}]*\}?$/; // a name still being written at the end of a streamed text
 
 /** Blocks as they travel in the answer text; a backtick is escaped so no text can close the fence. */
 const fence = (b: Block) => `\n\n\`\`\`${LANG}\n${JSON.stringify(b).replaceAll("`", "\\u0060")}\n\`\`\`\n\n`;
 
 /**
  * The blocks one answer prepared, and the render_blocks tool that fills it. Each block is drawn once, where the answer names
- * it; a block the answer never names closes it, so nothing prepared is lost.
+ * it; a block the answer never names closes it, so nothing prepared is lost. A second render_blocks call adds blocks (the
+ * numbering goes on): the names the answer already uses stay valid, so it never forces a rewrite.
  */
 export function blockRegistry() {
-  const blocks = new Map<string, Block>(), placed = new Set<string>();
-  const take = (id: string) => (blocks.has(id) && !placed.has(id) ? (placed.add(id), fence(blocks.get(id)!)) : "");
+  const blocks = new Map<string, Block>();
   const tool: ExtraTool = {
     name: "render_blocks",
-    description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Returns one name per block ({{bloc-1}}); then write the answer and put each name on its own line where its block belongs.",
+    description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Returns one name per block ({{bloc-1}}); call it once, as soon as the reading shows the answer's shape, then write the answer and put each name on its own line where its block belongs. A second call only adds blocks: earlier names stay valid.",
     schema: z.object({ blocks: z.array(BLOCK).min(1).max(6) }),
     run: async ({ blocks: list }: { blocks: Block[] }) => {
       const names = list.map((b) => { const id = `bloc-${blocks.size + 1}`; blocks.set(id, b); return `{{${id}}} (${b.type})`; });
-      return `Prepared: ${names.join(", ")}. Write the answer now and put each name on its own line where its block belongs; never repeat a block's content in the prose.`;
+      return `Prepared: ${names.join(", ")}. Put each name on its own line in the answer where its block belongs; never repeat a block's content in the prose.`;
     },
   };
+  /** Each name replaced by its block (the first time it appears); `rest`: the blocks never named, at the end. */
+  const place = (md: string, rest: boolean) => {
+    const placed = new Set<string>();
+    const take = (id: string) => (blocks.has(id) && !placed.has(id) ? (placed.add(id), fence(blocks.get(id)!)) : "");
+    return md.replace(PLACEHOLDER, (_, id: string) => take(id)) + (rest ? [...blocks.keys()].map(take).join("") : "");
+  };
   /** The final answer, each name replaced by its block, the unnamed blocks at the end. */
-  const assemble = (md: string) => (md.replace(PLACEHOLDER, (_, id: string) => take(id)) + [...blocks.keys()].map(take).join("")).trim();
-  return { tool, assemble, used: () => blocks.size > 0 };
+  const assemble = (md: string) => place(md, true).trim();
+  /** The text so far, for the stream: the blocks it names drawn in place as the final answer will, an unknown or half-written name dropped, the unnamed blocks left out until the end. */
+  const draft = (md: string) => place(md.replace(HALF_NAME, ""), false);
+  return { tool, assemble, draft };
 }
 
-/** Streamed text as a draft: a block is only named in it (`{{bloc-1}}`, maybe half written), the final answer draws it. */
-export const draftMarkdown = (md: string) => md.replace(PLACEHOLDER, "").replace(/\{\{[^}]*\}?$/, "");
+/** Streamed text as a draft when no block is known: every name, even half written, is dropped. */
+export const draftMarkdown = (md: string) => md.replace(HALF_NAME, "").replace(PLACEHOLDER, "");
 
 /** A block as plain Markdown: what the history carries, and what is shown when a fence does not parse. */
 export function blockMarkdown(b: Block): string {

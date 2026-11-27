@@ -91,8 +91,6 @@ export const LIMITS = {
   askHistoryChars: 4000,
   /** Site question: characters kept of each earlier question given to the judge. */
   askEarlierChars: 300,
-  /** Site question: an answer longer than this written without any display block is sent back once to be laid out. */
-  askBlocksAfterChars: 600,
   /** Site question: turns that may read (Read, Grep, Glob); then only the display tool is offered and the model must answer from what it has read (the pages are already given in full). */
   askToolRounds: 4,
   /** Judge: simultaneous calls of one batch (a search, a site question): a hosted model rate-limits, a local server queues. */
