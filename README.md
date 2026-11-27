@@ -292,7 +292,7 @@ An instance with a `spaces/` folder is multi-space; without one it works as alwa
 cortex space add veille                  # spaces/veille/{wiki,raw}, with its index and journal
 cortex space add pro --repo git@host:me/pro.git   # clones it into spaces/pro/, adds /spaces/pro/ to .gitignore, records it under spaces
 cortex space list                        # * marks the default, "(own repo)" a space with its own .git
-cortex space add pro --content notes     # a space of your own notes (see below); default: resources. Both: --content resources,notes
+cortex space add pro --content notes --title "Work"   # a space of your own notes (see below); default: resources. Both: --content resources,notes; --title is its display name
 cortex space migrate veille              # legacy wiki: moves wiki/, raw/, paths/, inbox/ and .cortex/ (except accounts.db) into spaces/veille/; the saved conversations, journeys and favorites of the accounts become that space's (run it again on an instance whose wiki already became a space: it then moves only those rows)
 cortex --space pro search "context rot"
 ```

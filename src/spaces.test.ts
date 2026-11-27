@@ -843,4 +843,16 @@ describe("visibility and roles", () => {
     expect([getSpace(check, "again"), spaceMembers(check, "again")]).toEqual([undefined, []]);
     check.close();
   });
+
+  test("cortex space add --title records the display name, kept by the archive and the restore", () => {
+    const root = instance(["keep"]);
+    expect(cortex(root, ["space", "add", "titled", "--title", "  Mes   notes "]).code).toBe(0);
+    const title = () => { const db = openAccounts(accountsFile(root)); try { return getSpace(db, "titled")?.title; } finally { db.close(); } };
+    expect(title()).toBe("Mes notes");
+    expect(cortex(root, ["space", "archive", "titled"]).code).toBe(0);
+    expect(title()).toBe("Mes notes");
+    expect(cortex(root, ["space", "restore", "titled"]).code).toBe(0);
+    expect(title()).toBe("Mes notes");
+    expect(cortex(root, ["space", "add", "long", "--title", "x".repeat(121)]).code).not.toBe(0);
+  });
 });

@@ -11,8 +11,14 @@ import { paint } from "./style";
 import { commitAndPush, git } from "./sync";
 
 const usage = (msg: string) => new CortexError(msg, "usage");
-const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--content resources,notes] [--schema <file>] | migrate <name> | set <name> [--content resources,notes] [--visibility open|private] [--title \"…\"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]";
+const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--content resources,notes] [--schema <file>] [--title \"…\"] | migrate <name> | set <name> [--content resources,notes] [--visibility open|private] [--title \"…\"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]";
 const MAX_TITLE = 120;
+/** `--title` as the accounts keep it (one trimmed line), or a usage error. */
+const cleanTitle = (v: string) => {
+  const t = v.replace(/\s+/g, " ").trim();
+  if ([...t].length > MAX_TITLE) throw usage(`--title is at most ${MAX_TITLE} characters.`);
+  return t;
+};
 
 /** The accounts' database for the length of `f`. */
 function withAccounts<T>(instance: string, f: (db: Database) => T): T {
@@ -175,8 +181,9 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
     case "add":
       if (existsSync(accountsFile(instance)) && withAccounts(instance, (db) => getSpace(db, checkName(name))?.archived_at)) throw usage(`space ${name} is archived: cortex space restore ${name}, or archive it for good under another name.`);
       const content = opts.content === undefined ? undefined : parseContent(opts.content);
+      const given = opts.title === undefined ? undefined : cleanTitle(opts.title);
       await addSpace(instance, name, opts.repo, { content, schema: opts.schema });
-      if (existsSync(accountsFile(instance))) withAccounts(instance, (db) => forgetSpace(db, name!)); // nothing of an earlier space of that name carries over
+      if (given || existsSync(accountsFile(instance))) withAccounts(instance, (db) => { forgetSpace(db, name!); if (given) setSpace(db, name!, { title: given }); }); // nothing of an earlier space of that name carries over
       if (opts.sync && !opts.repo) commitSpacePaths(instance, `space: add ${name}`, await addedPaths(instance, name!, (content && recordable(content)) || opts.schema)); // a clone is its own repository's
       console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${content ? ` (content: ${content.join(", ")})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
       return;
@@ -186,8 +193,7 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
       if (visibility === undefined && title === undefined && ro === undefined && !content) throw usage(USAGE);
       if (ro !== undefined && ro !== "true" && ro !== "false") throw usage("--read-only expects true or false.");
       if (visibility !== undefined && visibility !== "open" && visibility !== "private") throw usage("--visibility expects open or private.");
-      const t = title === undefined ? undefined : title.replace(/\s+/g, " ").trim();
-      if (t !== undefined && [...t].length > MAX_TITLE) throw usage(`--title is at most ${MAX_TITLE} characters.`);
+      const t = title === undefined ? undefined : cleanTitle(title);
       if (visibility !== undefined || title !== undefined || ro !== undefined)
         withAccounts(instance, (db) => setSpace(db, name!, { ...(visibility && { visibility }), ...(t !== undefined && { title: t || null }), ...(ro !== undefined && { read_only: ro === "true" }) }));
       if (content) await setContent(instance, name!, content, opts.sync);

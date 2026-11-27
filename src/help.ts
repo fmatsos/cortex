@@ -33,7 +33,7 @@ export const HELP = `cortex — second brain
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
-  cortex space list | add <name> [--repo <git url>] [--content resources|notes|resources,notes] [--schema <file>] | migrate <name>
+  cortex space list | add <name> [--repo <git url>] [--content resources|notes|resources,notes] [--schema <file>] [--title "…"] | migrate <name>
   cortex space archive <name> | restore <name> [--sync]  |  cortex space list --archived
   cortex space set <name> [--content resources|notes|resources,notes] [--visibility open|private] [--title "…"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]
                                                (spaces: isolated wikis under spaces/<name>/, sharing cortex.json; add --repo clones one
