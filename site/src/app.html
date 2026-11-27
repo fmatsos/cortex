@@ -5,6 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
 		<script>try{var t=(localStorage.getItem("cortex:theme")||localStorage.getItem("brain:theme"));if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);var l=localStorage.getItem("cortex:lang");if(l==="en"||l==="fr")document.documentElement.lang=l;if(localStorage.getItem("cortex:reading")==="1")document.documentElement.setAttribute("data-reading","");if(localStorage.getItem("cortex:assistant-comfort")==="1")document.documentElement.setAttribute("data-assistant-comfort","")}catch(e){}</script>
+		<!-- classic registration (the built service-worker.js has no import): its script is fetched with the session cookie, see serviceWorker in vite.config.ts.
+		     %sveltekit.assets% is relative to each page (and the base path in the 404 shell): the scope is the folder of the site, also under /s/<space>/ -->
+		<script>if("serviceWorker" in navigator)addEventListener("load",function(){navigator.serviceWorker.register("%sveltekit.assets%/service-worker.js")})</script>
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
 		<link rel="icon" href="%sveltekit.assets%/favicon-32.png" sizes="32x32" type="image/png" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
