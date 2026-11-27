@@ -19,8 +19,8 @@ export type AccountDeps = {
   root: string;
   say: (m: string) => void;
   config: () => Promise<Config>;
-  /** Page id → title, to name a journey by its first and last pages. */
-  titles: () => Promise<Map<string, string>>;
+  /** Page id → title of a space ('' outside the spaces), to name a journey by its first and last pages. */
+  titles: (space: string) => Promise<Map<string, string>>;
   env?: Record<string, string | undefined>;
   net?: Net;
   now?: () => number;
@@ -113,10 +113,12 @@ const conversationOut = (c: db.ConversationRow) => ({ id: c.id, title: c.title, 
 const journeyOut = (j: db.JourneyRow) => ({ id: j.id, title: j.title, route: j.route, created_at: iso(j.created_at), updated_at: iso(j.updated_at) });
 
 /**
- * The route handler: `undefined` for a URL that is not an account route. It also tells who a request is (`userOf`), whether sign-in
+ * The route handler: `undefined` for a URL that is not an account route. With a `scope` (a multi-space `serve`, after it checked who may see the
+ * space) it answers the saved conversations, journeys and favorites (`me/state`) of that space only, at `path` (`/api/conversations`…): page ids repeat from one
+ * space to the next, so each space keeps its own. Without one it is the instance's, space `''`: the routes of a legacy instance. It also tells who a request is (`userOf`), whether sign-in
  * is configured, and gives the database: what a multi-space `cortex serve` needs to decide who may see a space.
  */
-export type AccountRoute = ((req: Request) => Promise<Response | undefined>) & {
+export type AccountRoute = ((req: Request, scope?: { space: string; path: string }) => Promise<Response | undefined>) & {
   userOf(req: Request): Promise<User | undefined>;
   configured(): Promise<boolean>;
   store(): Database;
@@ -126,9 +128,9 @@ export function accountRoute(d: AccountDeps): AccountRoute {
   let conn: Database | undefined, lastPurge = 0, warned = "";
   const open = () => (conn ??= openAccounts(accountsFile(d.root)));
 
-  const handler = async (req: Request) => {
-    const url = new URL(req.url), path = url.pathname;
-    if (!/^\/api\/(auth|me|conversations|journeys)(\/|$)/.test(path)) return;
+  const handler = async (req: Request, scope?: { space: string; path: string }) => {
+    const url = new URL(req.url), path = scope?.path ?? url.pathname, space = scope?.space ?? "";
+    if (!(scope ? /^\/api\/(me\/state|conversations|journeys)(\/|$)/ : /^\/api\/(auth|me|conversations|journeys)(\/|$)/).test(path)) return;
     const [area, a, b, ...extra] = path.slice(5).split("/").filter(Boolean) as [string, string?, string?, ...string[]];
 
     let cfg: Config = {};
@@ -162,7 +164,7 @@ export function accountRoute(d: AccountDeps): AccountRoute {
       db.extendSession(store, sha256(session!), t + SESSION_DAYS * DAY);
       headers.push(cookie(jar[HOST_SESSION] ? HOST_SESSION : SESSION, session!, { path: "/", maxAge: SESSION_DAYS * 86_400, secure: !!jar[HOST_SESSION] }));
     }
-    const res = extra.length ? fail(404, "not found") : await dataRoute(req, method, area, a, b, user, store, t);
+    const res = extra.length ? fail(404, "not found") : await dataRoute(req, method, area, a, b, user, store, t, space);
     for (const c of headers) res.headers.append("set-cookie", c);
     return res;
   };
@@ -235,7 +237,7 @@ export function accountRoute(d: AccountDeps): AccountRoute {
   }
 
   // ---- the signed-in routes
-  async function dataRoute(req: Request, method: string, area: string, a: string | undefined, b: string | undefined, user: User, store: Database, t: number): Promise<Response> {
+  async function dataRoute(req: Request, method: string, area: string, a: string | undefined, b: string | undefined, user: User, store: Database, t: number, space: string): Promise<Response> {
     if (area === "me") {
       if (!a) {
         if (method === "GET") return json({ id: user.id, name: user.name, email: user.email, provider: user.provider });
@@ -247,14 +249,14 @@ export function accountRoute(d: AccountDeps): AccountRoute {
       }
       if (a !== "state" || b) return fail(404, "not found");
       if (method === "GET") {
-        const s = db.getState(store, user.id);
+        const s = space ? db.getSpaceState(store, user.id, space) : db.getState(store, user.id);
         return json(s ? JSON.parse(s.data) : {}, 200, s ? { "last-modified": new Date(s.updated_at).toUTCString() } : {});
       }
       if (method !== "PUT") return fail(405, "method not allowed");
       const body = await readJson(req, ACCOUNT_LIMITS.state);
       if ("error" in body) return fail(body.status ?? 400, body.error);
       if (!body.ok || typeof body.ok !== "object" || Array.isArray(body.ok)) return fail(400, "the preferences are a JSON object.");
-      db.putState(store, user.id, JSON.stringify(body.ok), t);
+      if (space) db.putSpaceState(store, user.id, space, JSON.stringify(body.ok), t); else db.putState(store, user.id, JSON.stringify(body.ok), t);
       return json({ ok: true });
     }
 
@@ -262,7 +264,7 @@ export function accountRoute(d: AccountDeps): AccountRoute {
       if (!a) {
         if (method === "GET") {
           const words = normalize(new URL(req.url).searchParams.get("q") ?? "").toLowerCase().split(" ").filter(Boolean).slice(0, 8);
-          return json({ conversations: db.listConversations(store, user.id, words).map((c) => ({ ...c, created_at: iso(c.created_at), updated_at: iso(c.updated_at) })) });
+          return json({ conversations: db.listConversations(store, user.id, space, words).map((c) => ({ ...c, created_at: iso(c.created_at), updated_at: iso(c.updated_at) })) });
         }
         if (method !== "POST") return fail(405, "method not allowed");
         const body = await readJson(req, ACCOUNT_LIMITS.body);
@@ -270,14 +272,14 @@ export function accountRoute(d: AccountDeps): AccountRoute {
         const o = (body.ok ?? {}) as Record<string, unknown>, turns = checkTurns(o.turns), title = checkTitle(o.title);
         if ("error" in turns) return fail(turns.status ?? 400, turns.error);
         if ("error" in title) return fail(title.status ?? 400, title.error);
-        if (db.countOf(store, "conversations", user.id) >= ACCOUNT_LIMITS.perUser) return fail(409, `at most ${ACCOUNT_LIMITS.perUser} saved conversations: delete one first.`);
-        return json(conversationOut(db.insertConversation(store, user.id, title.ok ?? clip(normalize(turns.ok[0]!.question), ACCOUNT_LIMITS.title), turns.ok, t)), 201);
+        if (db.countOf(store, "conversations", user.id, space) >= ACCOUNT_LIMITS.perUser) return fail(409, `at most ${ACCOUNT_LIMITS.perUser} saved conversations: delete one first.`);
+        return json(conversationOut(db.insertConversation(store, user.id, space, title.ok ?? clip(normalize(turns.ok[0]!.question), ACCOUNT_LIMITS.title), turns.ok, t)), 201);
       }
       if (b) return fail(404, "not found");
-      const cur = db.getConversation(store, user.id, a);
+      const cur = db.getConversation(store, user.id, space, a);
       if (!cur) return fail(404, "no such conversation");
       if (method === "GET") return json(conversationOut(cur));
-      if (method === "DELETE") { db.deleteConversation(store, user.id, a); return json({ ok: true }); }
+      if (method === "DELETE") { db.deleteConversation(store, user.id, space, a); return json({ ok: true }); }
       if (method !== "PUT") return fail(405, "method not allowed");
       const body = await readJson(req, ACCOUNT_LIMITS.body);
       if ("error" in body) return fail(body.status ?? 400, body.error);
@@ -287,26 +289,26 @@ export function accountRoute(d: AccountDeps): AccountRoute {
       if ("error" in turns) return fail(turns.status ?? 400, turns.error);
       if ("error" in title) return fail(title.status ?? 400, title.error);
       const next = o.title === undefined ? cur.title : title.ok ?? clip(normalize(turns.ok[0]!.question), ACCOUNT_LIMITS.title);
-      return json(conversationOut(db.updateConversation(store, user.id, a, next, turns.ok, t)!));
+      return json(conversationOut(db.updateConversation(store, user.id, space, a, next, turns.ok, t)!));
     }
 
     // journeys
     if (!a) {
-      if (method === "GET") return json({ journeys: db.listJourneys(store, user.id).map(journeyOut) });
+      if (method === "GET") return json({ journeys: db.listJourneys(store, user.id, space).map(journeyOut) });
       if (method !== "POST") return fail(405, "method not allowed");
       const body = await readJson(req, ACCOUNT_LIMITS.body);
       if ("error" in body) return fail(body.status ?? 400, body.error);
       const o = (body.ok ?? {}) as Record<string, unknown>, route = checkIds(o.route, "route", ACCOUNT_LIMITS.route), title = checkTitle(o.title);
       if ("error" in route) return fail(route.status ?? 400, route.error);
       if ("error" in title) return fail(title.status ?? 400, title.error);
-      if (db.countOf(store, "journeys", user.id) >= ACCOUNT_LIMITS.perUser) return fail(409, `at most ${ACCOUNT_LIMITS.perUser} saved journeys: delete one first.`);
-      return json(journeyOut(db.insertJourney(store, user.id, title.ok ?? (await journeyTitle(route.ok)), route.ok, t)), 201);
+      if (db.countOf(store, "journeys", user.id, space) >= ACCOUNT_LIMITS.perUser) return fail(409, `at most ${ACCOUNT_LIMITS.perUser} saved journeys: delete one first.`);
+      return json(journeyOut(db.insertJourney(store, user.id, space, title.ok ?? (await journeyTitle(route.ok, space)), route.ok, t)), 201);
     }
     if (b) return fail(404, "not found");
-    const cur = db.getJourney(store, user.id, a);
+    const cur = db.getJourney(store, user.id, space, a);
     if (!cur) return fail(404, "no such journey");
     if (method === "GET") return json(journeyOut(cur));
-    if (method === "DELETE") { db.deleteJourney(store, user.id, a); return json({ ok: true }); }
+    if (method === "DELETE") { db.deleteJourney(store, user.id, space, a); return json({ ok: true }); }
     if (method !== "PUT") return fail(405, "method not allowed");
     const body = await readJson(req, ACCOUNT_LIMITS.body);
     if ("error" in body) return fail(body.status ?? 400, body.error);
@@ -315,13 +317,13 @@ export function accountRoute(d: AccountDeps): AccountRoute {
     const route = o.route === undefined ? { ok: cur.route } : checkIds(o.route, "route", ACCOUNT_LIMITS.route), title = checkTitle(o.title);
     if ("error" in route) return fail(route.status ?? 400, route.error);
     if ("error" in title) return fail(title.status ?? 400, title.error);
-    const next = o.title === undefined ? cur.title : title.ok ?? (await journeyTitle(route.ok));
-    return json(journeyOut(db.updateJourney(store, user.id, a, next, route.ok, t)!));
+    const next = o.title === undefined ? cur.title : title.ok ?? (await journeyTitle(route.ok, space));
+    return json(journeyOut(db.updateJourney(store, user.id, space, a, next, route.ok, t)!));
   }
 
   /** « Voyage : <first page> → <last page> », the pages' titles when the server knows them, their ids otherwise. */
-  async function journeyTitle(route: string[]): Promise<string> {
-    const titles = await d.titles().catch(() => new Map<string, string>());
+  async function journeyTitle(route: string[], space: string): Promise<string> {
+    const titles = await d.titles(space).catch(() => new Map<string, string>());
     const name = (id: string) => titles.get(id) ?? id;
     return clip(`Voyage : ${name(route[0]!)} → ${name(route[route.length - 1]!)}`, ACCOUNT_LIMITS.title);
   }

@@ -27,12 +27,14 @@ create table if not exists user_state (
   user_id text primary key references users(id) on delete cascade, data text not null, updated_at integer not null);
 create table if not exists conversations (
   id text primary key, user_id text not null references users(id) on delete cascade, title text not null, turns text not null,
-  exchanges integer not null, search text not null, created_at integer not null, updated_at integer not null);
+  exchanges integer not null, search text not null, created_at integer not null, updated_at integer not null, space text not null default '');
 create index if not exists conversations_user on conversations(user_id, updated_at desc);
 create table if not exists journeys (
   id text primary key, user_id text not null references users(id) on delete cascade, title text not null, route text not null,
-  created_at integer not null, updated_at integer not null);
+  created_at integer not null, updated_at integer not null, space text not null default '');
 create index if not exists journeys_user on journeys(user_id, updated_at desc);
+create table if not exists space_state (
+  user_id text not null references users(id) on delete cascade, space text not null, data text not null, updated_at integer not null, primary key (user_id, space));
 create table if not exists login_tx (
   id_hash text primary key, provider text not null, state text not null, nonce text not null, verifier text not null,
   return_to text not null, public_url text not null, expires_at integer not null);
@@ -55,7 +57,10 @@ const MIGRATIONS = (db: Database) => {
       db.run("alter table space_members add column role text not null default 'owner' check (role in ('owner', 'member'))");
       db.run("insert or ignore into spaces (name, visibility) select distinct space, 'private' from space_members");
     }
+    for (const t of ["conversations", "journeys"]) if (!has(t, "space")) db.run(`alter table ${t} add column space text not null default ''`);
   }).immediate();
+  db.run("create index if not exists conversations_user_space on conversations(user_id, space, updated_at desc)");
+  db.run("create index if not exists journeys_user_space on journeys(user_id, space, updated_at desc)");
 };
 
 /** Opens (and creates) the accounts database. Foreign keys are per connection: without the pragma `on delete cascade` does nothing. */
@@ -188,10 +193,10 @@ export const removeSpaceMember = (db: Database, space: string, userId: string): 
   return "ok";
 }).immediate();
 
-/** Everything the accounts hold for a space name: a space created later under that name inherits nothing (people, visibility, title, invitations). */
+/** Everything the accounts hold for a space name: a space created later under that name inherits nothing (people, visibility, title, invitations, saved conversations, journeys, favorites). */
 export function forgetSpace(db: Database, name: string) {
   db.transaction(() => {
-    for (const t of ["space_members", "space_invites", "spaces"]) db.query(`delete from ${t} where ${t === "spaces" ? "name" : "space"} = $name`).run({ name });
+    for (const t of ["space_members", "space_invites", "spaces", "conversations", "journeys", "space_state"]) db.query(`delete from ${t} where ${t === "spaces" ? "name" : "space"} = $name`).run({ name });
   }).immediate();
 }
 /** An archived space: its people, visibility and title are kept (restoring brings them back); pending invitations are dropped. */
@@ -243,15 +248,38 @@ export function findUser(db: Database, ref: string): { user?: User; ambiguous?: 
   return rows.length === 1 ? { user: rows[0] } : { ambiguous: rows.length > 1 };
 }
 
-// ---- preferences
+// ---- preferences (the account's, and the favorites of each space: page ids repeat from one space to the next)
 
 export const getState = (db: Database, userId: string): { data: string; updated_at: number } | undefined =>
   (db.query("select data, updated_at from user_state where user_id = $userId").get({ userId }) as { data: string; updated_at: number } | null) ?? undefined;
 export function putState(db: Database, userId: string, data: string, now: number) {
   db.query("insert into user_state (user_id, data, updated_at) values ($userId, $data, $now) on conflict (user_id) do update set data = $data, updated_at = $now").run({ userId, data, now });
 }
+export const getSpaceState = (db: Database, userId: string, space: string): { data: string; updated_at: number } | undefined =>
+  (db.query("select data, updated_at from space_state where user_id = $userId and space = $space").get({ userId, space }) as { data: string; updated_at: number } | null) ?? undefined;
+export function putSpaceState(db: Database, userId: string, space: string, data: string, now: number) {
+  db.query("insert into space_state (user_id, space, data, updated_at) values ($userId, $space, $data, $now) on conflict (user_id, space) do update set data = $data, updated_at = $now").run({ userId, space, data, now });
+}
 
-// ---- conversations and journeys
+/**
+ * `cortex space migrate`: what an instance saved before it had spaces (space `''`) now belongs to the space the wiki became: the saved
+ * conversations and journeys, and the favorites (the `favs` of the account's state, which leave it: the other keys are the account's).
+ */
+export function moveToSpace(db: Database, space: string, now: number) {
+  db.transaction(() => {
+    for (const t of ["conversations", "journeys"]) db.query(`update ${t} set space = $space where space = ''`).run({ space });
+    for (const r of db.query("select user_id, data from user_state").all() as { user_id: string; data: string }[]) {
+      let state: Record<string, unknown>;
+      try { state = JSON.parse(r.data); } catch { continue; }
+      if (!Array.isArray(state?.favs)) continue;
+      putSpaceState(db, r.user_id, space, JSON.stringify({ favs: state.favs }), now);
+      const { favs: _, ...rest } = state;
+      db.query("update user_state set data = $data where user_id = $user_id").run({ data: JSON.stringify(rest), user_id: r.user_id });
+    }
+  }).immediate();
+}
+
+// ---- conversations and journeys (of one space: '' is the instance of before the spaces)
 
 export type Turn = { question: string; answer: string; pages?: string[]; at?: string };
 export type ConversationRow = { id: string; title: string; turns: Turn[]; created_at: number; updated_at: number };
@@ -259,48 +287,48 @@ export type ConversationSummary = { id: string; title: string; exchanges: number
 /** Lower-cased title and questions, what `?q=` looks into. */
 export const searchText = (title: string, turns: Turn[]) => [title, ...turns.map((t) => t.question)].join("\n").toLowerCase();
 
-export const countOf = (db: Database, table: "conversations" | "journeys", userId: string) =>
-  (db.query(`select count(*) as n from ${table} where user_id = $userId`).get({ userId }) as { n: number }).n;
+export const countOf = (db: Database, table: "conversations" | "journeys", userId: string, space: string) =>
+  (db.query(`select count(*) as n from ${table} where user_id = $userId and space = $space`).get({ userId, space }) as { n: number }).n;
 
-export function listConversations(db: Database, userId: string, words: string[]): ConversationSummary[] {
+export function listConversations(db: Database, userId: string, space: string, words: string[]): ConversationSummary[] {
   const where = words.map((_, i) => `and instr(search, $w${i}) > 0`).join(" ");
-  const params: Record<string, string> = { userId };
+  const params: Record<string, string> = { userId, space };
   words.forEach((w, i) => (params[`w${i}`] = w));
-  return db.query(`select id, title, exchanges, created_at, updated_at from conversations where user_id = $userId ${where} order by updated_at desc, id`).all(params) as ConversationSummary[];
+  return db.query(`select id, title, exchanges, created_at, updated_at from conversations where user_id = $userId and space = $space ${where} order by updated_at desc, id`).all(params) as ConversationSummary[];
 }
 const toConversation = (r: { id: string; title: string; turns: string; created_at: number; updated_at: number }): ConversationRow => ({ ...r, turns: JSON.parse(r.turns) });
-export const getConversation = (db: Database, userId: string, id: string): ConversationRow | undefined => {
-  const r = db.query("select id, title, turns, created_at, updated_at from conversations where id = $id and user_id = $userId").get({ id, userId }) as Parameters<typeof toConversation>[0] | null;
+export const getConversation = (db: Database, userId: string, space: string, id: string): ConversationRow | undefined => {
+  const r = db.query("select id, title, turns, created_at, updated_at from conversations where id = $id and user_id = $userId and space = $space").get({ id, userId, space }) as Parameters<typeof toConversation>[0] | null;
   return r ? toConversation(r) : undefined;
 };
-export function insertConversation(db: Database, userId: string, title: string, turns: Turn[], now: number): ConversationRow {
+export function insertConversation(db: Database, userId: string, space: string, title: string, turns: Turn[], now: number): ConversationRow {
   const id = crypto.randomUUID();
-  db.query("insert into conversations (id, user_id, title, turns, exchanges, search, created_at, updated_at) values ($id, $userId, $title, $turns, $exchanges, $search, $now, $now)")
-    .run({ id, userId, title, turns: JSON.stringify(turns), exchanges: turns.length, search: searchText(title, turns), now });
+  db.query("insert into conversations (id, user_id, space, title, turns, exchanges, search, created_at, updated_at) values ($id, $userId, $space, $title, $turns, $exchanges, $search, $now, $now)")
+    .run({ id, userId, space, title, turns: JSON.stringify(turns), exchanges: turns.length, search: searchText(title, turns), now });
   return { id, title, turns, created_at: now, updated_at: now };
 }
-export function updateConversation(db: Database, userId: string, id: string, title: string, turns: Turn[], now: number): ConversationRow | undefined {
-  const r = db.query("update conversations set title = $title, turns = $turns, exchanges = $exchanges, search = $search, updated_at = $now where id = $id and user_id = $userId")
-    .run({ id, userId, title, turns: JSON.stringify(turns), exchanges: turns.length, search: searchText(title, turns), now });
-  return r.changes ? getConversation(db, userId, id) : undefined;
+export function updateConversation(db: Database, userId: string, space: string, id: string, title: string, turns: Turn[], now: number): ConversationRow | undefined {
+  const r = db.query("update conversations set title = $title, turns = $turns, exchanges = $exchanges, search = $search, updated_at = $now where id = $id and user_id = $userId and space = $space")
+    .run({ id, userId, space, title, turns: JSON.stringify(turns), exchanges: turns.length, search: searchText(title, turns), now });
+  return r.changes ? getConversation(db, userId, space, id) : undefined;
 }
-export const deleteConversation = (db: Database, userId: string, id: string) => db.query("delete from conversations where id = $id and user_id = $userId").run({ id, userId }).changes > 0;
+export const deleteConversation = (db: Database, userId: string, space: string, id: string) => db.query("delete from conversations where id = $id and user_id = $userId and space = $space").run({ id, userId, space }).changes > 0;
 
 export type JourneyRow = { id: string; title: string; route: string[]; created_at: number; updated_at: number };
 const toJourney = (r: { id: string; title: string; route: string; created_at: number; updated_at: number }): JourneyRow => ({ ...r, route: JSON.parse(r.route) });
-export const listJourneys = (db: Database, userId: string): JourneyRow[] =>
-  (db.query("select id, title, route, created_at, updated_at from journeys where user_id = $userId order by updated_at desc, id").all({ userId }) as Parameters<typeof toJourney>[0][]).map(toJourney);
-export const getJourney = (db: Database, userId: string, id: string): JourneyRow | undefined => {
-  const r = db.query("select id, title, route, created_at, updated_at from journeys where id = $id and user_id = $userId").get({ id, userId }) as Parameters<typeof toJourney>[0] | null;
+export const listJourneys = (db: Database, userId: string, space: string): JourneyRow[] =>
+  (db.query("select id, title, route, created_at, updated_at from journeys where user_id = $userId and space = $space order by updated_at desc, id").all({ userId, space }) as Parameters<typeof toJourney>[0][]).map(toJourney);
+export const getJourney = (db: Database, userId: string, space: string, id: string): JourneyRow | undefined => {
+  const r = db.query("select id, title, route, created_at, updated_at from journeys where id = $id and user_id = $userId and space = $space").get({ id, userId, space }) as Parameters<typeof toJourney>[0] | null;
   return r ? toJourney(r) : undefined;
 };
-export function insertJourney(db: Database, userId: string, title: string, route: string[], now: number): JourneyRow {
+export function insertJourney(db: Database, userId: string, space: string, title: string, route: string[], now: number): JourneyRow {
   const id = crypto.randomUUID();
-  db.query("insert into journeys (id, user_id, title, route, created_at, updated_at) values ($id, $userId, $title, $route, $now, $now)").run({ id, userId, title, route: JSON.stringify(route), now });
+  db.query("insert into journeys (id, user_id, space, title, route, created_at, updated_at) values ($id, $userId, $space, $title, $route, $now, $now)").run({ id, userId, space, title, route: JSON.stringify(route), now });
   return { id, title, route, created_at: now, updated_at: now };
 }
-export function updateJourney(db: Database, userId: string, id: string, title: string, route: string[], now: number): JourneyRow | undefined {
-  const r = db.query("update journeys set title = $title, route = $route, updated_at = $now where id = $id and user_id = $userId").run({ id, userId, title, route: JSON.stringify(route), now });
-  return r.changes ? getJourney(db, userId, id) : undefined;
+export function updateJourney(db: Database, userId: string, space: string, id: string, title: string, route: string[], now: number): JourneyRow | undefined {
+  const r = db.query("update journeys set title = $title, route = $route, updated_at = $now where id = $id and user_id = $userId and space = $space").run({ id, userId, space, title, route: JSON.stringify(route), now });
+  return r.changes ? getJourney(db, userId, space, id) : undefined;
 }
-export const deleteJourney = (db: Database, userId: string, id: string) => db.query("delete from journeys where id = $id and user_id = $userId").run({ id, userId }).changes > 0;
+export const deleteJourney = (db: Database, userId: string, space: string, id: string) => db.query("delete from journeys where id = $id and user_id = $userId and space = $space").run({ id, userId, space }).changes > 0;

@@ -415,3 +415,24 @@ test("restore is refused (409) when a live space has the name", async () => {
   mkdirSync(join(root, "spaces/mine/wiki"), { recursive: true }); // what a manual `cortex space add` would leave
   expect((await send("POST", "/api/spaces/mine/restore", undefined, { origin, ...ada.cookie })).status).toBe(409);
 });
+
+test("a space's conversations, journeys and favorites are served under /s/<space>/api, behind the same visibility check", async () => {
+  const root = instance(["open", "priv"], AUTH);
+  const ada = person(root, "1"), bob = person(root, "2");
+  hold(root, "priv", ada.id);
+  const { get, send } = await start(root), origin = "http://localhost"; // the account routes accept the origins of auth.public_urls
+  const turns = [{ question: "q", answer: "a" }];
+  const save = (space: string, who: Record<string, string>) => send("POST", `/s/${space}/api/conversations`, { turns }, { origin, ...who });
+  expect((await save("priv", ada.cookie)).status).toBe(201);
+  expect((await save("priv", bob.cookie)).status).toBe(404); // not a member: the space does not exist for them
+  expect((await save("priv", {})).status).toBe(404);
+  expect((await get("/s/priv/api/journeys", bob.cookie)).status).toBe(404);
+  expect((await get("/s/priv/api/me/state", bob.cookie)).status).toBe(404);
+  expect((await save("open", bob.cookie)).status).toBe(201);
+  expect((await save("open", {})).status).toBe(401); // open, but saving needs an account
+  const mine = async (space: string, who: Record<string, string>) => ((await (await get(`/s/${space}/api/conversations`, who)).json()) as { conversations: unknown[] }).conversations.length;
+  expect([await mine("priv", ada.cookie), await mine("open", ada.cookie), await mine("open", bob.cookie)]).toEqual([1, 0, 1]);
+  expect((await send("PUT", "/s/open/api/me/state", { favs: ["wiki/x"] }, { origin, ...ada.cookie })).status).toBe(200);
+  expect(await (await get("/s/open/api/me/state", ada.cookie)).json()).toEqual({ favs: ["wiki/x"] });
+  expect(await (await get("/s/priv/api/me/state", ada.cookie)).json()).toEqual({});
+});

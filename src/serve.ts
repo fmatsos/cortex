@@ -482,7 +482,7 @@ export async function serve(root: string, o: ServeOpts) {
   let previous: number | undefined;
   const accounts = accountRoute({
     root, say, config: () => loadConfig(root),
-    titles: async () => multi ? new Map() : new Map((await openWiki(root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
+    titles: async (space) => multi && !space ? new Map() : new Map((await openWiki(space ? spaceRoot(root, space) : root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
   });
   const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`);
   if (multi) {
@@ -654,7 +654,7 @@ export async function serve(root: string, o: ServeOpts) {
         const site = sites.get(at[1]!);
         if (!site || !(await may(at[1]!, req))) return notFound(); // a space the visitor may not see is a space that does not exist
         if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${at[1]}/${url.search}` } });
-        const managed = await admin(req, at[1]!, at[2]);
+        const managed = await admin(req, at[1]!, at[2]) ?? await accounts(req, { space: at[1]!, path: at[2] });
         if (managed) return managed;
         const inner = new URL(url);
         inner.pathname = at[2];

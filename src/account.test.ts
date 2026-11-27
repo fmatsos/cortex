@@ -153,7 +153,11 @@ async function setup(auth: Config["auth"] = {}, env: Record<string, string | und
     throw new Error(`unexpected request to ${req.url}`);
   }) as unknown as typeof fetch };
   const route = accountRoute({ root, say: (m) => logs.push(m), config: async () => cfg, env, net, now: () => clock.t, titles: async () => new Map([["concepts/idee", "Idée"]]) });
-  const send: Send = async (req) => (await route(req)) ?? new Response("not an account route", { status: 599 });
+  // `/s/<space>/…` is what a multi-space serve hands over after its visibility check: the account routes of that space
+  const send: Send = async (req) => {
+    const at = /^\/s\/([a-z0-9-]+)(\/.*)$/.exec(new URL(req.url).pathname);
+    return (await route(req, at ? { space: at[1]!, path: at[2]! } : undefined)) ?? new Response("not an account route", { status: 599 });
+  };
   const browser = (headers: Record<string, string> = {}) => new Browser(send, ORIGIN, ORIGIN, headers);
   return { root, logs, oidc, google, github, clock, send, browser, setConfig: (c: Config) => (cfg = c), db: () => new Database(accountsFile(root), { readonly: true }) };
 }
@@ -640,6 +644,46 @@ test("deleting the account removes the user and everything under it, and only th
   // signing in again makes a new, empty account
   const again = await signInAs(a, "alice");
   expect((await again.json("/api/conversations")).body.conversations).toEqual([]);
+});
+
+test("per space: conversations, journeys and favorites of one space are invisible from another (and from the root), by id as well", async () => {
+  const a = await setup(ALL);
+  const alice = await signInAs(a, "alice");
+  const conv = {} as Record<string, any>, trip = {} as Record<string, any>;
+  for (const sp of ["a", "b", ""]) {
+    const base = sp ? `/s/${sp}` : "";
+    conv[sp] = (await alice.json(`${base}/api/conversations`, { method: "POST", body: { turns: [turn(1)], title: `in ${sp || "root"}` } })).body;
+    trip[sp] = (await alice.json(`${base}/api/journeys`, { method: "POST", body: { route: ["wiki/concepts/x"] } })).body;
+    await alice.json(`${base}/api/me/state`, { method: "PUT", body: { favs: [`wiki/concepts/x`, sp] } }); // the same page id in every space
+  }
+  for (const sp of ["a", "b", ""]) {
+    const base = sp ? `/s/${sp}` : "";
+    expect((await alice.json(`${base}/api/conversations`)).body.conversations.map((c: { id: string }) => c.id)).toEqual([conv[sp].id]);
+    expect((await alice.json(`${base}/api/journeys`)).body.journeys.map((j: { id: string }) => j.id)).toEqual([trip[sp].id]);
+    expect((await alice.json(`${base}/api/me/state`)).body).toEqual({ favs: ["wiki/concepts/x", sp] });
+  }
+  // an id of another space is a 404 on every verb, and nothing changed there
+  for (const [method, path, body] of [
+    ["GET", `/s/b/api/conversations/${conv.a.id}`], ["PUT", `/s/b/api/conversations/${conv.a.id}`, { title: "pwned" }], ["DELETE", `/s/b/api/conversations/${conv.a.id}`],
+    ["GET", `/api/conversations/${conv.a.id}`], ["DELETE", `/api/conversations/${conv.a.id}`],
+    ["GET", `/s/a/api/journeys/${trip.b.id}`], ["PUT", `/s/a/api/journeys/${trip.b.id}`, { route: ["z"] }], ["DELETE", `/s/a/api/journeys/${trip.b.id}`],
+  ] as [string, string, unknown?][]) expect([method, path, (await alice.json(path, { method, body })).status]).toEqual([method, path, 404]);
+  expect((await alice.json(`/s/a/api/conversations/${conv.a.id}`)).body.title).toBe("in a");
+  expect((await alice.json(`/s/b/api/journeys/${trip.b.id}`)).status).toBe(200);
+  expect((await alice.json("/s/a/api/conversations?q=in+b")).body.conversations).toEqual([]);
+  // the account stays at the root, the quota is per space, another user sees none of it
+  for (const path of ["/s/a/api/me", "/s/a/api/auth/methods", "/s/a/api/spaces"]) expect((await alice.req(path)).status).toBe(599);
+  const bob = await signInAs(a, "bob");
+  for (const sp of ["a", "b"]) expect((await bob.json(`/s/${sp}/api/conversations`)).body.conversations).toEqual([]);
+  expect((await bob.json("/s/a/api/me/state")).body).toEqual({});
+  expect((await bob.json(`/s/a/api/conversations/${conv.a.id}`)).status).toBe(404);
+  const w = openAccounts(accountsFile(a.root));
+  w.run("begin");
+  for (let i = 0; i < ACCOUNT_LIMITS.perUser; i++) w.run("insert into journeys (id, user_id, title, route, created_at, updated_at, space) select ?, id, 't', '[\"a\"]', 1, 1, 'full' from users where subject = 'alice'", [`j${i}`]);
+  w.run("commit"); w.close();
+  expect((await alice.json("/s/full/api/journeys", { method: "POST", body: { route: ["a"] } })).status).toBe(409);
+  expect((await alice.json("/s/a/api/journeys", { method: "POST", body: { route: ["a"] } })).status).toBe(201);
+  expect((await alice.req("/s/a/api/me/state", { method: "PUT", origin: "https://evil.example", body: {} })).status).toBe(403);
 });
 
 test("the last owner of a space cannot delete their account (409, nothing deleted) until the space has another owner", async () => {

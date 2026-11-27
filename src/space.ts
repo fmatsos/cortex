@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Database } from "bun:sqlite";
-import { accountsFile, addSpaceMember, archiveSpaceRows, restoreSpaceRows, findUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, type Role } from "./accounts";
+import { accountsFile, addSpaceMember, archiveSpaceRows, moveToSpace, restoreSpaceRows, findUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, type Role } from "./accounts";
 import { regenerateCtx } from "./catalog";
 import { BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
 import { openWiki } from "./context";
@@ -207,6 +207,7 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
         for (const f of readdirSync(join(instance, ".cortex")).filter((f) => !INSTANCE_STATE.test(f))) renameSync(join(instance, ".cortex", f), join(dir, ".cortex", f));
       const config = await readConfig(instance);
       if (config.default_space == null) await writeConfig(configFile(instance), { ...config, default_space: name });
+      if (existsSync(accountsFile(instance))) withAccounts(instance, (db) => moveToSpace(db, name!, Date.now())); // what the accounts saved before the spaces is this space's
       console.log(`${paint.ok("✓")} moved ${present.map((p) => `${p}/`).join(", ")} into spaces/${name}/${inGit ? " (git mv: commit the move)" : ""}.`);
       return;
     }

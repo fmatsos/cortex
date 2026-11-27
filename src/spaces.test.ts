@@ -231,7 +231,8 @@ describe("cortex space", () => {
     sh(root, "init", "-q", "-b", "main"); sh(root, "add", "-A"); sh(root, "commit", "-qm", "init");
     mkdirSync(join(root, "wiki/untracked"), { recursive: true }); writeFileSync(join(root, "wiki/untracked/u.md"), "u");
     mkdirSync(join(root, ".cortex/serve/a"), { recursive: true });
-    for (const f of [".cortex/accounts.db", ".cortex/accounts.db-wal", ".cortex/search.db", ".cortex/judge.db", ".cortex/serve/a/x"]) writeFileSync(join(root, f), "d");
+    openAccounts(join(root, ".cortex/accounts.db")).close(); // a real one: migrate gives its rows to the space
+    for (const f of [".cortex/search.db", ".cortex/judge.db", ".cortex/serve/a/x"]) writeFileSync(join(root, f), "d");
     const r = cortex(root, ["space", "migrate", "veille"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("spaces/veille/");
@@ -240,12 +241,37 @@ describe("cortex space", () => {
       expect(existsSync(join(root, f))).toBe(false);
     }
     expect(existsSync(join(root, ".cortex/accounts.db"))).toBe(true);
-    expect(existsSync(join(root, ".cortex/accounts.db-wal"))).toBe(true);
     expect(existsSync(join(root, "wiki"))).toBe(false);
     expect(sh(root, "status", "--porcelain")).toContain("R  wiki/concepts/a.md -> spaces/veille/wiki/concepts/a.md"); // history kept
     expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).default_space).toBe("veille");
     expect(cortex(root, ["ls"]).out).toContain("T"); // the default space now answers
     expect(cortex(root, ["space", "migrate", "other"]).code).toBe(2); // spaces/ exists: refused
+  });
+
+  test("migrate gives the saved conversations, journeys and favorites of the legacy instance to the space (an accounts.db of before the spaces)", () => {
+    const root = tmp();
+    writeFileSync(join(root, "cortex.json"), "{}");
+    mkdirSync(join(root, "wiki"), { recursive: true }); mkdirSync(join(root, "raw"), { recursive: true });
+    mkdirSync(join(root, ".cortex"), { recursive: true });
+    const old = new Database(join(root, ".cortex/accounts.db"), { create: true });
+    old.run(`
+      create table users (id text primary key, provider text not null, subject text not null, name text, email text, created_at integer not null, last_login_at integer not null, unique (provider, subject));
+      create table user_state (user_id text primary key references users(id) on delete cascade, data text not null, updated_at integer not null);
+      create table conversations (id text primary key, user_id text not null references users(id) on delete cascade, title text not null, turns text not null, exchanges integer not null, search text not null, created_at integer not null, updated_at integer not null);
+      create table journeys (id text primary key, user_id text not null references users(id) on delete cascade, title text not null, route text not null, created_at integer not null, updated_at integer not null);
+      create table space_members (space text not null, user_id text not null, primary key (space, user_id));
+      insert into users values ('u1', 'github', '1', 'Ada', null, 1, 1), ('u2', 'github', '2', 'Bob', null, 1, 1);
+      insert into user_state values ('u1', '{"theme":"dark","favs":["wiki/concepts/x","wiki/y"]}', 1), ('u2', '{"theme":"light"}', 1);
+      insert into conversations values ('c1', 'u1', 'Q', '[]', 0, 'q', 1, 1);
+      insert into journeys values ('j1', 'u1', 'J', '["a"]', 1, 1), ('j2', 'u2', 'K', '["b"]', 1, 1);`);
+    old.close();
+    expect(cortex(root, ["space", "migrate", "veille"]).code).toBe(0);
+    const db = openAccounts(accountsFile(root));
+    expect(db.query("select id, space from conversations").all()).toEqual([{ id: "c1", space: "veille" }]);
+    expect(db.query("select id, space from journeys order by id").all()).toEqual([{ id: "j1", space: "veille" }, { id: "j2", space: "veille" }]);
+    expect(db.query("select user_id, space, data from space_state").all()).toEqual([{ user_id: "u1", space: "veille", data: '{"favs":["wiki/concepts/x","wiki/y"]}' }]);
+    expect(db.query("select user_id, data from user_state order by user_id").all()).toEqual([{ user_id: "u1", data: '{"theme":"dark"}' }, { user_id: "u2", data: '{"theme":"light"}' }]); // the account keeps its preferences
+    db.close();
   });
 
   test("migrate without git is a plain rename, and an existing default_space is kept", () => {
