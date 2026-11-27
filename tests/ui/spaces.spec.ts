@@ -15,7 +15,10 @@ type Mock = {
   spaces: Row[];
   canCreate: boolean;
   details: Record<string, Detail>;
-  archived: { name: string; title: string | null; archived_at: string }[];
+  archived: { name: string; title: string | null; content: Content[]; archived_at: string }[];
+  /** What `GET /api/search?spaces=…` answers, and the query strings it was asked with. */
+  across: { hits: { space: string; id: string; title: string; type: string; extract: string; match: string }[]; spaces: string[] };
+  searches: string[];
   restoreError?: number;
   archiveError?: { status: number; error: string };
   createdTaken: string[];
@@ -42,7 +45,8 @@ const newMock = (over: Partial<Mock> = {}): Mock => ({
     carnet: detail("carnet", { title: "Carnet personnel", content: ["notes"], members: [{ id: "u1", name: "Ada Lovelace", role: "owner" }] }),
     ro: detail("ro", { title: "Famille", read_only: true, content: ["notes", "resources"], you: "member" }),
   },
-  archived: [{ name: "old", title: "Ancienne documentation", archived_at: "2026-10-02T10:00:00.000Z" }],
+  archived: [{ name: "old", title: "Ancienne documentation", content: ["notes", "resources"], archived_at: "2026-10-02T10:00:00.000Z" }],
+  across: { hits: [], spaces: [] }, searches: [],
   createdTaken: [],
   calls: [], writes: [],
   ...over,
@@ -71,6 +75,7 @@ async function mount(page: Page, m: Mock, space = "demo") {
         return m.createdTaken.includes(b.name) ? json({ error: "exists" }, 409) : json({ name: b.name, url: `/s/${b.name}/` }, 201);
       }
       if (path === "/api/spaces/archived") return json({ archived: m.archived });
+      if (path === "/api/search" && method === "GET") { m.searches.push(url.pathname + url.search); return json(m.across); }
       const restore = path.match(/^\/api\/spaces\/([a-z0-9-]+)\/restore$/);
       if (restore) {
         if (m.restoreError) return json({ error: `a space ${restore[1]} exists now` }, m.restoreError);
@@ -214,10 +219,81 @@ test.describe("home of a space", () => {
     await expect(page.getByRole("note")).toHaveCount(0);
   });
 
-  test("the search says where it looks", async ({ page }) => {
+  test("the notes of a space of notes are the pages that come from notes, labelled as such", async ({ page }) => {
+    await mount(page, newMock());
+    await page.goto("/s/carnet/");
+    const recent = page.getByRole("region", { name: /Recent notes|Notes récentes/ });
+    // the fixture's raw source "Source one" is a note, and three pages cite it (and nothing else): they come from notes
+    for (const title of [/Source one/, /Alpha concept/, /Overview/]) await expect(recent.getByRole("link", { name: title })).toBeVisible();
+    await expect(recent.getByText(/^(Note)$/)).toHaveCount(3);
+    await expect(recent.getByRole("link", { name: /Beta concept|Gamma entity/ })).toHaveCount(0); // they cite no source at all: pages, not notes
+  });
+
+  test("the search says where it looks: the control is for someone signed in, the plain line for the others", async ({ page }) => {
     await mount(page, newMock());
     await page.goto("/s/demo/search/");
-    await expect(page.getByText(/In this space|Dans cet espace/)).toContainText("Demo space");
+    await expect(page.getByRole("radio", { name: /This space.*Demo space|Cet espace.*Demo space/ })).toBeChecked();
+    await expect(page.getByText(/In this space|Dans cet espace/)).toHaveCount(0);
+    const out = await page.context().newPage();
+    await mount(out, newMock({ signedIn: false }));
+    await out.goto("/s/demo/search/");
+    await expect(out.getByText(/In this space|Dans cet espace/)).toContainText("Demo space");
+    await expect(out.getByRole("radio")).toHaveCount(0);
+  });
+});
+
+test.describe("search across spaces", () => {
+  const across = {
+    spaces: ["demo", "carnet"],
+    hits: [
+      { space: "demo", id: "concepts/alpha", title: "Alpha concept", type: "Concept", extract: "The first alpha concept", match: "both" },
+      { space: "carnet", id: "journal/2026-11-27", title: "Journal alpha", type: "Source", extract: "A note about alpha", match: "lexical" },
+    ],
+  };
+  const scope = (page: Page) => page.getByRole("group", { name: /Search in|Rechercher dans/ });
+
+  test("this space by default, nothing asked of the server; all my spaces: results grouped by space, a hit opens in its own space", async ({ page }) => {
+    const m = newMock({ across });
+    await mount(page, m);
+    await page.goto("/s/demo/search/?q=alpha");
+    await expect(scope(page).getByRole("radio", { name: /This space|Cet espace/ })).toBeChecked();
+    await expect(scope(page).getByRole("radio")).toHaveCount(3);
+    expect(m.searches).toEqual([]);
+    await scope(page).getByRole("radio", { name: /All my spaces|Tous mes espaces/ }).check();
+    const demo = page.getByRole("region", { name: /Results of Demo space|Résultats de Demo space/ }), carnet = page.getByRole("region", { name: /Results of Carnet personnel|Résultats de Carnet personnel/ });
+    await expect(demo).toContainText("Alpha concept");
+    await expect(carnet).toContainText("Journal alpha");
+    await expect(carnet).toContainText(/Notes/); // what the space holds, as everywhere
+    expect(m.searches).toEqual(["/api/search?q=alpha&spaces=all&limit=50"]);
+    await expect(carnet.getByRole("link", { name: "Journal alpha" })).toHaveAttribute("href", "/s/carnet/wiki/journal/2026-11-27/");
+    await expect(demo.getByRole("link", { name: "Alpha concept" })).toHaveAttribute("href", "/s/demo/wiki/concepts/alpha/");
+    // back to this space: the page of its own index again
+    await scope(page).getByRole("radio", { name: /This space|Cet espace/ }).check();
+    await expect(page.getByRole("region", { name: /Results of|Résultats de/ })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Alpha concept/ }).first()).toBeVisible();
+  });
+
+  test("choose the spaces: the picked ones are asked, none asked says so, a failing search is announced", async ({ page }) => {
+    const m = newMock({ across });
+    await mount(page, m);
+    await page.goto("/s/demo/search/?q=alpha");
+    await scope(page).getByRole("radio", { name: /Choose the spaces|Choisir les espaces/ }).check();
+    await expect(page.getByText(/Choose at least one space|Choisissez au moins un espace/)).toBeVisible();
+    expect(m.searches).toEqual([]);
+    await scope(page).getByRole("checkbox", { name: /Carnet personnel/ }).check();
+    await scope(page).getByRole("checkbox", { name: /Famille/ }).check();
+    await expect.poll(() => m.searches.at(-1)).toBe("/api/search?q=alpha&spaces=carnet,ro&limit=50");
+    await expect(page.getByRole("region", { name: /Carnet personnel/ })).toBeVisible();
+    await page.route("**/api/search?*", (r) => r.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+    await scope(page).getByRole("checkbox", { name: /Famille/ }).uncheck();
+    await expect(page.getByText(/search across spaces failed|recherche dans les espaces a échoué/)).toBeVisible();
+  });
+
+  test("a visitor with one space to choose from has no control", async ({ page }) => {
+    await mount(page, newMock({ spaces: [{ name: "demo", title: "Demo space", read_only: false, content: ["resources"] }] }));
+    await page.goto("/s/demo/search/");
+    await expect(page.getByText(/In this space|Dans cet espace/)).toBeVisible();
+    await expect(page.getByRole("radio")).toHaveCount(0);
   });
 });
 
@@ -270,6 +346,8 @@ test.describe("account: my spaces", () => {
     await page.goto("/s/demo/account/");
     const section = page.getByRole("region", { name: /Archived spaces|Espaces archivés/ });
     await expect(section).toContainText("Ancienne documentation");
+    await expect(section.getByRole("listitem")).toContainText(/Notes/);
+    await expect(section.getByRole("listitem")).toContainText(/Resources|Ressources/);
     await section.getByRole("button", { name: /Restore|Restaurer/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("/s/old/");

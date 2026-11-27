@@ -113,10 +113,16 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
 export type SpaceHit = Hit & { space: string };
 
 /**
- * `search` in each space, then one list: each space's ranking fused by reciprocal rank (the same `EMBED.rrfK`), a tie going to the
- * first space listed. Wiki before raw, as in a single space; `score`: lower is better.
+ * The rankings of several spaces (each list in its own order) as one list: fused by reciprocal rank (the same `EMBED.rrfK`), a tie going to
+ * the first space listed. Wiki before raw, as in a single space (a hit with no `area` is a wiki page); `score`: lower is better.
  */
+export function fuseSpaces<H extends object>(lists: { space: string; hits: H[] }[], limit: number): (H & { space: string; score: number })[] {
+  const raw = (h: object) => Number("area" in h && h.area === "raw");
+  return lists.flatMap(({ space, hits }) => hits.map((h, i) => ({ ...h, space, score: -1 / (EMBED.rrfK + i + 1) })))
+    .sort((a, b) => raw(a) - raw(b) || a.score - b.score).slice(0, limit);
+}
+
+/** `search` in each space, then `fuseSpaces`. */
 export async function searchSpaces(spaces: { space: string; root: string }[], q: string, opts: Parameters<typeof search>[2] = {}): Promise<SpaceHit[]> {
-  const lists = await Promise.all(spaces.map(async ({ space, root }) => (await search(root, q, opts)).map((h, i): SpaceHit => ({ ...h, space, score: -1 / (EMBED.rrfK + i + 1) }))));
-  return lists.flat().sort((a, b) => Number(a.area === "raw") - Number(b.area === "raw") || a.score - b.score).slice(0, opts.limit ?? 20);
+  return fuseSpaces(await Promise.all(spaces.map(async ({ space, root }) => ({ space, hits: await search(root, q, opts) }))), opts.limit ?? 20);
 }

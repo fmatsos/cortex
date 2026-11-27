@@ -10,8 +10,8 @@ import type { Config } from "./config";
 import { askSitePrompt, askSiteSystem, scopePrefix } from "./prompts";
 import { historyPart, pagesPart, relevantPages, wikiTools, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
-import { search } from "./search";
-import { searchSite } from "./search-api";
+import { fuseSpaces, search } from "./search";
+import { searchSite, type SearchHit } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
 import { inbox, sharesResource } from "./inbox";
@@ -660,6 +660,30 @@ export async function serve(root: string, o: ServeOpts) {
     return Response.json({ name, url: `/s/${name}/` }, { headers: noStore });
   };
 
+  /**
+   * `GET /api/search?q=…&spaces=a,b|all` at the root: the site's own search (operators included, no judge) in each requested space the visitor may
+   * see, fused by `fuseSpaces`, every hit with its `space`. A space they may not see (or that does not exist) is dropped without a word. Looking
+   * into more than one space is for a signed-in person (decided on what was asked, before anything is checked): a single named space is the
+   * space's own search, open or private as it is.
+   */
+  const searchAcross = async (req: Request, url: URL): Promise<Response> => {
+    if (req.method === "HEAD") return new Response(null, { status: 204, headers: noStore });
+    if (req.method !== "GET") return new Response(null, { status: 405, headers: noStore });
+    const asked = url.searchParams.get("spaces") ?? "", every = asked === "all", names = every ? [] : [...new Set(asked.split(",").map((s) => s.trim()).filter(Boolean))];
+    const q = url.searchParams.get("q") ?? "", limit = Math.min(Math.max(Math.trunc(Number(url.searchParams.get("limit"))) || LIMITS.searchLimit, 1), LIMITS.searchMaxLimit);
+    if (!q.trim() || q.length > LIMITS.searchQueryChars) return Response.json({ error: `expected q (1 to ${LIMITS.searchQueryChars} characters)` }, { status: 400, headers: noStore });
+    if (!every && !names.length) return Response.json({ error: "expected spaces=a,b or spaces=all" }, { status: 400, headers: noStore });
+    if ((every || names.length > 1) && !(await accounts.userOf(req))) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+    const targets: string[] = [];
+    for (const n of every ? await visible(req) : names) if (sites.has(n) && (every || await may(n, req))) targets.push(n);
+    const lists = await Promise.all(targets.map(async (space) => {
+      try { return { space, hits: ((await searchSite(spaceRoot(root, space), q, { limit })).body.hits ?? []) as SearchHit[] }; }
+      catch (e) { say(`search in ${space}: ${(e as Error).message}`); return { space, hits: [] as SearchHit[] }; } // one broken space does not hide the others
+    }));
+    const hits = fuseSpaces(lists, limit).map(({ space, id, title, type, extract, match }) => ({ space, id, title, type, extract, match }));
+    return Response.json({ hits, spaces: targets }, { headers: noStore });
+  };
+
   const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: async (name) => { const site = sites.get(name); sites.delete(name); await site?.halt(); }, rebuild: (name) => sites.get(name)?.rebuild() });
 
   const server = Bun.serve({
@@ -671,6 +695,7 @@ export async function serve(root: string, o: ServeOpts) {
       if (!multi) return sites.get("")!.fetch(req, srv, url);
       const flow = await invitations(req, url) ?? await archived(req, url);
       if (flow) return flow;
+      if (url.pathname === "/api/search") return searchAcross(req, url);
       if (url.pathname === "/api/spaces") {
         if (req.method === "POST") { srv.timeout(req, 0); return createSpace(req); } // the first build of the space outlasts Bun's 10 s idle timeout
         if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });

@@ -7,6 +7,12 @@
 	import SearchBox from "#lib/components/search-box.svelte";
 	import SearchScope from "#lib/components/search-scope.svelte";
 	import SearchFacets from "#lib/components/search-facets.svelte";
+	import TypeBadge from "#lib/components/type-badge.svelte";
+	import { account } from "#lib/account.svelte.js";
+	import { ApiError } from "#lib/api.js";
+	import { bySpace, hitHref, searchAcross, type Across, type Scope } from "#lib/space-search.js";
+	import { labelOf, spaces } from "#lib/spaces.svelte.js";
+	import SpaceBadges from "#lib/components/space-badges.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
 	import { toPage, toRoute } from "#lib/links.js";
@@ -16,7 +22,7 @@
 	import type { SearchDoc } from "#lib/types.js";
 	import { search } from "#lib/search-state.svelte.js";
 	import { typeIcon, typePlural } from "#lib/type-meta.js";
-	import { t } from "#lib/i18n/index.js";
+	import { contentLang, t } from "#lib/i18n/index.js";
 
 	let { data } = $props();
 	const STEP = 50; // results displayed per slice
@@ -27,6 +33,26 @@
 	let limit = $state(STEP);
 	let filtersOpen = $state(false);
 	let undoBtn = $state<HTMLButtonElement | null>(null);
+
+	// Beyond this space (signed in, several spaces): the server searches the spaces asked for and fuses the answers; the local index stays the
+	// one of this space, so that the page below is replaced by the results grouped by space while the scope is wider.
+	let scope = $state<Scope>("current");
+	let picked = $state<string[]>([]);
+	const wide = $derived(scope !== "current" && !!account.me && spaces.list.length > 1);
+	let across = $state<{ q: string; res?: Across; failed?: boolean }>();
+	const groups = $derived(across?.res ? bySpace(across.res.hits, across.res.spaces) : []);
+	const spaceOf = (name: string) => spaces.list.find((s) => s.name === name);
+	$effect(() => {
+		const v = search.validated.trim(), on = wide, target = scope === "all" ? "all" as const : [...picked];
+		across = undefined;
+		if (!on || !v || (target !== "all" && !target.length)) return;
+		const ctl = new AbortController();
+		untrack(() => void searchAcross(v, target, ctl.signal).then(
+			(res) => { across = { q: v, res }; },
+			(e) => { if (ctl.signal.aborted) return; if (e instanceof ApiError && e.status === 401) account.expire(); across = { q: v, failed: true }; },
+		));
+		return () => ctl.abort();
+	});
 
 	const q = $derived(search.q);
 	const text = $derived(q.trim());
@@ -195,10 +221,40 @@
 
 <h1 class="text-3xl font-semibold tracking-tight">{t("nav.search")}</h1>
 <SearchBox variant="main" live class="mt-4" />
-<SearchScope />
+<SearchScope choose bind:scope bind:picked />
 <FilterChips bind:value={() => search.q, (v) => search.apply(v)} class="mt-3" />
 
 
+{#if wide}
+	<section aria-labelledby="across-h" class="mt-6 min-w-0">
+		<h2 id="across-h" class="sr-only">{t("search.resultsLabel")}</h2>
+		<p class="text-muted-foreground min-h-6 text-sm" role="status">
+			{#if !text}{t("spaces.search.hint")}
+			{:else if scope === "set" && !picked.length}{t("spaces.search.none")}
+			{:else if across?.failed}{t("spaces.search.failed")}
+			{:else if !across || across.q !== search.validated.trim()}{search.validated.trim() === text ? t("spaces.search.loading") : t("spaces.search.hint")}
+			{:else}{t("search.results", { count: across.res?.hits.length ?? 0 })}{/if}
+		</p>
+		{#each groups as g (g.space)}
+			{@const s = spaceOf(g.space)}
+			<section aria-label={t("spaces.search.group", { title: s ? labelOf(s) : g.space })} class="mt-4" data-space={g.space}>
+				<h3 class="bg-muted flex flex-wrap items-center gap-x-2 gap-y-1 border px-3 py-2 text-base font-semibold"><Icon name="space" size={20} /><span lang={contentLang}>{s ? labelOf(s) : g.space}</span><span class="text-muted-foreground text-xs font-normal">{g.space}</span>{#if s}<SpaceBadges content={s.content} readOnly={s.readOnly} />{/if}<span class="text-muted-foreground ml-auto text-sm font-normal tabular-nums">{t("search.results", { count: g.hits.length })}</span></h3>
+				<ul class="divide-border divide-y">
+					{#each g.hits as h (h.id)}
+						<li class="py-4">
+							<p class="mb-1.5 flex flex-wrap items-center gap-2"><TypeBadge type={h.type} /></p>
+							<a href={hitHref(h)} data-sveltekit-reload lang={contentLang} class="text-link link-content text-lg leading-snug font-semibold underline-offset-4 hover:underline">{@html highlight(h.title, parsed)}</a>
+							{#if h.extract}<p lang={contentLang} class="mt-1 line-clamp-3 text-[0.9375rem]">{@html highlight(h.extract.length > 320 ? `${h.extract.slice(0, 320)} …` : h.extract, parsed)}</p>{/if}
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/each}
+		{#if text && across?.res && !across.res.hits.length && across.q === search.validated.trim()}
+			<p class="py-6 font-medium">{t("spaces.search.empty")}</p>
+		{/if}
+	</section>
+{:else}
 <div class="mt-6 grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-10">
 	<aside aria-label={t("search.filters.label")}>
 		<details bind:open={filtersOpen} class="rounded-lg border px-3 py-1 lg:border-0 lg:p-0">
@@ -387,3 +443,4 @@
 		{/if}
 	</section>
 </div>
+{/if}

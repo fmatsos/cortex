@@ -638,3 +638,44 @@ test("the title given at creation survives the archive and the restore, and the 
   expect((await send("POST", "/api/spaces/mine/restore", undefined, as)).status).toBe(200);
   expect(await row("/api/spaces", "spaces")).toMatchObject({ title: "Mes notes", content: ["notes"] });
 });
+
+test("GET /api/search?spaces=…: each space the visitor may see is searched and the hits are fused; the others are dropped silently; several spaces are for a signed-in person", async () => {
+  const root = instance(["open", "priv", "second"], { ...AUTH, default_space: "open" });
+  const ada = person(root, "1"), bob = person(root, "2");
+  hold(root, "priv", ada.id);
+  const page = (space: string, name: string, title: string) => {
+    mkdirSync(join(root, "spaces", space, "wiki/concepts"), { recursive: true });
+    writeFileSync(join(root, "spaces", space, `wiki/concepts/${name}.md`), `---\ntype: Concept\ntitle: ${title}\ndescription: About the zebracorn.\ntags: [t]\nstatus: stable\n---\nThe zebracorn lives here.\n`);
+  };
+  page("open", "a", "Open zebracorn"); page("priv", "b", "Private zebracorn"); page("second", "c", "Second zebracorn");
+  const { get, server } = await start(root);
+  const find = async (qs: string, who?: Record<string, string>) => { const r = await get(`/api/search?q=zebracorn&${qs}`, who); return { status: r.status, body: (await r.json()) as { hits?: { space: string; id: string; title: string; type: string }[]; spaces?: string[]; error?: string } }; };
+  const spacesOf = (b: { hits?: { space: string }[] }) => [...new Set(b.hits!.map((h) => h.space))].sort();
+  // a signed-in person: every space they may see, ranked together, each hit says where it comes from
+  const all = await find("spaces=all", ada.cookie);
+  expect([all.status, all.body.spaces?.sort(), spacesOf(all.body)]).toEqual([200, ["open", "priv", "second"], ["open", "priv", "second"]]);
+  expect(all.body.hits![0]).toMatchObject({ id: expect.stringMatching(/^concepts\//), type: "Concept", title: expect.stringContaining("zebracorn") });
+  expect(JSON.stringify(all.body)).not.toContain("score");
+  // the same request from someone who may not see the private space: it is not there, and nothing says it was asked for
+  const bobAll = await find("spaces=all", bob.cookie);
+  expect([bobAll.status, spacesOf(bobAll.body)]).toEqual([200, ["open", "second"]]);
+  const dropped = await find("spaces=open,priv,ghost", bob.cookie);
+  expect([dropped.status, dropped.body.spaces, spacesOf(dropped.body)]).toEqual([200, ["open"], ["open"]]);
+  expect(JSON.stringify(dropped.body)).not.toMatch(/priv|ghost/);
+  // nobody signed in: one named space is that space's own search (open as it is), several are refused whatever they hold
+  expect((await find("spaces=open")).body.spaces).toEqual(["open"]);
+  expect((await find("spaces=priv")).body).toEqual({ hits: [], spaces: [] });
+  expect((await find("spaces=all")).status).toBe(401);
+  expect((await find("spaces=open,second")).status).toBe(401);
+  expect((await find("spaces=open,priv")).status).toBe(401);
+  // bad requests, method, probe
+  expect((await find("")).status).toBe(400);
+  expect((await get("/api/search?spaces=all", ada.cookie)).status).toBe(400);
+  expect((await get("/api/search?q=%20&spaces=all", ada.cookie)).status).toBe(400);
+  expect((await fetch(`http://localhost:${server.port}/api/search?q=x&spaces=all`, { method: "POST", headers: { origin: `http://localhost:${server.port}`, ...ada.cookie } })).status).toBe(405);
+  const r = await get("/api/search?q=zebracorn&spaces=all", ada.cookie);
+  expect(r.headers.get("cache-control")).toBe("no-store");
+  // the fusion itself: one ranking per space, reciprocal rank, a tie to the first space listed
+  const { fuseSpaces } = await import("./search");
+  expect(fuseSpaces([{ space: "a", hits: [{ t: 1 }, { t: 2 }] }, { space: "b", hits: [{ t: 3 }] }], 3).map((h) => [h.space, h.t])).toEqual([["a", 1], ["b", 3], ["a", 2]]);
+});
