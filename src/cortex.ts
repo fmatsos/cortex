@@ -12,7 +12,7 @@ import { search } from "./search";
 import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
 import { CONFIG_KEYS, override } from "./config";
-import { CortexError, findRoot } from "./lib";
+import { CortexError, findInstance, findRoot, isMultiSpace } from "./lib";
 import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
 import { fail, paint, warn } from "./style";
@@ -27,7 +27,9 @@ const usage = (msg: string) => new CortexError(msg, "usage");
 /** This very cortex: the compiled binary, or bun and the script. */
 const SELF = /\.[jt]s$/.test(Bun.main) ? [process.execPath, Bun.main] : [process.execPath];
 /** Whether a local wiki answers: $CORTEX_ROOT, or a parent folder holding cortex.json. */
-const hasLocalWiki = () => { try { findRoot(); return true; } catch { return false; } };
+const hasLocalWiki = () => !!process.env.CORTEX_ROOT || !!findInstance();
+/** `space` and `config` concern the instance as a whole: no space has to be chosen for them. */
+const instanceOrRoot = () => { const i = findInstance(process.env.CORTEX_ROOT || process.cwd()); return i && isMultiSpace(i) ? i : findRoot(); };
 type Token = { kind: string; index: number; name?: string; value?: string; inlineValue?: boolean };
 /** The argv sent to a remote wiki: the command first (remote-exec checks it), without --wiki, everything else as typed. */
 function forwardedArgv(argv: string[], tokens: Token[]): string[] {
@@ -87,7 +89,7 @@ try {
       process.exit(await forward(target, forwardedArgv(process.argv.slice(2), tokens!)));
     }
   }
-  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : findRoot();
+  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" ? instanceOrRoot() : findRoot(process.cwd(), o.space);
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {
@@ -273,6 +275,9 @@ try {
       else process.stdout.write(await schemaText(root));
       break;
     }
+    case "space":
+      await (await import("./space")).spaceCmd(root, args, { repo: o.repo });
+      break;
     case "config":
       finish(await configCmd(root, args), false);
       break;
