@@ -19,6 +19,9 @@ export default defineConfig({
       // make them relative for an arbitrary address): domain root by default, CORTEX_SITE_BASE=/subpath otherwise.
       adapter: adapter({ pages: out, assets: out, fallback: "404.html" }),
       version: { name: process.env.CORTEX_SITE_VERSION ?? "dev" }, // deterministic (fingerprint of the frontend, not of the data: see exportSite): the export is reproducible
+      // the service worker is registered by app.html, not by SvelteKit: SvelteKit always registers it as a module, and a browser fetches the script of a
+      // module service worker without cookies, which a private space (`/s/<name>/`, members only) answers with a 404: no offline copy there.
+      serviceWorker: { register: false },
       paths: { relative: true, base: process.env.CORTEX_SITE_BASE ?? "" }, // relative links and resources: works under any subpath
       prerender: {
         handleHttpError: "fail", handleMissingId: "ignore", // a broken anchor in a wiki link is harmless, a 404 is not

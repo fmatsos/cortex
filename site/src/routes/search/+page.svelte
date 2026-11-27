@@ -5,6 +5,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import ResultRow from "#lib/components/result-row.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
+	import SearchScope from "#lib/components/search-scope.svelte";
 	import SearchFacets from "#lib/components/search-facets.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { fold } from "#lib/fold.js";
@@ -194,6 +195,7 @@
 
 <h1 class="text-3xl font-semibold tracking-tight">{t("nav.search")}</h1>
 <SearchBox variant="main" live class="mt-4" />
+<SearchScope />
 <FilterChips bind:value={() => search.q, (v) => search.apply(v)} class="mt-3" />
 
 

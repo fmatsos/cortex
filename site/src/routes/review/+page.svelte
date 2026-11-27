@@ -13,14 +13,15 @@
 	// by its own « Mark as reviewed » button, which only exists where `/api/verify` answers (`cortex serve`).
 	let { data } = $props();
 	let done = $state(new Set<string>()); // validated from this tab since the build: they leave the queue until the site is rebuilt
-	let api = $state(false);
+	let probe = $state<"none" | "ok" | "read-only">("none"); // 409: a read-only space
+	const api = $derived(probe === "ok");
 	const pending = $derived(data.items.filter((i) => !done.has(i.id)));
 	const never = $derived(pending.filter((i) => i.reason === "never").length);
 	const modified = $derived(pending.length - never);
 
 	onMount(() => {
 		done = loadDone();
-		fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => (api = r.status === 204), () => {});
+		fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => { probe = r.status === 204 ? "ok" : r.status === 409 ? "read-only" : "none"; }, () => {});
 	});
 	// the article reached from here offers the next page of this very list
 	$effect(() => saveQueue(pending.map(({ id, title }) => ({ id, title }))));
@@ -38,7 +39,7 @@
 	<p class="text-muted-foreground mt-4">{t("review.off")}</p>
 	<p class="mt-3"><a href={toRoute("/")} class="text-link link-content underline underline-offset-4">{t("nav.home")}</a></p>
 {:else}
-	<p class="text-muted-foreground mt-3 max-w-prose">{t("review.lead")} {api ? t("review.hint.api") : t("review.hint.static")}</p>
+	<p class="text-muted-foreground mt-3 max-w-prose">{t("review.lead")} {api ? t("review.hint.api") : probe === "read-only" ? t("spaces.readOnly.reason") : t("review.hint.static")}</p>
 
 	{#if pending.length}
 		<div class="mt-4 flex flex-wrap items-center gap-3">

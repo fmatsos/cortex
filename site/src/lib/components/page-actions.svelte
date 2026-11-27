@@ -18,9 +18,11 @@
 	// a reply that arrives after a navigation to another page is never announced there (this component outlives the route change).
 	type Reviewed = { id: string; by: string; at: string };
 	let { id, md, original, reviewable = false, onreviewed }: { id: string; md: string; original?: { url: string; domain: string }; reviewable?: boolean; onreviewed?: (r: Reviewed) => void } = $props();
-	let api = $state(false), reviewingId = $state<string | null>(null);
+	// the probe: 204 = validation is available, 409 = this space is read-only (the button stays, disabled, with the reason), anything else = no API
+	let probe = $state<"none" | "ok" | "read-only">("none"), reviewingId = $state<string | null>(null);
+	const api = $derived(probe === "ok");
 	const reviewing = $derived(reviewingId === id);
-	$effect(() => { fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => (api = r.status === 204), () => {}); });
+	$effect(() => { fetch(spaceApi("/api/verify"), { method: "HEAD" }).then((r) => { probe = r.status === 204 ? "ok" : r.status === 409 ? "read-only" : "none"; }, () => {}); });
 	const review = async () => {
 		const target = id;
 		reviewingId = target;
@@ -86,6 +88,12 @@
 	<FavButton {id} />
 	{#if api && reviewable}
 		<Button size="sm" variant="outline" disabled={reviewing} onclick={review}>
+			<Icon name="verified" size={16} />
+			{t("actions.markReviewed")}
+		</Button>
+	{:else if probe === "read-only" && reviewable}
+		<!-- aria-disabled, not disabled: the button keeps its focus and says why (the reason is also in the context bar) -->
+		<Button size="sm" variant="outline" aria-disabled="true" aria-describedby="read-only-reason" title={t("spaces.readOnly.reason")} class="cursor-not-allowed opacity-60" onclick={(e: MouseEvent) => e.preventDefault()}>
 			<Icon name="verified" size={16} />
 			{t("actions.markReviewed")}
 		</Button>

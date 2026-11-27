@@ -5,7 +5,8 @@ import { api, ApiError } from "./api";
 import { favs } from "./favs.svelte";
 import { lang } from "./lang.svelte";
 import { reading } from "./reading.svelte";
-import { plan, stateKey, toBody, type SyncState } from "./sync-state";
+import { favsKey, joinServer, plan, prefsKey, prefsOf, stateKey, toBody, type SyncState } from "./sync-state";
+import { spaceApi, spacePrefix } from "./space";
 import { theme } from "./theme.svelte";
 
 /**
@@ -16,7 +17,9 @@ import { theme } from "./theme.svelte";
  *
  * Preferences (theme, language, reading comfort, favorites) stay local first. Once signed in, the account's state is read once; the first
  * synchronisation of an account sends the local state, later ones apply the server's (favorites: union), then every change
- * goes back as one `PUT` of the whole object, 1.5 s after the last one (see sync-state.ts for the rules).
+ * goes back as one `PUT` of the whole object, 1.5 s after the last one (see sync-state.ts for the rules). Under `/s/<space>/` the
+ * favorites are that space's own: they are read and written at `/s/<space>/api/me/state` (`{ favs }`), the four preferences at the
+ * root, each object sent only when its part changed. Without a space prefix, one object as before.
  */
 export type Provider = { id: string; label: string };
 /** `name` is "" when the provider gave none (the server answers `null`): the views show a generic label then. */
@@ -25,6 +28,8 @@ export type AuthNotice = "refused" | "error";
 
 const DEBOUNCE_MS = 1500;
 const STATE = "/api/me/state";
+/** The favorites are a space's own (the page is under `/s/<space>/`): two objects. */
+const apart = () => spacePrefix() !== "";
 
 /** The one place that reads the local stores... */
 const collectLocal = (): SyncState => ({ theme: theme.mode, lang: lang.choice, reading: reading.article, comfort: reading.assistant, favs: [...favs.ids] });
@@ -53,7 +58,10 @@ class Account {
 	notice = $state<AuthNotice | null>(null);
 	private started = false;
 	private base: unknown = {}; // what the server holds, to PUT back the keys this front end does not know
+	private spaceBase: unknown = {}; // the same for the space's favorites object
 	private lastSent = "";
+	private lastPrefs = "";
+	private lastFavs = "";
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private stopWatch: (() => void) | undefined;
 
@@ -116,11 +124,17 @@ class Account {
 	// ---- preferences synchronisation ---------------------------------------------------------------------------------
 
 	private async startSync() {
-		let server: unknown;
-		try { server = await api(STATE); } catch (e) { if (e instanceof ApiError && e.status === 401) this.me = null; return; }
-		const { apply, push } = plan(collectLocal(), server);
+		let server: unknown, spaceState: unknown = {};
+		try {
+			server = await api(STATE);
+			if (apart()) spaceState = await api(spaceApi(STATE));
+		} catch (e) { if (e instanceof ApiError && e.status === 401) this.me = null; return; }
+		const { apply, push } = plan(collectLocal(), apart() ? joinServer(server, spaceState) : server);
 		this.base = server;
+		this.spaceBase = spaceState;
 		this.lastSent = push ? "" : stateKey(apply);
+		this.lastPrefs = push ? "" : prefsKey(apply);
+		this.lastFavs = push ? "" : favsKey(apply);
 		applyLocal(apply);
 		if (push) await this.flush();
 		// only now: watching before the server's state is applied would send this browser's defaults over it
@@ -152,13 +166,30 @@ class Account {
 		if (!this.me) return;
 		const state = collectLocal(), key = stateKey(state);
 		if (key === this.lastSent) return;
+		const put = (url: string, body: unknown) => fetch(url, { method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: leaving });
 		try {
-			const body = toBody(this.base, state);
-			await fetch(STATE, { method: "PUT", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: leaving })
-				.then((r) => {
+			if (!apart()) {
+				const body = toBody(this.base, state);
+				await put(STATE, body).then((r) => {
 					if (r.status === 401) { this.me = null; this.stopSync(); } // the session ended: back to local only
 					else if (r.ok) { this.lastSent = key; this.base = body; }
 				});
+				return;
+			}
+			// two objects: each is sent only if its part changed, so a favorite never rewrites the preferences (nor the reverse)
+			let ok = true;
+			const prefs = prefsKey(state), favs = favsKey(state);
+			if (prefs !== this.lastPrefs) {
+				const body = toBody(this.base, prefsOf(state)), r = await put(STATE, body);
+				if (r.status === 401) { this.me = null; this.stopSync(); return; }
+				if (r.ok) { this.lastPrefs = prefs; this.base = body; } else ok = false;
+			}
+			if (favs !== this.lastFavs) {
+				const body = toBody(this.spaceBase, { favs: state.favs }), r = await put(spaceApi(STATE), body);
+				if (r.status === 401) { this.me = null; this.stopSync(); return; }
+				if (r.ok) { this.lastFavs = favs; this.spaceBase = body; } else ok = false;
+			}
+			if (ok) this.lastSent = key;
 		} catch { /* offline: the next change tries again */ }
 	}
 }
