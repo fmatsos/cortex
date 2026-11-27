@@ -31,3 +31,15 @@ What is planned, not started. Done work lives in the git history; design in `doc
 
 - Marking an action done: an edit of the page (through the agent, or a small server route that rewrites one line), or a per-user state that does not touch the wiki. A read-only space would refuse the first, not the second.
 - Reminders (notifications) stay out of scope: the calendar keeps that role.
+
+## Mobile app: choice of technology
+
+**When:** at the start of the mobile app, together with the move to Better Auth.
+
+**Decision to make:** how the app is built. The site stays on SvelteKit until then; a move to React is not worth it for the site alone (static export, offline service worker, per-space base path, about 610 Playwright tests).
+
+- **PWA:** the site as it is (already installable and offline). Cheapest; limited access to native features.
+- **Capacitor:** the same SvelteKit site packaged as a native app, with notifications and the system share sheet. Keeps one front end.
+- **React Native / Expo:** a separate native app. Only this option reopens the question of React for the site, to share components. The logic is shareable either way: API calls, sync, spaces and search live in plain TypeScript (`site/src/lib/*.ts`).
+
+**Criteria:** offline reading of several spaces, share target from the phone into a chosen space, notifications (if appointments and actions land), and the cost of keeping one or two front ends.
