@@ -30,9 +30,11 @@ export async function runExtra(t: ExtraTool, args: unknown): Promise<string> {
  * reader left, stop paying for the answer (the openai client only; without `text` the answer is not streamed, only cancellable).
  * `onlyExtra`: no cortex pack, only the run's extra tools (the site's questions never get the file tools). `toolRounds`: turns that
  * may run reading tools (the pack's, or the extra tools marked `read`); after them only the other extra tools are offered and the
- * model is told to answer (the openai client only; the claude client ignores it).
+ * model is told to answer (the openai client only; the claude client ignores it). `blocksReady`: false until a display block is
+ * registered; meanwhile the openai client sends `tool_choice: "required"` (for `LIMITS.askToolRounds + 2` turns at most), so the
+ * model cannot answer without calling a tool; the claude client ignores it.
  */
-export type Stream = { text?: (delta: string) => void; reset?: () => void; step?: (name: string, args: Record<string, unknown>) => void; signal?: AbortSignal; toolRounds?: number; onlyExtra?: boolean };
+export type Stream = { text?: (delta: string) => void; reset?: () => void; step?: (name: string, args: Record<string, unknown>) => void; signal?: AbortSignal; toolRounds?: number; onlyExtra?: boolean; blocksReady?: () => boolean };
 
 export interface Backend {
   /** Command of the interactive session: the agent presents its plan before writing. */

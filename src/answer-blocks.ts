@@ -81,7 +81,7 @@ export function blockRegistry(o: { titles?: Map<string, string>; log?: (m: strin
   };
   /** The text so far, for the stream: the blocks it names drawn in place as the final answer will, an unknown or half-written name dropped, the unnamed blocks left out until the end. */
   const draft = (md: string) => place(md.replace(HALF_NAME, ""), false);
-  return { tool, assemble, draft };
+  return { tool, assemble, draft, ready: () => blocks.size > 0 };
 }
 
 /** Streamed text as a draft when no block is known: every name, even half written, is dropped. */

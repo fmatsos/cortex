@@ -277,6 +277,7 @@ test("site agent: a long answer written without any block is the final answer (n
   try {
     const events = await post(`http://127.0.0.1:${b.port}/v1`, "q");
     expect(seenB).toHaveLength(2);
+    expect(seenB.map((r) => r.tool_choice)).toEqual(["required", undefined]); // forced to call a tool until a block exists
     const drafts = events.filter((e) => e.t === "draft"), done = events.at(-1);
     const kinds = (segs: any[]) => segs.map((x) => ("block" in x ? x.block.type : "html"));
     expect(drafts.length).toBeGreaterThan(0);

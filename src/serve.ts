@@ -135,7 +135,7 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
   if (blocks && stream) stream.draft = blocks.draft; // the live draft draws the blocks the agent prepared, where the text names them
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds });
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds, blocksReady: blocks?.ready });
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 

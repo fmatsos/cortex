@@ -67,10 +67,12 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         // server's prompt cache keeps the prefix on the turns in between
         if (nearFull(messages) && elide(messages)) report?.({ level: "info", text: "context nearly full: old tool results elided", mark: "  ↻" });
         const offered = capped ? extraTools : tools;
+        // no block registered yet: the model must call a tool (reading, or render_blocks), never answer bare; bounded, so a model that never gets a block through still answers
+        const required = !!offered.length && stream?.blocksReady?.() === false && turn < LIMITS.askToolRounds + 2;
         const res = await fetch(`${url}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, ...(offered.length && { tools: offered }), max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
+          body: JSON.stringify({ model: cfg.model, messages, ...(offered.length && { tools: offered }), ...(required && { tool_choice: "required" }), max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(LIMITS.llmRequestMs)]) : AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {

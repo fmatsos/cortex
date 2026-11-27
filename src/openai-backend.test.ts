@@ -425,3 +425,34 @@ test("openai: onlyExtra offers no pack tool, and the extra tools marked read are
     expect(seen[3].messages.at(-1).content).toContain("refused: your reading is over");
   } finally { server.stop(true); }
 });
+
+test("openai: tool_choice required is sent until a block is registered, then omitted; never without blocksReady", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const { z } = await import("zod");
+  const { blockRegistry } = await import("./answer-blocks");
+  const call = (id: string, name: string, args: object) => ({ id, type: "function", function: { name, arguments: JSON.stringify(args) } });
+  const tools = (...c: any[]) => ({ finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: c } });
+  const text = { finish_reason: "stop", message: { role: "assistant", content: "ok {{bloc-1}}" } };
+  const look = { name: "look", description: "d", schema: z.object({ q: z.string() }), read: true, run: async () => "found" };
+  const play = async (script: any[], blocksReady: (() => boolean) | undefined, extra: any[]) => {
+    const seen: any[] = [];
+    const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [script[seen.length - 1]] }); } });
+    try { await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, extra, { onlyExtra: true, toolRounds: 4, blocksReady }); }
+    finally { server.stop(true); }
+    return seen.map((b) => b.tool_choice);
+  };
+  const facts = { blocks: [{ type: "facts", items: [{ label: "A", value: "1" }] }] };
+  // a reading turn, then render_blocks, then the answer: required until the block exists
+  const r = blockRegistry();
+  expect(await play([tools(call("1", "look", { q: "a" })), tools(call("2", "render_blocks", facts)), text], r.ready, [look, r.tool])).toEqual(["required", "required", undefined]);
+  // the same run without the option: never sent
+  const r2 = blockRegistry();
+  expect(await play([tools(call("1", "look", { q: "a" })), tools(call("2", "render_blocks", facts)), text], undefined, [look, r2.tool])).toEqual([undefined, undefined, undefined]);
+  // render_blocks refused every time: required stops after askToolRounds + 2 turns, the model may answer
+  const r3 = blockRegistry({ titles: new Map() });
+  const bad = { blocks: [{ type: "pages", items: [{ path: "/nope", summary: "s" }] }] };
+  const n = LIMITS.askToolRounds + 2;
+  const choices = await play([...Array.from({ length: n }, (_, i) => tools(call(String(i), "render_blocks", bad))), text], r3.ready, [r3.tool]);
+  expect(choices).toEqual([...Array(n).fill("required"), undefined]);
+  expect(r3.ready()).toBe(false);
+});
