@@ -8,7 +8,7 @@
 	import { spaces, type SpaceDetail } from "#lib/spaces.svelte.js";
 	import { t } from "#lib/i18n/index.js";
 
-	// Who may see the space (open: everyone, no member; private: its members, a 404 for anyone else), whether it accepts writes
+	// Who may see the space (open: everyone, members keep their role; private: its members, a 404 for anyone else), whether it accepts writes
 	// (read-only: visible and searchable, no note, source, compilation or validation; favorites and journeys stay) and where it is
 	// stored (set from the command line, never from here). Changing the visibility asks for a confirmation: it changes who can read.
 	let { detail, onchange }: { detail: SpaceDetail; onchange: (d: SpaceDetail) => void } = $props();

@@ -12,8 +12,8 @@
 	import { intlLocale, t } from "#lib/i18n/index.js";
 	import { spaces, type Invite, type Member, type Role, type SpaceDetail } from "#lib/spaces.svelte.js";
 
-	// Who is in a private space (their role, removal: the last owner stays) and the single-use invitation links (valid 7 days: the link
-	// is the secret, nothing is e-mailed). An open space has no members: invite only once it is private.
+	// Who is in a space (their role, removal: the last owner stays) and the single-use invitation links (valid 7 days: the link
+	// is the secret, nothing is e-mailed). An open space keeps its members and roles too.
 	let { detail, onrefresh }: { detail: SpaceDetail; onrefresh: () => Promise<void> } = $props();
 	const uid = $props.id();
 	const owners = $derived(detail.members.filter((m) => m.role === "owner").length);
@@ -28,7 +28,7 @@
 	const fail = (e: unknown, fallback: string) => { if (e instanceof ApiError && e.status === 401) account.expire(); return (e instanceof ApiError && e.detail) || fallback; };
 
 	async function loadInvites() { try { invites = await spaces.invites(detail.name); } catch (e) { error = fail(e, t("spaces.invite.failed")); } }
-	onMount(() => { if (!isOpen) void loadInvites(); });
+	onMount(() => { void loadInvites(); });
 
 	async function setRole(m: Member, next: Role) {
 		memberError = "";
@@ -63,7 +63,6 @@
 
 <SettingsPanel title={t("spaces.members.title")}>
 	<p class="text-muted-foreground text-sm">{isOpen ? t("spaces.members.open") : t("spaces.members.private")}</p>
-	{#if !isOpen}
 		<ul class="mt-4">
 			{#each detail.members as m (m.id)}
 				{@const last = m.role === "owner" && owners === 1}
@@ -81,18 +80,17 @@
 		</ul>
 		<p id="{uid}-last" class="text-muted-foreground mt-3 text-xs">{t("spaces.members.lastOwner")} {t("spaces.members.lastOwner.hint")}</p>
 		<p role="alert" class="text-destructive mt-2 text-sm empty:hidden">{memberError}</p>
-	{/if}
 
 	<form onsubmit={invite} class="mt-6 flex flex-col gap-2">
 		<label for="{uid}-role" class="text-sm font-semibold">{t("spaces.invite.role")}</label>
 		<div class="flex flex-wrap items-center gap-2">
-			<NativeSelect.Root id="{uid}-role" bind:value={role} disabled={isOpen}>
+			<NativeSelect.Root id="{uid}-role" bind:value={role}>
 				<NativeSelect.Option value="member">{roleLabel("member")}</NativeSelect.Option>
 				<NativeSelect.Option value="owner">{roleLabel("owner")}</NativeSelect.Option>
 			</NativeSelect.Root>
-			<Button type="submit" variant="outline" disabled={isOpen || pending}><Icon name="copy-link" size={16} />{t("spaces.invite.create")}</Button>
+			<Button type="submit" variant="outline" disabled={pending}><Icon name="copy-link" size={16} />{t("spaces.invite.create")}</Button>
 		</div>
-		<p class="text-muted-foreground text-xs">{isOpen ? t("spaces.invite.openHint") : t("spaces.invite.hint")}</p>
+		<p class="text-muted-foreground text-xs">{t("spaces.invite.hint")}</p>
 	</form>
 
 	{#if created}
@@ -106,7 +104,6 @@
 		</div>
 	{/if}
 
-	{#if !isOpen}
 		<h3 class="mt-6 mb-2 font-semibold">{t("spaces.invite.pending")}</h3>
 		{#if invites.length}
 			<ul>
@@ -118,7 +115,6 @@
 				{/each}
 			</ul>
 		{:else}<p class="text-muted-foreground text-sm">{t("spaces.invite.none")}</p>{/if}
-	{/if}
 	<p role="alert" class="text-destructive mt-2 text-sm empty:hidden">{error}</p>
 </SettingsPanel>
 

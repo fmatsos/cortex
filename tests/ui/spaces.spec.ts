@@ -481,6 +481,18 @@ test.describe("settings of a space", () => {
     await expect(page.getByText(/(Link created|Lien créé) · (Owner|Propriétaire)/)).toBeVisible();
   });
 
+  test("an open space keeps its members and its owners can still invite", async ({ page }) => {
+    const m = newMock();
+    m.details.demo!.visibility = "open";
+    await mount(page, m);
+    await page.goto("/s/demo/account/settings/?space=demo");
+    await expect(page.getByText(/everyone can read it|tout le monde peut le lire/)).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: "Marie Laurent" }).getByRole("button", { name: /Remove|Retirer/ })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /Create an invitation link|Créer un lien d'invitation/ })).toBeEnabled();
+    await page.getByRole("button", { name: /Create an invitation link|Créer un lien d'invitation/ }).click();
+    await expect(page.getByLabel(/Link created|Lien créé/)).toHaveValue(/\/s\/demo\/account\/invite\/\?token=tok$/);
+  });
+
   test("visibility asks for a confirmation; read-only is a switch with its own save", async ({ page }) => {
     const m = newMock();
     await mount(page, m);
@@ -488,7 +500,7 @@ test.describe("settings of a space", () => {
     await page.getByRole("radio", { name: /^Open|^Ouvert/ }).check();
     await page.getByRole("button", { name: /Apply the visibility|Appliquer la visibilité/ }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText(/first member|vidée|emptied/);
+    await expect(dialog).toContainText(/roles are kept|rôles sont conservés/);
     await dialog.getByRole("button", { name: /Cancel|Annuler/ }).click();
     expect(m.writes.filter((w) => w.method === "PATCH")).toEqual([]);
     await page.getByRole("switch", { name: /Read-only|Lecture seule/ }).check();
