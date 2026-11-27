@@ -138,7 +138,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex export [--out <dir>]` | Builds the static site (default `.cortex/site`). The output directory is emptied first. |
 | `cortex mcp` | Starts an MCP server on stdio. |
 | `cortex schema [--write]` | Prints the agent schema, or rewrites `CLAUDE.md` / `AGENTS.md` with it. |
-| `cortex space list \| add <name> [--repo <url>] \| migrate <name>` | Manages the [spaces](#spaces) of an instance. |
+| `cortex space list \| add <name> [--repo <url>] [--schema notes] \| migrate <name>` | Manages the [spaces](#spaces) of an instance. |
 | `cortex config init [client] \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `cortex.json` (`cortex help` lists the keys; an invalid key or value is rejected with what is allowed). `init` also writes the agent schema. |
 
 ### Choosing the agent
@@ -176,7 +176,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 | Key | Effect |
 |---|---|
 | `language` | Fills the wiki language into the schema (default `English`). |
-| `schema` | Path, relative to the instance root (the folder holding `cortex.json`), of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
+| `schema` | Path, relative to the instance root (the folder holding `cortex.json`), of your own Markdown schema, used instead of the built-in one, or the name of a built-in one (`notes`, see [Notes spaces](#notes-spaces)). `{{language}}` works there too. A space can have its own (`spaces.<name>.schema`). |
 | `fetch_timeout` | Seconds before fetching a URL gives up (default `30`). With `--via`, each mirror gets that much. |
 | `parser.social.external_link.limit` | Pages a social post links to that `cortex add` also captures, as sources tied to the post (default `5`, `0` = links not followed). Each one is compiled in its own agent session. `parser.social.<network>.external_link.limit` (`x`, `bluesky`, `mastodon`, `linkedin`) overrides it for one network. Example: `{ "parser": { "social": { "external_link": { "limit": 2 }, "linkedin": { "external_link": { "limit": 0 } } } } }`. |
 | `parser.social.linkedin` | Selectors LinkedIn is read with outside its JSON-LD, to update when LinkedIn changes its page: `card` (link card), `activity_text`, `activity_author`, `activity_images` (activity page), `shortlink` (destination link on the lnkd.in interstitial), `carousel` (attribute holding the carousel's JSON). Each key is optional, defaults in `src/social/linkedin.ts`. Example: `{ "parser": { "social": { "linkedin": { "card": "a.card" } } } }`. |
@@ -187,7 +187,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 | `drafts` | Draft status on the site: the draft mark, the `status:draft` filter and facet. `true` to turn it on; absent = off, draft pages are shown as stable. |
 | `judge` | A System One model that answers yes/no and choice questions at `POST <base_url>/systemone`: TypeSafe's hosted Jev, or d3-mini behind llama.cpp; absent = off. `{ "base_url": …, "model": "d3-mini" }`, every key optional. `base_url`: its own, else `$CORTEX_JEV_BASE_URL` (key in `$CORTEX_JEV_API_KEY`, sent only there), else as for `embed`. `model`: default `$CORTEX_JEV_MODEL`, else `d3-mini`. The former `CORTEX_JUDGE_*` names (`CORTEX_JUDGE_BASE_URL`, `CORTEX_JUDGE_API_KEY`, ...) are still read when the new one is absent, with a one-time deprecation warning; the new name wins if both are set, and an old key is only sent with the old URL (or with the new one when no old URL is set). Settings that depend on the model, each from cortex.json, else `$CORTEX_JEV_<NAME>` (e.g. `CORTEX_JEV_ROUTE_YES`), else the default: `route_yes` (0.5) and `dup_yes` (0.7), the probabilities from which a page is suggested to `compile` or a new page refused; `route_candidates` (10) and `dup_candidates` (5), the pages offered to the judge; `route_chars` (1500), the characters of the source it reads; `ask_retained` (0.5), `ask_related` (0.3) and `ask_candidates` (16) for the site's questions (see `site_ask`); `search_retained` (0.5), `search_related` (0.3, never above `search_retained`: checked by `cortex config lint`, and lowered at run time otherwise) and `search_candidates` (20) for the judged ranking of the site's search (`GET /api/search?judge=1`, below); `concurrency` (6), the simultaneous calls of one batch. Each page is judged in its own call (a batch in one call scored the same page 0.24 first and 0.75 last), and every score is kept in `.cortex/judge.db` as soon as it arrives, under the hash of the model, the question's wording, the normalized query (lowercase, spaces collapsed), the page and the text the judge reads of it: a page edited, or another model, is judged again; scores older than 30 days, and the oldest beyond 20,000, are forgotten. For Jev: `CORTEX_JEV_BASE_URL=https://api.typesafe.ai/v1`, `CORTEX_JEV_MODEL=jev-1.13.0`, `CORTEX_JEV_ROUTE_YES=0.65` (best F1 measured on a real wiki). Used by `cortex new` (does the new page duplicate one of the 5 closest pages by meaning? refused at probability 0.7) and by `compile` (the pages the source probably updates, listed in the agent's prompt). Needs `embed` for both. Server down or slow: one warning, then the same behaviour as without it (cosine alone for `new`, nothing for `compile`). The judge's endpoint is `judge.base_url`, else `$CORTEX_JEV_BASE_URL`; the key is optional and only in `$CORTEX_JEV_API_KEY` (sent to that URL alone, never read from cortex.json); in a batch of calls (the site's questions and search) one call that fails, or that gets an unusable answer, does not stop the others. |
 | `default_space` | The space used when none is chosen, in a multi-space instance (see [Spaces](#spaces)). |
-| `spaces` | Per-space settings, by name: `{ "veille": { "repo": "<git url>" } }`. `repo` is written by `cortex space add --repo`. |
+| `spaces` | Per-space settings, by name: `{ "veille": { "repo": "<git url>" }, "pro": { "schema": "notes" } }`. `repo` is written by `cortex space add --repo`. `schema` is the agent schema of the space, instead of the global one: a path relative to the instance root, or the built-in `notes`; written by `cortex space add --schema notes`. |
 | `max_tags` | Most tags on a page an agent creates (default `4`). Beyond it, `compile --batch` keeps the tags already in use first. |
 
 ```sh
@@ -275,7 +275,7 @@ The file name (`learn-fermentation.md`: lowercase letters, digits, dashes) is th
 
 ### Spaces
 
-One `cortex.json`, one `.cortex/accounts.db` and one git repository can hold several isolated wikis, called spaces (a watch space, a work one, a personal one…). A space is a folder `spaces/<name>/` with its own `wiki/`, `raw/`, optional `paths/` and `inbox/`, and its own `.cortex/` (search index, judge scores…). The configuration is shared by the instance; only `repo` can be set per space.
+One `cortex.json`, one `.cortex/accounts.db` and one git repository can hold several isolated wikis, called spaces (a watch space, a work one, a personal one…). A space is a folder `spaces/<name>/` with its own `wiki/`, `raw/`, optional `paths/` and `inbox/`, and its own `.cortex/` (search index, judge scores…). The configuration is shared by the instance; only `repo` and `schema` can be set per space.
 
 ```
 instance/
@@ -291,8 +291,16 @@ An instance with a `spaces/` folder is multi-space; without one it works as alwa
 cortex space add veille                  # spaces/veille/{wiki,raw}, with its index and journal
 cortex space add pro --repo git@host:me/pro.git   # clones it into spaces/pro/, adds /spaces/pro/ to .gitignore, records it under spaces
 cortex space list                        # * marks the default, "(own repo)" a space with its own .git
+cortex space add pro --schema notes      # a space of personal notes: its agent follows the built-in notes schema (see below)
 cortex space migrate veille              # legacy wiki: moves wiki/, raw/, paths/, inbox/ and .cortex/ (except accounts.db) into spaces/veille/
 cortex --space pro search "context rot"
+```
+
+**Notes spaces.** A space does not have to be a watch. With `--schema notes` (or `"spaces": { "pro": { "schema": "notes" } }`) its agent follows the built-in [`notes` schema](src/schema-notes.md): the sources are your own notes (meetings, work notes, daily notes, appointments), kept faithful (facts, decisions, dates, names, action items with their owner and due date), a meeting becoming a Source page linked to the people, projects and clients it concerns. The page types, the frontmatter and the guards are the same as in the default schema. The schema of a space is, in order, its own `schema`, the global `schema`, the built-in default. Each space has its own agent file (`CLAUDE.md` or `AGENTS.md` in `spaces/<name>/`), written by `cortex space add` (never overwritten) and rewritten by `cortex schema --write`. Capture a note from the command line, then compile it:
+
+```sh
+echo "Call with Marie, Acme: budget approved, I send the quote by Friday 20" | cortex add - --space pro --note "call with Marie (Acme)"
+cortex compile --space pro --pending     # or: cortex compile --space pro <id>
 ```
 
 **Searching several spaces.** Only on request: `cortex search "context rot" --space veille,pro` (or `--space all`) searches each space with its own index, then fuses the rankings by reciprocal rank (k = 60, wiki before raw); each hit names its space (a prefix in the text output, a `space` field with `--json`). Every other command refuses a `--space` that names several spaces, and so does a search run from inside a space, as an agent is: it cannot read the others. The MCP `search` tool takes the same value in an optional `space` argument (`get` and `related` take one name, to open a hit of another space); without it, the server's own space.
@@ -305,7 +313,7 @@ cortex --space pro search "context rot"
 
 **Who sees a space.** A space with no member is open: the rules of the site apply to it as to any `cortex serve` (sign-in, when configured, only identifies people). A space with members is visible to them alone: its pages, its APIs and its entry in the listing answer 404 to anyone else, as if it did not exist. Members are kept in `.cortex/accounts.db` (table `space_members`), and deleting an account never opens a space. Without `auth` in `cortex.json`, every space is open. Signing in is done on the account page of a space the visitor can open (or at `/api/auth/login/<provider>?return=/`).
 
-**Creating a space from the site.** When `auth` is configured, a signed-in person gets a space switcher in the header (when there is more than one space to choose from, or when they can create one) and a "Spaces" section on their account page: it lists the spaces they can open and creates a new one from a name (lowercase letters, digits and dashes, 40 at most). The space is created like `cortex space add` does, its only member is its creator (private by default), and with `--sync` its `wiki/` and `raw/` are committed and pushed; the person lands on its site once its first build is served. A name already taken answers 409, a visitor who is not signed in 401, a request from another origin or without `auth` configured 403: nothing is created for them. A space backed by its own git repository is never created from the web (a web request must not clone an arbitrary URL): use `cortex space add <name> --repo <git url>` on the server. Nothing in the site can add other members, rename or delete a space yet.
+**Creating a space from the site.** When `auth` is configured, a signed-in person gets a space switcher in the header (when there is more than one space to choose from, or when they can create one) and a "Spaces" section on their account page: it lists the spaces they can open and creates a new one from a name (lowercase letters, digits and dashes, 40 at most) and a kind: Watch (veille, the default) or Notes (`schema: "notes"`, recorded in `cortex.json`; the API accepts nothing else, never a path). The space is created like `cortex space add` does, its only member is its creator (private by default), and with `--sync` its `wiki/` and `raw/` (and `cortex.json` for a notes space) are committed and pushed; the person lands on its site once its first build is served. A name already taken answers 409, a visitor who is not signed in 401, a request from another origin or without `auth` configured 403: nothing is created for them. A space backed by its own git repository is never created from the web (a web request must not clone an arbitrary URL): use `cortex space add <name> --repo <git url>` on the server. Nothing in the site can add other members, rename or delete a space yet.
 
 ### Wiki status
 
@@ -493,6 +501,7 @@ cd site && CORTEX_SITE_DATA=/path/to/wiki/.cortex/site-data bunx --bun vite dev 
 | `src/` | The CLI. `cortex.ts` is the entry point. `backends/` holds the agent clients. |
 | `site/` | The SvelteKit app built by `cortex export`. It uses Svelte 5, Tailwind v4, shadcn-svelte components and force-graph. |
 | `src/schema.md` | The built-in agent schema. |
+| `src/schema-notes.md` | The built-in `notes` schema, for spaces of personal notes. |
 | `docs/DESIGN.md` | Architecture and design decisions. |
 | `assets/logo/` | The logo, as SVG and PNG. |
 
