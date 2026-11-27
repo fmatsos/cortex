@@ -32,14 +32,23 @@ What is planned, not started. Done work lives in the git history; design in `doc
 - Marking an action done: an edit of the page (through the agent, or a small server route that rewrites one line), or a per-user state that does not touch the wiki. A read-only space would refuse the first, not the second.
 - Reminders (notifications) stay out of scope: the calendar keeps that role.
 
-## Mobile app: choice of technology
+## Mobile app: Capacitor
 
 **When:** at the start of the mobile app, together with the move to Better Auth.
 
-**Decision to make:** how the app is built. The site stays on SvelteKit until then; a move to React is not worth it for the site alone (static export, offline service worker, per-space base path, about 610 Playwright tests).
+**Decided:** the app is the SvelteKit site packaged with [Capacitor](https://capacitorjs.com/), for Android and iOS. One front end: the site, its offline service worker, its spaces and its i18n are reused as they are; the logic in plain TypeScript (`site/src/lib/*.ts`) stays shared. The site stays on SvelteKit.
 
-- **PWA:** the site as it is (already installable and offline). Cheapest; limited access to native features.
-- **Capacitor:** the same SvelteKit site packaged as a native app, with notifications and the system share sheet. Keeps one front end.
-- **React Native / Expo:** a separate native app. Only this option reopens the question of React for the site, to share components. The logic is shareable either way: API calls, sync, spaces and search live in plain TypeScript (`site/src/lib/*.ts`).
+**To build:**
 
-**Criteria:** offline reading of several spaces, share target from the phone into a chosen space, notifications (if appointments and actions land), and the cost of keeping one or two front ends.
+- Accounts through Better Auth tokens (`bearer` plugin) instead of the session cookie, since the app is not served from the instance's origin.
+- Offline reading of several spaces (one service worker scope per space today: check how Capacitor serves the bundled site, or sync the spaces' data into the app's storage).
+- The system share sheet into a chosen space (Capacitor plugin), replacing the PWA share target.
+- Notifications, if appointments and action items land.
+- A small native module only where a plugin falls short (Kotlin on Android, Swift on iOS), e.g. a home screen widget for quick capture.
+
+**Rejected:**
+
+- **PWA alone:** too limited for the share sheet and notifications on iOS.
+- **React Native / Expo:** a second front end, and a move of the site to React for no gain on the site itself.
+- **Flutter:** a second front end in Dart, with nothing of the site or its logic reused.
+- **Kotlin native:** Android only, and a second front end; kept only for a native module next to Capacitor if needed.
