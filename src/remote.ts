@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { OPTIONS } from "./cli-options";
-import { CortexError } from "./lib";
+import { CortexError, findRoot } from "./lib";
 import { withSync } from "./sync";
 import pkg from "../package.json";
 
@@ -205,8 +205,8 @@ function payloadArg(args: string[]): string | undefined {
  * with git around it (`withSync`); the MCP server, which lasts a whole session, syncs each tool call instead.
  */
 export async function remoteExec(args: string[], self: string[]): Promise<number> {
-  const root = process.env.CORTEX_ROOT;
-  if (!root) throw new CortexError("remote-exec needs $CORTEX_ROOT (set by the forced command of the ssh key).", "refused");
+  const instance = process.env.CORTEX_ROOT;
+  if (!instance) throw new CortexError("remote-exec needs $CORTEX_ROOT (set by the forced command of the ssh key).", "refused");
   const arg = payloadArg(args);
   if (!arg) throw new CortexError("remote-exec: no payload", "refused");
   const { argv, envelope } = decodePayload(arg);
@@ -220,6 +220,8 @@ export async function remoteExec(args: string[], self: string[]): Promise<number
   }
   const why = refusal(argv, e?.files.length ?? 0);
   if (why) throw new CortexError(why, "refused");
+  // a multi-space host: the command (its --space) runs, and is synced with git, in that space's folder (it may be its own repository)
+  const root = findRoot(instance, parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: false }).values.space as string | undefined);
   let dir: string | undefined;
   if (e) {
     dir = mkdtempSync(join(tmpdir(), "cortex-upload-"));

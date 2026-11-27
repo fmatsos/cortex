@@ -19,8 +19,9 @@ const tryGit = (root: string, ...args: string[]) => { try { git(root, ...args); 
 /**
  * `git pull --rebase` with an identity: a rebase rewrites the local commits, so git needs a committer even on a host with
  * no user.name / user.email (a CI runner, a service account); without one it fails, as if the remote had conflicted.
+ * `--autostash`: files outside what a command may change (another space of the same repository…) are kept, not refused.
  */
-const pull = (who: string) => ["-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "pull", "-q", "--rebase"];
+const pull = (who: string) => ["-c", `user.name=${who}`, "-c", `user.email=${who}@localhost`, "pull", "-q", "--rebase", "--autostash"];
 
 /**
  * Pull with rebase: local commits a failed push left behind go on top of the remote, pushed by the next change.

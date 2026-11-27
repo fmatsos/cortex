@@ -6,6 +6,7 @@ import { accountsFile } from "./accounts";
 import { confine } from "./backends/sandbox";
 import { configFile, lintConfig, loadConfig } from "./config";
 import { findRoot, instanceRoot, listSpaces } from "./lib";
+import { encodePayload } from "./remote";
 import { changedPaths, withSync } from "./sync";
 
 /** Spaces: the root of a multi-space instance, `cortex space`, git per space and the sandbox of an agent. */
@@ -168,6 +169,7 @@ describe("cortex space", () => {
     expect(cortex(join(root, "spaces/pro/wiki"), ["ls"]).out).toContain("T");
     expect(cortex(join(root, "spaces/veille"), ["ls"], { CORTEX_SPACE: "pro" }).out).toContain("No pages"); // the folder wins over the environment
     expect(cortex(root, ["--space", "nope", "ls"]).code).toBe(2);
+    expect(cortex(join(root, "spaces/veille"), ["--space", "pro", "ls"]).code).toBe(2); // a command run in a space cannot reach another one
     // config acts on the instance without a space being chosen
     expect(cortex(root, ["config", "set", "default_space", "pro"]).code).toBe(0);
     expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).default_space).toBe("pro");
@@ -254,6 +256,33 @@ describe("git per space", () => {
     expect(show(bare, "spaces/a/wiki/second.md")).toBe("z\n");
     expect(show(bare, "spaces/b/wiki/other.md")).toBe(""); // not committed
     expect(sh(work, "status", "--porcelain")).toContain("spaces/b/wiki/other.md");
+  });
+
+  test("monorepo: a tracked file modified in another space does not stop the pull, nor is it lost", async () => {
+    const d = tmp(), bare = remoteWith(d, "inst", { "cortex.json": "{}", "spaces/a/wiki/p.md": "1\n", "spaces/b/wiki/p.md": "1\n" });
+    sh(d, "clone", "-q", bare, "work"); sh(d, "clone", "-q", bare, "other");
+    const work = join(d, "work"), a = join(work, "spaces/a");
+    writeFileSync(join(d, "other/spaces/a/wiki/q.md"), "from another writer\n"); sh(join(d, "other"), "add", "-A"); sh(join(d, "other"), "commit", "-qm", "q"); sh(join(d, "other"), "push", "-q");
+    writeFileSync(join(work, "spaces/b/wiki/p.md"), "unsaved work in b\n"); // tracked, modified, not this space's
+    await withSync(a, "new", async () => { writeFileSync(join(a, "wiki/new.md"), "x\n"); }, () => {});
+    expect(show(bare, "spaces/a/wiki/new.md")).toBe("x\n");
+    expect(show(bare, "spaces/a/wiki/q.md")).toBe("from another writer\n");
+    expect(readFileSync(join(work, "spaces/b/wiki/p.md"), "utf8")).toBe("unsaved work in b\n");
+  });
+
+  test("a remote host runs and syncs a forwarded command in the space it names, monorepo or own repository", () => {
+    const d = tmp(), inst = remoteWith(d, "inst", { "cortex.json": "{}", ".gitignore": "/spaces/pro/\n", "spaces/veille/wiki/p.md": "1\n" }), pro = remoteWith(d, "pro", { "wiki/p.md": "1\n" });
+    sh(d, "clone", "-q", inst, "work");
+    const work = join(d, "work");
+    sh(work, "clone", "-q", pro, "spaces/pro");
+    const exec = (...argv: string[]) => Bun.spawnSync(["bun", CLI, "remote-exec", encodePayload({ argv })], { cwd: d, env: { ...process.env, NO_COLOR: "1", CORTEX_ROOT: work }, stdin: Buffer.from(`Une source distante ${argv.at(-1)}, assez longue pour être capturée.`) });
+    expect(exec("add", "-", "--space", "veille").exitCode).toBe(0);
+    expect(exec("add", "-", "--space", "pro").exitCode).toBe(0);
+    const rawIn = (bare: string, prefix: string) => Bun.spawnSync(["git", "-C", bare, "ls-tree", "-r", "--name-only", "main"]).stdout.toString().split("\n").filter((f) => f.startsWith(prefix) && f.endsWith("source.md"));
+    expect(rawIn(inst, "spaces/veille/raw/").length).toBe(1); // the monorepo got its space's source
+    expect(rawIn(pro, "raw/").length).toBe(1); // the own repository got its own
+    expect(rawIn(inst, "spaces/pro/").length).toBe(0);
+    expect(exec("search", "x").exitCode).toBe(2); // two spaces, none chosen
   });
 
   test("own repository: the space is synced into its own remote, not into the instance's", async () => {
