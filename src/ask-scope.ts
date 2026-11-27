@@ -10,6 +10,9 @@ import { CortexError, SPACE_NAME, findSpaces, listSpaces } from "./lib";
  */
 export const ASK_SPACES_ENV = "CORTEX_ASK_SPACES";
 
+/** The environment of a process the agent runs: the process's own, plus the spaces of the question when it reads several (a bare `cortex search` there reads exactly those). */
+export const askEnv = (spaces?: string[], extra: Record<string, string> = {}): Record<string, string | undefined> => (spaces ? { ...process.env, ...extra, [ASK_SPACES_ENV]: spaces.join(",") } : process.env);
+
 /** The spaces this process was started with (the pack's server, a command the agent runs): undefined when it reads one. */
 export function askSpacesFromEnv(env: Record<string, string | undefined> = process.env): string[] | undefined {
   const names = (env[ASK_SPACES_ENV] ?? "").split(",").filter((n) => SPACE_NAME.test(n));

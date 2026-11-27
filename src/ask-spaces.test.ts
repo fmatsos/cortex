@@ -60,6 +60,21 @@ test("confine: several allowed spaces are read-only and every other one is hidde
   expect(confine(join(root, "spaces/a"), ["x"], "read").filter((x) => x === "--tmpfs")).toHaveLength(2);
 });
 
+test.skipIf(!bwrap || platform !== "linux")("the instance's own git repository does not give back the spaces that are hidden", () => {
+  const root = instance();
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-c", "user.email=t@example.org", "-c", "user.name=t", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  git("init", "-q"); git("add", "-A"); git("commit", "-qm", "x");
+  expect(git("show", "HEAD:spaces/c/wiki/concepts/p.md").stdout.toString()).toContain("The quokka lives in c."); // outside the sandbox: it is there
+  const inside = (...args: string[]) => Bun.spawnSync(confine(root, ["git", ...args], "read", ["a", "b"]), { cwd: root, stdout: "pipe", stderr: "pipe" });
+  expect(inside("show", "HEAD:spaces/c/wiki/concepts/p.md").stdout.toString()).toBe("");
+  expect(inside("grep", "-l", "quokka", "HEAD").stdout.toString()).toBe("");
+  expect(confine(root, ["x"], "read", ["a"]).join(" ")).toContain(`--tmpfs ${join(root, ".git")}`);
+  // a space that is its own repository keeps its own .git (it is an allowed space)
+  mkdirSync(join(root, "spaces/a/.git"));
+  expect(confine(root, ["x"], "read", ["b"]).join(" ")).toContain(`--tmpfs ${join(root, "spaces/a")}`);
+  expect(confine(root, ["x"], "read", ["a"]).join(" ")).not.toContain(join(root, "spaces/a/.git"));
+});
+
 test("confine on macOS: the same spaces are denied to the reader", () => {
   const root = instance();
   Object.defineProperty(process, "platform", { value: "darwin" });
@@ -201,14 +216,16 @@ test.skipIf(!bwrap || platform !== "linux")("cortex ask --space a,b: the agent i
   const script = join(root, "agent.sh");
   // a fake agent: what it is told (standard input), what it can see, and an attempt to write
   writeFileSync(script, `cat >/tmp/cortex-ask-prompt.$$; echo "told: $(sed -n 1p /tmp/cortex-ask-prompt.$$ | head -c 400)"; rm -f /tmp/cortex-ask-prompt.$$
-echo "a: $(cat spaces/a/wiki/concepts/p.md | grep -c quokka)"; echo "c: $(cat spaces/c/wiki/concepts/p.md 2>&1 | grep -c quokka)"; echo "write: $(touch spaces/a/wiki/x.md 2>&1 | grep -c .)"\n`);
-  const p = Bun.spawnSync([process.execPath, CLI, "ask", "what lives where?", "--space", "a,b"], { cwd: root, env: { ...process.env, CORTEX_ROOT: "", CORTEX_AGENT_BATCH: `sh ${script}` }, stdout: "pipe", stderr: "pipe" });
+echo "a: $(cat spaces/a/wiki/concepts/p.md | grep -c quokka)"; echo "c: $(cat spaces/c/wiki/concepts/p.md 2>&1 | grep -c quokka)"; echo "write: $(touch spaces/a/wiki/x.md 2>&1 | grep -c .)"
+echo "bare search: $(bun "$CLI" search quokka --json | grep -o '"space": "[a-z]*"' | sort -u | tr -d '\n')"\n`);
+  const p = Bun.spawnSync([process.execPath, CLI, "ask", "what lives where?", "--space", "a,b"], { cwd: root, env: { ...process.env, CORTEX_ROOT: "", CORTEX_AGENT_BATCH: `sh ${script}`, CLI }, stdout: "pipe", stderr: "pipe" });
   const out = p.stdout.toString() + p.stderr.toString();
   expect(out).toContain("You read several spaces of it, each one a separate wiki: a, b");
   expect(out).toContain("Read-only");
   expect(out).toContain("a: 2"); // the two lines of the page that say quokka
   expect(out).toContain("c: 0");
   expect(out).toContain("write: 1");
+  expect(out).toContain('bare search: "space": "a""space": "b"'); // a plain `cortex search` in the agent's shell reads the question's spaces, and no other
 });
 
 test("narrowSpaces and parseSpacePath: the list only ever shrinks", () => {
@@ -246,6 +263,11 @@ test("an answer over several spaces: each citation is the link to its own page, 
   const a = askAnswerSpaces(md, titles, "b");
   expect(a.refs).toEqual([{ space: "a", id: "concepts/p", title: "Page a" }, { space: "b", id: "concepts/p", title: "Page b" }]);
   expect(a.cited).toEqual(["concepts/p"]); // the one of the space the question was asked in
+  // an answer of one space that carries such a citation from the history of the conversation: the page on its own site, never a dead .md link
+  const single = answerSegments("[x](/s/b/wiki/concepts/p.md#y) et [y](/wiki/concepts/p.md)", new Map([["wiki/concepts/p.md", "Page"]])).map((s) => ("html" in s ? s.html : "")).join("");
+  expect(single).toContain('<a href="/s/b/wiki/concepts/p/#y">x</a>');
+  expect(single).toContain('href="wiki/concepts/p/"');
+  expect(single).not.toContain(".md");
   // an answer of one space is drawn as before
   expect(answerSegments("[x](/wiki/concepts/p.md)", new Map([["wiki/concepts/p.md", "Page"]])).map((s) => ("html" in s ? s.html : "")).join("")).toContain('href="wiki/concepts/p/"');
   expect(stepOf("get", { path: "/s/b/wiki/concepts/p.md" }, new Map(), titles)).toEqual({ kind: "read", path: "wiki/concepts/p.md", title: "Page b" });

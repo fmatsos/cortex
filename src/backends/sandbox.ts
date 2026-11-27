@@ -8,8 +8,9 @@ import type { Mode } from "./backend";
  * folder is the whole instance (the agent of a space writes nothing outside its wiki/, config and accounts included) and
  * the other spaces are neither readable nor writable.
  * `allowed` (a question that reads several spaces, `ask --space a,b`): read mode only, from the instance (or any folder of it): the instance is
- * read-only, and every space not in the list is hidden as well, with the archived ones (`.cortex/archive/`) and the accounts' database, whatever
- * folder the command runs in. The list is the sandbox's, not an option of the command: nothing the agent runs can widen it.
+ * read-only, and every space not in the list is hidden as well, with the archived ones (`.cortex/archive/`), the accounts' database and the
+ * instance's own `.git` (it holds every space's committed pages: `git show HEAD:spaces/<other>/…` would read them), whatever folder the command runs in. The
+ * `.git` of an allowed space that is its own repository stays. The list is the sandbox's, not an option of the command: nothing the agent runs can widen it.
  * Applies to any CLI (default engine, interactive sessions); the rest of the system stays writable
  * (the agent's own state: ~/.claude, ~/.codex…).
  * Linux: bubblewrap. macOS: sandbox-exec (Seatbelt, the one Codex and Claude Code use).
@@ -24,7 +25,7 @@ export function confine(root: string, cmd: string[], mode: Mode, allowed?: strin
     if (!inst || !isMultiSpace(inst)) throw new Error("several spaces: this is not a multi-space instance.");
     base = inst;
     const db = join(inst, ".cortex/accounts.db"), keep = new Set(allowed);
-    hidden = [...listSpaces(inst).filter((n) => !keep.has(n)).map((n) => join(inst, "spaces", n)), join(inst, ".cortex/archive"), db, `${db}-wal`, `${db}-shm`, `${db}-journal`].filter((p) => existsSync(p));
+    hidden = [...listSpaces(inst).filter((n) => !keep.has(n)).map((n) => join(inst, "spaces", n)), join(inst, ".cortex/archive"), join(inst, ".git"), db, `${db}-wal`, `${db}-shm`, `${db}-journal`].filter((p) => existsSync(p));
   } else {
     const [dir, name] = inst && isMultiSpace(inst) ? relative(inst, r).split(sep) : [];
     base = dir === "spaces" && name ? inst! : r; // the folder that is read-only

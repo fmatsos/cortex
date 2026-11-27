@@ -457,11 +457,13 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
         }
         const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
         // an answer that cites pages of several spaces (`/s/<space>/wiki/…`) is drawn with the spaces its reader may see: the conversation is theirs
-        const wide = reach && (answers as string[]).some((md) => /\]\(\/s\/[a-z0-9-]+\/wiki\//.test(md));
+        // (an answer that mixes both forms was written for one space: its links with no space are that space's, so it is drawn as one)
+        const cites = (md: string) => /\]\(\/(?:s|spaces)\/[a-z0-9-]+\/wiki\//.test(md) && !/\]\(\/?wiki\//.test(md);
+        const wide = reach && (answers as string[]).some(cites);
         const seen = wide ? await reach!(req, "all") : undefined;
         const across = seen && !(seen instanceof Response) ? await spaceTitles(instanceRoot(root), seen) : undefined;
         const home = base.replace(/^\/s\//, "");
-        return Response.json({ answers: (answers as string[]).map((md) => across && /\]\(\/s\/[a-z0-9-]+\/wiki\//.test(md) ? askAnswerSpaces(md, across, home) : askAnswer(md, titles)) });
+        return Response.json({ answers: (answers as string[]).map((md) => across && cites(md) ? askAnswerSpaces(md, across, home) : askAnswer(md, titles)) });
       }
       if (url.pathname === "/api/ask") {
         // opt-in (the route spends tokens), and only through an SDK client: the agnostic CLI ignores the model and may keep its own tools

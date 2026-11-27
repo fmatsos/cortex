@@ -21,6 +21,7 @@ import { appendLogCtx } from "./log";
 import { split } from "./backends/backend";
 import { collator } from "./text";
 import { tagKey } from "./lint";
+import { askEnv } from "./ask-scope";
 import { askPrompt, askSpacesPrompt, askSpacesSystem, compilePrompt, scopePrefix, spacesPrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
@@ -85,7 +86,7 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
     // Ctrl+C targets the agent; without this handler, cortex would die too (same process group) before checking the Source page and flipping the status
     const keep = () => {};
     process.on("SIGINT", keep);
-    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode, spaces), { cwd: root, env: process.env, stdio: ["inherit", "inherit", "inherit"] }).exited; }
+    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode, spaces), { cwd: root, env: askEnv(spaces), stdio: ["inherit", "inherit", "inherit"] }).exited; }
     catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
     finally { process.off("SIGINT", keep); }
   }

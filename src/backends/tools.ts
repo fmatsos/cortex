@@ -6,7 +6,7 @@ import { usage } from "./policy";
 import { confine } from "./sandbox";
 import { LIMITS } from "../limits";
 import { frontmatterError, identityChange, serializeDoc } from "../lib";
-import { ASK_SPACES_ENV, spaceCite, spacePath } from "../ask-scope";
+import { ASK_SPACES_ENV, askEnv, spaceCite, spacePath } from "../ask-scope";
 
 // --- The cortex tool pack: the tools every agent gets, whatever the backend. openai calls `callTool` in its own loop;
 // the other backends reach the same pack over MCP (`cortex mcp --agent`, or in process for the Claude SDK).
@@ -156,7 +156,7 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     }
     case "Bash": {
       // guard allowed a single cortex command, quotes without expansion; sh only parses them, bwrap still confines it
-      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode, spaces), { cwd: root, env: spaces ? { ...process.env, CORTEX_ROOT: root, [ASK_SPACES_ENV]: spaces.join(",") } : process.env, stdout: "pipe", stderr: "pipe" });
+      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode, spaces), { cwd: root, env: askEnv(spaces, { CORTEX_ROOT: root }), stdout: "pipe", stderr: "pipe" });
       const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
       return part(`${out}${err}${code ? `\n(exit ${code})` : ""}`, a.offset);
     }

@@ -849,4 +849,9 @@ test("ask across spaces: a saved answer is drawn again with the spaces its reade
   expect(his).toContain('href="/s/c/wiki/concepts/other/"');
   // an answer of one space keeps its own links
   expect((await render(ada.cookie, ["See [A](/wiki/concepts/idea.md)."])).answers[0]!.segments.map((x) => x.html).join("")).toContain("idea/");
+  // one that mixes both forms (a conversation that changed scope) was written for one space: its links with no space are that space's
+  const mixed = (await render(ada.cookie, ["See [A](/wiki/concepts/idea.md) and [B](/s/b/wiki/concepts/idea.md)."])).answers[0]!.segments.map((x) => x.html).join("");
+  expect(mixed).toContain('href="wiki/concepts/idea/"');
+  expect(mixed).toContain('href="/s/b/wiki/concepts/idea/"');
+  expect(mixed).not.toContain("missing-link");
 });

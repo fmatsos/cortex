@@ -64,7 +64,13 @@ test.describe("service worker of a site served at the root, before and after mig
         expect(after.caches.filter((c) => c.startsWith("cortex-wiki:/:")), "no cache of the old root site").toEqual([]);
       }
       // the deep URL shows the current page of the space (serve swaps in its rebuild a few seconds after it started), not the copy the old worker kept
-      await expect.poll(async () => { await page.goto(origin + "/wiki/concepts/alpha/"); return page.locator("main").innerText(); }, { timeout: 90_000 }).toContain("narwhal sentence");
+      // (a rebuild that loses the export lock to another export of the machine is not started again by itself: it is asked again now and then)
+      let asked = 0;
+      await expect.poll(async () => {
+        if (Date.now() - asked > 15_000) { asked = Date.now(); await fetch(origin + "/api/sync", { method: "POST" }).catch(() => {}); }
+        await page.goto(origin + "/wiki/concepts/alpha/");
+        return page.locator("main").innerText();
+      }, { timeout: 120_000 }).toContain("narwhal sentence");
       expect(new URL(page.url()).pathname).toBe("/s/veille/wiki/concepts/alpha/");
       // the old script itself is now the retiring one
       expect(await (await fetch(origin + "/service-worker.js")).text()).toContain("unregister()");

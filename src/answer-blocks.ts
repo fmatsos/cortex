@@ -172,7 +172,9 @@ export function qualifyLinks(md: string, spaces: Map<string, Map<string, string>
  * the text is still being written (`partial`: a heading at the very end may get its text). `titles`: wiki path → page title.
  */
 export function answerSegments(md: string, titles: Map<string, string>, partial = false, spaces?: Map<string, Map<string, string>>): Segment[] {
-  if (spaces) md = qualifyLinks(md, spaces);
+  // an answer that read several spaces cites each page in its space; an answer of one space may still carry such a citation (the history of a conversation
+  // that changed scope): the page on its own site, whether it exists is that site's to say, never a `.md` link
+  md = spaces ? qualifyLinks(md, spaces) : md.replace(SPACE_LINK, (_all, space: string, path: string, frag = "") => `](/s/${space}/${path}/${frag})`);
   const paths = new Set(titles.keys());
   const html = (s: string) => render(s, "", paths).html;
   const inline = (s: string) => html(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");

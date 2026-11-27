@@ -2,6 +2,7 @@ import { interactiveWith, split, type Backend } from "./backend";
 import { BUILTINS } from "./claude";
 import { packMcpConfig } from "./tools";
 import { confine } from "./sandbox";
+import { askEnv } from "../ask-scope";
 
 // --- Agnostic (default): any agent CLI, no SDK--------------------------------------------------
 
@@ -16,7 +17,7 @@ export default function agnostic(): Backend {
       const args = cmd[0] === "claude"
         ? [...cmd, "--strict-mcp-config", "--mcp-config", packMcpConfig(root, mode, spaces), "--allowedTools", "mcp__cortex__*", "--disallowedTools", ...BUILTINS]
         : cmd;
-      const p = Bun.spawn(confine(root, args, mode, spaces), { cwd: root, env: process.env, stdin: new TextEncoder().encode(prompt), stdout: "pipe", stderr: "inherit" });
+      const p = Bun.spawn(confine(root, args, mode, spaces), { cwd: root, env: askEnv(spaces), stdin: new TextEncoder().encode(prompt), stdout: "pipe", stderr: "inherit" });
       const out = await new Response(p.stdout).text();
       if (await p.exited) throw new Error(`${cmd[0]} exited with an error`);
       return out.trim();
