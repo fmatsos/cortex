@@ -194,6 +194,47 @@ export function forgetSpace(db: Database, name: string) {
     for (const t of ["space_members", "space_invites", "spaces"]) db.query(`delete from ${t} where ${t === "spaces" ? "name" : "space"} = $name`).run({ name });
   }).immediate();
 }
+/** An archived space: its people, visibility and title are kept (restoring brings them back); pending invitations are dropped. */
+export function archiveSpaceRows(db: Database, name: string, now: number) {
+  db.transaction(() => {
+    setSpace(db, name, {});
+    db.query("update spaces set archived_at = $now where name = $name").run({ name, now });
+    db.query("delete from space_invites where space = $name").run({ name });
+  }).immediate();
+}
+export const restoreSpaceRows = (db: Database, name: string) => { db.query("update spaces set archived_at = null where name = $name").run({ name }); };
+/** The archived spaces `userId` owns. */
+export const archivedSpaces = (db: Database, userId: string): { name: string; title: string | null; archived_at: number }[] =>
+  db.query("select s.name, s.title, s.archived_at from spaces s join space_members m on m.space = s.name and m.user_id = $userId and m.role = 'owner' where s.archived_at is not null order by s.name").all({ userId }) as { name: string; title: string | null; archived_at: number }[];
+
+// ---- invitations: a random token, stored hashed, single use, expiring; the URL carries it, nothing is matched against an e-mail
+
+export const INVITE_DAYS = 7;
+export type InviteRow = { id: string; role: Role; created_by: string; created_at: number; expires_at: number };
+/** A new invitation: `token` is only ever returned here. */
+export function createInvite(db: Database, space: string, role: Role, createdBy: string, now: number): { id: string; token: string; expires_at: number } {
+  const id = crypto.randomUUID(), token = randomToken(), expires_at = now + INVITE_DAYS * 86_400_000;
+  db.query("insert into space_invites (id, space, token_hash, role, created_by, created_at, expires_at) values ($id, $space, $hash, $role, $createdBy, $now, $expires_at)")
+    .run({ id, space, hash: sha256(token), role, createdBy, now, expires_at });
+  return { id, token, expires_at };
+}
+export const listInvites = (db: Database, space: string, now: number): InviteRow[] =>
+  db.query("select id, role, created_by, created_at, expires_at from space_invites where space = $space and used_at is null and expires_at > $now order by created_at").all({ space, now }) as InviteRow[];
+export const revokeInvite = (db: Database, space: string, id: string) => db.query("delete from space_invites where id = $id and space = $space").run({ id, space }).changes > 0;
+/** The space an unused, unexpired token is for (what the invitation page shows), or undefined. */
+export const inviteSpace = (db: Database, token: string, now: number): string | undefined =>
+  (db.query("select space from space_invites where token_hash = $hash and used_at is null and expires_at > $now").get({ hash: sha256(token), now }) as { space: string } | null)?.space;
+/** Uses the token for `userId`: they join with the invited role (someone already in the space is left as they are, and the token is not spent). Undefined: unknown, used or expired. */
+export const acceptInvite = (db: Database, token: string, userId: string, now: number): { space: string; role: Role } | undefined => db.transaction(() => {
+  const inv = db.query("select id, space, role from space_invites where token_hash = $hash and used_at is null and expires_at > $now").get({ hash: sha256(token), now }) as { id: string; space: string; role: Role } | null;
+  if (!inv) return;
+  const cur = memberRole(db, inv.space, userId);
+  if (cur) return { space: inv.space, role: cur };
+  addSpaceMember(db, inv.space, userId, inv.role);
+  db.query("update space_invites set used_at = $now, used_by = $userId where id = $id").run({ id: inv.id, now, userId });
+  return { space: inv.space, role: inv.role };
+}).immediate();
+
 /** A user by id, else by e-mail (case-insensitive; an e-mail shared by several accounts is ambiguous: undefined, and `ambiguous` says so). */
 export function findUser(db: Database, ref: string): { user?: User; ambiguous?: boolean } {
   const byId = db.query("select id, provider, subject, name, email from users where id = $ref").get({ ref }) as User | null;

@@ -18,10 +18,11 @@ import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
-import { addSpaceMember, forgetSpace, getSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
+import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
-import { addSpace } from "./space";
+import { addSpace, archiveSpace, restoreSpace } from "./space";
+import { spaceAdmin } from "./space-admin";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -529,8 +530,9 @@ export async function serve(root: string, o: ServeOpts) {
     if (typeof name !== "string" || !SPACE_NAME.test(name) || (schema != null && schema !== "notes")) // the schema is never a path from the web
       return Response.json({ error: 'expected { name, schema? }: a name of lowercase letters, digits and dashes (40 at most, starting with a letter or digit); schema, if any, is "notes".' }, { status: 400, headers: noStore });
     if (sites.has(name) || creating.has(name) || existsSync(spaceRoot(root, name))) return Response.json({ error: `space ${name} already exists.` }, { status: 409, headers: noStore });
-    creating.add(name);
     const store = accounts.store();
+    if (getSpace(store, name)?.archived_at) return Response.json({ error: `space ${name} is archived: restore it, or pick another name.` }, { status: 409, headers: noStore });
+    creating.add(name);
     let site: Site | undefined;
     try {
       await addSpace(root, name, undefined, schema ?? undefined); // what `cortex space add` does
@@ -551,6 +553,86 @@ export async function serve(root: string, o: ServeOpts) {
     return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
   };
 
+  /** The pages of the invitation flow, and the archive's way back, at the root: `GET /s/<name>/invite/<token>` (answered before the visibility check: the token is what lets someone in), `POST /api/invites/<token>/accept`, `GET /api/spaces/archived`, `POST /api/spaces/<name>/restore`. */
+  const invitePage = (name: string, token: string) => new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Join ${name}</title></head>
+<body style="font:16px system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 16px"><h1>Join the space <code>${name}</code></h1><p id="m">Checking your account…</p><p id="a"></p>
+<script>(async () => {
+  const space = ${JSON.stringify(name)}, token = ${JSON.stringify(token)}, m = document.getElementById("m"), a = document.getElementById("a");
+  const me = await fetch("/api/me").then((r) => (r.ok ? r.json() : null), () => null);
+  if (!me) {
+    const methods = await fetch("/api/auth/methods").then((r) => r.json(), () => ({ providers: [] }));
+    m.textContent = "Sign in to accept the invitation.";
+    for (const p of methods.providers ?? []) { const l = document.createElement("a"); l.href = "/api/auth/login/" + p.id + "?return=" + encodeURIComponent(location.pathname); l.textContent = p.label; l.style.marginRight = "1rem"; a.append(l); }
+    return;
+  }
+  m.textContent = "Signed in as " + (me.name || me.email || "you") + ".";
+  const b = document.createElement("button"); b.textContent = "Join " + space; b.style.cssText = "font:inherit;padding:.5rem 1rem";
+  b.onclick = async () => {
+    b.disabled = true;
+    const r = await fetch("/api/invites/" + encodeURIComponent(token) + "/accept", { method: "POST" });
+    if (r.ok) location.href = "/s/" + space + "/"; else { m.textContent = "This invitation is no longer valid."; b.remove(); }
+  };
+  a.append(b);
+})();</script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+
+  const invitations = async (req: Request, url: URL): Promise<Response | undefined> => {
+    const page = /^\/s\/([a-z0-9][a-z0-9-]*)\/invite\/([A-Za-z0-9_-]{16,128})$/.exec(url.pathname);
+    if (page && (req.method === "GET" || req.method === "HEAD")) {
+      let ok = false;
+      try { ok = inviteSpace(accounts.store(), page[2]!, Date.now()) === page[1] && sites.has(page[1]!); } catch { /* closed */ }
+      return ok ? invitePage(page[1]!, page[2]!) : notFound();
+    }
+    const accept = /^\/api\/invites\/([A-Za-z0-9_-]{16,128})\/accept$/.exec(url.pathname);
+    if (accept) {
+      if (req.method !== "POST") return new Response(null, { status: 405 });
+      if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403, headers: noStore });
+      const user = await accounts.userOf(req);
+      if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+      try {
+        const store = accounts.store(), space = inviteSpace(store, accept[1]!, Date.now());
+        const joined = space && sites.has(space) ? acceptInvite(store, accept[1]!, user.id, Date.now()) : undefined;
+        if (joined) return Response.json({ space: joined.space, role: joined.role, url: `/s/${joined.space}/` }, { headers: noStore });
+      } catch (e) { say(`invitation: ${(e as Error).message}`); }
+      return Response.json({ error: "this invitation is not valid" }, { status: 404, headers: noStore });
+    }
+  };
+
+  const archived = async (req: Request, url: URL): Promise<Response | undefined> => {
+    const restore = /^\/api\/spaces\/([a-z0-9][a-z0-9-]*)\/restore$/.exec(url.pathname);
+    if (url.pathname !== "/api/spaces/archived" && !restore) return;
+    const user = await accounts.userOf(req);
+    if (url.pathname === "/api/spaces/archived") {
+      if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
+      if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+      const rows = archivedSpaces(accounts.store(), user.id).map((r) => ({ name: r.name, title: r.title, archived_at: new Date(r.archived_at).toISOString() }));
+      return Response.json({ archived: rows }, { headers: noStore });
+    }
+    const name = restore![1]!;
+    if (req.method !== "POST") return new Response(null, { status: 405 });
+    if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403, headers: noStore });
+    if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+    const store = accounts.store();
+    if (!getSpace(store, name)?.archived_at || memberRole(store, name, user.id) !== "owner") return Response.json({ error: "not found" }, { status: 404, headers: noStore });
+    if (sites.has(name) || creating.has(name) || existsSync(spaceRoot(root, name))) return Response.json({ error: `a space ${name} exists now: nothing is restored over it.` }, { status: 409, headers: noStore });
+    creating.add(name);
+    let site: Site | undefined;
+    try {
+      await serial(() => restoreSpace(root, name, o.sync));
+      site = await mount(name);
+      await site.start();
+      sites.set(name, site);
+    } catch (e) {
+      site?.stop();
+      say(`space ${name}: restore failed: ${(e as Error).message}`);
+      await archiveSpace(root, name, false).catch(() => {}); // back where it was: the space is not left half served
+      return Response.json({ error: `the space could not be restored: ${(e as Error).message}` }, { status: 500, headers: noStore });
+    } finally { creating.delete(name); }
+    say(`space ${name} restored for ${user.name ?? user.id}`);
+    return Response.json({ name, url: `/s/${name}/` }, { headers: noStore });
+  };
+
+  const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: (name) => { sites.get(name)?.stop(); sites.delete(name); } });
+
   const server = Bun.serve({
     port: o.port,
     async fetch(req, srv) {
@@ -558,18 +640,22 @@ export async function serve(root: string, o: ServeOpts) {
       const account = await accounts(req);
       if (account) return account;
       if (!multi) return sites.get("")!.fetch(req, srv, url);
+      const flow = await invitations(req, url) ?? await archived(req, url);
+      if (flow) return flow;
       if (url.pathname === "/api/spaces") {
         if (req.method === "POST") { srv.timeout(req, 0); return createSpace(req); } // the first build of the space outlasts Bun's 10 s idle timeout
         if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
         const names = await visible(req);
-        const title = (name: string) => { try { return getSpace(accounts.store(), name)?.title ?? undefined; } catch { return undefined; } };
-        return Response.json({ spaces: names.map((name) => ({ name, ...(title(name) && { title: title(name) }) })), canCreate: await (async () => { const user = await accounts.userOf(req); return !!user && (await accounts.configured()) && (await mayCreate(user)); })(), default: (await landing(names)) ?? null }, { headers: noStore });
+        const info = (name: string) => { try { return getSpace(accounts.store(), name); } catch { return undefined; } };
+        return Response.json({ spaces: names.map((name) => { const row = info(name); return { name, title: row?.title ?? null, read_only: row?.read_only ?? false }; }), canCreate: await (async () => { const user = await accounts.userOf(req); return !!user && (await accounts.configured()) && (await mayCreate(user)); })(), default: (await landing(names)) ?? null }, { headers: noStore });
       }
       const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
       if (at) {
         const site = sites.get(at[1]!);
         if (!site || !(await may(at[1]!, req))) return notFound(); // a space the visitor may not see is a space that does not exist
         if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${at[1]}/${url.search}` } });
+        const managed = await admin(req, at[1]!, at[2]);
+        if (managed) return managed;
         const inner = new URL(url);
         inner.pathname = at[2];
         return site.fetch(req, srv, inner);

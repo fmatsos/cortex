@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountsFile, addSpaceMember, createSession, getSpace, openAccounts, randomToken, setSpace, sha256, spaceMembers, upsertUser, type Role } from "./accounts";
+import { accountsFile, addSpaceMember, createSession, getSpace, memberRole, openAccounts, randomToken, setSpace, sha256, spaceMembers, upsertUser, type Role } from "./accounts";
 import { serve } from "./serve";
 
 // `cortex serve` on a multi-space instance: /s/<space>/ routing, who may see a space, and creating one from the site.
@@ -19,6 +19,8 @@ writeFileSync(out + "/index.html", (process.env.CORTEX_ROOT ?? "").split("/").at
 const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
 const AUTH = { auth: { public_urls: ["http://localhost"], github: { client_id: "x", allow: [1] } } };
+/** An entry of GET /api/spaces for a space with no title and not read-only. */
+const plain = (name: string) => ({ name, title: null, read_only: false });
 const ANYONE = { ...AUTH, site_spaces: { create: "anyone" } };
 const SECRET = "CORTEX_GITHUB_CLIENT_SECRET";
 let saved: string | undefined;
@@ -51,7 +53,8 @@ const start = async (root: string) => {
   const origin = `http://localhost:${server.port}`;
   const get = (path: string, headers: Record<string, string> = {}) => fetch(origin + path, { redirect: "manual", headers });
   const post = (path: string, body: unknown, headers: Record<string, string> = { origin }) => fetch(origin + path, { method: "POST", redirect: "manual", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
-  return { server, said, origin, get, post };
+  const send = (method: string, path: string, body?: unknown, headers: Record<string, string> = { origin }) => fetch(origin + path, { method, redirect: "manual", headers: { "content-type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
+  return { server, said, origin, get, post, send };
 };
 
 test("a legacy instance is served as before: the site at the root, no /s/, no /api/spaces", async () => {
@@ -82,7 +85,7 @@ test("multi-space: each space under /s/<name>/ with its own base path and APIs, 
   expect((await get("/api/status")).status).toBe(404); // not at the root: the root holds the instance's routes
   expect(said.some((m) => m.includes("2 spaces: a, b"))).toBe(true);
   const spaces = await (await get("/api/spaces")).json();
-  expect(spaces).toEqual({ spaces: [{ name: "a" }, { name: "b" }], canCreate: false, default: "b" });
+  expect(spaces).toEqual({ spaces: [plain("a"), plain("b")], canCreate: false, default: "b" });
   // without default_space, the first
   const other = await start(instance(["x", "y"]));
   expect((await other.get("/")).headers.get("location")).toBe("/s/x/");
@@ -128,7 +131,7 @@ test("without sign-in configured an open space stays open, a private one is hidd
   const { get, post, origin } = await start(root);
   expect(await (await get("/s/open/")).text()).toBe("open|/s/open");
   expect((await get("/s/priv/")).status).toBe(404);
-  expect(((await (await get("/api/spaces")).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "open" }]);
+  expect(((await (await get("/api/spaces")).json()) as { spaces: unknown[] }).spaces).toEqual([plain("open")]);
   expect((await post("/api/spaces", { name: "new" })).status).toBe(403);
   expect(existsSync(join(root, "spaces/new"))).toBe(false);
   expect((await post("/api/spaces", { name: "new" }, { origin })).status).toBe(403);
@@ -181,8 +184,8 @@ test("POST /api/spaces: same origin, signed in, a valid new name; the creator is
   expect((await get("/s/mine/")).status).toBe(404);
   expect(await (await get("/s/first/")).text()).toBe("first|/s/first"); // the others stay open
   expect((await create("mine")).status).toBe(409);
-  expect(((await (await get("/api/spaces", ada.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "first" }, { name: "mine" }]);
-  expect(((await (await get("/api/spaces", bob.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "first" }]);
+  expect(((await (await get("/api/spaces", ada.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([plain("first"), plain("mine")]);
+  expect(((await (await get("/api/spaces", bob.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([plain("first")]);
 });
 
 test("POST /api/spaces is for the owners of a space unless site_spaces.create is \"anyone\"; the listing says who can", async () => {
@@ -241,4 +244,174 @@ test("POST /api/sync at the root pulls and rebuilds every space (loopback only)"
   const until = Date.now() + 10_000;
   while (said.filter((m) => m.startsWith("site rebuilt")).length < before + 2 && Date.now() < until) await Bun.sleep(20);
   expect(said.filter((m) => m.startsWith("site rebuilt")).length).toBe(before + 2);
+});
+
+// ---- the administration of a space: /s/<space>/api/space
+
+const manage = async (extra: object = {}) => {
+  const root = instance(["open", "mine"], { ...ANYONE, ...extra });
+  const ada = person(root, "1"), bob = person(root, "2"), eve = person(root, "3");
+  hold(root, "mine", ada.id); hold(root, "mine", bob.id, "member");
+  return { root, ada, bob, eve, ...(await start(root)) };
+};
+const isJson = async (r: Response) => ({ status: r.status, body: (await r.json().catch(() => undefined)) as any });
+
+test("GET /s/<space>/api/space: members only (404 to anyone else, whatever the visibility), the title is shown in the listing", async () => {
+  const { ada, bob, eve, get, root } = await manage();
+  const info = await isJson(await get("/s/mine/api/space", ada.cookie));
+  expect(info.status).toBe(200);
+  expect(info.body).toMatchObject({ name: "mine", title: null, visibility: "private", read_only: false, kind: "watch", storage: "instance", you: "owner" });
+  expect(info.body.members.map((m: { id: string; role: string }) => [m.id, m.role])).toEqual([[ada.id, "owner"], [bob.id, "member"]]);
+  expect((await isJson(await get("/s/mine/api/space", bob.cookie))).body.you).toBe("member"); // a member reads, never changes
+  for (const who of [undefined, eve.cookie, { cookie: "cortex_session=forged" }]) expect((await get("/s/mine/api/space", who)).status).toBe(404);
+  expect((await get("/s/open/api/space", eve.cookie)).status).toBe(404); // open, but not a member: nothing to administer from the web
+  expect((await get("/s/open/api/space")).status).toBe(404);
+  mkdirSync(join(root, "spaces/mine/.git"));
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ ...ANYONE, spaces: { mine: { schema: "notes" } } }));
+  expect((await isJson(await get("/s/mine/api/space", ada.cookie))).body).toMatchObject({ kind: "notes", storage: "own repo" });
+});
+
+test("PATCH /s/<space>/api/space: owners set the title, the visibility and read-only; the slug never changes", async () => {
+  const { ada, bob, eve, get, send, origin } = await manage();
+  const patch = (body: unknown, who: Record<string, string> = ada.cookie, h: Record<string, string> = { origin }) => send("PATCH", "/s/mine/api/space", body, { ...h, ...who });
+  expect((await isJson(await patch({ title: "  Ma   veille  ", name: "other" }))).body).toMatchObject({ name: "mine", title: "Ma veille" });
+  expect(await (await get("/api/spaces", ada.cookie)).json()).toMatchObject({ spaces: [{ name: "mine", title: "Ma veille" }, plain("open")] });
+  expect((await isJson(await patch({ read_only: true }))).body.read_only).toBe(true);
+  expect((await isJson(await patch({ visibility: "open", read_only: false }))).body).toMatchObject({ visibility: "open", read_only: false });
+  expect((await get("/s/mine/", eve.cookie)).status).toBe(200); // open now
+  expect((await isJson(await patch({ visibility: "private", title: null }))).body).toMatchObject({ visibility: "private", title: null });
+  expect((await get("/s/mine/", eve.cookie)).status).toBe(404);
+  expect((await patch({ title: 3 })).status).toBe(400);
+  expect((await patch({ title: "x".repeat(121) })).status).toBe(400);
+  expect((await patch({ visibility: "secret" })).status).toBe(400);
+  expect((await patch({ read_only: "yes" })).status).toBe(400);
+  expect((await patch({})).status).toBe(400);
+  expect((await patch({ title: "x" }, bob.cookie)).status).toBe(403); // a member
+  expect((await patch({ title: "x" }, eve.cookie)).status).toBe(404); // a stranger
+  expect((await patch({ title: "x" }, {})).status).toBe(404);
+  expect((await patch({ title: "x" }, ada.cookie, {})).status).toBe(403); // no Origin
+  expect((await patch({ title: "x" }, ada.cookie, { origin: "https://evil.example" })).status).toBe(403);
+  expect((await isJson(await get("/s/mine/api/space", ada.cookie))).body.title).toBeNull();
+  expect((await send("PUT", "/s/mine/api/space", {}, { origin, ...ada.cookie })).status).toBe(405);
+});
+
+test("members: owners change roles and remove people; the last owner stays; a stranger cannot", async () => {
+  const { root, ada, bob, eve, send, origin } = await manage();
+  const act = (method: string, id: string, body?: unknown, who = ada.cookie) => send(method, `/s/mine/api/space/members/${id}`, body, { origin, ...who });
+  expect((await act("DELETE", ada.id)).status).toBe(409); // the last owner
+  expect((await act("PATCH", ada.id, { role: "member" })).status).toBe(409);
+  expect((await act("PATCH", bob.id, { role: "root" })).status).toBe(400);
+  expect((await act("PATCH", eve.id, { role: "owner" })).status).toBe(404); // not a member
+  expect((await act("DELETE", bob.id, undefined, bob.cookie)).status).toBe(403); // a member cannot, not even to leave
+  expect((await act("PATCH", bob.id, { role: "owner" }, eve.cookie)).status).toBe(404);
+  const promoted = await isJson(await act("PATCH", bob.id, { role: "owner" }));
+  expect(promoted.body.members.map((m: { role: string }) => m.role)).toEqual(["owner", "owner"]);
+  expect((await act("PATCH", ada.id, { role: "member" }, bob.cookie)).status).toBe(200); // bob owns it now
+  expect((await act("DELETE", ada.id)).status).toBe(403); // ada is a plain member now
+  expect((await act("DELETE", ada.id, undefined, bob.cookie)).status).toBe(200);
+  expect(members(root, "mine")).toEqual([bob.id]);
+  expect((await act("DELETE", bob.id, undefined, bob.cookie)).status).toBe(409);
+});
+
+test("invitations: a single-use link, 7 days, stored hashed; accepted from the root; a private space stays hidden until then", async () => {
+  const { root, ada, bob, eve, get, send, origin } = await manage();
+  const invite = (body: unknown = {}, who = ada.cookie) => send("POST", "/s/mine/api/space/invites", body, { origin, ...who });
+  expect((await invite({}, bob.cookie)).status).toBe(403);
+  expect((await invite({}, eve.cookie)).status).toBe(404);
+  expect((await invite({ role: "root" })).status).toBe(400);
+  const made = await isJson(await invite({ role: "owner" }));
+  expect(made.status).toBe(201);
+  expect(made.body.url).toMatch(/^\/s\/mine\/invite\/[A-Za-z0-9_-]{43}$/);
+  const token = made.body.url.split("/").pop();
+  expect(Date.parse(made.body.expires_at) - Date.now()).toBeGreaterThan(6.9 * 86_400_000);
+  const db = openAccounts(accountsFile(root));
+  expect(JSON.stringify(db.query("select * from space_invites").all())).not.toContain(token); // only a hash
+  db.close();
+  expect((await isJson(await get("/s/mine/api/space/invites", ada.cookie))).body.invites.map((i: { id: string; role: string }) => [i.id, i.role])).toEqual([[made.body.id, "owner"]]);
+  expect((await get("/s/mine/api/space/invites", bob.cookie)).status).toBe(403);
+  // the page is answered to someone who is not a member, for a valid token only
+  const page = await get(made.body.url);
+  expect([page.status, page.headers.get("referrer-policy"), page.headers.get("cache-control")]).toEqual([200, "no-referrer", "no-store"]);
+  expect(await page.text()).toContain("Join the space <code>mine</code>");
+  expect((await get(`/s/mine/invite/${"x".repeat(43)}`)).status).toBe(404);
+  expect((await get(`/s/open/invite/${token}`)).status).toBe(404); // another space
+  expect((await get("/s/mine/", eve.cookie)).status).toBe(404);
+  const accept = (t: string, h: Record<string, string> = { origin, ...eve.cookie }) => send("POST", `/api/invites/${t}/accept`, undefined, h);
+  expect((await accept(token, { origin })).status).toBe(401);
+  expect((await accept(token, eve.cookie)).status).toBe(403); // no Origin
+  expect((await accept(token, { origin: "https://evil.example", ...eve.cookie })).status).toBe(403);
+  expect((await accept("y".repeat(43))).status).toBe(404);
+  expect((await isJson(await accept(token))).body).toEqual({ space: "mine", role: "owner", url: "/s/mine/" });
+  expect((await get("/s/mine/", eve.cookie)).status).toBe(200);
+  expect(members(root, "mine").includes(eve.id)).toBe(true);
+  const frank = person(root, "4");
+  expect((await accept(token, { origin, ...frank.cookie })).status).toBe(404); // single use
+  expect((await get(made.body.url)).status).toBe(404);
+  expect((await get("/s/mine/api/space/invites", ada.cookie).then(isJson)).body.invites).toEqual([]);
+  // someone already in keeps their role and does not spend the link
+  const again = (await isJson(await invite({ role: "owner" }))).body.url.split("/").pop();
+  expect((await isJson(await accept(again, { origin, ...bob.cookie }))).body.role).toBe("member");
+  expect((await get(`/s/mine/invite/${again}`)).status).toBe(200);
+  // revoked, and expired
+  const rev = await isJson(await invite()), revToken = rev.body.url.split("/").pop();
+  expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...bob.cookie })).status).toBe(403);
+  expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...ada.cookie })).status).toBe(200);
+  expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...ada.cookie })).status).toBe(404);
+  expect((await accept(revToken, { origin, ...frank.cookie })).status).toBe(404);
+  const old = (await isJson(await invite())).body.url.split("/").pop();
+  const w = openAccounts(accountsFile(root)); w.run("update space_invites set expires_at = 1"); w.close();
+  expect((await accept(old, { origin, ...frank.cookie })).status).toBe(404);
+  expect((await get(`/s/mine/invite/${old}`)).status).toBe(404);
+});
+
+test("archive: typed confirmation, out of spaces/, not served nor listed, restorable by an owner with its people; a space with its own repository is refused", async () => {
+  const { root, ada, bob, eve, get, send, origin, said } = await manage();
+  const archive = (confirm: unknown, who = ada.cookie, name = "mine") => send("POST", `/s/${name}/api/space/archive`, { confirm }, { origin, ...who });
+  expect((await archive("nope")).status).toBe(400);
+  expect((await archive(undefined)).status).toBe(400);
+  expect((await archive("mine", bob.cookie)).status).toBe(403);
+  expect((await archive("mine", eve.cookie)).status).toBe(404);
+  mkdirSync(join(root, "spaces/mine/.git"));
+  expect((await archive("mine")).status).toBe(409); // its own repository: the CLI only
+  expect(existsSync(join(root, "spaces/mine/wiki"))).toBe(true);
+  writeFileSync(join(root, "cortex.json"), JSON.stringify({ ...ANYONE, default_space: "mine" }));
+  rmSync(join(root, "spaces/mine/.git"), { recursive: true });
+  expect((await archive("mine")).status).toBe(200);
+  expect(existsSync(join(root, "spaces/mine"))).toBe(false);
+  const kept = readdirSync(join(root, ".cortex/archive")).filter((d) => /^mine-\d{8}-\d{6}$/.test(d));
+  expect(kept.length).toBe(1);
+  expect(existsSync(join(root, ".cortex/archive", kept[0]!, "wiki"))).toBe(true);
+  expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).default_space ?? null).toBeNull(); // the CLI no longer fails on it
+  expect((await get("/s/mine/", ada.cookie)).status).toBe(404);
+  expect((await get("/s/mine/api/space", ada.cookie)).status).toBe(404);
+  expect(((await (await get("/api/spaces", ada.cookie)).json()) as { spaces: { name: string }[] }).spaces.map((s) => s.name)).toEqual(["open"]);
+  expect(said.some((m) => m.startsWith("space mine archived"))).toBe(true);
+  // the rows are kept: its owners find it, others do not, and nobody can take the name meanwhile
+  const list = async (who?: Record<string, string>) => ((await (await get("/api/spaces/archived", who)).json()) as { archived?: { name: string; archived_at: string }[] }).archived;
+  expect((await list(ada.cookie))?.map((a) => a.name)).toEqual(["mine"]);
+  expect(Date.parse((await list(ada.cookie))![0]!.archived_at)).toBeGreaterThan(Date.now() - 60_000);
+  expect(await list(bob.cookie)).toEqual([]); // a member, not an owner
+  expect(await list(eve.cookie)).toEqual([]);
+  expect((await get("/api/spaces/archived")).status).toBe(401);
+  expect((await send("POST", "/api/spaces", { name: "mine" }, { origin, ...ada.cookie })).status).toBe(409);
+  const restore = (who: Record<string, string> = ada.cookie, h: Record<string, string> = { origin }) => send("POST", "/api/spaces/mine/restore", undefined, { ...h, ...who });
+  expect((await restore(eve.cookie)).status).toBe(404);
+  expect((await restore(bob.cookie)).status).toBe(404);
+  expect((await restore({})).status).toBe(401);
+  expect((await restore(ada.cookie, {})).status).toBe(403);
+  expect((await send("POST", "/api/spaces/ghost/restore", undefined, { origin, ...ada.cookie })).status).toBe(404);
+  expect((await isJson(await restore())).body).toEqual({ name: "mine", url: "/s/mine/" });
+  expect(await (await get("/s/mine/", ada.cookie)).text()).toBe("mine|/s/mine");
+  expect(await (await get("/s/mine/", eve.cookie)).status).toBe(404); // private as before
+  expect((await get("/s/mine/", bob.cookie)).status).toBe(200); // its people are back
+  expect(members(root, "mine").sort()).toEqual([ada.id, bob.id].sort());
+  expect(await list(ada.cookie)).toEqual([]);
+  expect((await restore()).status).toBe(404); // not archived any more
+});
+
+test("restore is refused (409) when a live space has the name", async () => {
+  const { root, ada, send, origin } = await manage();
+  expect((await send("POST", "/s/mine/api/space/archive", { confirm: "mine" }, { origin, ...ada.cookie })).status).toBe(200);
+  mkdirSync(join(root, "spaces/mine/wiki"), { recursive: true }); // what a manual `cortex space add` would leave
+  expect((await send("POST", "/api/spaces/mine/restore", undefined, { origin, ...ada.cookie })).status).toBe(409);
 });

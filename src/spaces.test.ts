@@ -8,6 +8,7 @@ import { confine } from "./backends/sandbox";
 import { configFile, lintConfig, loadConfig } from "./config";
 import { findRoot, instanceRoot, listSpaces } from "./lib";
 import { encodePayload } from "./remote";
+import { archiveSpace, restoreSpace } from "./space";
 import { changedPaths, withSync } from "./sync";
 
 /** Spaces: the root of a multi-space instance, `cortex space`, git per space and the sandbox of an agent. */
@@ -285,6 +286,25 @@ describe("git per space", () => {
     expect(show(bare, "spaces/a/wiki/second.md")).toBe("z\n");
     expect(show(bare, "spaces/b/wiki/other.md")).toBe(""); // not committed
     expect(sh(work, "status", "--porcelain")).toContain("spaces/b/wiki/other.md");
+  });
+
+  test("monorepo: archiving and restoring a space commit the move (and cortex.json when default_space changes)", async () => {
+    const d = tmp(), bare = remoteWith(d, "inst", { "cortex.json": '{"default_space":"a"}\n', "spaces/a/wiki/p.md": "1\n", "spaces/b/wiki/p.md": "1\n" });
+    sh(d, "clone", "-q", bare, "work");
+    const work = join(d, "work");
+    await archiveSpace(work, "a", true);
+    expect(show(bare, "spaces/a/wiki/p.md")).toBe(""); // gone from the tree, still in the history
+    expect(show(bare, "spaces/b/wiki/p.md")).toBe("1\n");
+    expect(show(bare, "cortex.json")).not.toContain("default_space\": \"a");
+    expect(sh(work, "log", "-1", "--format=%s")).toBe("space: archive a");
+    expect(sh(work, "status", "--porcelain")).not.toContain("spaces/");
+    restoreSpace(work, "a", true);
+    expect(show(bare, "spaces/a/wiki/p.md")).toBe("1\n");
+    expect(sh(work, "log", "-1", "--format=%s")).toBe("space: restore a");
+    // nothing tracked, nothing to commit: no error either
+    mkdirSync(join(work, "spaces/c/wiki"), { recursive: true });
+    await archiveSpace(work, "c", true);
+    expect(sh(work, "log", "-1", "--format=%s")).toBe("space: restore a");
   });
 
   test("monorepo: a tracked file modified in another space does not stop the pull, nor is it lost", async () => {
@@ -597,6 +617,42 @@ describe("visibility and roles", () => {
     expect(list).not.toContain("Ma veille");
     const check = openAccounts(accountsFile(root));
     expect(spaceMembers(check, "a").map((m) => [m.id, m.role])).toEqual([[bob, "owner"]]);
+    check.close();
+  });
+
+  test("cortex space archive and restore: out of spaces/ and out of the lists, nothing else lost, the name stays taken", () => {
+    const root = instance(["a", "b"], { default_space: "a" });
+    writeFileSync(join(root, "spaces/a/wiki/p.md"), page);
+    expect(cortex(root, ["space", "archive", "nope"]).code).toBe(2);
+    expect(cortex(root, ["space", "archive", "a"]).code).toBe(0);
+    expect(existsSync(join(root, "spaces/a"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).default_space ?? null).toBeNull();
+    expect(cortex(root, ["space", "list"]).out).toBe("* b  open\n"); // the only one left is the default
+    expect(cortex(root, ["--space", "a", "ls"]).code).toBe(2); // nothing reads it, search included
+    expect(cortex(root, ["space", "list", "--archived"]).out).toMatch(/^a  archived \d{8}-\d{6}\n$/);
+    const r = cortex(root, ["space", "add", "a"]);
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("archived")]);
+    expect(cortex(root, ["space", "restore", "a"]).code).toBe(0);
+    expect(readFileSync(join(root, "spaces/a/wiki/p.md"), "utf8")).toBe(page);
+    expect(cortex(root, ["space", "list"]).out).toContain("  a  open");
+    expect(cortex(root, ["space", "list", "--archived"]).out).toContain("No archived space");
+    expect(cortex(root, ["space", "restore", "a"]).code).toBe(2); // nothing archived any more
+    expect(cortex(root, ["space", "restore", "b"]).code).toBe(2);
+  });
+
+  test("archiving keeps the people, visibility and title; a restored space gets them back", () => {
+    const root = instance(["a", "b"]), db = openAccounts(accountsFile(root)), ada = user(db, "1");
+    setSpace(db, "a", { visibility: "private", title: "Mine" }); addSpaceMember(db, "a", ada, "owner");
+    db.close();
+    expect(cortex(root, ["space", "archive", "a"]).code).toBe(0);
+    let check = openAccounts(accountsFile(root));
+    expect(getSpace(check, "a")).toMatchObject({ visibility: "private", title: "Mine", archived_at: expect.any(Number) });
+    expect(spaceMembers(check, "a").map((m) => m.id)).toEqual([ada]);
+    check.close();
+    expect(cortex(root, ["space", "restore", "a"]).code).toBe(0);
+    check = openAccounts(accountsFile(root));
+    expect(getSpace(check, "a")).toMatchObject({ visibility: "private", title: "Mine", archived_at: null });
+    expect(spaceMembers(check, "a").length).toBe(1);
     check.close();
   });
 
