@@ -108,3 +108,15 @@ export async function search(root: string, q: string, opts: { in?: "wiki" | "raw
     });
   } finally { ix.close(); }
 }
+
+/** A hit of a search over several spaces: the space it comes from. */
+export type SpaceHit = Hit & { space: string };
+
+/**
+ * `search` in each space, then one list: each space's ranking fused by reciprocal rank (the same `EMBED.rrfK`), a tie going to the
+ * first space listed. Wiki before raw, as in a single space; `score`: lower is better.
+ */
+export async function searchSpaces(spaces: { space: string; root: string }[], q: string, opts: Parameters<typeof search>[2] = {}): Promise<SpaceHit[]> {
+  const lists = await Promise.all(spaces.map(async ({ space, root }) => (await search(root, q, opts)).map((h, i): SpaceHit => ({ ...h, space, score: -1 / (EMBED.rrfK + i + 1) }))));
+  return lists.flat().sort((a, b) => Number(a.area === "raw") - Number(b.area === "raw") || a.score - b.score).slice(0, opts.limit ?? 20);
+}

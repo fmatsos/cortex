@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { OPTIONS } from "./cli-options";
-import { CortexError, findRoot } from "./lib";
+import { CortexError, findRoot, isSpaceList } from "./lib";
 import { withSync } from "./sync";
 import pkg from "../package.json";
 
@@ -126,6 +126,7 @@ export function refusal(argv: string[], uploads = 0): string | undefined {
   try { parsed = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: true }); } catch (e) { return (e as Error).message; }
   const { values: o, positionals: [, ...rest] } = parsed;
   if (cmd === "config" && !["get", "lint", undefined].includes(rest[0])) return "through a remote wiki, cortex config only reads (get, lint): edit cortex.json in a checkout.";
+  if (isSpaceList(o.space) && cmd !== "search") return "--space with several spaces (a,b or all) is only for cortex search.";
   if (cmd === "mcp" && o.agent !== undefined) return "cortex mcp --agent is internal to the wiki host.";
   if (cmd === "add") {
     const files = rest.filter((a) => /^@file:\d+$/.test(a));
@@ -221,7 +222,9 @@ export async function remoteExec(args: string[], self: string[]): Promise<number
   const why = refusal(argv, e?.files.length ?? 0);
   if (why) throw new CortexError(why, "refused");
   // a multi-space host: the command (its --space) runs, and is synced with git, in that space's folder (it may be its own repository)
-  const root = findRoot(instance, parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: false }).values.space as string | undefined);
+  const space = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true, strict: false }).values.space as string | undefined;
+  const several = isSpaceList(space); // a search over several spaces runs at the instance, unsynced: it reads each space as the host has it
+  const root = several ? instance : findRoot(instance, space);
   let dir: string | undefined;
   if (e) {
     dir = mkdtempSync(join(tmpdir(), "cortex-upload-"));
@@ -239,6 +242,6 @@ export async function remoteExec(args: string[], self: string[]): Promise<number
     const p = Bun.spawn([...self, ...argv], { cwd: root, env: { ...env, CORTEX_ROOT: root, CORTEX_PUBLIC_ONLY: "1", ...(cmd === "mcp" && { CORTEX_SYNC: "1" }) }, stdin, stdout: "inherit", stderr: "inherit" });
     return p.exited;
   };
-  try { return cmd === "mcp" ? await run() : await withSync(root, cmd, run, undefined, (code) => code !== 0); }
+  try { return cmd === "mcp" || several ? await run() : await withSync(root, cmd, run, undefined, (code) => code !== 0); }
   finally { if (dir) rmSync(dir, { recursive: true, force: true }); }
 }

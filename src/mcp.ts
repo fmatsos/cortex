@@ -7,10 +7,10 @@ import * as z from "zod/v4";
 import { add } from "./add";
 import { fromResource, toResource } from "./doc";
 import { openWiki } from "./context";
-import { related, type Related } from "./lib";
+import { confinedSpace, instanceRoot, isSpaceList, related, spaceList, type Related } from "./lib";
 import { lint } from "./lint";
 import { KINDS, lastDays, readLog, type LogEntry } from "./log";
-import { search } from "./search";
+import { search, searchSpaces } from "./search";
 import type { RelatedReason } from "../site/src/lib/types";
 import { mcpInstructions } from "./prompts";
 import { loadConfig } from "./config";
@@ -48,7 +48,8 @@ const toolResult = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) => async 
   catch (e) { return { ...text(`Error: ${(e as Error).message}`), isError: true }; }
 };
 
-export function buildServer(root: string, language?: string): McpServer {
+/** `confined`: the server runs inside a space, which cannot read the other ones (the `space` argument is then refused). */
+export function buildServer(root: string, language?: string, confined = false): McpServer {
   const s = new McpServer({ name: "cortex", version: pkg.version }, {
     instructions: mcpInstructions(language),
   });
@@ -57,37 +58,54 @@ export function buildServer(root: string, language?: string): McpServer {
   const tool = <A>(fn: (a: A) => Promise<ReturnType<typeof text>>) =>
     toolResult(process.env.CORTEX_SYNC === "1" ? (a: A) => withSync(root, "mcp", () => fn(a)) : fn);
 
+  /** The spaces a tool call names (undefined: the server's own); only on request, and never from a space-confined server. */
+  const spacesOf = (space?: string) => {
+    if (space === undefined) return undefined;
+    if (confined) throw new Error("space: this server is confined to its own space.");
+    return spaceList(instanceRoot(root), space);
+  };
+  const rootOf = (space?: string) => {
+    if (isSpaceList(space)) throw new Error("space: one space name here.");
+    return spacesOf(space)?.[0].root ?? root;
+  };
+
   s.registerTool("search", {
-    description: "Hybrid search in the wiki, then in raw/ (words, title typos and, when configured, meaning; one result per page, with the extract of its best section). Use it first for any question about the user's knowledge. A result found only in raw/ flags a gap to compile.",
+    description: "Hybrid search in the wiki, then in raw/ (words, title typos and, when configured, meaning; one result per page, with the extract of its best section). Use it first for any question about the user's knowledge. A result found only in raw/ flags a gap to compile. Searches this server's space; `space` searches others only when the user asks.",
     inputSchema: z.object({
       q: z.string().describe("search terms"),
       in: z.enum(["wiki", "raw"]).optional().describe("restrict to wiki or raw (default: both, wiki first)"),
       limit: z.number().int().min(1).max(50).optional().describe("maximum number of results (default 10)"),
+      space: z.string().optional().describe("another space, a comma list (a,b) or \"all\" (default: this server's space); each hit then names its space"),
     }),
     annotations: readOnly,
-  }, tool(async ({ q, in: area, limit }) => {
-    const hits = await search(root, q, { in: area, limit: limit ?? 10 });
+  }, tool(async ({ q, in: area, limit, space }) => {
+    const spaces = spacesOf(space), opts = { in: area, limit: limit ?? 10 };
+    const hits = spaces ? await searchSpaces(spaces, q, opts) : await search(root, q, opts);
     const gap = area !== "raw" && hits.length > 0 && hits.every((h) => h.area === "raw");
     return json({
-      hits: hits.map((h) => ({ path: toResource(h.path), title: h.title, area: h.area, snippet: h.snippet, match: h.match })),
+      hits: hits.map((h) => ({ ...("space" in h && { space: h.space }), path: toResource(h.path), title: h.title, area: h.area, snippet: h.snippet, match: h.match })),
       ...(gap && { hint: "Found only in raw/: a gap to compile (cortex compile)." }),
     });
   }));
 
   s.registerTool("get", {
     description: "Reads the raw content of a .md page under wiki/ or raw/, for example /wiki/concepts/x.md. Use it to read a whole page after a search or a related.",
-    inputSchema: z.object({ path: z.string().describe("path relative to the repository root, with or without a leading \"/\"") }),
+    inputSchema: z.object({
+      path: z.string().describe("path relative to the repository root, with or without a leading \"/\""),
+      space: z.string().optional().describe("the space of a hit from another space (default: this server's space)"),
+    }),
     annotations: readOnly,
-  }, tool(async ({ path }) => text(await getFile(root, path))));
+  }, tool(async ({ path, space }) => text(await getFile(rootOf(space), path))));
 
   s.registerTool("related", {
     description: "Wiki pages related to a page: outgoing links, backlinks, shared raw sources and tags, ranked by strength with the reason. Use it to explore a page's neighborhood before answering or proposing an update.",
     inputSchema: z.object({
       path: z.string().describe("wiki page, for example /wiki/concepts/x.md"),
       limit: z.number().int().min(1).max(50).optional().describe("maximum number of pages (default 10)"),
+      space: z.string().optional().describe("the space of a page from another space (default: this server's space)"),
     }),
     annotations: readOnly,
-  }, tool(async ({ path, limit }) => json(relatedForAgent(related(await openWiki(root).pages(), path), limit))));
+  }, tool(async ({ path, limit, space }) => json(relatedForAgent(related(await openWiki(rootOf(space)).pages(), path), limit))));
 
   s.registerTool("lint", {
     description: "Mechanical checks of the wiki: errors and warnings (broken links, orphans, pending sources, pages to review…). Contradictions between pages remain yours to find.",
@@ -132,5 +150,6 @@ export function buildServer(root: string, language?: string): McpServer {
 export async function serveMcp(root: string) {
   console.log = console.error;
   const { language } = await loadConfig(root);
-  serveStdio(() => buildServer(root, language));
+  const confined = confinedSpace() !== undefined;
+  serveStdio(() => buildServer(root, language, confined));
 }

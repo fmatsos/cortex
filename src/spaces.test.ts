@@ -347,3 +347,126 @@ describe("sandbox of a multi-space instance", () => {
     } finally { Object.defineProperty(process, "platform", platform); }
   });
 });
+
+describe("search across spaces", () => {
+  const doc = (title: string, body: string) => `---\ntype: Concept\ntitle: ${title}\ndescription: D.\n---\n${body}\n`;
+  /** a: "Zythum Alpha" (title match, rank 1) and "Brew" (body only, rank 2); b: "Zythum Beta" (rank 1); c: nothing. */
+  const fixture = () => {
+    const root = instance(["a", "b", "c"], { default_space: "a" });
+    writeFileSync(join(root, "spaces/a/wiki/alpha.md"), doc("Zythum Alpha", "Un texte."));
+    writeFileSync(join(root, "spaces/a/wiki/brew.md"), doc("Brew", "Un texte sur le zythum."));
+    writeFileSync(join(root, "spaces/b/wiki/beta.md"), doc("Zythum Beta", "Un autre texte."));
+    return root;
+  };
+  const search = (cwd: string, ...args: string[]) => cortex(cwd, ["search", "zythum", "--json", ...args]);
+  const titles = (out: string) => JSON.parse(out).map((h: { space: string; title: string }) => `${h.space}:${h.title}`);
+
+  test("fuses each space's ranking by rank (a tie goes to the first space), each hit names its space", () => {
+    const root = fixture();
+    expect(titles(search(root, "--space", "a,b").out)).toEqual(["a:Zythum Alpha", "b:Zythum Beta", "a:Brew"]);
+    expect(titles(search(root, "--space", "b,a").out)).toEqual(["b:Zythum Beta", "a:Zythum Alpha", "a:Brew"]);
+    expect(titles(search(root, "--space", "a,b", "--limit", "2").out)).toEqual(["a:Zythum Alpha", "b:Zythum Beta"]);
+    expect(JSON.parse(search(root, "--space", "a,b").out)[0].score).toBeCloseTo(-1 / 61, 10); // k = 60, rank 1
+  });
+
+  test("all searches every space; text output prefixes the space only when several were searched", () => {
+    const root = fixture();
+    expect(titles(search(root, "--space", "all").out)).toEqual(["a:Zythum Alpha", "b:Zythum Beta", "a:Brew"]);
+    const text = cortex(root, ["search", "zythum", "--space", "all"]).out.split("\n").filter((l) => /^\S+\s+wiki/.test(l));
+    expect(text.map((l) => l.split(/\s+/)[0])).toEqual(["a", "b", "a"]);
+    expect(cortex(root, ["search", "zythum", "--space", "a,a"]).out).not.toMatch(/^a\s+wiki/m); // one space: no prefix
+  });
+
+  test("by default, and with one name, a search stays in one space and its output is unchanged", () => {
+    const root = fixture();
+    expect(JSON.parse(search(root).out).map((h: { title: string; space?: string }) => [h.title, h.space])).toEqual([["Zythum Alpha", undefined], ["Brew", undefined]]);
+    expect(search(root, "--space", "b").out).not.toContain('"space"');
+    expect(titles(search(root, "--space", "b").out)).toEqual(["undefined:Zythum Beta"]);
+  });
+
+  test("an unknown space, a list on a legacy instance: usage errors", () => {
+    const root = fixture(), legacy = tmp();
+    writeFileSync(join(legacy, "cortex.json"), "{}");
+    const r = search(root, "--space", "a,nope");
+    expect([r.code, r.err]).toEqual([2, expect.stringContaining("unknown space: nope")]);
+    expect(search(legacy, "--space", "all").code).toBe(2);
+  });
+
+  test("every other command refuses several spaces", () => {
+    const root = fixture();
+    for (const args of [["ls"], ["lint"], ["show", "x"], ["related", "x"], ["index"], ["log"]]) for (const space of ["a,b", "all"]) {
+      const r = cortex(root, [...args, "--space", space]);
+      expect([args[0], r.code, r.err]).toEqual([args[0], 2, expect.stringContaining("only for cortex search")]);
+    }
+  });
+
+  test("refused inside a space (an agent confined to it): from its folder or through CORTEX_ROOT", () => {
+    const root = fixture();
+    for (const r of [search(join(root, "spaces/a"), "--space", "all"), cortex(root, ["search", "zythum", "--space", "a,b"], { CORTEX_ROOT: join(root, "spaces/a") })]) {
+      expect(r.code).toBe(2);
+      expect(r.err).toContain("inside the space a");
+    }
+    expect(search(join(root, "spaces/a")).code).toBe(0); // its own space is still searchable
+  });
+
+  test("a remote host searches several spaces, runs at the instance; other commands are refused there", () => {
+    const root = fixture();
+    const exec = (...argv: string[]) => Bun.spawnSync(["bun", CLI, "remote-exec", encodePayload({ argv })], { cwd: root, env: { ...process.env, NO_COLOR: "1", CORTEX_ROOT: root } });
+    const ok = exec("search", "zythum", "--json", "--space", "a,b");
+    expect(ok.exitCode).toBe(0);
+    expect(titles(ok.stdout.toString())).toEqual(["a:Zythum Alpha", "b:Zythum Beta", "a:Brew"]);
+    expect(exec("ls", "--space", "all").exitCode).not.toBe(0);
+  });
+
+  /** The MCP server over stdio: `call(name, args)` resolves the tool result. */
+  async function mcp(env: Record<string, string>) {
+    const e: Record<string, string | undefined> = { ...process.env, ...env };
+    for (const k of ["CORTEX_SPACE", "CORTEX_WIKI"]) delete e[k];
+    const proc = Bun.spawn(["bun", CLI, "mcp"], { env: e, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = "", n = 0;
+    const rpc = async (method: string, params?: object) => {
+      const id = ++n;
+      proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); proc.stdin.flush();
+      for (;;) {
+        const nl = buf.indexOf("\n");
+        if (nl >= 0) { const m = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1); if (m.id === id) return m.result; continue; }
+        const { value, done } = await reader.read();
+        if (done) throw new Error(await new Response(proc.stderr).text());
+        buf += value;
+      }
+    };
+    await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+    proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+    return { call: (name: string, args: object) => rpc("tools/call", { name, arguments: args }), tools: () => rpc("tools/list"), close: () => { proc.stdin.end(); proc.kill(); } };
+  }
+  const data = (r: { content: { text: string }[] }) => JSON.parse(r.content[0].text);
+
+  test("MCP: search takes a space argument (a name, a list, all); get and related open a hit of another space", async () => {
+    const root = fixture(), m = await mcp({ CORTEX_ROOT: root });
+    try {
+      const props = (await m.tools()).tools.map((t: { name: string; inputSchema: { properties: object } }) => [t.name, Object.keys(t.inputSchema.properties)]);
+      for (const t of ["search", "get", "related"]) expect(props.find(([n]: string[]) => n === t)[1]).toContain("space");
+      const own = data(await m.call("search", { q: "zythum" }));
+      expect(own.hits.map((h: { title: string; space?: string }) => [h.title, h.space])).toEqual([["Zythum Alpha", undefined], ["Brew", undefined]]); // today's behaviour
+      expect(data(await m.call("search", { q: "zythum", space: "all" })).hits.map((h: { space: string; title: string }) => `${h.space}:${h.title}`)).toEqual(["a:Zythum Alpha", "b:Zythum Beta", "a:Brew"]);
+      expect(data(await m.call("search", { q: "zythum", space: "b" })).hits.map((h: { space: string }) => h.space)).toEqual(["b"]);
+      expect((await m.call("get", { path: "/wiki/beta.md" })).isError).toBe(true); // not in the server's space
+      expect((await m.call("get", { path: "/wiki/beta.md", space: "b" })).content[0].text).toContain("Zythum Beta");
+      expect((await m.call("related", { path: "/wiki/beta.md", space: "b" })).isError).toBeFalsy();
+      expect((await m.call("get", { path: "/wiki/beta.md", space: "a,b" })).isError).toBe(true);
+      expect((await m.call("search", { q: "zythum", space: "nope" })).isError).toBe(true);
+    } finally { m.close(); }
+  });
+
+  test("MCP: a server confined to a space refuses the space argument", async () => {
+    const root = fixture(), m = await mcp({ CORTEX_ROOT: join(root, "spaces/a") });
+    try {
+      for (const [name, args] of [["search", { q: "zythum", space: "all" }], ["get", { path: "/wiki/beta.md", space: "b" }]] as const) {
+        const r = await m.call(name, args);
+        expect([name, r.isError, r.content[0].text]).toEqual([name, true, expect.stringContaining("confined")]);
+      }
+      expect(data(await m.call("search", { q: "zythum" })).hits.length).toBe(2); // its own space still answers
+    } finally { m.close(); }
+  });
+});

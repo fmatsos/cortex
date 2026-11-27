@@ -5,7 +5,7 @@ export const HELP = `cortex — second brain
 
   cortex add <url|file|-> [--note "why I keep this"] [--via freedium (then archive.ph, Wayback)] [--linked-from <id>] [--dry-run]
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
-  cortex search "<query>" [--in wiki|raw] [--json] [--limit N]
+  cortex search "<query>" [--in wiki|raw] [--json] [--limit N] [--space a,b|all]   (--space a,b or all: several spaces, one fused list)
   cortex index
   cortex new <Source|Concept|Entity|Synthesis> "<title>" [--force]   (creates the page per page_path, status: draft; prints its path; --force: a near title, by hand only)
   cortex lint [--json]
@@ -47,6 +47,6 @@ $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "cla
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json, otherwise the default remote wiki.
 With a spaces/ folder there, the root is one space: the one you are in, else --space <name>, $CORTEX_SPACE, default_space,
-the only one. The agent of a space writes only its wiki/ and cannot read the other spaces.
+the only one. The agent of a space writes only its wiki/ and cannot read the other spaces (nor search them).
 --wiki <name> (or $CORTEX_WIKI) sends the command to that remote wiki over ssh, even inside a local one. Through a
 remote wiki: serve, share, export, inbox and compile are refused; config only reads; ask runs the host's agent.`;

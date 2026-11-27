@@ -8,11 +8,11 @@ import { inbox } from "./inbox";
 import { openWiki } from "./context";
 import { regenerateCtx } from "./catalog";
 import { KINDS, kindLabel, logAddCtx, newestFirst } from "./log";
-import { search } from "./search";
+import { search, searchSpaces } from "./search";
 import { lintCtx } from "./lint";
 import { configCmd } from "./config-cmd";
 import { CONFIG_KEYS, override } from "./config";
-import { CortexError, findInstance, findRoot, isMultiSpace } from "./lib";
+import { CortexError, findInstance, findRoot, findSpaces, isMultiSpace, isSpaceList } from "./lib";
 import { newPageCtx } from "./naming";
 import { print, type Result } from "./print";
 import { fail, paint, warn } from "./style";
@@ -74,6 +74,9 @@ try {
   // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
   // help and version too: no command, `--help`, `--version` (the release workflow runs them outside any wiki)
   if (o.version) { console.log(pkg.version); process.exit(0); }
+  // several spaces (`a,b`, `all`) are for a search alone, here and on a remote host
+  const spaces = isSpaceList(o.space);
+  if (spaces && cmd !== "search") throw usage("--space with several spaces (a,b or all) is only for cortex search.");
   // remote wiki (docs/REMOTE-PLAN.md): the remotes.json commands, the server side of a forwarded call, then the forwarding
   if (cmd === "remote" || cmd === "remote-exec") {
     const r = await import("./remote");
@@ -89,7 +92,7 @@ try {
       process.exit(await forward(target, forwardedArgv(process.argv.slice(2), tokens!)));
     }
   }
-  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" || (cmd === "serve" && !o.space) ? instanceOrRoot() : findRoot(process.cwd(), o.space);
+  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" || (cmd === "serve" && !o.space) || spaces ? instanceOrRoot() : findRoot(process.cwd(), o.space);
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {
@@ -113,10 +116,12 @@ try {
       const q = args.join(" ");
       if (!q) throw usage('Usage: cortex search "<query>"');
       if (o.in && o.in !== "wiki" && o.in !== "raw") throw usage("--in expects wiki or raw");
-      const hits = await search(root, q, { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) });
+      const opts = { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) };
+      const searched = spaces ? findSpaces(o.space!) : undefined; // another space than the one chosen: on request only
+      const hits = searched ? await searchSpaces(searched, q, opts) : await search(root, q, opts);
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
       if (!hits.length) console.log(paint.dim("No results."));
-      for (const h of hits) console.log(`${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}\n      ${h.snippet.replace(/\s+/g, " ")}`);
+      for (const h of hits) console.log(`${searched && searched.length > 1 ? `${paint.dim((h as { space?: string }).space!)}  ` : ""}${paint.accent(h.area === "raw" ? "raw " : "wiki")}  ${paint.bold(h.title)}  ${paint.dim(toResource(h.path))}\n      ${h.snippet.replace(/\s+/g, " ")}`);
       if (o.in !== "raw" && hits.length && hits.every((h) => h.area === "raw")) console.log(paint.warn("\n→ Found only in raw/: a gap to compile?"));
       break;
     }

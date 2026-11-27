@@ -56,6 +56,31 @@ export function findRoot(from = process.cwd(), space?: string): string {
   return spaceRoot(inst, name);
 }
 
+/** The space whose folder $CORTEX_ROOT (else `from`) is inside: a process confined to it, which must not read the others. */
+export function confinedSpace(from = process.cwd()): string | undefined {
+  const start = process.env.CORTEX_ROOT || from, inst = findInstance(start);
+  if (!inst || !isMultiSpace(inst)) return undefined;
+  const [dir, inside] = relative(inst, resolve(start)).split(sep);
+  return dir === "spaces" && inside && SPACE_NAME.test(inside) ? inside : undefined;
+}
+/** A `--space` value that names several spaces (`a,b` or `all`): only `search` takes it. */
+export const isSpaceList = (space?: string) => !!space && (space === "all" || space.includes(","));
+/** The spaces named by `a,b` or `all` (or one name) in the instance, with their roots; a usage error for an unknown one. */
+export function spaceList(inst: string, spec: string): { space: string; root: string }[] {
+  const names = listSpaces(inst);
+  if (!names.length) throw new CortexError("--space: this instance has no spaces.", "usage");
+  const want = spec === "all" ? names : [...new Set(spec.split(",").map((s) => s.trim()))];
+  const bad = want.find((n) => !names.includes(n));
+  if (bad !== undefined) throw new CortexError(`unknown space: ${bad} (spaces: ${names.join(", ")}).`, "usage");
+  return want.map((space) => ({ space, root: spaceRoot(inst, space) }));
+}
+/** The spaces of a cross-space search (`--space a,b` or `all`) from the current place; refused inside a space, which cannot read the others. */
+export function findSpaces(spec: string, from = process.cwd()): { space: string; root: string }[] {
+  const confined = confinedSpace(from);
+  if (confined) throw new CortexError(`--space ${spec}: this folder is inside the space ${confined}, which cannot search the other spaces.`, "usage");
+  return spaceList(findInstance(process.env.CORTEX_ROOT || from) ?? "", spec);
+}
+
 /** A parsed .md file: the frontmatter as YAML gave it. `toPage` / `toRawSource` (doc.ts) type it. */
 export type Fm = Record<string, unknown>;
 export type Doc = { path: string; fm: Fm; body: string };
