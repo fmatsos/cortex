@@ -118,18 +118,19 @@ export function buildServer(root: string, language?: string, confined = false): 
   }));
 
   s.registerTool("add", {
-    description: "Adds a source to raw/ (status pending; never touches the wiki): an http(s) URL or a text. No local file: an MCP client must not be able to copy a file of the machine into the repository.",
+    description: "Adds a source to raw/ (status pending; never touches the wiki): an http(s) URL (a resource) or a text (a note, the user's own writing, unless `as` says resource). No local file: an MCP client must not be able to copy a file of the machine into the repository.",
     inputSchema: z.object({
       input: z.string().optional().describe("http(s) URL"),
       text: z.string().optional().describe("text to add, instead of input"),
       note: z.string().optional().describe("why the user keeps this source (optional)"),
+      as: z.enum(["note", "resource"]).optional().describe("what it is: a URL is a resource, a text a note (the user's own writing) unless this says otherwise; a space refuses a kind its content does not hold"),
     }),
-  }, tool(async ({ input, text: txt, note }) => {
+  }, tool(async ({ input, text: txt, note, as }) => {
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Give either input (URL or path) or text.");
     assertWritable(root); // a read-only space takes no source
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input must be an http(s) URL; for a local file, use cortex add or cortex inbox.");
-    const r = await add(root, input ?? "-", { note, text: txt, publicOnly: true });
+    const r = await add(root, input ?? "-", { note, text: txt, as, publicOnly: true });
     return json({ id: r.id, duplicate: r.duplicate, ...(r.ex && { title: r.ex.title, partial: r.ex.partial }) });
   }));
 

@@ -1,39 +1,49 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
 import { add, formatAdd } from "./add";
+import { SOURCE_CONTENTS, type SourceContent } from "./doc";
+import { CortexError } from "./lib";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 
 /**
  * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`, optional
- * origin URL in `<name>.origin`: a page captured from the browser, its text is the source and the URL is not fetched).
+ * origin URL in `<name>.origin`: a page captured from the browser, its text is the source and the URL is not fetched; `note` or
+ * `resource` in `<name>.kind`: what the source is, a typed share being a note). An entry the space does not take (its `content`
+ * leaves that kind out) is skipped, not failed: it stays in the inbox for when it does.
  * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
  * and are returned; `ok` is false when an entry failed.
  */
+/** What a share delivers, from its inbox files: a text typed by the person (`.kind` file) is a note, a link or a captured page a resource. */
+export const sharedKind = (files: { path: string; content: string }[]): SourceContent =>
+  files.some((f) => f.path.endsWith(".kind") && f.content.trim() === "note") ? "note" : "resource";
+
 export async function inbox(root: string, opts: { dryRun?: boolean } = {}, report?: Report): Promise<Result & { sources: string[] }> {
   const { say, done: result } = collector(report);
   const dir = join(root, "inbox");
   const urlsFile = join(dir, "urls.txt");
   const names = await readdir(dir, { withFileTypes: true }).then((es) => es.filter((e) => e.isFile()).map((e) => e.name), () => []);
-  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note") && !n.endsWith(".origin")).sort();
+  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note") && !n.endsWith(".origin") && !n.endsWith(".kind")).sort();
   const lines = (await Bun.file(urlsFile).exists()) ? (await Bun.file(urlsFile).text()).split("\n") : [];
 
   const done = new Set<string>(); // urls.txt lines to remove
   let added = 0, known = 0, failed = 0;
+  const skipped = new Map<string, string>(); // entries the space does not take (label → reason)
   /** One line per source added (and the pages it links to): `<title> (<id>) ← <entry>`, for a commit body. */
   const sources: string[] = [];
   const record = (r: Awaited<ReturnType<typeof add>>, label: string): void => {
     if (!r.duplicate && r.ex) sources.push(`${r.ex.title} (${r.id}) ← ${label}`);
     for (const l of r.linked ?? []) if (!("error" in l)) record(l, `${label} (linked)`);
   };
-  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string) => {
+  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string, as?: SourceContent) => {
     try {
-      const r = await add(root, input, { note, url, dryRun: opts.dryRun });
+      const r = await add(root, input, { note, url, as, dryRun: opts.dryRun });
       say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else added++;
       record(r, label);
       if (!opts.dryRun) await onOk();
     } catch (e) {
+      if (e instanceof CortexError && e.code === "refused") { skipped.set(label, e.message.replace(/\.$/, "")); return; }
       say("fail", `${label}: ${(e as Error).message}`);
       failed++;
     }
@@ -55,7 +65,9 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     const note = ((await Bun.file(noteFile).exists()) ? (await Bun.file(noteFile).text()).trim() : "") || undefined;
     const originFile = join(dir, `${f}.origin`);
     const origin = ((await Bun.file(originFile).exists()) ? (await Bun.file(originFile).text()).trim() : "") || undefined;
-    await run(f, join(dir, f), note, async () => { for (const x of [join(dir, f), noteFile, originFile]) await unlink(x).catch(() => {}); }, /^https?:\/\//.test(origin ?? "") ? origin : undefined);
+    const kindFile = join(dir, `${f}.kind`);
+    const kind = ((await Bun.file(kindFile).exists()) ? (await Bun.file(kindFile).text()).trim() : "") as SourceContent;
+    await run(f, join(dir, f), note, async () => { for (const x of [join(dir, f), noteFile, originFile, kindFile]) await unlink(x).catch(() => {}); }, /^https?:\/\//.test(origin ?? "") ? origin : undefined, SOURCE_CONTENTS.includes(kind) ? kind : undefined);
   }
 
   if (done.size) {
@@ -65,7 +77,7 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     await rename(`${urlsFile}.tmp`, urlsFile);
   }
 
-  if (!added && !known && !failed) say("info", paint.dim("Empty inbox."));
-  else say("info", `${opts.dryRun ? "(dry-run, inbox unchanged) " : ""}${added} added, ${known} already present, ${failed} failed.`);
+  if (!added && !known && !failed && !skipped.size) say("info", paint.dim("Empty inbox."));
+  else say("info", `${opts.dryRun ? "(dry-run, inbox unchanged) " : ""}${added} added, ${known} already present, ${failed} failed${skipped.size ? `, ${skipped.size} skipped and left in inbox/: ${[...new Set(skipped.values())].join("; ")}` : ""}.`);
   return { ...result(!failed), sources };
 }

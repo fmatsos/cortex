@@ -8,8 +8,9 @@ import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { openWiki, type Wiki } from "./context";
-import { rawId } from "./doc";
-import { cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
+import { disabledKind } from "./config";
+import { rawId, type SourceContent } from "./doc";
+import { CortexError, cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
 import { free } from "./naming";
 import { expand } from "./template";
 import { appendLogCtx } from "./log";
@@ -251,8 +252,10 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
 
 /** `url`: origin of a text or file given as input (a page captured from the browser): kept as the source's `url`, never fetched. */
 /** `linkedFrom`: id of a source already in raw/ this input was found in (a newsletter and the pages it points to): tied both ways. */
-type AddOpts = { note?: string; dryRun?: boolean; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string } & FetchOpts;
-type AddResult = { id: string; duplicate: boolean; ex?: Extract; linked?: (AddResult | { url: string; error: string })[] };
+/** `as`: what the source is (`resource` or `note`), instead of what its input says: stdin is a note, a URL, a PDF or a file a resource. */
+type AddOpts = { note?: string; dryRun?: boolean; as?: SourceContent; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string } & FetchOpts;
+/** `refused` (dry run only): why a real `add` would be refused, the space not holding this kind of source. */
+type AddResult = { id: string; duplicate: boolean; ex?: Extract; refused?: string; linked?: (AddResult | { url: string; error: string })[] };
 
 /**
  * One source, then the pages it links to (a post's links and link card), each a source of its own: a post often
@@ -275,12 +278,12 @@ export async function addCtx(w: Wiki, input: string, opts: AddOpts): Promise<Add
   const note = opts.note; // the post's intent as is: no note on the post, none on its pages (compile asks); the tie is linked_from
   for (const url of links) {
     let got: AddResult;
-    try { got = await addOne(w, url, { ...opts, mirrors: undefined, note }); }
+    try { got = await addOne(w, url, { ...opts, mirrors: undefined, note, as: undefined }); }
     catch (e) {
       const direct = (e as Error).message.split("\n")[0];
       // paywall, anti-bot or truncated page: Freedium may serve it (only some publishers), then archive.ph and the Wayback Machine (a copy, if one exists)
       if (!/HTTP 40[123]|paywall|Almost empty/i.test(direct)) { r.linked.push({ url, error: direct }); continue; }
-      try { got = await addOne(w, url, { ...opts, mirrors: VIA.freedium, note }); }
+      try { got = await addOne(w, url, { ...opts, mirrors: VIA.freedium, note, as: undefined }); }
       catch (f) { r.linked.push({ url, error: `${direct} Then via Freedium / archives: ${(f as Error).message.split("\n")[0]}` }); continue; }
     }
     r.linked.push(got);
@@ -319,12 +322,17 @@ export async function addFmLink(root: string, id: string, key: string, value: st
 async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResult> {
   const input = /^https?:\/\//.test(rawInput) ? cleanUrl(rawInput) : rawInput; // the one point every captured URL (given or followed) passes
   const root = w.root;
+  // what it is is known before anything is fetched: a space takes only the kinds its content holds (a dry run says so and goes on)
+  const content: SourceContent = opts.as ?? (input === "-" && !opts.url ? "note" : "resource");
+  const refused = disabledKind(await w.config(), root, content);
+  if (refused && !opts.dryRun) throw new CortexError(refused, "refused");
+  const result = (r: AddResult): AddResult => (refused ? { ...r, refused } : r);
   const now = opts.now ?? new Date();
   let ex: Extract;
   const isUrl = /^https?:\/\//.test(input);
   if (isUrl) {
     const known = await findDuplicate(w, [input]); // before the fetch: no needless request
-    if (known) return { id: known, duplicate: true };
+    if (known) return result({ id: known, duplicate: true });
     const cfg = await w.config(), secs = cfg.fetch_timeout;
     ex = await extractUrl(input, { ...opts, timeoutMs: opts.timeoutMs ?? (secs ? secs * 1000 : undefined), linkedin: opts.linkedin ?? cfg.parser?.social?.linkedin ?? undefined });
   }
@@ -340,7 +348,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: socialFor(opts.url) ? "social" : "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
   const hash = sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
-  if (dup) return { id: dup, duplicate: true, ex };
+  if (dup) return result({ id: dup, duplicate: true, ex });
 
   const iso = localIso(now);
   // folder according to raw_path (cortex.json); its last segment is the id, unique under raw/
@@ -348,11 +356,12 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   const tried = new Set<string>(); // folders another writer took between the probe and the mkdir
   const taken = (p: string) => tried.has(p) || !!rawPath(root, p.split("/").at(-1)!) || existsSync(join(root, "raw", p));
   let rel = free(base, taken);
-  if (opts.dryRun) return { id: rel.split("/").at(-1)!, duplicate: false, ex };
+  if (opts.dryRun) return result({ id: rel.split("/").at(-1)!, duplicate: false, ex });
 
   const fm: Record<string, unknown> = { type: "RawSource", title: ex.title };
   if (ex.url) fm.url = cleanUrl(ex.url);
   fm.kind = ex.kind;
+  fm.content = content;
   if (ex.author) fm.author = ex.author;
   if (ex.published) fm.published = ex.published;
   fm.sha256 = hash;
@@ -392,6 +401,7 @@ export function formatAdd(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean):
 }
 
 function formatOne(r: AddResult, dryRun?: boolean): string {
-  if (r.duplicate || !r.ex) return `${paint.dim("=")} already present: ${r.id}`;
-  return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partial" : ""}] ${r.ex.content.split(/\s+/).length} words`;
+  const refused = r.refused ? `\n  ${paint.warn("!")} not added for real: ${r.refused}` : "";
+  if (r.duplicate || !r.ex) return `${paint.dim("=")} already present: ${r.id}${refused}`;
+  return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partial" : ""}] ${r.ex.content.split(/\s+/).length} words${refused}`;
 }

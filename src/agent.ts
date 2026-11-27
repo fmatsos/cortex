@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, join, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
-import { rawId, toResource, type Page, type RawSource } from "./doc";
+import { rawId, sourceContent, toResource, type Page, type RawSource } from "./doc";
 import { nearest } from "./embed";
 import { clip, judge, judgeConfig, JUDGE } from "./judge";
 import { openWiki, type Wiki } from "./context";
@@ -11,7 +11,7 @@ import { regenerateCtx } from "./catalog";
 import { backendFor, type Mode } from "./backends/index";
 import type { Check } from "./backends/backend";
 import { confine } from "./backends/sandbox";
-import { agentFile } from "./config";
+import { agentFile, disabledKind } from "./config";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 import { LIMITS } from "./limits";
@@ -284,9 +284,10 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
   const { say, done } = collector(report);
   const root = w.root;
   const raw = await w.raws();
-  const targets = opts.pending
-    ? raw.filter((d) => d.fm.status === "pending")
-    : ids.map((id) => resolveRawId(raw, id));
+  const pending = opts.pending ? raw.filter((d) => d.fm.status === "pending") : [];
+  const cfg0 = await w.config(), refused = new Map(pending.flatMap((d) => { const why = disabledKind(cfg0, root, sourceContent(d.fm)); return why ? [[d, why] as const] : []; }));
+  const targets = opts.pending ? pending.filter((d) => !refused.has(d)) : ids.map((id) => resolveRawId(raw, id)); // explicit ids are compiled whatever the space holds
+  if (refused.size) say("info", paint.dim(`${refused.size} pending source${refused.size > 1 ? "s" : ""} skipped, left pending: ${[...new Set(refused.values())].map((m) => m.replace(/\.$/, "")).join("; ")}.`));
   if (!targets.length) { say("info", "Nothing to compile."); return done(true); }
 
   let ok = true;

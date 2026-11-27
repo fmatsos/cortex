@@ -14,12 +14,12 @@ import { search } from "./search";
 import { searchSite } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
-import { inbox } from "./inbox";
+import { inbox, sharedKind } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
-import { checkContent, configFile, contentOf, loadConfig, readConfig, writeConfig } from "./config";
+import { checkContent, configFile, contentOf, disabledKind, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { readOnlyMessage, readOnlyReason } from "./read-only";
 import { addedPaths, addSpace, archiveSpace, recordable, restoreSpace } from "./space";
@@ -310,8 +310,10 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
     if (o.sync) commitAndPush(root, inboxCommitMessage(r.sources), ["raw", "wiki"]);
     void rebuild();
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
-  const { route: shareRoute } = await import("../scripts/share-server");
+  const { route: shareRoute, ShareRefused } = await import("../scripts/share-server");
   const deliver = async (files: { path: string; content: string }[]) => {
+    const why = disabledKind(await loadConfig(root), root, sharedKind(files)); // a space takes only the kinds its content holds: the phone is told
+    if (why) throw new ShareRefused(why);
     mkdirSync(join(root, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(root, f.path), f.content);
     void ingest(); // the phone gets its answer now; the source is fetched and committed in the background

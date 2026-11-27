@@ -32,7 +32,7 @@ type Share = { title?: string; text?: string; url?: string; note?: string };
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
  * optional) goes on the `.url` line, or in `<name>.md.note` next to a text. A text with an explicit `url` (a page captured by the
  * browser extension: the text is what the page showed, behind its paywall or login) keeps it in `<name>.md.origin`: the source's
- * `url`, not fetched.
+ * `url`, not fetched. A text with no link at all (what the person typed) gets `<name>.md.kind` = `note`.
  */
 export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
   title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
@@ -45,6 +45,7 @@ export function toInbox({ title = "", text = "", url = "", note = "" }: Share): 
   const extra: [string, string][] = [];
   if (url) extra.push(["md.origin", `${url}\n`]);
   if (note) extra.push(["md.note", `${note}\n`]);
+  if (!link) extra.push(["md.kind", "note\n"]); // a text with no link is what the person wrote: a note
   return [md, ...extra];
 }
 
@@ -109,6 +110,9 @@ document.getElementById("f").onsubmit = (e) => { e.preventDefault();
 flush();
 </script></body></html>`;
 
+/** A share the space refuses (its content leaves that kind out): answered 409 with the reason. */
+export class ShareRefused extends Error {}
+
 /** Where a share's inbox files go: written (and committed, pushed…) by the caller, which returns once they are safe. */
 export type Deliver = (files: { path: string; content: string }[], id: string) => Promise<void>;
 
@@ -130,7 +134,11 @@ async function put(share: Share, deliver: Deliver): Promise<Response> {
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
   const out = files.map(([ext, content]) => ({ path: `inbox/partage-${id}.${ext}`, content }));
   try { await deliver(out, id); return Response.json({ paths: out.map((f) => f.path) }); }
-  catch (e) { console.error(`share ${id}: ${(e as Error).message}`); return new Response("échec de l'enregistrement", { status: 502 }); }
+  catch (e) {
+    if (e instanceof ShareRefused) return new Response(e.message, { status: 409 });
+    console.error(`share ${id}: ${(e as Error).message}`);
+    return new Response("échec de l'enregistrement", { status: 502 });
+  }
 }
 
 /** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */

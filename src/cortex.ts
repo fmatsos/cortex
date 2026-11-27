@@ -3,7 +3,7 @@ import "./sqlite-lib"; // first: the SQLite library must be chosen before any Da
 import { parseArgs } from "node:util";
 import { join } from "node:path";
 import { add, formatAdd, VIA } from "./add";
-import { toResource } from "./doc";
+import { SOURCE_CONTENTS, type SourceContent, toResource } from "./doc";
 import { inbox } from "./inbox";
 import { openWiki } from "./context";
 import { regenerateCtx } from "./catalog";
@@ -102,9 +102,10 @@ try {
     case "add": {
       if (!args[0]) throw usage("Usage: cortex add <url|file|-> --note \"…\"");
       if (o.via && !VIA[o.via]) throw usage(`Unknown --via: ${o.via} (${Object.keys(VIA).join(", ")}).`);
+      if (o.as !== undefined && !(SOURCE_CONTENTS as readonly string[]).includes(o.as)) throw usage(`--as expects ${SOURCE_CONTENTS.join(" or ")}.`);
       for (const input of args) {
         try { // one context per input (add(root) opens it): the previous input wrote to raw/, the duplicate check must see it
-          const r = await add(root, input, { note: o.note, dryRun: o["dry-run"], linkedFrom: o["linked-from"], mirrors: o.via ? VIA[o.via] : undefined, publicOnly: process.env.CORTEX_PUBLIC_ONLY === "1" });
+          const r = await add(root, input, { note: o.note, as: o.as as SourceContent | undefined, dryRun: o["dry-run"], linkedFrom: o["linked-from"], mirrors: o.via ? VIA[o.via] : undefined, publicOnly: process.env.CORTEX_PUBLIC_ONLY === "1" });
           console.log(formatAdd(r, o["dry-run"]));
         } catch (e) {
           fail((e as Error).message);

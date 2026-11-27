@@ -417,8 +417,8 @@ describe("git per space", () => {
     const work = join(d, "work");
     sh(work, "clone", "-q", pro, "spaces/pro");
     const exec = (...argv: string[]) => Bun.spawnSync(["bun", CLI, "remote-exec", encodePayload({ argv })], { cwd: d, env: { ...process.env, NO_COLOR: "1", CORTEX_ROOT: work }, stdin: Buffer.from(`Une source distante ${argv.at(-1)}, assez longue pour être capturée.`) });
-    expect(exec("add", "-", "--space", "veille").exitCode).toBe(0);
-    expect(exec("add", "-", "--space", "pro").exitCode).toBe(0);
+    expect(exec("add", "-", "--as", "resource", "--space", "veille").exitCode).toBe(0);
+    expect(exec("add", "-", "--as", "resource", "--space", "pro").exitCode).toBe(0);
     const rawIn = (bare: string, prefix: string) => Bun.spawnSync(["git", "-C", bare, "ls-tree", "-r", "--name-only", "main"]).stdout.toString().split("\n").filter((f) => f.startsWith(prefix) && f.endsWith("source.md"));
     expect(rawIn(inst, "spaces/veille/raw/").length).toBe(1); // the monorepo got its space's source
     expect(rawIn(pro, "raw/").length).toBe(1); // the own repository got its own

@@ -8,7 +8,7 @@ test("share: a link alone is a .url (note on its line), text keeps its link insi
     ["md", "# Un post sur les LLM locaux\n\nUn post sur les LLM locaux\nsuite\n\nSource : <https://lnkd.in/x>\n"],
     ["md.note", "veille\n"],
   ]);
-  expect(toInbox({ title: "Idée", text: "rappel : tester GLM" })).toEqual([["md", "# Idée\n\nrappel : tester GLM\n"]]);
+  expect(toInbox({ title: "Idée", text: "rappel : tester GLM" })).toEqual([["md", "# Idée\n\nrappel : tester GLM\n"], ["md.kind", "note\n"]]); // typed text, no link: a note
   expect(toInbox({ text: "  ", note: "x" })).toBeNull();
 });
 

@@ -41,11 +41,17 @@ export type PageFm = z.infer<typeof PageFmLoaded>;
 export type SourceRef = z.infer<typeof SourceRef>;
 export type Stamp = z.infer<typeof Stamp>;
 
+/** What a raw source is: a `resource` (an outside source) or a `note` (the user's own writing), set by `add`; one without it is a resource. */
+export const SOURCE_CONTENTS = ["resource", "note"] as const;
+export type SourceContent = (typeof SOURCE_CONTENTS)[number];
+export const sourceContent = (fm: { content?: unknown }): SourceContent => (fm.content === "note" ? "note" : "resource");
+
 const rawShape = {
   type: z.literal("RawSource"),
   title: Text.nullish(),
   url: z.string().nullish(),
   kind: z.string().nullish(),
+  content: z.enum(SOURCE_CONTENTS).nullish(),
   sha256: z.string().nullish(),
   blob: z.string().nullish(),
   fetched_at: Date_.nullish(),

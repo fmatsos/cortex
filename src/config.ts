@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { checkTemplate, type NamingKey } from "./template";
 import { LIMITS } from "./limits";
-import { instanceRoot, SPACE_NAME } from "./lib";
+import type { SourceContent } from "./doc";
+import { instanceRoot, SPACE_NAME, spaceNameOf } from "./lib";
 
 /**
  * cortex.json: schema, defaults, reading and linting. Imports nothing from naming.ts, schema.ts or backends/
@@ -300,3 +301,10 @@ export const agentFileFor = async (root: string) => agentFile((await loadConfig(
 
 /** What the space `name` holds (`spaces.<name>.content`, default resources). */
 export const contentOf = (c: Config, name?: string): readonly Content[] => (name && c.spaces?.[name]?.content) || DEFAULT_CONTENT;
+
+/** Why the space of `root` takes no source of this kind (its `content` leaves it out), or undefined. Outside a space (a legacy wiki) everything is taken. */
+export function disabledKind(c: Config, root: string, kind: SourceContent): string | undefined {
+  const name = spaceNameOf(root), held = contentOf(c, name), want = kind === "note" ? "notes" : "resources";
+  if (!name || held.includes(want)) return;
+  return `space ${name} holds ${held.join(" and ")}, not ${want}: this source is ${kind === "note" ? "a note" : "a resource"} (cortex space set ${name} --content ${[...held, want].join(",")} enables it, or add it with --as ${kind === "note" ? "resource" : "note"}).`;
+}
