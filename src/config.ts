@@ -92,11 +92,13 @@ const SHAPE = {
    * haiku, codex: gpt-6-luna), otherwise the global `model` when the client is the global one; effort: none sent by default;
    * base_url (openai client): default $CORTEX_ASK_BASE_URL, else as the openai client. $CORTEX_ASK_API_KEY only goes to $CORTEX_ASK_BASE_URL.
    * history_turns: earlier exchanges (question + answer) sent with each question; default the client's own limit (serve.ts), else 10.
+   * temperature: 0 to 2; absent = none sent, the provider's default applies; only the openai client sends it.
    */
   site_ask: z.strictObject({
     client: z.enum(CLIENT_NAMES, { error: (i) => `unknown site_ask.client "${i.input}" (${CLIENT_NAMES.join(", ")}).` }).nullish(),
     base_url: str("site_ask.base_url"), model: str("site_ask.model"), effort: str("site_ask.effort"), history_turns: count("site_ask.history_turns"),
-  }, { error: '"site_ask" must be an object (client, base_url, model, effort, history_turns), or null.' }).nullish(),
+    temperature: z.number({ error: '"site_ask.temperature" must be a number between 0 and 2, or null.' }).min(0, { error: '"site_ask.temperature" must be a number between 0 and 2, or null.' }).max(2, { error: '"site_ask.temperature" must be a number between 0 and 2, or null.' }).nullish(),
+  }, { error: '"site_ask" must be an object (client, base_url, model, effort, history_turns, temperature), or null.' }).nullish(),
   /** Review notion (verified pages, « to review again », « mark as reviewed »). Absent = off: the site shows none of it. */
   review: z.boolean({ error: '"review" must be true, false or null.' }).nullish(),
   /** Draft status. Absent = off: the site shows draft pages as stable and offers no draft filter. */
@@ -192,6 +194,8 @@ export function lintConfig(c: unknown): ConfigIssue[] {
   if (r.data.client === "openai" && !r.data.model) return [{ level: "warning", msg: "the openai client needs a model (e.g. qwen3:8b)." }];
   if (r.data.site_ask?.client === "openai" && !r.data.site_ask.model && r.data.client !== "openai")
     return [{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }];
+  if (r.data.site_ask?.temperature != null && (r.data.site_ask.client ?? r.data.client) !== "openai")
+    return [{ level: "warning", msg: "site_ask.temperature only applies to the openai client (the other clients do not take it)." }];
   const j = r.data.judge;
   // one of the two set alone is compared with the other's default: the related bar would be lowered at run time
   if (j && (j.search_retained != null) !== (j.search_related != null)) {

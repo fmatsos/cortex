@@ -72,7 +72,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
         const res = await fetch(`${url}/chat/completions`, {
           method: "POST",
           headers: { "content-type": "application/json", ...(key && { authorization: `Bearer ${key}` }) },
-          body: JSON.stringify({ model: cfg.model, messages, ...(offered.length && { tools: offered }), ...(required && { tool_choice: "required" }), max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
+          body: JSON.stringify({ model: cfg.model, messages, ...(offered.length && { tools: offered }), ...(required && { tool_choice: "required" }), ...(cfg.temperature != null && { temperature: cfg.temperature }), max_tokens: LIMITS.llmMaxTokens, ...(stream?.text && { stream: true }), ...cache(url), ...route(url), ...thinking(cfg.effort) }),
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(LIMITS.llmRequestMs)]) : AbortSignal.timeout(LIMITS.llmRequestMs), timeout: false, // Bun cuts a fetch at 5 min by default: llmRequestMs decides
         });
         if (!res.ok) {

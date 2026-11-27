@@ -171,6 +171,17 @@ test("openai: read mode offers no write tool", async () => {
   } finally { server.stop(true); }
 });
 
+test("openai: temperature is sent when set (0 included), absent otherwise", async () => {
+  const seen: any[] = [];
+  const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] }); } });
+  const base_url = `http://127.0.0.1:${server.port}/v1`;
+  try {
+    for (const temperature of [0.2, 0, undefined]) await openai({ model: "m", base_url, temperature }).run(mkdtempSync(join(tmpdir(), "cortex-openai-")), "q", "read");
+    expect(seen.map((b) => b.temperature)).toEqual([0.2, 0, undefined]);
+    expect("temperature" in seen[2]).toBe(false);
+  } finally { server.stop(true); }
+});
+
 test("openai: the API key is never sent to a base_url only cortex.json names", async () => {
   const auth: (string | null)[] = [];
   const server = Bun.serve({ port: 0, fetch(req) { auth.push(req.headers.get("authorization")); return Response.json({ choices: [{ message: { role: "assistant", content: "ok" } }] }); } });

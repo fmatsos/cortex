@@ -72,7 +72,12 @@ test("site_ask: client, base_url, model, effort; effort checked against site_ask
   expect(lintConfig({ client: "claude", site_ask: { effort: "turbo" } })[0].msg).toContain("site_ask.effort");
   expect(lintConfig({ client: "codex", site_ask: { client: "claude", effort: "ultra" } })[0].level).toBe("error");
   expect(lintConfig({ client: "claude", site_ask: { client: "openai" } })).toEqual([{ level: "warning", msg: "site_ask with the openai client needs site_ask.model." }]);
-  expect(lintConfig({ site_ask: { temperature: 1 } })[0].level).toBe("error");
+  expect(lintConfig({ site_ask: { foo: 1 } })[0].level).toBe("error");
+  expect(lintConfig({ client: "openai", model: "m", site_ask: { temperature: 0 } })).toEqual([]);
+  expect(lintConfig({ client: "openai", model: "m", site_ask: { temperature: 2 } })).toEqual([]);
+  expect(lintConfig({ client: "openai", model: "m", site_ask: { temperature: 2.1 } })[0].msg).toContain("site_ask.temperature");
+  expect(lintConfig({ client: "openai", model: "m", site_ask: { temperature: -0.1 } })[0].level).toBe("error");
+  expect(lintConfig({ client: "claude", site_ask: { temperature: 0.2 } })[0]).toEqual({ level: "warning", msg: "site_ask.temperature only applies to the openai client (the other clients do not take it)." });
   expect(lintConfig({ client: "claude", site_ask: { history_turns: 6 } })).toEqual([]);
   expect(lintConfig({ client: "claude", site_ask: { history_turns: 0 } })[0].msg).toContain("site_ask.history_turns");
   expect(lintConfig({ client: "claude", site_ask: { history_turns: 1.5 } })[0].level).toBe("error");

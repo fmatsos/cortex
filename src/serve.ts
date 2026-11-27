@@ -69,10 +69,10 @@ export const askModel = (cfg: Config) => {
  * environment only, as $OPENAI_API_KEY: $CORTEX_ASK_API_KEY only goes to $CORTEX_ASK_BASE_URL (or a site_ask.base_url equal
  * to it), never to a URL only cortex.json names, since a cloned wiki could point it at any host.
  */
-export function askSetup(cfg: Config): { cfg: Config; ep?: { url: string; key?: string } } {
+export function askSetup(cfg: Config): { cfg: Config & { temperature?: number }; ep?: { url: string; key?: string } } {
   const own = cfg.site_ask?.base_url, envUrl = process.env.CORTEX_ASK_BASE_URL, named = own ?? envUrl;
   const ep = named ? { url: named.replace(/\/+$/, ""), key: !own || own === envUrl ? process.env.CORTEX_ASK_API_KEY : undefined } : undefined;
-  return { cfg: { ...cfg, client: askClient(cfg), model: askModel(cfg), effort: cfg.site_ask?.effort ?? undefined }, ep };
+  return { cfg: { ...cfg, client: askClient(cfg), model: askModel(cfg), effort: cfg.site_ask?.effort ?? undefined, temperature: cfg.site_ask?.temperature ?? undefined }, ep };
 }
 
 /**

@@ -1,8 +1,9 @@
-import type { Config } from "../config";
+import type { Config as BaseConfig } from "../config";
 import type { Report } from "../print";
 /** Bridge between the commands (compile, ask) and the agents. Each client implements `Backend`. */
 export type Mode = "write" | "read";
-export type { Config };
+/** The config plus what one run may add: `temperature` (the site's questions; only the openai client sends it). */
+export type Config = BaseConfig & { temperature?: number };
 
 /**
  * What the command will check once the agent is done (`answer`: its final text): one line per miss, empty when the work is
