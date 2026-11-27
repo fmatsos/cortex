@@ -15,6 +15,12 @@ import type { Mode } from "./backend";
  * (the agent's own state: ~/.claude, ~/.codex…).
  * Linux: bubblewrap. macOS: sandbox-exec (Seatbelt, the one Codex and Claude Code use).
  */
+/** What an agent confined to some spaces must not read at the instance: its git history (every space is in it), the archived spaces, the accounts. A space's own .git stays. */
+function instanceSecrets(inst: string): string[] {
+  const db = join(inst, ".cortex/accounts.db");
+  return [join(inst, ".cortex/archive"), join(inst, ".git"), db, `${db}-wal`, `${db}-shm`, `${db}-journal`].filter((p) => existsSync(p));
+}
+
 export function confine(root: string, cmd: string[], mode: Mode, allowed?: string[]): string[] {
   const r = realpathSync(root); // macOS: /var → /private/var, the profile must target the real path
   const wiki = join(r, "wiki");
@@ -24,12 +30,13 @@ export function confine(root: string, cmd: string[], mode: Mode, allowed?: strin
     if (mode !== "read") throw new Error("a question that reads several spaces never writes.");
     if (!inst || !isMultiSpace(inst)) throw new Error("several spaces: this is not a multi-space instance.");
     base = inst;
-    const db = join(inst, ".cortex/accounts.db"), keep = new Set(allowed);
-    hidden = [...listSpaces(inst).filter((n) => !keep.has(n)).map((n) => join(inst, "spaces", n)), join(inst, ".cortex/archive"), join(inst, ".git"), db, `${db}-wal`, `${db}-shm`, `${db}-journal`].filter((p) => existsSync(p));
+    const keep = new Set(allowed);
+    hidden = [...listSpaces(inst).filter((n) => !keep.has(n)).map((n) => join(inst, "spaces", n)), ...instanceSecrets(inst)];
   } else {
     const [dir, name] = inst && isMultiSpace(inst) ? relative(inst, r).split(sep) : [];
     base = dir === "spaces" && name ? inst! : r; // the folder that is read-only
-    hidden = base === r ? [] : listSpaces(base).filter((n) => n !== name).map((n) => join(base, "spaces", n));
+    // one space: the other spaces, and what would show them anyway (the instance's git history, the archives, the accounts)
+    hidden = base === r ? [] : [...listSpaces(base).filter((n) => n !== name).map((n) => join(base, "spaces", n)), ...instanceSecrets(base)];
   }
   if (process.platform === "darwin") {
     const q = (p: string) => JSON.stringify(p); // quoted, escaped SBPL string

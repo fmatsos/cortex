@@ -477,6 +477,18 @@ describe("sandbox of a multi-space instance", () => {
     expect(run(`echo x > ${join(root, "cortex.json")}`)!.exitCode).not.toBe(0);
   });
 
+  test.skipIf(!bwrap)("linux: for real, the instance's git history does not show the other spaces to the agent of a space", () => {
+    const root = instance(["veille", "pro"]);
+    writeFileSync(join(root, "spaces/veille/wiki/secret.md"), "veille\n");
+    const g = (...a: string[]) => Bun.spawnSync(["git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@t", ...a], { stdout: "pipe", stderr: "pipe" });
+    g("init", "-q"); g("add", "-A"); g("commit", "-qm", "init");
+    expect(g("show", "HEAD:spaces/veille/wiki/secret.md").stdout.toString()).toBe("veille\n");
+    const p = Bun.spawnSync(confine(join(root, "spaces/pro"), ["git", "-C", root, "show", "HEAD:spaces/veille/wiki/secret.md"], "write"), { stdout: "pipe", stderr: "pipe" });
+    if (p.exitCode !== 0 && /bwrap:/.test(p.stderr.toString())) return; // no user namespaces here
+    expect(p.stdout.toString()).not.toContain("veille");
+    expect(p.exitCode).not.toBe(0);
+  });
+
   test.skipIf(!bwrap)("linux: cortex commands of the agent still write under the sandbox of a multi-space instance that has accounts (the read-only guard cannot open the database there)", () => {
     const root = instance(["pro"]);
     openAccounts(accountsFile(root)).close(); // .cortex/accounts.db: read-only for the agent

@@ -56,8 +56,8 @@ test("confine: several allowed spaces are read-only and every other one is hidde
   const legacy = mkdtempSync(join(tmpdir(), "cortex-legacy-"));
   writeFileSync(join(legacy, "cortex.json"), "{}");
   expect(() => confine(legacy, ["x"], "read", ["a"])).toThrow("not a multi-space instance");
-  // without a list: the confinement of one space is as it was (the other spaces hidden, nothing about the archive)
-  expect(confine(join(root, "spaces/a"), ["x"], "read").filter((x) => x === "--tmpfs")).toHaveLength(2);
+  // without a list: one space, the other spaces hidden, and the archive too (as for a list)
+  expect(confine(join(root, "spaces/a"), ["x"], "read").filter((x) => x === "--tmpfs")).toHaveLength(3);
 });
 
 test.skipIf(!bwrap || platform !== "linux")("the instance's own git repository does not give back the spaces that are hidden", () => {
