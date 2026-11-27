@@ -231,15 +231,18 @@
 						<!-- the answer sits on a card (surface, border, light relief) so that it reads apart from the question's muted bubble -->
 						<div class="bg-card shadow-surface mt-3 border p-3">
 							{@render segments(turn.answer.segments, fix)}
-							{#each lists(turn) as l (l.key)}
-								<h3 class="mt-4 text-sm font-semibold">{l.label}</h3>
-								<ul class="mt-1 space-y-1 text-sm">
-									{#each l.docs as d (d.id)}
-										<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" /><span lang={contentLang}>{d.title}</span></a></li>
-									{/each}
-								</ul>
-							{/each}
-							<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs"><Icon name="generated" size={16} class="shrink-0" />{turn.answer.model ? t("assistant.ai", { model: turn.answer.model }) : t("assistant.ai.unknown")}</p>
+							<!-- second section of the card: the pages behind the answer, then the notice -->
+							<div class="mt-4 border-t pt-3">
+								{#each lists(turn) as l (l.key)}
+									<h3 class="mt-4 text-sm font-semibold first:mt-0">{l.label}</h3>
+									<ul class="mt-1 space-y-1 text-sm">
+										{#each l.docs as d (d.id)}
+											<li><a href={toPage(d.id)} class="inline-flex items-start gap-2 underline-offset-4 hover:underline"><Icon name={typeIcon(d.type)} size={16} class="text-muted-foreground mt-0.5 shrink-0" /><span lang={contentLang}>{d.title}</span></a></li>
+										{/each}
+									</ul>
+								{/each}
+								<p class="text-muted-foreground mt-3 flex items-start gap-2 text-xs first:mt-0"><Icon name="generated" size={16} class="shrink-0" />{turn.answer.model ? t("assistant.ai", { model: turn.answer.model }) : t("assistant.ai.unknown")}</p>
+							</div>
 						</div>
 					{/if}
 				</article>
@@ -260,13 +263,13 @@
 				<textarea bind:this={area} id="assistant-q" rows="2" bind:value={assistant.draft} onkeydown={onKey} placeholder={t("assistant.placeholder")} aria-invalid={over} aria-describedby="assistant-hint"
 					class="max-h-40 min-h-11 flex-1 resize-none bg-transparent text-sm outline-none field-sizing-content"></textarea>
 				{#if assistant.pending}
-					<!-- Stop takes the place of Send while an answer is on its way (one question at a time); a plain square, like the activity glyph -->
-					<button bind:this={stopButton} type="button" class="hover:bg-muted inline-flex size-9 shrink-0 items-center justify-center rounded-md border pointer-coarse:size-11" aria-label={t("assistant.stop")} title={t("assistant.stop")} onclick={stop}>
-						<span class="size-3 bg-current" aria-hidden="true"></span>
+					<!-- Stop takes the place of Send while an answer is on its way (one question at a time); a plain filled square, no frame -->
+					<button bind:this={stopButton} type="button" class="text-primary hover:text-foreground inline-flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11" aria-label={t("assistant.stop")} title={t("assistant.stop")} onclick={stop}>
+						<span class="size-3.5 bg-current" aria-hidden="true"></span>
 					</button>
 				{:else}
-					<button type="submit" class="bg-primary text-primary-foreground inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:opacity-50 pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={!assistant.draft.trim() || over}>
-						<Icon name="kind-query" size={20} />
+					<button type="submit" class="text-primary enabled:hover:text-foreground disabled:text-muted-foreground inline-flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={!assistant.draft.trim() || over}>
+						<Icon name="send" filled size={20} />
 					</button>
 				{/if}
 			</div>
@@ -297,11 +300,12 @@
 	}
 	.assistant {
 		position: fixed;
+		/* pinned top and bottom, not a viewport-unit height alone: the box is the visible window, whatever the browser's own chrome */
 		inset: 0 0 0 auto;
 		margin: 0;
 		width: min(100vw, 30rem);
 		max-width: 100vw;
-		height: 100dvh;
+		height: auto;
 		max-height: 100dvh;
 		padding: 0;
 		border: 0;

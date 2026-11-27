@@ -1,5 +1,5 @@
 {
-  "$comment": "Single source of the icon pack: Cortex icon name (the public API: <Icon name>, iconUse, sprite id cx-<name>) -> Phosphor icon name. 'icons' use the Light weight (node_modules/@phosphor-icons/core/assets/light/<name>-light.svg); 'filled' entries use the Fill weight (assets/fill/<name>-fill.svg) and are only reached through the 'filled' prop of <Icon> (the active star). Phosphor Icons, MIT. Run `bun run icons` after editing; `bun run icons --check` fails when site/src/lib/icons.ts is stale. Two pairs share a glyph on purpose because they mean the same thing: favorites/star and clear/close-selection.",
+  "$comment": "Single source of the icon pack: Cortex icon name (the public API: <Icon name>, iconUse, sprite id cx-<name>) -> Phosphor icon name. 'icons' use the Light weight (node_modules/@phosphor-icons/core/assets/light/<name>-light.svg); 'filled' entries use the Fill weight (assets/fill/<name>-fill.svg) and are only reached through the 'filled' prop of <Icon> (the active star, the send arrow). Phosphor Icons, MIT. Run `bun run icons` after editing; `bun run icons --check` fails when site/src/lib/icons.ts is stale. Two pairs share a glyph on purpose because they mean the same thing: favorites/star and clear/close-selection.",
   "icons": {
     "home": "house",
     "search": "magnifying-glass",
@@ -74,9 +74,11 @@
     "conversation": "chat-circle-text",
     "save": "floppy-disk",
     "export-markdown": "file-arrow-down",
-    "new-conversation": "note-pencil"
+    "new-conversation": "note-pencil",
+    "send": "paper-plane-right"
   },
   "filled": {
-    "star-filled": "star"
+    "star-filled": "star",
+    "send-filled": "paper-plane-right"
   }
 }

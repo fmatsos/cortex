@@ -125,6 +125,27 @@ test.describe("header", () => {
     await expect(state(page)).toHaveAttribute("aria-live", "polite");
   });
 
+  test("the title, the state (smaller, with its square) and the buttons share one row, all centered; a long state is cut, not wrapped", async ({ page }) => {
+    await open(page, newMock());
+    await ask(page, "What is Alpha?");
+    await expect(state(page)).toHaveText("Not saved");
+    const mid = (l: Locator) => l.evaluate((el) => { const r = el.getBoundingClientRect(); return { y: r.top + r.height / 2, left: r.left, right: r.right, size: parseFloat(getComputedStyle(el).fontSize) }; });
+    const title = await mid(panel(page).getByRole("heading", { name: "Assistant" }));
+    const st = await mid(state(page));
+    const actions = await mid(panel(page).getByRole("group", { name: "Conversation actions" }).getByRole("button").first());
+    expect(Math.abs(title.y - st.y)).toBeLessThan(2);
+    expect(Math.abs(title.y - actions.y)).toBeLessThan(2);
+    expect(st.left).toBeGreaterThanOrEqual(title.right); // after the title, on the same row
+    expect(st.size).toBeLessThan(title.size);
+    expect(await state(page).locator("span[aria-hidden]").evaluate((el) => el.getBoundingClientRect().width)).toBe(8); // the square stays
+    // a long text is cut with an ellipsis and never pushes the buttons out
+    await state(page).locator("span:not([aria-hidden])").evaluate((el) => { el.textContent = "A very long state text that does not fit in the header at all, whatever the width"; });
+    const after = await mid(panel(page).getByRole("group", { name: "Conversation actions" }).getByRole("button").first());
+    expect(after.left).toBe(actions.left);
+    expect(await state(page).locator("span:not([aria-hidden])").evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
+    expect(Math.abs((await mid(panel(page).getByRole("heading", { name: "Assistant" }))).y - title.y)).toBeLessThan(2);
+  });
+
   test("while an answer is on its way, Save and Export wait for it; New is open and drops it", async ({ page }) => {
     let release!: () => void;
     const m = newMock({ gate: new Promise<void>((r) => (release = r)) });

@@ -57,6 +57,79 @@ async function open(page: Page) {
   await expect(panel(page)).toBeVisible();
 }
 
+// Both projects (docked panel, drawer): the whole panel fits the window, the composer included, whatever the answer's length.
+const LONG = Array.from({ length: 30 }, (_, i) => `<p>Paragraph ${i}: some text that wraps over several lines in a narrow panel, to make the answer taller than the window.</p>`).join("");
+async function answered(page: Page, done: object, q = "Why?") {
+  await page.route("**/api/ask", (route: Route) => route.request().method() === "HEAD"
+    ? route.fulfill({ status: 204 })
+    : route.fulfill({ contentType: "application/x-ndjson", body: JSON.stringify({ t: "done", ...done }) + "\n" }));
+  await page.goto("/graph");
+  await page.locator("#assistant-toggle").click();
+  await page.locator("#assistant-q").fill(q);
+  await page.locator("#assistant-q").press("Enter");
+  await expect(panel(page).locator("article .wiki").first()).toBeVisible();
+}
+const inside = (page: Page, el: ReturnType<Page["locator"]>) => el.evaluate((e) => { const r = e.getBoundingClientRect(), v = window.visualViewport!; return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vw: v.width, vh: v.height }; });
+
+test("the panel fits the window: the composer (field, send, hint) is wholly inside the viewport, with a long answer too", async ({ page }) => {
+  await answered(page, { segments: [{ html: LONG }], md: "x", cited: [], retained: [], related: [], model: "m" });
+  await page.locator("#assistant-q").fill("Another question");
+  const dlg = await inside(page, panel(page));
+  expect(dlg.top).toBe(0);
+  expect(dlg.bottom).toBe(dlg.vh);
+  for (const el of [page.locator("#assistant-q"), panel(page).getByRole("button", { name: /Envoyer la question|Send the question/ }), page.locator("#assistant-hint"), panel(page).locator("form")]) {
+    const b = await inside(page, el);
+    expect(b.top, "top").toBeGreaterThanOrEqual(0);
+    expect(b.bottom, "bottom").toBeLessThanOrEqual(b.vh);
+    expect(b.left, "left").toBeGreaterThanOrEqual(0);
+    expect(b.right, "right").toBeLessThanOrEqual(b.vw);
+  }
+});
+
+test("Send and Stop are plain icons: no border, no background, a hit area of 36 px (44 on a coarse pointer), muted when Send is disabled", async ({ page, isMobile }) => {
+  await heldStream(page);
+  await page.goto("/graph");
+  await page.locator("#assistant-toggle").click();
+  const send = panel(page).getByRole("button", { name: /Envoyer la question|Send the question/ });
+  const look = (b: ReturnType<Page["locator"]>) => b.evaluate((el) => { const s = getComputedStyle(el), r = el.getBoundingClientRect(); return { bg: s.backgroundColor, border: s.borderTopWidth, color: s.color, w: r.width, h: r.height, svg: !!el.querySelector("svg") }; });
+  const min = isMobile ? 44 : 36;
+  const idle = await look(send);
+  await expect(send).toBeDisabled();
+  expect(idle).toMatchObject({ bg: "rgba(0, 0, 0, 0)", border: "0px", svg: true });
+  expect(idle.w).toBeGreaterThanOrEqual(min); expect(idle.h).toBeGreaterThanOrEqual(min);
+  const muted = await page.evaluate(() => { const p = document.createElement("p"); p.className = "text-muted-foreground"; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; });
+  expect(idle.color).toBe(muted);
+  await page.locator("#assistant-q").fill("Why?");
+  await expect(send).toBeEnabled();
+  const ready = await look(send);
+  expect(ready.color).not.toBe(muted);
+  expect(ready).toMatchObject({ bg: "rgba(0, 0, 0, 0)", border: "0px" });
+  expect(await send.locator("use").getAttribute("href")).toMatch(/send-filled/); // the filled paper-plane variant
+  await page.locator("#assistant-q").press("Enter");
+  const stop = panel(page).getByRole("button", { name: STOP });
+  await expect(stop).toBeVisible();
+  const s = await look(stop);
+  expect(s).toMatchObject({ bg: "rgba(0, 0, 0, 0)", border: "0px", svg: false });
+  expect(s.w).toBeGreaterThanOrEqual(min); expect(s.h).toBeGreaterThanOrEqual(min);
+  expect(await stop.locator("span").evaluate((el) => { const r = el.getBoundingClientRect(), c = getComputedStyle(el); return r.width === r.height && c.backgroundColor !== "rgba(0, 0, 0, 0)"; })).toBe(true); // a filled square
+  await stop.focus();
+  await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+  expect(await stop.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none"); // focus ring stays
+});
+
+test("an answer card is two sections: the prose, then (separated by a border) the pages and the notice", async ({ page }) => {
+  await answered(page, { segments: [{ html: "<p>Body.</p>" }], md: "x", cited: ["concepts/alpha"], retained: ["concepts/alpha"], related: [], model: "m" });
+  const card = panel(page).locator("article > div").last();
+  const second = card.locator("> div").last();
+  await expect(second.getByRole("heading", { name: /Pages retenues|Pages retained/ })).toBeVisible();
+  await expect(second).toContainText(/IA|AI/);
+  const b = await second.evaluate((el) => { const s = getComputedStyle(el); return { w: s.borderTopWidth, pt: parseFloat(s.paddingTop), mt: parseFloat(s.marginTop) }; });
+  expect(b.w).toBe("1px");
+  expect(b.pt).toBeGreaterThan(0);
+  expect(b.mt).toBeGreaterThan(0);
+  await expect(card.locator(".wiki").first().locator("xpath=ancestor::div[contains(@class,'border-t')]")).toHaveCount(0); // the prose is not inside it
+});
+
 test.describe("desktop 1440", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   test.skip(({ isMobile }) => isMobile, "docked panel: desktop project only");

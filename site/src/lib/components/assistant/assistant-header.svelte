@@ -6,7 +6,7 @@
 	import type { AssistantFlow } from "./assistant-flow.svelte.js";
 	import HeaderAction from "./header-action.svelte";
 
-	// The panel's header: the title with the state of the conversation beneath it, then four square icon buttons
+	// The panel's header: the title with the state of the conversation after it on the same row, then four square icon buttons
 	// (save, export as Markdown, new conversation, close) and, under them, the short message that says what just happened.
 	let { flow, onclose }: { flow: AssistantFlow; onclose: () => void } = $props();
 	const signedIn = $derived(!!account.me);
@@ -16,13 +16,14 @@
 
 <header class="border-b">
 	<div class="flex items-center gap-2 px-4 py-2">
-		<div class="min-w-0 flex-1">
-			<h2 id="assistant-title" class="truncate text-base leading-tight font-semibold">{t("assistant.title")}</h2>
+		<!-- one row, centered: the title, then the state of the conversation (smaller, cut with an ellipsis when long) -->
+		<div class="flex min-w-0 flex-1 items-center gap-3">
+			<h2 id="assistant-title" class="shrink-0 text-base leading-tight font-semibold">{t("assistant.title")}</h2>
 			<!-- always present, so that a change of its text is announced -->
-			<p aria-live="polite" data-conversation-state={state || "none"} class="text-muted-foreground flex min-h-4 items-center gap-1.5 text-xs leading-4">
+			<p aria-live="polite" data-conversation-state={state || "none"} class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs leading-4">
 				{#if state}
 					<span aria-hidden="true" class="size-2 shrink-0 {state === 'unsaved' ? 'bg-warning-foreground' : 'bg-muted-foreground'}"></span>
-					<span class={state === "unsaved" ? "text-foreground" : ""}>{t(`assistant.state.${state}`)}</span>
+					<span class="truncate {state === 'unsaved' ? 'text-foreground' : ''}" title={t(`assistant.state.${state}`)}>{t(`assistant.state.${state}`)}</span>
 				{/if}
 			</p>
 		</div>
