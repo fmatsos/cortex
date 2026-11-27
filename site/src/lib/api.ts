@@ -1,9 +1,13 @@
-/** The account API of `cortex serve` (`/api/me*`, `/api/conversations*`, `/api/journeys*`): JSON, cookie session, never cached. */
+/**
+ * The API of `cortex serve`: the account and the spaces at the root of the server (`/api/me*`, `/api/spaces*`), and the data of the
+ * space of the page under its prefix (`/s/<space>/api/conversations*`, `journeys*`, `me/state`, `space*`; see space.ts): JSON, cookie session, never cached.
+ */
 export class ApiError extends Error {
-	constructor(readonly status: number, message: string) { super(message); }
+	/** `detail`: what the server said (`{ error }` of its answer), in its own language: shown as it is for a refusal that explains itself (409). */
+	constructor(readonly status: number, message: string, readonly detail = "") { super(message); }
 }
 
-/** JSON call at the root of the server. Throws `ApiError` on a non-2xx answer (401: not signed in) and on a network failure (status 0). */
+/** JSON call. Throws `ApiError` on a non-2xx answer (401: not signed in) and on a network failure (status 0); `detail` carries the server's message. */
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
 	let res: Response;
 	try {
@@ -18,6 +22,9 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
 		if ((e as Error)?.name === "AbortError") throw e;
 		throw new ApiError(0, "network");
 	}
-	if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+	if (!res.ok) {
+		const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+		throw new ApiError(res.status, `HTTP ${res.status}`, typeof body?.error === "string" ? body.error : "");
+	}
 	return (await res.json().catch(() => ({}))) as T;
 }

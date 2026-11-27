@@ -1,17 +1,18 @@
 import { api } from "./api";
+import { spaceApi } from "./space";
 
-/** A saved graph journey (`route`: the page ids, in order; dates are ISO strings). */
+/** Saved journeys belong to a space (`spaceApi`, like the conversations). A saved graph journey (`route`: the page ids, in order; dates are ISO strings). */
 export type Journey = { id: string; title: string; route: string[]; created_at: string; updated_at: string };
 
-export const listJourneys = (signal?: AbortSignal) => api<{ journeys: Journey[] }>("/api/journeys", { signal }).then((r) => r.journeys);
-export const getJourney = (id: string) => api<Journey>(`/api/journeys/${encodeURIComponent(id)}`);
-export const renameJourney = (id: string, title: string) => api<Journey>(`/api/journeys/${encodeURIComponent(id)}`, { method: "PUT", body: { title } });
-export const removeJourney = (id: string) => api(`/api/journeys/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const listJourneys = (signal?: AbortSignal) => api<{ journeys: Journey[] }>(spaceApi("/api/journeys"), { signal }).then((r) => r.journeys);
+export const getJourney = (id: string) => api<Journey>(spaceApi(`/api/journeys/${encodeURIComponent(id)}`));
+export const renameJourney = (id: string, title: string) => api<Journey>(spaceApi(`/api/journeys/${encodeURIComponent(id)}`), { method: "PUT", body: { title } });
+export const removeJourney = (id: string) => api(spaceApi(`/api/journeys/${encodeURIComponent(id)}`), { method: "DELETE" });
 
 /** The first save of the journey on the graph page (title: the visitor's, else the server names it after its first and last pages). */
-export const createJourney = (title: string | undefined, route: readonly string[]) => api<Journey>("/api/journeys", { method: "POST", body: { title, route } });
+export const createJourney = (title: string | undefined, route: readonly string[]) => api<Journey>(spaceApi("/api/journeys"), { method: "POST", body: { title, route } });
 /** Replaces the route of a saved journey (its title is kept). */
-export const updateJourney = (id: string, route: readonly string[]) => api<Journey>(`/api/journeys/${encodeURIComponent(id)}`, { method: "PUT", body: { route } });
+export const updateJourney = (id: string, route: readonly string[]) => api<Journey>(spaceApi(`/api/journeys/${encodeURIComponent(id)}`), { method: "PUT", body: { route } });
 
 /**
  * What the account page can do with a saved journey: export it as Markdown (`registerJourneyActions`, once, from the layout);

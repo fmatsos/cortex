@@ -27,7 +27,7 @@ export type Step = { kind: "pages" | "read" | "search" | "layout" | "write" | "w
 export type Turn = { id: number; q: string; answer?: Answer; error?: AskErrorKind; pending?: boolean; at?: string; partial?: string; draft?: Segment[]; step?: Step };
 /** The saved copy this conversation continues: its id, its name, the exchanges it holds (`keys`) and when it was created. */
 export type SavedLink = { id: string; title: string; keys: string; created_at: string };
-/** A turn as `POST /api/conversations` takes it. */
+/** A turn as `POST /api/conversations` (of the page's space: conversations.ts) takes it. */
 export type SavedTurn = { question: string; answer: string; pages?: string[]; at?: string };
 
 /** HTTP status of POST /api/ask → what the visitor is told (and whether a retry makes sense). */
