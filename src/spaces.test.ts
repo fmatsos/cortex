@@ -314,6 +314,19 @@ describe("git per space", () => {
     expect(sh(work, "status", "--porcelain")).toContain("spaces/b/wiki/other.md");
   });
 
+  test("cortex space add --sync commits the new space's wiki, raw and agent file (cortex.json for a schema)", () => {
+    const d = tmp(), bare = remoteWith(d, "inst", { "cortex.json": "{}", "spaces/a/wiki/p.md": "1\n" });
+    sh(d, "clone", "-q", bare, "work");
+    const work = join(d, "work");
+    expect(cortex(work, ["space", "add", "n", "--schema", "notes", "--sync"]).code).toBe(0);
+    expect(sh(d, `--git-dir=${bare}`, "ls-tree", "-r", "--name-only", "main")).toEqual(expect.stringContaining("spaces/n/raw/.gitkeep")); // empty: `show` cannot tell it
+    for (const f of ["spaces/n/CLAUDE.md", "spaces/n/wiki/index.md"]) expect(show(bare, f)).not.toBe("");
+    expect(show(bare, "cortex.json")).toContain('"schema": "notes"');
+    expect(sh(work, "log", "-1", "--format=%s")).toBe("space: add n");
+    expect(cortex(work, ["space", "add", "m"]).code).toBe(0); // without --sync: left to the user, as before
+    expect(show(bare, "spaces/m/CLAUDE.md")).toBe("");
+  });
+
   test("monorepo: archiving and restoring a space commit the move (and cortex.json when default_space changes)", async () => {
     const d = tmp(), bare = remoteWith(d, "inst", { "cortex.json": '{"default_space":"a"}\n', "spaces/a/wiki/p.md": "1\n", "spaces/b/wiki/p.md": "1\n" });
     sh(d, "clone", "-q", bare, "work");

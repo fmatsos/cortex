@@ -46,9 +46,9 @@ const hold = (root: string, space: string, userId: string, role: Role = "owner")
 
 const servers: { stop(force?: boolean): unknown }[] = [];
 afterEach(() => { servers.splice(0).forEach((s) => s.stop(true)); });
-const start = async (root: string) => {
+const start = async (root: string, sync = false) => {
   const said: string[] = [];
-  const server = await serve(root, { port: 0, sync: false, reviewer: "t", say: (m) => said.push(m), exportCmd, settleMs: 5, embeddings: async () => undefined });
+  const server = await serve(root, { port: 0, sync, reviewer: "t", say: (m) => said.push(m), exportCmd, settleMs: 5, embeddings: async () => undefined });
   servers.push(server);
   const origin = `http://localhost:${server.port}`;
   const get = (path: string, headers: Record<string, string> = {}) => fetch(origin + path, { redirect: "manual", headers });
@@ -457,4 +457,22 @@ test("the share target: /s/<space>/share/ delivers into that space (behind its v
   const until = Date.now() + 5000;
   while ((!inbox("a").length || !inbox("b").length || !inbox("priv").length) && Date.now() < until) await Bun.sleep(20);
   expect([inbox("a").length, inbox("b").length, inbox("priv").length]).toEqual([1, 1, 1]); // each in its own space; the default one got the root's
+});
+
+test("with --sync the creation commit holds the space's wiki, raw and agent file (and cortex.json for a schema)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "cortex-spaces-sync-")), sh = (cwd: string, ...a: string[]) => { const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, stderr: "pipe", stdout: "pipe" }); if (r.exitCode) throw new Error(r.stderr.toString()); return r.stdout.toString().trim(); };
+  sh(d, "init", "-q", "--bare", "-b", "main", "remote.git"); sh(d, "clone", "-q", "remote.git", "seed");
+  mkdirSync(join(d, "seed/spaces/first/wiki"), { recursive: true });
+  writeFileSync(join(d, "seed/spaces/first/wiki/x.md"), "x\n"); writeFileSync(join(d, "seed/cortex.json"), JSON.stringify(ANYONE));
+  sh(join(d, "seed"), "add", "-A"); sh(join(d, "seed"), "commit", "-qm", "init"); sh(join(d, "seed"), "push", "-q", "-u", "origin", "main");
+  sh(d, "clone", "-q", "remote.git", "work");
+  const root = join(d, "work"), ada = person(root, "1");
+  const { post, origin } = await start(root, true);
+  expect((await post("/api/spaces", { name: "mine", schema: "notes" }, { origin, ...ada.cookie })).status).toBe(201);
+  const files = sh(d, "--git-dir=remote.git", "ls-tree", "-r", "--name-only", "main").split("\n");
+  expect(files).toEqual(expect.arrayContaining(["spaces/mine/CLAUDE.md", "spaces/mine/wiki/index.md", "spaces/mine/raw/.gitkeep", "cortex.json"]));
+  expect(sh(d, "--git-dir=remote.git", "show", "main:cortex.json")).toContain('"schema": "notes"');
+  expect(sh(d, "--git-dir=remote.git", "show", "main:spaces/mine/CLAUDE.md")).toContain("a space of personal notes");
+  expect((await post("/api/spaces", { name: "plain" }, { origin, ...ada.cookie })).status).toBe(201);
+  expect(sh(d, "--git-dir=remote.git", "ls-tree", "-r", "--name-only", "main")).toContain("spaces/plain/CLAUDE.md");
 });

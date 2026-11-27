@@ -21,7 +21,7 @@ import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
-import { addSpace, archiveSpace, restoreSpace } from "./space";
+import { addedPaths, addSpace, archiveSpace, restoreSpace } from "./space";
 import { spaceAdmin } from "./space-admin";
 
 /**
@@ -552,7 +552,7 @@ export async function serve(root: string, o: ServeOpts) {
       return Response.json({ error: `the space could not be created: ${(e as Error).message}` }, { status: 500, headers: noStore });
     } finally { creating.delete(name); }
     say(`space ${name} created for ${user.name ?? user.id}`);
-    if (o.sync) await serial(() => commitAndPush(root, `space: add ${name}`, [...(schema ? ["cortex.json"] : []), `spaces/${name}/wiki`, `spaces/${name}/raw`])).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
+    if (o.sync) await serial(async () => commitAndPush(root, `space: add ${name}`, await addedPaths(root, name, schema))).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
     return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
   };
 

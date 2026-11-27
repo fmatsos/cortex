@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { Database } from "bun:sqlite";
 import { accountsFile, addSpaceMember, archiveSpaceRows, moveToSpace, restoreSpaceRows, findUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, type Role } from "./accounts";
 import { regenerateCtx } from "./catalog";
-import { BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
+import { agentFileFor, BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
 import { openWiki } from "./context";
 import { CortexError, isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { writeSchema } from "./schema";
@@ -19,6 +19,10 @@ function withAccounts<T>(instance: string, f: (db: Database) => T): T {
   const db = openAccounts(accountsFile(instance));
   try { return f(db); } finally { db.close(); }
 }
+
+/** What the creation of a space (never an own-repo one) puts in the instance's repository: its wiki/, raw/ and agent file, and cortex.json when it records a schema. */
+export const addedPaths = async (instance: string, name: string, schema?: string | null) =>
+  [...(schema ? ["cortex.json"] : []), `spaces/${name}/wiki`, `spaces/${name}/raw`, `spaces/${name}/${await agentFileFor(spaceRoot(instance, name))}`];
 
 /** What a space owns at the instance root of a legacy wiki (everything else there is shared by the instance). */
 const SPACE_PATHS = ["wiki", "raw", "paths", "inbox"];
@@ -148,6 +152,7 @@ export async function spaceCmd(instance: string, [sub, name, action, ref]: strin
       if (existsSync(accountsFile(instance)) && withAccounts(instance, (db) => getSpace(db, checkName(name))?.archived_at)) throw usage(`space ${name} is archived: cortex space restore ${name}, or archive it for good under another name.`);
       await addSpace(instance, name, opts.repo, opts.schema);
       if (existsSync(accountsFile(instance))) withAccounts(instance, (db) => forgetSpace(db, name!)); // nothing of an earlier space of that name carries over
+      if (opts.sync && !opts.repo) commitSpacePaths(instance, `space: add ${name}`, await addedPaths(instance, name!, opts.schema)); // a clone is its own repository's
       console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
       return;
     case "set": {
