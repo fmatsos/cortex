@@ -6,7 +6,7 @@ import { spaceName } from "./space";
  * static site, a server of one space) the route does not answer: `available` stays false and nothing about spaces is shown.
  * Loaded once the account is known (`canCreate` depends on it), never blocking a render.
  *
- * The listing carries `name`, `title` (null: the slug is the title), `read_only` and, from a server that knows them, `content`.
+ * The listing carries `name`, `title` (null: the slug is the title), `read_only` and `content`.
  * What only a member may read (visibility, members, storage, the role) comes from `GET /s/<name>/api/space` (`detail`): 404 for
  * anyone else, who then sees the space as open and read-only for them.
  */
@@ -20,7 +20,7 @@ export type SpaceRow = {
 	/** The display title, or null when none was given. */
 	title: string | null;
 	readOnly: boolean;
-	/** What the space holds; empty when the server did not say (nothing is claimed then). */
+	/** What the space holds; empty when the answer carries none (nothing is claimed then). */
 	content: Content[];
 };
 export type Role = "owner" | "member";
@@ -36,7 +36,7 @@ export type SpaceDetail = {
 	you: Role;
 };
 export type Invite = { id: string; role: Role; expires_at: string };
-export type ArchivedRow = { name: string; title: string | null; archivedAt: string };
+export type ArchivedRow = { name: string; title: string | null; content: Content[]; archivedAt: string };
 export type CreateInput = { name: string; title?: string; content: Content[] };
 
 /** Why a slug is refused before asking the server: "invalid" (not the slug's form) or "taken" (an active or archived space of the visitor has it); "" when it looks fine. */
@@ -44,19 +44,18 @@ export const slugProblem = (slug: string, taken: Iterable<string>): "" | "invali
 
 /** What to show for a space: its title, else its slug. */
 export const labelOf = (s: { name: string; title: string | null }): string => s.title || s.name;
-export const asContent = (v: unknown, kind?: unknown): Content[] =>
-	Array.isArray(v) ? CONTENTS.filter((c) => v.includes(c)) : kind === "notes" ? ["notes"] : [];
+export const asContent = (v: unknown): Content[] => (Array.isArray(v) ? CONTENTS.filter((c) => v.includes(c)) : []);
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const asRow = (v: unknown): SpaceRow | undefined => {
 	if (!isObject(v) || typeof v.name !== "string") return;
-	return { name: v.name, title: typeof v.title === "string" && v.title ? v.title : null, readOnly: v.read_only === true, content: asContent(v.content, v.kind) };
+	return { name: v.name, title: typeof v.title === "string" && v.title ? v.title : null, readOnly: v.read_only === true, content: asContent(v.content) };
 };
 function asDetail(v: unknown): SpaceDetail | undefined {
 	if (!isObject(v) || typeof v.name !== "string") return;
 	return {
 		name: v.name, title: typeof v.title === "string" && v.title ? v.title : null,
-		visibility: v.visibility === "private" ? "private" : "open", readOnly: v.read_only === true, content: asContent(v.content, v.kind),
+		visibility: v.visibility === "private" ? "private" : "open", readOnly: v.read_only === true, content: asContent(v.content),
 		storage: v.storage === "own repo" ? "own repo" : "instance",
 		members: Array.isArray(v.members) ? v.members.filter(isObject).map((m) => ({ id: String(m.id), name: String(m.name ?? ""), role: (m.role === "owner" ? "owner" : "member") as Role })) : [],
 		you: v.you === "owner" ? "owner" : "member",
@@ -123,7 +122,7 @@ class Spaces {
 
 	async loadArchived() {
 		const r = await api<{ archived?: unknown[] }>("/api/spaces/archived");
-		this.archived = (Array.isArray(r.archived) ? r.archived : []).filter(isObject).map((a) => ({ name: String(a.name), title: typeof a.title === "string" && a.title ? a.title : null, archivedAt: String(a.archived_at ?? "") }));
+		this.archived = (Array.isArray(r.archived) ? r.archived : []).filter(isObject).map((a) => ({ name: String(a.name), title: typeof a.title === "string" && a.title ? a.title : null, content: asContent(a.content), archivedAt: String(a.archived_at ?? "") }));
 		this.archivedLoaded = true;
 	}
 	/** Restores an archived space and returns its URL. Throws `ApiError` (409: the name was taken meanwhile; `detail` says so). */

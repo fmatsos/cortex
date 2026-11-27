@@ -209,3 +209,29 @@ test("version du site : l'empreinte du frontend change avec le CSS ou un composa
   expect(frontendFingerprint(dir)).not.toBe(b);
   expect(frontendFingerprint()).toMatch(/^[0-9a-f]{64}$/); // the real site
 });
+
+test("export : ce que contient l'espace, et les pages issues de notes (toutes les sources citées sont des notes)", async () => {
+  const instance = mkdtempSync(join(tmpdir(), "cortex-notes-"));
+  const root = join(instance, "spaces/pro");
+  writeFileSync(join(instance, "cortex.json"), JSON.stringify({ spaces: { pro: { content: ["notes", "resources"] } } }));
+  const raw = (id: string, content: string) => {
+    mkdirSync(join(root, `raw/2026/11/${id}`), { recursive: true });
+    writeFileSync(join(root, `raw/2026/11/${id}/source.md`), `---\ntype: RawSource\ntitle: R\n${content}status: compiled\n---\nBody\n`);
+  };
+  const page = (name: string, ids: string[]) => {
+    mkdirSync(join(root, "wiki/sources"), { recursive: true });
+    const sources = ids.length ? `sources:\n${ids.map((id) => `  - id: s\n    resource: /raw/2026/11/${id}/source.md\n    title: S\n`).join("")}` : "";
+    writeFileSync(join(root, `wiki/sources/${name}.md`), `---\ntype: Source\ntitle: ${name}\ndescription: D.\ntags: [t]\n${sources}---\nBody.\n`);
+  };
+  raw("n1", "content: note\n"); raw("r1", "content: resource\n"); raw("old", "");
+  page("only-note", ["n1"]); page("mixed", ["n1", "r1"]); page("resource", ["r1"]); page("no-content", ["old"]); page("no-source", []);
+  writeFileSync(join(root, "wiki/index.md"), "# Index\n");
+  const { data } = await buildSiteData(root);
+  expect(data.content).toEqual(["notes", "resources"]);
+  expect(Object.fromEntries(data.pages.map((p) => [p.id, p.fromNotes === true]))).toEqual({
+    "sources/mixed": false, "sources/no-content": false, "sources/no-source": false, "sources/only-note": true, "sources/resource": false,
+  });
+  expect(data.pages.find((p) => p.id === "sources/mixed")!.sources.map((s) => s.note)).toEqual([true, undefined]);
+  // a wiki outside any space: resources, the default
+  expect((await buildSiteData(fixture())).data.content).toEqual(["resources"]);
+});

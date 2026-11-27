@@ -16,7 +16,7 @@ const RECENT = 6; // recent pages and people/projects of a space that holds note
  * the browser (the prerendered page stays the same from one export to the next, the picks change every day without a rebuild).
  */
 export const load = () => {
-	const { pages, log } = site();
+	const { pages, log, content } = site();
 	const degree = new Map((JSON.parse(dataFile("graph.json")) as GraphData).nodes.map((n) => [n.id, n.degree]));
 	const deg = (id: string) => degree.get(id) ?? 0;
 	const byDegree = [...pages].sort((a, b) => deg(b.id) - deg(a.id) || a.title.localeCompare(b.title, "fr"));
@@ -31,9 +31,11 @@ export const load = () => {
 		facts: byDegree.filter((p) => (p.type === "Concept" || p.type === "Entity") && p.description).slice(0, POOL * 2).map(({ id, title, description }) => ({ id, title, description })),
 		// the latest briefs: identifiers before any grouping (same anchors as /log), then a source added and compiled the same day is one brief
 		news: briefs(withIds(log).slice(0, CANDIDATES), NEWS),
-		// a space that holds notes: its latest pages (by the date they were written, else verified; no date, no place) and the entities (people, projects, clients) it knows best.
-		// The export does not say which raw source is a note (the source's own kind is not in the pages' data): these are pages, not "notes".
-		recent: [...pages].map((p) => ({ p, at: p.generated?.at ?? p.verified?.at ?? "" })).filter((x) => x.at).sort((a, b) => b.at.localeCompare(a.at) || a.p.title.localeCompare(b.p.title, "fr")).slice(0, RECENT).map(({ p, at }) => ({ ...card(p), at })),
+		// what the space holds: the home is prerendered for it (the browser may know better from the server, never worse)
+		content,
+		// a space that holds notes: its latest notes (the pages that come from notes, see `fromNotes`: by the date they were written, else verified; no date, no place)
+		// and the entities (people, projects, clients) it knows best.
+		recent: pages.filter((p) => p.fromNotes).map((p) => ({ p, at: p.generated?.at ?? p.verified?.at ?? "" })).filter((x) => x.at).sort((a, b) => b.at.localeCompare(a.at) || a.p.title.localeCompare(b.p.title, "fr")).slice(0, RECENT).map(({ p, at }) => ({ ...card(p), at })),
 		people: byDegree.filter((p) => p.type === "Entity").slice(0, RECENT * 2).map(card),
 		hubs: byDegree.filter((p) => p.type !== "Source").slice(0, HUBS).map(card),
 	};

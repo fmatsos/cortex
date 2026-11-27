@@ -306,12 +306,14 @@ test("PATCH /s/<space>/api/space: owners set the title, the visibility and read-
 });
 
 test("PATCH /s/<space>/api/space { content }: owners only, validated before anything is applied, rewrites the agent file and cortex.json (the default leaves no entry)", async () => {
-  const { ada, bob, eve, send, origin, root } = await manage();
+  const { ada, bob, eve, send, origin, root, said } = await manage();
   const patch = (body: unknown, who: Record<string, string> = ada.cookie, h: Record<string, string> = { origin }) => send("PATCH", "/s/mine/api/space", body, { ...h, ...who });
   const config = () => JSON.parse(readFileSync(join(root, "cortex.json"), "utf8")).spaces;
   const agent = () => readFileSync(join(root, "spaces/mine/CLAUDE.md"), "utf8");
   expect((await isJson(await patch({ content: ["notes", "resources"] }))).body).toMatchObject({ content: ["resources", "notes"], custom_schema: false }); // alone: not an empty patch
   expect(config()).toEqual({ mine: { content: ["resources", "notes"] } });
+  await Bun.sleep(300); // the export knows what the space holds: its site is rebuilt
+  expect(said.filter((m) => m.startsWith("site rebuilt")).length).toBeGreaterThan(2);
   expect(agent()).toContain("## From notes to pages");
   expect((await isJson(await patch({ content: ["notes"], title: "Notes" }))).body).toMatchObject({ content: ["notes"], title: "Notes" });
   expect(agent()).toContain("a space of personal notes");
@@ -620,4 +622,19 @@ test("archiving right after a sync leaves no export or inbox writing into the mo
   await Bun.sleep(400); // longer than the quiet time and a fake build
   expect(existsSync(join(root, "spaces/mine"))).toBe(false); // nothing recreated it
   expect((await send("POST", "/api/spaces/mine/restore", undefined, { origin, ...ada.cookie })).status).toBe(200); // so the name is free to restore
+});
+
+test("the title given at creation survives the archive and the restore, and the archived list carries it with what the space holds", async () => {
+  const root = instance(["first"], ANYONE);
+  const ada = person(root, "1");
+  const { get, send, origin } = await start(root);
+  const as = { origin, ...ada.cookie };
+  const created = await send("POST", "/api/spaces", { name: "mine", title: "Mes notes", content: ["notes"] }, as);
+  expect(created.status).toBe(201);
+  const row = async (path: string, key: string) => ((await (await get(path, ada.cookie)).json()) as Record<string, { name: string; title: string | null; content?: string[] }[]>)[key]!.find((s) => s.name === "mine");
+  expect(await row("/api/spaces", "spaces")).toMatchObject({ title: "Mes notes", content: ["notes"] });
+  expect((await send("POST", "/s/mine/api/space/archive", { confirm: "mine" }, as)).status).toBe(200);
+  expect(await row("/api/spaces/archived", "archived")).toMatchObject({ title: "Mes notes", content: ["notes"] });
+  expect((await send("POST", "/api/spaces/mine/restore", undefined, as)).status).toBe(200);
+  expect(await row("/api/spaces", "spaces")).toMatchObject({ title: "Mes notes", content: ["notes"] });
 });

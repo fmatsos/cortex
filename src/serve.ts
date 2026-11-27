@@ -222,6 +222,8 @@ type Site = {
   start(): Promise<number | undefined>;
   /** What `POST /api/sync` does: pull, then rebuild and take in the inbox (both queued, not awaited). */
   sync(): Promise<void>;
+  /** Queues a rebuild (not awaited): the export holds what the space holds, so a change of its content is picked up. */
+  rebuild(): void;
   stop(): void;
   /** `stop`, then waits until the export child has exited and the build loop has ended: nothing of this site writes into its folder afterwards. */
   halt(): Promise<void>;
@@ -334,6 +336,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
       return previous === undefined ? undefined : done[previous];
     },
     async sync() { await serial(pull); void rebuild(); void ingest(); },
+    rebuild() { void rebuild(); },
     // stopping the server stops the export child too (it holds site/.export.lock)
     stop() { stopped = true; exporter?.kill(); },
     current: () => current,
@@ -629,7 +632,8 @@ export async function serve(root: string, o: ServeOpts) {
     if (url.pathname === "/api/spaces/archived") {
       if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
       if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
-      const rows = archivedSpaces(accounts.store(), user.id).map((r) => ({ name: r.name, title: r.title, archived_at: new Date(r.archived_at).toISOString() }));
+      const config = await loadConfig(root).catch(() => ({} as Config)); // `spaces.<name>` stays in cortex.json while the space is archived
+      const rows = archivedSpaces(accounts.store(), user.id).map((r) => ({ name: r.name, title: r.title, content: contentOf(config, r.name), archived_at: new Date(r.archived_at).toISOString() }));
       return Response.json({ archived: rows }, { headers: noStore });
     }
     const name = restore![1]!;
@@ -656,7 +660,7 @@ export async function serve(root: string, o: ServeOpts) {
     return Response.json({ name, url: `/s/${name}/` }, { headers: noStore });
   };
 
-  const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: async (name) => { const site = sites.get(name); sites.delete(name); await site?.halt(); } });
+  const admin = spaceAdmin({ root, say, store: accounts.store, userOf: accounts.userOf, sameOrigin, serial, sync: o.sync, unmount: async (name) => { const site = sites.get(name); sites.delete(name); await site?.halt(); }, rebuild: (name) => sites.get(name)?.rebuild() });
 
   const server = Bun.serve({
     port: o.port,

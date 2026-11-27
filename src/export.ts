@@ -9,8 +9,9 @@ import { MANIFEST_PLACEHOLDER, type Manifest, manifestPath } from "../site/src/l
 import type { GraphData, Link, LogEntryData, Note, PageData, SearchIndex, SiteData, SourceRef } from "../site/src/lib/types";
 import { openWiki, type Wiki } from "./context";
 import { type LogEntry, newestFirst } from "./log";
-import { type Page, type RawFm, type Stamp, isoDate, pageId, pageState, pageRoute, toRawSource, toResource } from "./doc";
-import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify } from "./lib";
+import { type Page, type RawFm, type Stamp, isoDate, pageId, pageState, pageRoute, sourceContent, toRawSource, toResource } from "./doc";
+import { contentOf } from "./config";
+import { isReservedPage, LINK_DIRS, linkPrefix, parseDoc, rawPath, related, sha256, slugify, spaceNameOf } from "./lib";
 import { collator } from "./text";
 import { isUnder } from "./paths";
 import { sanitizeHtml } from "./sanitize";
@@ -183,7 +184,7 @@ export function render(body: string, from: string, pages: Set<string>) {
 }
 
 /**
- * Reads the frontmatter of raw sources (read-only, confined to raw/). Only `url` and `partial` come out of it, never
+ * Reads the frontmatter of raw sources (read-only, confined to raw/). Only `url`, `partial` and `content` (note or resource) come out of it, never
  * the body. Each source is read and parsed at most once per reader: a reader lives for one export (REL-10).
  */
 function rawReader(root: string) {
@@ -200,6 +201,11 @@ function rawReader(root: string) {
     originUrl(resource: string): string | undefined {
       const u = fm(resource)?.url;
       return /^https?:\/\//.test(String(u)) ? String(u) : undefined;
+    },
+    /** Whether the source is a note (`content: note`; a source with no `content` is a resource). */
+    isNote(resource: string): boolean {
+      const f = fm(resource);
+      return !!f && sourceContent(f) === "note";
     },
     /** Partial extraction (`partial:` in the raw frontmatter, written by `cortex add` on a paywall). */
     partial(resource: string): boolean {
@@ -280,6 +286,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn,
   const locale = resolveLocale(cfg.language), contentLang = resolveContentLang(cfg.language);
   // optional notions (cortex.json): off, their data does not reach the site
   const features = { review: !!cfg.review, drafts: !!cfg.drafts };
+  const content = [...contentOf(cfg, spaceNameOf(root))]; // what the space holds: the prerendered home is already the right one
   setLocale(locale);
   const all = await w.pages();
   for (const e of w.errors.pages) say(`page skipped, invalid frontmatter: ${e.path} (${e.msg})`);
@@ -305,8 +312,10 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn,
         id: String(s.id), title: String(s.title ?? s.id), url: s.resource ? raw.originUrl(String(s.resource)) : undefined,
         ...(page && page !== d && { page: link(page) }),
         ...(s.resource && raw.partial(String(s.resource)) && { partial: true }),
+        ...(s.resource && raw.isNote(String(s.resource)) && { note: true as const }),
       };
     });
+    const fromNotes = sources.length > 0 && sources.every((x) => x.note); // every raw source it cites is a note: the page comes from the space's notes
     // partial source: `partial:` extraction of a cited raw source (Source page only: a concept citing a
     // partial source is not itself partial), or partial-content warning callout in the body
     const partial = (fm.type === "Source" && (fm.sources ?? []).some((s) => s.resource && raw.partial(s.resource))) || r.warnings.some(isPartialWarning);
@@ -316,6 +325,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn,
       status: features.drafts || (fm.status ?? "draft") !== "draft" ? String(fm.status ?? "draft") : "stable",
       verified: features.review ? stamp(fm.verified) : undefined, generated: stamp(fm.generated),
       stale_after: isoDate(fm.stale_after), needsReview: features.review && pageState(fm).needsReview, partial,
+      ...(fromNotes && { fromNotes: true as const }),
       html: r.html, md: pageMarkdown(root, d.path, raw), sources, notes: r.notes, toc: r.toc,
       backlinks: [...(graph0.backlinks.get(d.path) ?? [])].map((p) => link(byPath.get(p)!)).sort(byTitle),
       related: related(docs, d.path, graph0).slice(0, LIMITS.relatedPages).map((x) => ({ ...link(byPath.get(x.path)!), reasons: x.reasons.map((r) => (r.kind === "source" ? { kind: r.kind } : r)) /* raw/ paths are never published */ })),
@@ -335,7 +345,7 @@ export async function buildSiteDataCtx(w: Wiki, say: (m: string) => void = warn,
     links: edges,
   });
 
-  const data: SiteData = { locale, contentLang, features, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
+  const data: SiteData = { locale, contentLang, features, content, pages, tags, log: renderLog(root, w.journal().entries, paths, byPath, resourcePage, link) };
 
   // reading paths (<root>/paths/*.md) and the maintenance summary: files of their own, not part of the pages' data
   const readPathsOf = await readPaths(root);

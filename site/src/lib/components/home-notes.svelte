@@ -30,6 +30,7 @@
 							{#if p.description}<p lang={contentLang} class="mt-1 line-clamp-2 text-sm">{p.description}</p>{/if}
 							<p class="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
 								{#each p.tags as tag (tag)}<a href={toTag(tag)} class="hover:text-foreground underline-offset-4 hover:underline">#{tag}</a>{/each}
+								<span>{t("home.notes.note")}</span>
 								<time datetime={p.at}>{longDay(p.at.slice(0, 10))}</time>
 							</p>
 						</li>

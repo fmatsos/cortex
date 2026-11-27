@@ -1,6 +1,6 @@
 /** Contract between `src/export.ts` (which writes data.json, graph.json, search-index.json) and the site (which displays them). */
 export type Link = { id: string; title: string; type: string };
-export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true }; // partial: partial extraction of the raw source (paywall)
+export type SourceRef = { id: string; title: string; url?: string; page?: Link; partial?: true; note?: true }; // partial: partial extraction of the raw source (paywall); note: the raw source is a note (`content: note`), not a resource
 export type Note = { n: number; id: string; refs: number; html: string }; // refs: occurrences of the note in the text
 /** Why a page is related to another: outgoing link, incoming link, shared raw source (`value` = its resource path), shared tag (`value` = the tag). */
 export type RelatedReason = { kind: "out" | "in" | "source" | "tag" | "semantic"; value?: string };
@@ -20,6 +20,7 @@ export type PageData = {
   html: string;
   md: string; // Source Markdown of the page, raw/ paths replaced by the original URL
   sources: SourceRef[];
+  fromNotes?: true; // cites at least one raw source and every one it cites is a note: a page of the space's notes
   notes: Note[];
   toc: TocItem[]; // h2/h3 headings of the body, with their anchor
   backlinks: Link[];
@@ -31,6 +32,7 @@ export type SiteData = {
   locale: "en" | "fr"; // UI language of the export (cortex.json `language`)
   contentLang: string; // language of the wiki text (BCP 47, from cortex.json `language`, else the UI language): `lang` of the content zones
   features: { review: boolean; drafts: boolean }; // optional notions (cortex.json `review`, `drafts`)
+  content: ("resources" | "notes")[]; // what the space holds (cortex.json `spaces.<name>.content`, default resources): the home is prerendered for it
   pages: PageData[];
   tags: { tag: string; slug: string; ids: string[] }[];
   log: LogEntryData[]; // most recent first

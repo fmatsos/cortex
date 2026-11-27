@@ -5,6 +5,7 @@
 	import Icon from "#lib/components/icon.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import * as Dialog from "#lib/components/ui/dialog/index.js";
+	import SpaceBadges from "#lib/components/space-badges.svelte";
 	import { labelOf, spaces, type ArchivedRow } from "#lib/spaces.svelte.js";
 	import { contentLang, intlLocale, t } from "#lib/i18n/index.js";
 
@@ -61,6 +62,7 @@
 						<div class="min-w-0 flex-1">
 							<p class="font-semibold [overflow-wrap:anywhere]" lang={contentLang}>{labelOf(row)}</p>
 							<p class="text-muted-foreground text-xs">{row.name}{#if day(row.archivedAt)}{" · "}{t("spaces.archived.on", { date: day(row.archivedAt) })}{/if}</p>
+							{#if row.content.length}<p class="mt-1.5 flex flex-wrap gap-1"><SpaceBadges content={row.content} /></p>{/if}
 						</div>
 						<Button variant="outline" onclick={() => ask(row)} aria-label={t("spaces.restore.of", { name: labelOf(row) })}><Icon name="recent" size={16} />{t("spaces.restore")}</Button>
 					</li>

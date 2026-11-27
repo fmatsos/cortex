@@ -30,6 +30,8 @@ export type AdminDeps = {
   sync: boolean;
   /** Takes the space's site off the routes and stops it, waiting for its build to end (before its folder moves). */
   unmount: (name: string) => Promise<void>;
+  /** Queues a rebuild of the space's site (the export knows what the space holds). */
+  rebuild: (name: string) => void;
 };
 
 const MAX_TITLE = 120;
@@ -88,6 +90,7 @@ export function spaceAdmin(d: AdminDeps) {
       if (kind) {
         try { await d.serial(() => setContent(d.root, name, kind.content, d.sync)); }
         catch (e) { d.say(`space ${name}: content not saved: ${(e as Error).message}`); return fail(500, `the content could not be saved: ${(e as Error).message}`); }
+        d.rebuild(name);
       }
       return info(name, role);
     }

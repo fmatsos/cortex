@@ -42,10 +42,11 @@
 		const start = pool.length ? (day * FACTS) % pool.length : 0;
 		return [...pool.slice(start), ...pool.slice(0, start)].slice(0, FACTS);
 	});
-	// a space of several: what it holds decides the home (known in the browser only: the prerendered page is the one of Resources)
+	// what the space holds decides the home: the export prerendered it for the space (`data.content`), the server's own answer wins once known
 	const info = $derived(spaces.available ? spaces.info : undefined);
-	const showNotes = $derived(!!info?.content.includes("notes"));
-	const showResources = $derived(!showNotes || !!info?.content.includes("resources"));
+	const content = $derived(info?.content.length ? info.content : data.content);
+	const showNotes = $derived(content.includes("notes"));
+	const showResources = $derived(!showNotes || content.includes("resources"));
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
