@@ -66,3 +66,46 @@ test("render_blocks called twice: the second call adds blocks, numbering goes on
   expect(md.indexOf('"facts"')).toBeLessThan(md.indexOf('"callout"'));
   expect(md.match(/```cortex-ui/g)).toHaveLength(2);
 });
+
+test("render_blocks with titles: a pages block's unknown paths are reported at call time and the good ones kept; with none left it is refused and takes no name", async () => {
+  const r = blockRegistry({ titles });
+  const items = (...paths: string[]) => paths.map((path) => ({ path, summary: "x" }));
+  const first = await runExtra(r.tool, { blocks: [{ type: "pages", items: items("/wiki/concepts/bun.md", "/wiki/nope.md") }] });
+  expect(first).toContain("{{bloc-1}} (pages)");
+  expect(first).toContain("/wiki/nope.md");
+  const refused = await runExtra(r.tool, { blocks: [{ type: "pages", items: items("/wiki/a.md", "/wiki/b.md") }, { type: "callout", tone: "info", text: "Note" }] });
+  expect(refused).toContain("Refused a pages block");
+  expect(refused).toContain("/wiki/a.md, /wiki/b.md");
+  expect(refused).toContain("{{bloc-2}} (callout)"); // the refused block did not consume a name
+  const md = r.assemble("{{bloc-1}}");
+  expect(md).toContain("/wiki/concepts/bun.md");
+  expect(md).not.toContain("nope");
+});
+
+test("answer segments: a heading left empty by a dropped block goes, in the final answer; a heading still being written at the end of a draft stays", () => {
+  const gone = "\n\n```cortex-ui\n" + JSON.stringify({ type: "pages", items: [{ path: "/wiki/nope.md", summary: "x" }] }) + "\n```\n\n";
+  const md = `## Comment ça fonctionne${gone}## Suite\n\nTexte.\n\n### Détail\n\n## Fin`;
+  const html = (s: ReturnType<typeof answerSegments>) => s.map((x) => ("html" in x ? x.html : "")).join("");
+  const final = html(answerSegments(md, titles));
+  expect(final).not.toContain("Comment ça fonctionne");
+  expect(final).not.toContain("Détail"); // empty, followed by a higher heading
+  expect(final).not.toContain("Fin"); // empty, at the end
+  expect(final).toContain("Suite");
+  const draft = html(answerSegments(md, titles, true));
+  expect(draft).not.toContain("Comment ça fonctionne"); // followed by another heading
+  expect(draft).not.toContain("Détail");
+  expect(draft).toContain("Fin"); // the last heading may be about to get its text
+  expect(html(answerSegments("## T\n\n```\n## code\n```\n", titles))).toContain("code"); // only headings, never a fence's content
+});
+
+test("assemble logs the names it drops (unknown, duplicate), once; draft stays silent", async () => {
+  const lines: string[] = [];
+  const r = blockRegistry({ titles, log: (m) => lines.push(m) });
+  await runExtra(r.tool, { blocks: [{ type: "callout", tone: "info", text: "Note" }] });
+  r.draft("A {{bloc-9}} {{bloc-1}} {{bloc-1}}");
+  expect(lines).toEqual([]);
+  r.assemble("A {{bloc-9}} {{bloc-1}} {{bloc-1}} {{bloc-3}}");
+  expect(lines).toEqual(["ask: dropped block {{bloc-9}} (unknown), {{bloc-1}} (duplicate), {{bloc-3}} (unknown)"]);
+  r.assemble("A {{bloc-1}}");
+  expect(lines).toHaveLength(1);
+});

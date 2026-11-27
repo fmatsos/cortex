@@ -39,25 +39,46 @@ const fence = (b: Block) => `\n\n\`\`\`${LANG}\n${JSON.stringify(b).replaceAll("
  * it; a block the answer never names closes it, so nothing prepared is lost. A second render_blocks call adds blocks (the
  * numbering goes on): the names the answer already uses stay valid, so it never forces a rewrite.
  */
-export function blockRegistry() {
+export function blockRegistry(o: { titles?: Map<string, string>; log?: (m: string) => void } = {}) {
   const blocks = new Map<string, Block>();
+  const exists = (path: string) => !o.titles || o.titles.has(path.slice(1)); // a wiki page, when the pages are known
   const tool: ExtraTool = {
     name: "render_blocks",
     description: "Prepares display blocks that the site draws inside the answer: callout, table, steps, tabs, facts, pages. Every answer uses it (at least one block). Returns one name per block ({{bloc-1}}); call it once, as soon as the reading shows the answer's shape, then write the answer and put each name on its own line where its block belongs. A second call only adds blocks: earlier names stay valid.",
     schema: z.object({ blocks: z.array(BLOCK).min(1).max(6) }),
     run: async ({ blocks: list }: { blocks: Block[] }) => {
-      const names = list.map((b) => { const id = `bloc-${blocks.size + 1}`; blocks.set(id, b); return `{{${id}}} (${b.type})`; });
-      return `Prepared: ${names.join(", ")}. Put each name on its own line in the answer where its block belongs; never repeat a block's content in the prose.`;
+      const names: string[] = [], notes: string[] = [];
+      for (const b of list) {
+        let kept = b;
+        if (b.type === "pages") { // what answerSegments would drop silently is reported now, while the model can still correct
+          const items = b.items.filter((p) => exists(p.path)), lost = b.items.filter((p) => !exists(p.path)).map((p) => p.path);
+          if (!items.length) { notes.push(`Refused a pages block (no name): none of its paths exist in the wiki (${lost.join(", ")}). Use paths from the pages you read.`); continue; }
+          if (lost.length) notes.push(`A pages block lost the paths that do not exist in the wiki: ${lost.join(", ")}.`);
+          kept = { ...b, items };
+        }
+        const id = `bloc-${blocks.size + 1}`; blocks.set(id, kept); names.push(`{{${id}}} (${b.type})`);
+      }
+      return [names.length ? `Prepared: ${names.join(", ")}. Put each name on its own line in the answer where its block belongs; never repeat a block's content in the prose.` : "Nothing prepared.", ...notes].join(" ");
     },
   };
-  /** Each name replaced by its block (the first time it appears); `rest`: the blocks never named, at the end. */
-  const place = (md: string, rest: boolean) => {
+  /** Each name replaced by its block (the first time it appears); `rest`: the blocks never named, at the end; `lost`: the names dropped, with why. */
+  const place = (md: string, rest: boolean, lost?: string[]) => {
     const placed = new Set<string>();
-    const take = (id: string) => (blocks.has(id) && !placed.has(id) ? (placed.add(id), fence(blocks.get(id)!)) : "");
-    return md.replace(PLACEHOLDER, (_, id: string) => take(id)) + (rest ? [...blocks.keys()].map(take).join("") : "");
+    const take = (id: string, named = true) => {
+      const b = blocks.get(id), why = !b ? "unknown" : placed.has(id) ? "duplicate" : b.type === "pages" && !b.items.some((p) => exists(p.path)) ? "undrawable" : "";
+      if (why) { if (named) lost?.push(`{{${id}}} (${why})`); return ""; }
+      placed.add(id);
+      return fence(b!);
+    };
+    return md.replace(PLACEHOLDER, (_, id: string) => take(id)) + (rest ? [...blocks.keys()].map((id) => take(id, false)).join("") : "");
   };
-  /** The final answer, each name replaced by its block, the unnamed blocks at the end. */
-  const assemble = (md: string) => place(md, true).trim();
+  /** The final answer, each name replaced by its block, the unnamed blocks at the end; the names dropped are logged, once. */
+  const assemble = (md: string) => {
+    const lost: string[] = [];
+    const out = place(md, true, lost).trim();
+    if (lost.length) o.log?.(`ask: dropped block ${lost.join(", ")}`);
+    return out;
+  };
   /** The text so far, for the stream: the blocks it names drawn in place as the final answer will, an unknown or half-written name dropped, the unnamed blocks left out until the end. */
   const draft = (md: string) => place(md.replace(HALF_NAME, ""), false);
   return { tool, assemble, draft };
@@ -99,12 +120,28 @@ export type Segment = { html: string } | { block: DrawnBlock };
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+/** The Markdown without its empty sections: a heading followed (blank lines aside) by a heading of the same or a higher level, or by the end unless `partial`. */
+function dropEmptyHeadings(md: string, partial: boolean): string {
+  const lines = md.split("\n");
+  let fenced = false;
+  const level = lines.map((l) => (/^\s*```/.test(l) ? ((fenced = !fenced), 0) : fenced ? 0 : (/^(#{1,6})\s+\S/.exec(l)?.[1].length ?? 0)));
+  const gone = new Set<number>();
+  for (let i = lines.length - 1; i >= 0; i--) { // from the end, so a section emptied by the removal of its last subsection goes too
+    if (!level[i]) continue;
+    let j = i + 1;
+    while (j < lines.length && (gone.has(j) || !lines[j]!.trim())) j++;
+    if (j < lines.length ? level[j]! && level[j]! <= level[i]! : !partial) gone.add(i);
+  }
+  return gone.size ? lines.filter((_, i) => !gone.has(i)).join("\n") : md;
+}
+
 /**
  * The answer as the site draws it: prose segments (sanitized HTML, wiki links relative to the site root, footnotes listed at
  * the end) and blocks. Labels are escaped; text fields go through the same rendering as the prose. A page of a `pages`
- * block that does not exist is dropped. `titles`: wiki path → page title.
+ * block that does not exist is dropped, and a heading left with nothing under it (its block was dropped) goes with it, unless
+ * the text is still being written (`partial`: a heading at the very end may get its text). `titles`: wiki path → page title.
  */
-export function answerSegments(md: string, titles: Map<string, string>): Segment[] {
+export function answerSegments(md: string, titles: Map<string, string>, partial = false): Segment[] {
   const paths = new Set(titles.keys());
   const html = (s: string) => render(s, "", paths).html;
   const inline = (s: string) => html(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");
@@ -131,7 +168,7 @@ export function answerSegments(md: string, titles: Map<string, string>): Segment
     blocks.push(d);
     return `\n\nCORTEXBLOCK${blocks.length - 1}\n\n`;
   });
-  const r = render(prose, "", paths);
+  const r = render(dropEmptyHeadings(prose, partial), "", paths);
   const notes = r.notes.length ? `<hr><ol class="ask-notes">${r.notes.map((n) => `<li id="fn-${n.id}">${n.html}</li>`).join("")}</ol>` : "";
   const parts = (r.html + notes).split(/<p>CORTEXBLOCK(\d+)<\/p>/);
   const out: Segment[] = [];

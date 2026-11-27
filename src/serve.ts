@@ -44,8 +44,8 @@ export type ServeOpts = {
   /** The page embeddings' refresh (injectable for tests). Default: embed.ts. */
   embeddings?: (root: string) => Promise<{ embedded: number; removed: number } | undefined>;
 };
-/** `draft`: set by the agent that prepares display blocks, so the live draft can draw them (the text so far in, Markdown with the blocks out). */
-export type AskStream = Stream & { draft?: (md: string) => string };
+/** `draft`: set by the agent that prepares display blocks, so the live draft can draw them (the text so far in, Markdown with the blocks out). `log`: the service journal. */
+export type AskStream = Stream & { draft?: (md: string) => string; log?: (m: string) => void };
 /** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
 export type AskFn = (root: string, question: string, history: Turn[], stream?: AskStream) => Promise<{ md: string; core?: Core }>;
 
@@ -130,7 +130,8 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   }
   const ask = askSetup(cfg);
   // the wiki tools and the display blocks go through the run's own tools: only the clients that take them (the others answer in plain Markdown)
-  const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry() : undefined;
+  const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
+  const blocks = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? blockRegistry({ titles, log: stream?.log }) : undefined;
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
   if (blocks && stream) stream.draft = blocks.draft; // the live draft draws the blocks the agent prepared, where the text names them
@@ -407,12 +408,13 @@ export async function serve(root: string, o: ServeOpts) {
           const send = (e: object) => { if (!left.signal.aborted) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
           // the text so far, drawn as the final answer is (same renderer, so already sanitized), at most every 200 ms and always the last state
           let draft = "", timer: ReturnType<typeof setTimeout> | undefined;
-          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(live.draft?.(draft) ?? draftMarkdown(draft), known) }); } catch { /* half-written Markdown: the next draft will do */ } };
+          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(live.draft?.(draft) ?? draftMarkdown(draft), known, true) }); } catch { /* half-written Markdown: the next draft will do */ } };
           const live: AskStream = {
             text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
             reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
             step: (name, args) => send({ t: "step", step: stepOf(name, args, known) }),
             signal: left.signal,
+            log: say,
           };
           const out = new ReadableStream<Uint8Array>({
             start(c) {
@@ -427,7 +429,7 @@ export async function serve(root: string, o: ServeOpts) {
           return new Response(out, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-cache", "x-accel-buffering": "no" } });
         }
         try {
-          return Response.json(await answer({ signal: req.signal }));
+          return Response.json(await answer({ signal: req.signal, log: say }));
         } catch (e) {
           if (req.signal.aborted) { say("ask: aborted, the client left"); return new Response(null, { status: 499 }); }
           say(`ask: ${(e as Error).message}`);
