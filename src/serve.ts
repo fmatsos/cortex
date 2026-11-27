@@ -24,6 +24,7 @@ import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { readOnlyMessage, readOnlyReason } from "./read-only";
 import { addedPaths, addSpace, archiveSpace, recordable, restoreSpace } from "./space";
 import { checkTitle, spaceAdmin } from "./space-admin";
+import { legacyWorker } from "./legacy-worker";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -750,10 +751,12 @@ export async function serve(root: string, o: ServeOpts) {
         try { for (const site of sites.values()) await site.sync(); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
         return Response.json({ ok: true });
       }
+      // the worker the root site installed in browsers (scope `/`): replaced by one that removes itself and its caches (src/legacy-worker.ts)
+      if (url.pathname === "/service-worker.js" && (req.method === "GET" || req.method === "HEAD")) return legacyWorker();
       // a path of the site from before the instance had spaces (a bookmark, a link shared as `/wiki/<id>/`, `/search/?q=…`): the page of the
       // default space that has it, for a visitor who may see that space. Not the API (`/api/*` is the instance's, never a site's), not a path
       // that is no page of it: those stay a 404, as does a default space the visitor may not see.
-      if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/") && url.pathname !== "/service-worker.js") {
+      if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/")) {
         const to = await legacyTarget(req, url);
         if (to) return new Response(null, { status: 301, headers: { location: `/s/${to}${url.pathname}${url.search}`, ...noStore } });
       }

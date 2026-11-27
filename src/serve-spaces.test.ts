@@ -742,3 +742,24 @@ test("multi-space: a legacy path is a 404 for a visitor who may not see the defa
   const r = await get("/wiki/p1/", ada.cookie);
   expect([r.status, r.headers.get("location")]).toEqual([301, "/s/priv/wiki/p1/"]);
 });
+
+test("multi-space: the root /service-worker.js retires the old worker (scope /), a space keeps its own", async () => {
+  const { get } = await start(instance(["a"]));
+  const root = await get("/service-worker.js");
+  expect(root.status).toBe(200);
+  expect(root.headers.get("content-type")).toStartWith("text/javascript");
+  expect(root.headers.get("cache-control")).toBe("no-store");
+  const text = await root.text();
+  expect(text).toContain("registration.unregister()");
+  expect(text).toContain('"cortex-wiki:/:"'); // the root site's caches, never `cortex-wiki:/s/<name>/:`
+  expect(text).not.toContain("fetch"); // no fetch handler: nothing is served from a cache meanwhile
+  expect(await (await get("/s/a/service-worker.js")).text()).toBe("// sw of /s/a");
+});
+
+test("a legacy instance still serves its own service-worker.js at the root", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-legacy-serve-"));
+  writeFileSync(join(root, "cortex.json"), "{}");
+  mkdirSync(join(root, "wiki"), { recursive: true });
+  const { get } = await start(root);
+  expect(await (await get("/service-worker.js")).text()).toBe("// sw of ");
+});
