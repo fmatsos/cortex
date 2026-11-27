@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { Subprocess } from "bun";
+import type { Server, Subprocess } from "bun";
 import { openWiki } from "./context";
 import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
 import { EXTRA_TOOLS, type Stream } from "./backends/backend";
@@ -18,7 +18,10 @@ import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
+import { addSpaceMember, deleteSpaceMembers, spaceMembers } from "./accounts";
 import { loadConfig } from "./config";
+import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
+import { addSpace } from "./space";
 
 /**
  * `cortex serve`: the exported site, plus `POST /api/verify` (a human marks a page reviewed from the site). With
@@ -196,9 +199,9 @@ const EXPORT_TIMEOUT_MS = 15 * 60_000;
 export const exportArgv = (_root: string, out: string) => [process.execPath, join(import.meta.dir, "cortex.ts"), "export", "--out", out];
 
 /** Runs `argv` with `root` as the wiki; resolves on exit 0, rejects with the end of its output otherwise (or when it is killed). */
-async function runChild(root: string, argv: string[], onStart: (c: Subprocess) => void): Promise<void> {
+async function runChild(root: string, argv: string[], onStart: (c: Subprocess) => void, env: Record<string, string> = {}): Promise<void> {
   hookExit();
-  const child = Bun.spawn(argv, { env: { ...process.env, CORTEX_ROOT: root }, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: EXPORT_TIMEOUT_MS });
+  const child = Bun.spawn(argv, { env: { ...process.env, ...env, CORTEX_ROOT: root }, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: EXPORT_TIMEOUT_MS });
   children.add(child); onStart(child);
   try {
     const [out, err, code] = await Promise.all([new Response(child.stdout as ReadableStream).text(), new Response(child.stderr as ReadableStream).text(), child.exited]);
@@ -208,16 +211,25 @@ async function runChild(root: string, argv: string[], onStart: (c: Subprocess) =
   } finally { children.delete(child); }
 }
 
-export async function serve(root: string, o: ServeOpts) {
-  const say = o.say ?? console.log;
+/** What the sites of one server share: the git queue, and the guards of the routes that cost (a model call). */
+type Shared = { say: (m: string) => void; serial: <T>(f: () => Promise<T> | T) => Promise<T>; busy: { asking: boolean; judging: boolean } };
+/** One space's site and APIs, as `serve` mounts it: `fetch` gets the URL with the space's prefix already stripped. */
+type Site = {
+  fetch(req: Request, srv: Server<undefined>, url: URL): Promise<Response>;
+  /** Serves the build of a previous run at once (and rebuilds in the background), or awaits the first build. Returns when the previous build ended, if any. */
+  start(): Promise<number | undefined>;
+  /** What `POST /api/sync` does: pull, then rebuild and take in the inbox (both queued, not awaited). */
+  sync(): Promise<void>;
+  stop(): void;
+};
+
+/** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
+async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = ""): Promise<Site> {
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
   const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
   // the newest complete build of a previous run is served at once; the other folder is where the next build goes
   const done = dirs.map((d) => completedAt(d)), previous = done[0] === undefined && done[1] === undefined ? undefined : (done[1] ?? -1) > (done[0] ?? -1) ? 1 : 0;
   let current: string | undefined = previous === undefined ? undefined : dirs[previous], next = previous === undefined ? 0 : 1 - previous;
-  // one change at a time (pull, write, commit, push): git and the files are shared
-  let queue: Promise<unknown> = Promise.resolve();
-  const serial = <T>(f: () => Promise<T> | T): Promise<T> => { const r = queue.then(f); queue = r.catch(() => {}); return r; };
 
   // Rebuilds: one build at a time, in a child process, and one slot of waiting. A request made while a build runs, or while the
   // quiet time before it lasts, joins the next build: any number of requests give one build, plus one if they came during it.
@@ -240,7 +252,7 @@ export async function serve(root: string, o: ServeOpts) {
           rmSync(markerOf(out), { force: true }); // first: a folder being emptied is never taken for a complete one
           await rm(out, { recursive: true, force: true });
           try {
-            await runChild(root, exportCmd(root, out), (c) => (exporter = c));
+            await runChild(root, exportCmd(root, out), (c) => (exporter = c), base ? { CORTEX_SITE_BASE: base } : {});
             if (!existsSync(join(out, "index.html"))) throw new Error("the export wrote no index.html");
             markComplete(out);
             current = out; next = 1 - next;
@@ -296,26 +308,24 @@ export async function serve(root: string, o: ServeOpts) {
     void ingest(); // the phone gets its answer now; the source is fetched and committed in the background
   };
 
-  // no complete build: the first one is awaited, as nothing can be served before it
-  if (!current) {
-    pull();
-    await rebuild(true);
-    if (!current) throw new Error("the first export failed: nothing to serve.");
-    void ingest(); // entries left by a previous run
-  }
-
-  const accounts = accountRoute({
-    root, say, config: () => loadConfig(root),
-    titles: async () => new Map((await openWiki(root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
-  });
-  let judging = false; // one judged search at a time (each one is up to `judge.search_candidates` calls); the others get a 429
-  let asking = false; // ponytail: one question at a time for the whole server, a queue if several people use it
-  const server = Bun.serve({
-    port: o.port,
-    async fetch(req, srv) {
-      const url = new URL(req.url);
-      const account = await accounts(req);
-      if (account) return account;
+  const site: Site = {
+    async start() {
+      if (!current) { // no complete build: the first one is awaited, as nothing can be served before it
+        pull();
+        await rebuild(true);
+        if (!current) throw new Error("the first export failed: nothing to serve.");
+        void ingest(); // entries left by a previous run
+      }
+      if (previous !== undefined) {
+        // started on a previous build: what changed since (the remote, the inbox, the binary itself) is picked up in the background
+        void serial(pull).catch((e) => say(`pull: ${(e as Error).message}`)).then(() => { void rebuild(true); void ingest(); });
+      }
+      return previous === undefined ? undefined : done[previous];
+    },
+    async sync() { await serial(pull); void rebuild(); void ingest(); },
+    // stopping the server stops the export child too (it holds site/.export.lock)
+    stop() { stopped = true; exporter?.kill(); },
+    async fetch(req, srv, url) {
       if (url.pathname === "/api/verify") {
         if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its button
         if (req.method !== "POST") return new Response(null, { status: 405 });
@@ -356,7 +366,7 @@ export async function serve(root: string, o: ServeOpts) {
         try {
           const r = await searchSite(root, url.searchParams.get("q") ?? "", {
             limit: Number(url.searchParams.get("limit")), judge,
-            lock: () => { if (judging) return; judging = true; return () => { judging = false; }; },
+            lock: () => { if (busy.judging) return; busy.judging = true; return () => { busy.judging = false; }; },
           });
           return Response.json(r.body, { status: r.status, headers });
         } catch (e) {
@@ -389,8 +399,8 @@ export async function serve(root: string, o: ServeOpts) {
         const body = await req.json().then((b: { q?: unknown; history?: unknown }) => b ?? {}, () => ({} as { q?: unknown; history?: unknown }));
         const q = body.q;
         if (typeof q !== "string" || !q.trim() || q.length > MAX_QUESTION) return Response.json({ error: `expected { q } (1 to ${MAX_QUESTION} characters)` }, { status: 400 });
-        if (asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
-        asking = true;
+        if (busy.asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
+        busy.asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
         const answer = async (stream?: AskStream) => {
           const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history, askHistoryTurns(askCfg)), stream);
@@ -422,7 +432,7 @@ export async function serve(root: string, o: ServeOpts) {
               void answer(live).then(
                 (r) => send({ t: "done", ...r }),
                 (e) => { say(left.signal.aborted ? "ask: aborted, the client left" : `ask: ${(e as Error).message}`); send({ t: "error", error: (e as Error).message }); },
-              ).finally(() => { clearTimeout(timer); asking = false; try { c.close(); } catch { /* already cancelled */ } });
+              ).finally(() => { clearTimeout(timer); busy.asking = false; try { c.close(); } catch { /* already cancelled */ } });
             },
             cancel() { left.abort(); clearTimeout(timer); },
           });
@@ -434,16 +444,12 @@ export async function serve(root: string, o: ServeOpts) {
           if (req.signal.aborted) { say("ask: aborted, the client left"); return new Response(null, { status: 499 }); }
           say(`ask: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500 });
-        } finally { asking = false; }
+        } finally { busy.asking = false; }
       }
       if (url.pathname === "/share" || url.pathname.startsWith("/share/")) return shareRoute(req, deliver);
       if (url.pathname === "/api/sync" && req.method === "POST") {
-        const ip = srv.requestIP(req)?.address ?? "";
-        // the CI's direct call only: a request through the reverse proxy (same host, so loopback too) carries x-forwarded-*
-        if (!/^(127\.|::1$|::ffff:127\.)/.test(ip) || req.headers.has("x-forwarded-for") || req.headers.has("x-forwarded-host")) return new Response(null, { status: 403 });
-        try { await serial(pull); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
-        void rebuild();
-        void ingest();
+        if (!loopback(req, srv)) return new Response(null, { status: 403 });
+        try { await site.sync(); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
         return Response.json({ ok: true }); // pulled; the rebuild is queued, not finished (the site is swapped when it ends)
       }
       if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
@@ -452,15 +458,126 @@ export async function serve(root: string, o: ServeOpts) {
       const nf = join(current!, "404.html");
       return new Response(existsSync(nf) ? Bun.file(nf) : "Not found", { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
     },
+  };
+  return site;
+}
+
+/** The CI's direct call only: loopback, and not through the reverse proxy (same host, so loopback too, but it carries x-forwarded-*). */
+const loopback = (req: Request, srv: Server<undefined>) =>
+  /^(127\.|::1$|::ffff:127\.)/.test(srv.requestIP(req)?.address ?? "") && !req.headers.has("x-forwarded-for") && !req.headers.has("x-forwarded-host");
+
+const notFound = () => new Response("Not found", { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
+const noStore = { "cache-control": "no-store" };
+
+export async function serve(root: string, o: ServeOpts) {
+  const say = o.say ?? console.log;
+  // one change at a time (pull, write, commit, push): git and the files are shared
+  // ponytail: one queue (and one "question at a time") for every space of the instance, a monorepo has one git index; per space when it hurts
+  let queue: Promise<unknown> = Promise.resolve();
+  const serial = <T>(f: () => Promise<T> | T): Promise<T> => { const r = queue.then(f); queue = r.catch(() => {}); return r; };
+  const shared: Shared = { say, serial, busy: { asking: false, judging: false } };
+  // multi-space instance (a `spaces/` folder): every space under /s/<name>/, the accounts and /api/spaces at the root. Otherwise one site, at the root.
+  const multi = isMultiSpace(root), sites = new Map<string, Site>(), creating = new Set<string>();
+  let previous: number | undefined;
+  const accounts = accountRoute({
+    root, say, config: () => loadConfig(root),
+    titles: async () => multi ? new Map() : new Map((await openWiki(root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
   });
-  say(`cortex serve: http://localhost:${server.port}${o.sync ? " (sync: pull before, commit and push after each review)" : ""}${previous === undefined ? "" : ` (serving the build of ${new Date(done[previous]!).toISOString()} while the site is rebuilt)`}`);
-  if (previous !== undefined) {
-    // started on a previous build: what changed since (the remote, the inbox, the binary itself) is picked up in the background
-    void serial(pull).catch((e) => say(`pull: ${(e as Error).message}`)).then(() => { void rebuild(true); void ingest(); });
+  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`);
+  if (multi) {
+    for (const name of listSpaces(root)) {
+      const site = await mount(name);
+      try { await site.start(); sites.set(name, site); } catch (e) { site.stop(); say(`space ${name}: ${(e as Error).message}`); }
+    }
+    if (!sites.size) throw new Error("no space to serve: cortex space add <name> first.");
+  } else {
+    sites.set("", await makeSite(root, o, shared));
+    previous = await sites.get("")!.start();
   }
+
+  /** A space with no member is open; one with members is for them only (and open when sign-in is not configured: nobody could be one). */
+  const may = async (name: string, req: Request) => {
+    let who: string[];
+    try { who = spaceMembers(accounts.store(), name); } catch { return false; } // fail closed
+    if (!who.length || !(await accounts.configured())) return true;
+    const user = await accounts.userOf(req);
+    return !!user && who.includes(user.id);
+  };
+  const visible = async (req: Request) => { const out: string[] = []; for (const n of sites.keys()) if (await may(n, req)) out.push(n); return out; };
+  /** The space `/` leads to: `default_space` if the visitor may see it, else the first they may. */
+  const landing = async (names: string[]) => { const def = await loadConfig(root).then((c) => c.default_space, () => undefined); return def && names.includes(def) ? def : names[0]; };
+
+  /** `POST /api/spaces`: a signed-in visitor creates a space they alone can see, and gets its URL once its first build is served. */
+  const createSpace = async (req: Request): Promise<Response> => {
+    if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403, headers: noStore });
+    if (!(await accounts.configured())) return Response.json({ error: "sign-in is not configured: spaces are created with cortex space add." }, { status: 403, headers: noStore });
+    const user = await accounts.userOf(req);
+    if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+    const name = await req.json().then((b: { name?: unknown }) => b?.name, () => undefined);
+    if (typeof name !== "string" || !SPACE_NAME.test(name)) return Response.json({ error: "expected { name }: lowercase letters, digits and dashes, at most 40, starting with a letter or digit." }, { status: 400, headers: noStore });
+    if (sites.has(name) || creating.has(name) || existsSync(spaceRoot(root, name))) return Response.json({ error: `space ${name} already exists.` }, { status: 409, headers: noStore });
+    creating.add(name);
+    const store = accounts.store();
+    let site: Site | undefined;
+    try {
+      await addSpace(root, name); // what `cortex space add` does
+      addSpaceMember(store, name, user.id);
+      site = await mount(name);
+      await site.start();
+      sites.set(name, site);
+    } catch (e) {
+      site?.stop(); rmSync(spaceRoot(root, name), { recursive: true, force: true }); deleteSpaceMembers(store, name);
+      say(`space ${name}: ${(e as Error).message}`);
+      return Response.json({ error: `the space could not be created: ${(e as Error).message}` }, { status: 500, headers: noStore });
+    } finally { creating.delete(name); }
+    say(`space ${name} created for ${user.name ?? user.id}`);
+    if (o.sync) await serial(() => commitAndPush(root, `space: add ${name}`, [`spaces/${name}/wiki`, `spaces/${name}/raw`])).catch((e) => say(`space ${name}: not committed: ${(e as Error).message}`));
+    return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
+  };
+
+  const server = Bun.serve({
+    port: o.port,
+    async fetch(req, srv) {
+      const url = new URL(req.url);
+      const account = await accounts(req);
+      if (account) return account;
+      if (!multi) return sites.get("")!.fetch(req, srv, url);
+      if (url.pathname === "/api/spaces") {
+        if (req.method === "POST") { srv.timeout(req, 0); return createSpace(req); } // the first build of the space outlasts Bun's 10 s idle timeout
+        if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
+        const names = await visible(req);
+        return Response.json({ spaces: names.map((name) => ({ name })), canCreate: !!(await accounts.userOf(req)) && (await accounts.configured()), default: (await landing(names)) ?? null }, { headers: noStore });
+      }
+      const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
+      if (at) {
+        const site = sites.get(at[1]!);
+        if (!site || !(await may(at[1]!, req))) return notFound(); // a space the visitor may not see is a space that does not exist
+        if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${at[1]}/${url.search}` } });
+        const inner = new URL(url);
+        inner.pathname = at[2];
+        return site.fetch(req, srv, inner);
+      }
+      if (url.pathname === "/") {
+        const to = await landing(await visible(req));
+        return to ? new Response(null, { status: 302, headers: { location: `/s/${to}/`, ...noStore } }) : notFound();
+      }
+      // the phone's share target: a stable URL, it delivers to the default space
+      if (url.pathname === "/share" || url.pathname.startsWith("/share/")) {
+        const to = await landing(await visible(req));
+        return to ? sites.get(to)!.fetch(req, srv, url) : notFound();
+      }
+      if (url.pathname === "/api/sync" && req.method === "POST") {
+        if (!loopback(req, srv)) return new Response(null, { status: 403 });
+        try { for (const site of sites.values()) await site.sync(); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
+        return Response.json({ ok: true });
+      }
+      return notFound();
+    },
+  });
+  const where = multi ? ` (${sites.size} space${sites.size > 1 ? "s" : ""}: ${[...sites.keys()].join(", ")})` : "";
+  say(`cortex serve: http://localhost:${server.port}${where}${o.sync ? " (sync: pull before, commit and push after each review)" : ""}${previous === undefined ? "" : ` (serving the build of ${new Date(previous).toISOString()} while the site is rebuilt)`}`);
   void searchInfo().then((i) => say(`search: SQLite ${i.sqlite} (${i.library}), sqlite-vec ${i.knn ? i.vec : "not loaded (nearest neighbours in JS)"}`), () => {});
-  // stopping the server stops the export child too (it holds site/.export.lock)
   const stop = server.stop.bind(server);
-  server.stop = (force?: boolean) => { stopped = true; exporter?.kill(); return stop(force); };
+  server.stop = (force?: boolean) => { for (const s of sites.values()) s.stop(); return stop(force); };
   return server;
 }

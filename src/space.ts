@@ -20,6 +20,30 @@ const checkName = (name?: string) => {
   return name;
 };
 
+/** Creates `spaces/<name>/` (an empty wiki, or the clone of `repo`): what `cortex space add` does, and `POST /api/spaces` of `cortex serve` (never with a repo). */
+export async function addSpace(instance: string, name: string | undefined, repo?: string) {
+  checkName(name);
+  const dir = spaceRoot(instance, name!);
+  if (existsSync(dir)) throw usage(`space ${name} already exists.`);
+  if (!isMultiSpace(instance) && (existsSync(join(instance, "wiki")) || existsSync(join(instance, "raw"))))
+    throw usage(`this wiki has wiki/ and raw/ at its root: cortex space migrate <name> moves them into a space first.`);
+  mkdirSync(join(instance, "spaces"), { recursive: true });
+  if (repo) git(instance, "clone", "--", repo, join("spaces", name!));
+  const fresh = !existsSync(join(dir, "wiki"));
+  mkdirSync(join(dir, "wiki"), { recursive: true });
+  mkdirSync(join(dir, "raw"), { recursive: true });
+  if (fresh) { // an empty space: raw/ must exist in git, wiki/ gets its index and journal
+    await Bun.write(join(dir, "raw/.gitkeep"), "");
+    await regenerateCtx(openWiki(dir));
+  }
+  if (repo) { // the instance's own git must not see the clone
+    const ignore = join(instance, ".gitignore"), text = existsSync(ignore) ? readFileSync(ignore, "utf8") : "", line = `/spaces/${name}/`;
+    if (!text.split("\n").includes(line)) writeFileSync(ignore, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
+    const config = await readConfig(instance);
+    await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { repo } } });
+  }
+}
+
 /** cortex space list|add|migrate, run at the instance root (the folder holding cortex.json). */
 export async function spaceCmd(instance: string, [sub, name]: string[], opts: { repo?: string }) {
   switch (sub) {
@@ -30,30 +54,10 @@ export async function spaceCmd(instance: string, [sub, name]: string[], opts: { 
       for (const n of names) console.log(`${n === def ? "*" : " "} ${n}${existsSync(join(spaceRoot(instance, n), ".git")) ? paint.dim("  (own repo)") : ""}`);
       return;
     }
-    case "add": {
-      checkName(name);
-      const dir = spaceRoot(instance, name!);
-      if (existsSync(dir)) throw usage(`space ${name} already exists.`);
-      if (!isMultiSpace(instance) && (existsSync(join(instance, "wiki")) || existsSync(join(instance, "raw"))))
-        throw usage(`this wiki has wiki/ and raw/ at its root: cortex space migrate <name> moves them into a space first.`);
-      mkdirSync(join(instance, "spaces"), { recursive: true });
-      if (opts.repo) git(instance, "clone", "--", opts.repo, join("spaces", name!));
-      const fresh = !existsSync(join(dir, "wiki"));
-      mkdirSync(join(dir, "wiki"), { recursive: true });
-      mkdirSync(join(dir, "raw"), { recursive: true });
-      if (fresh) { // an empty space: raw/ must exist in git, wiki/ gets its index and journal
-        await Bun.write(join(dir, "raw/.gitkeep"), "");
-        await regenerateCtx(openWiki(dir));
-      }
-      if (opts.repo) { // the instance's own git must not see the clone
-        const ignore = join(instance, ".gitignore"), text = existsSync(ignore) ? readFileSync(ignore, "utf8") : "", line = `/spaces/${name}/`;
-        if (!text.split("\n").includes(line)) writeFileSync(ignore, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${line}\n`);
-        const config = await readConfig(instance);
-        await writeConfig(configFile(instance), { ...config, spaces: { ...(config.spaces as object), [name!]: { repo: opts.repo } } });
-      }
+    case "add":
+      await addSpace(instance, name, opts.repo);
       console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}: spaces/${name}/`);
       return;
-    }
     case "migrate": {
       checkName(name);
       if (isMultiSpace(instance)) throw usage("spaces/ already exists: nothing to migrate.");

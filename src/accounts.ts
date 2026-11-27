@@ -37,6 +37,7 @@ create table if not exists login_tx (
   id_hash text primary key, provider text not null, state text not null, nonce text not null, verifier text not null,
   return_to text not null, public_url text not null, expires_at integer not null);
 create index if not exists login_tx_expiry on login_tx(expires_at);
+create table if not exists space_members (space text not null, user_id text not null, primary key (space, user_id));
 `;
 
 /** Opens (and creates) the accounts database. Foreign keys are per connection: without the pragma `on delete cascade` does nothing. */
@@ -108,6 +109,13 @@ export function purge(db: Database, now: number) {
   db.query("delete from sessions where expires_at <= $now").run({ now });
   db.query("delete from login_tx where expires_at <= $now").run({ now });
 }
+
+// ---- spaces: who may see a space (no row: open to everyone). No foreign key on purpose: deleting an account must not open a private space.
+
+export const spaceMembers = (db: Database, space: string): string[] =>
+  (db.query("select user_id from space_members where space = $space").all({ space }) as { user_id: string }[]).map((r) => r.user_id);
+export const addSpaceMember = (db: Database, space: string, userId: string) => { db.query("insert or ignore into space_members (space, user_id) values ($space, $userId)").run({ space, userId }); };
+export const deleteSpaceMembers = (db: Database, space: string) => { db.query("delete from space_members where space = $space").run({ space }); };
 
 // ---- preferences
 

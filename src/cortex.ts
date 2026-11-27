@@ -28,7 +28,7 @@ const usage = (msg: string) => new CortexError(msg, "usage");
 const SELF = /\.[jt]s$/.test(Bun.main) ? [process.execPath, Bun.main] : [process.execPath];
 /** Whether a local wiki answers: $CORTEX_ROOT, or a parent folder holding cortex.json. */
 const hasLocalWiki = () => !!process.env.CORTEX_ROOT || !!findInstance();
-/** `space` and `config` concern the instance as a whole: no space has to be chosen for them. */
+/** `space` and `config` concern the instance as a whole: no space has to be chosen for them (nor for `serve`, which serves them all unless --space picks one). */
 const instanceOrRoot = () => { const i = findInstance(process.env.CORTEX_ROOT || process.cwd()); return i && isMultiSpace(i) ? i : findRoot(); };
 type Token = { kind: string; index: number; name?: string; value?: string; inlineValue?: boolean };
 /** The argv sent to a remote wiki: the command first (remote-exec checks it), without --wiki, everything else as typed. */
@@ -89,7 +89,7 @@ try {
       process.exit(await forward(target, forwardedArgv(process.argv.slice(2), tokens!)));
     }
   }
-  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" ? instanceOrRoot() : findRoot(process.cwd(), o.space);
+  const root = anywhere ? (process.env.CORTEX_ROOT ?? process.cwd()) : cmd === "space" || cmd === "config" || (cmd === "serve" && !o.space) ? instanceOrRoot() : findRoot(process.cwd(), o.space);
   const wiki = openWiki(root); // one context per command: cortex.json, raw/ and wiki/ are each read at most once
   switch (cmd) {
     case "add": {

@@ -112,13 +112,21 @@ function checkTurns(v: unknown): Checked<Turn[]> {
 const conversationOut = (c: db.ConversationRow) => ({ id: c.id, title: c.title, turns: c.turns, created_at: iso(c.created_at), updated_at: iso(c.updated_at) });
 const journeyOut = (j: db.JourneyRow) => ({ id: j.id, title: j.title, route: j.route, created_at: iso(j.created_at), updated_at: iso(j.updated_at) });
 
-/** The route handler: `undefined` for a URL that is not an account route. */
-export function accountRoute(d: AccountDeps): (req: Request) => Promise<Response | undefined> {
+/**
+ * The route handler: `undefined` for a URL that is not an account route. It also tells who a request is (`userOf`), whether sign-in
+ * is configured, and gives the database: what a multi-space `cortex serve` needs to decide who may see a space.
+ */
+export type AccountRoute = ((req: Request) => Promise<Response | undefined>) & {
+  userOf(req: Request): Promise<User | undefined>;
+  configured(): Promise<boolean>;
+  store(): Database;
+};
+export function accountRoute(d: AccountDeps): AccountRoute {
   const now = d.now ?? Date.now, env = d.env ?? process.env, net: Net = { ...d.net, cache: new Map() };
   let conn: Database | undefined, lastPurge = 0, warned = "";
   const open = () => (conn ??= openAccounts(accountsFile(d.root)));
 
-  return async (req) => {
+  const handler = async (req: Request) => {
     const url = new URL(req.url), path = url.pathname;
     if (!/^\/api\/(auth|me|conversations|journeys)(\/|$)/.test(path)) return;
     const [area, a, b, ...extra] = path.slice(5).split("/").filter(Boolean) as [string, string?, string?, ...string[]];
@@ -158,6 +166,12 @@ export function accountRoute(d: AccountDeps): (req: Request) => Promise<Response
     for (const c of headers) res.headers.append("set-cookie", c);
     return res;
   };
+  const userOf = async (req: Request) => {
+    const jar = cookies(req.headers), session = jar[HOST_SESSION] ?? jar[SESSION];
+    try { return session ? db.sessionUser(open(), sha256(session), now())?.user : undefined; } catch { return undefined; }
+  };
+  const configured = async () => { try { return enabledProviders((await d.config()).auth, env).length > 0; } catch { return false; } };
+  return Object.assign(handler, { userOf, configured, store: open });
 
   // ---- /api/auth/login/:provider, /api/auth/callback/:provider, /api/auth/logout
   async function authRoute(req: Request, method: string, a: string | undefined, id: string | undefined, c: { store: Database; providers: Provider[]; origins: string[]; t: number }): Promise<Response> {
