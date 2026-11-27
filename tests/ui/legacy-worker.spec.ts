@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,6 +48,8 @@ test.describe("service worker of a site served at the root, before and after mig
       expect(before.scopes).toEqual(["/"]);
       expect(before.caches.some((c) => c.startsWith("cortex-wiki:/:"))).toBe(true);
       await stop();
+      // the wiki changes while the visitor is away: what the old worker kept is now out of date
+      appendFileSync(join(root, "wiki/concepts/alpha.md"), "\nA narwhal sentence added after the first visit.\n");
 
       const m = spawnSync("bun", [cli, "space", "migrate", "veille"], { env, cwd: root, encoding: "utf8" });
       expect(m.status, m.stderr).toBe(0);
@@ -60,8 +62,10 @@ test.describe("service worker of a site served at the root, before and after mig
         await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map((r) => new URL(r.scope).pathname)), { timeout: 30_000 }).toEqual(["/s/veille/"]);
         const after = await page.evaluate(async () => ({ caches: await caches.keys(), title: document.title }));
         expect(after.caches.filter((c) => c.startsWith("cortex-wiki:/:")), "no cache of the old root site").toEqual([]);
-        expect(await page.locator("main").innerText()).toMatch(/Alpha|alpha|Cortex|wiki/i);
       }
+      // the deep URL shows the current page of the space (serve swaps in its rebuild a few seconds after it started), not the copy the old worker kept
+      await expect.poll(async () => { await page.goto(origin + "/wiki/concepts/alpha/"); return page.locator("main").innerText(); }, { timeout: 90_000 }).toContain("narwhal sentence");
+      expect(new URL(page.url()).pathname).toBe("/s/veille/wiki/concepts/alpha/");
       // the old script itself is now the retiring one
       expect(await (await fetch(origin + "/service-worker.js")).text()).toContain("unregister()");
     } finally {
