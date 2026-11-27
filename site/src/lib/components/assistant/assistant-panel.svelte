@@ -9,6 +9,7 @@
 	import AssistantHeader from "./assistant-header.svelte";
 	import StepLine from "./step-line.svelte";
 	import { assistant, MAX_QUESTION, type Segment, type Step, type Turn } from "#lib/assistant.svelte.js";
+	import SearchScope from "#lib/components/search-scope.svelte";
 	import { loadEngine, type Engine } from "#lib/search-client.js";
 	import { toPage, toRoute } from "#lib/links.js";
 	import { typeIcon } from "#lib/type-meta.js";
@@ -123,6 +124,7 @@
 	/** Pages under an answer, written by code: retained and related (the judge), then the others it cites. */
 	const lists = (turn: Turn) => {
 		const a = turn.answer!;
+		if (a.refs?.length) return []; // an answer over several spaces lists its pages by space (`refs`), written by code as well
 		const shown = new Set([...a.retained, ...a.related]);
 		return [
 			{ key: "retained", label: t("assistant.pages.retained"), ids: a.retained },
@@ -289,6 +291,15 @@
 							{@render segments(turn.answer.segments, fix)}
 							<!-- second section of the card: the pages behind the answer, then the notice -->
 							<div class="mt-4 border-t pt-3">
+								{#if turn.answer.refs?.length}
+									<h3 class="text-sm font-semibold">{t("spaces.ask.pages")}</h3>
+									<ul class="mt-1 space-y-1 text-sm">
+										{#each turn.answer.refs as r (`${r.space}/${r.id}`)}
+											<!-- the page of another space is that space's own site: an address outside this one's base, a full page load -->
+											<li><a href={`/s/${r.space}/wiki/${r.id}/`} class="inline-flex flex-wrap items-baseline gap-x-2 underline-offset-4 hover:underline" aria-label={t("spaces.ask.page", { title: r.title, space: r.space })}><span lang={contentLang}>{r.title}</span><code class="text-muted-foreground text-xs no-underline">{r.space}</code></a></li>
+										{/each}
+									</ul>
+								{/if}
 								{#each lists(turn) as l (l.key)}
 									<h3 class="mt-4 text-sm font-semibold first:mt-0">{l.label}</h3>
 									<ul class="mt-1 space-y-1 text-sm">
@@ -313,6 +324,8 @@
 		</div>
 
 		<form class="border-t p-3" onsubmit={(e) => { e.preventDefault(); send(); }}>
+			<!-- where the next question reads: this space (said), or, signed in with several spaces, all or some of them; the conversation stays in this space -->
+			<div class="mb-2 text-sm"><SearchScope choose kind="ask" bind:scope={assistant.scope} bind:picked={assistant.picked} /></div>
 			<label for="assistant-q" class="sr-only">{t("assistant.label")}</label>
 			<!-- the field sits in a frame: the frame carries the design system's opaque 2 px outline (a translucent ring is under 3:1) -->
 			<div class="focus-within:outline-ring relative flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:outline-2 focus-within:outline-offset-2">
@@ -330,7 +343,7 @@
 						<span class="size-3.5 bg-current" aria-hidden="true"></span>
 					</button>
 				{:else}
-					<button type="submit" class="text-primary enabled:hover:text-foreground disabled:text-muted-foreground inline-flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={!assistant.draft.trim() || over}>
+					<button type="submit" class="text-primary enabled:hover:text-foreground disabled:text-muted-foreground inline-flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11" aria-label={t("assistant.send")} disabled={!assistant.draft.trim() || over || !assistant.scopeReady}>
 						<Icon name="send" filled size={20} />
 					</button>
 				{/if}

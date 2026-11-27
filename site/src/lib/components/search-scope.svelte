@@ -8,7 +8,8 @@
 
 	// Where a search looks. By default the space of the page, said, never silent. On the search page (`choose`), someone signed in who has
 	// more than one space may widen it: all their spaces, or the ones they pick. The server drops what they may not see.
-	let { choose = false, scope = $bindable<Scope>("current"), picked = $bindable<string[]>([]) }: { choose?: boolean; scope?: Scope; picked?: string[] } = $props();
+	// `kind` "ask": the same choice for what the assistant reads (its own words; a conversation stays in the space it is asked in).
+	let { choose = false, kind = "search", scope = $bindable<Scope>("current"), picked = $bindable<string[]>([]) }: { choose?: boolean; kind?: "search" | "ask"; scope?: Scope; picked?: string[] } = $props();
 	const uid = $props.id();
 	const info = $derived(spaces.available ? spaces.info : undefined);
 	const wide = $derived(choose && !!account.me && spaces.list.length > 1);
@@ -20,7 +21,7 @@
 
 {#if info && wide}
 	<fieldset class="mt-3 flex flex-col gap-2">
-		<legend class="text-muted-foreground mb-1 flex items-center gap-1.5 text-sm font-semibold"><Icon name="space" size={16} />{t("spaces.search.in")}</legend>
+		<legend class="text-muted-foreground mb-1 flex items-center gap-1.5 text-sm font-semibold"><Icon name="space" size={16} />{kind === "ask" ? t("spaces.ask.in") : t("spaces.search.in")}</legend>
 		<div class="flex flex-wrap gap-x-6 gap-y-1">
 			{#each OPTIONS as o (o.value)}
 				<label class="flex min-h-9 cursor-pointer items-center gap-2 text-sm pointer-coarse:min-h-11">
@@ -31,7 +32,7 @@
 		</div>
 		{#if scope === "set"}
 			<div class="border-border bg-card shadow-surface mt-1 border p-3">
-				<p class="mb-2 text-sm">{t("spaces.search.include")}</p>
+				<p class="mb-2 text-sm">{kind === "ask" ? t("spaces.ask.include") : t("spaces.search.include")}</p>
 				<ul class="flex flex-wrap gap-x-6 gap-y-1">
 					{#each spaces.list as s (s.name)}
 						<li><label class="flex min-h-9 cursor-pointer items-center gap-2 text-sm pointer-coarse:min-h-11">
@@ -41,9 +42,10 @@
 						</label></li>
 					{/each}
 				</ul>
+				{#if kind === "ask" && !picked.length}<p class="text-muted-foreground mt-2 text-xs" role="status">{t("spaces.ask.none")}</p>{/if}
 			</div>
 		{/if}
 	</fieldset>
 {:else if info}
-	<p class="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-sm"><Icon name="space" size={16} />{t("spaces.search.scope")} <strong class="text-foreground font-semibold">{labelOf(info)}</strong></p>
+	<p class="text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5 text-sm"><Icon name="space" size={16} />{kind === "ask" ? t("spaces.ask.scope") : t("spaces.search.scope")} <strong class="text-foreground font-semibold">{labelOf(info)}</strong></p>
 {/if}

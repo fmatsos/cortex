@@ -121,6 +121,7 @@
 			<li>{t("help.assistant.cites")}</li>
 			<li>{t("help.assistant.ai")}</li>
 			<li>{t("help.assistant.readOnly")}</li>
+			<li>{t("help.assistant.spaces")}</li>
 			<li>{t("help.assistant.memory")}</li>
 			<li>{t("help.assistant.keep")}</li>
 		</ul>

@@ -19,6 +19,10 @@ type Mock = {
   /** What `GET /api/search?spaces=…` answers, and the query strings it was asked with. */
   across: { hits: { space: string; id: string; title: string; type: string; extract: string; match: string }[]; spaces: string[] };
   searches: string[];
+  /** The bodies of `POST /s/<space>/api/ask`, the answer it gives and the status (default 200). */
+  asks: { path: string; body: any }[];
+  answer: object;
+  askStatus?: number;
   restoreError?: number;
   inviteError?: number;
   archiveError?: { status: number; error: string };
@@ -47,7 +51,7 @@ const newMock = (over: Partial<Mock> = {}): Mock => ({
     ro: detail("ro", { title: "Famille", read_only: true, content: ["notes", "resources"], you: "member" }),
   },
   archived: [{ name: "old", title: "Ancienne documentation", content: ["notes", "resources"], archived_at: "2026-10-02T10:00:00.000Z" }],
-  across: { hits: [], spaces: [] }, searches: [],
+  across: { hits: [], spaces: [] }, searches: [], asks: [], answer: {},
   createdTaken: [],
   calls: [], writes: [],
   ...over,
@@ -88,6 +92,12 @@ async function mount(page: Page, m: Mock, space = "demo") {
         m.archived = m.archived.filter((a) => a.name !== restore[1]);
         return json({ name: restore[1], url: `/s/${restore[1]}/` });
       }
+      if (api === "/api/ask") {
+        if (method !== "POST") return route.fulfill({ status: 204, headers: { "x-ask-history-turns": "10" } });
+        m.asks.push({ path, body: body() });
+        return json(m.askStatus === 400 ? { error: "none of these spaces can be read" } : m.answer, m.askStatus ?? 200);
+      }
+      if (api === "/api/ask/render") return json({ answers: [] });
       if (api === "/api/verify") return route.fulfill({ status: m.details[name ?? space]?.read_only ?? m.spaces.find((s) => s.name === name)?.read_only ? 409 : 204 });
       if (name && api === "/api/space") {
         if (method === "GET") return m.details[name] ? json(m.details[name]) : json({ error: "not found" }, 404);
@@ -524,5 +534,74 @@ test.describe("settings of a space", () => {
     await confirm.click();
     await expect(dialog.getByRole("alert")).toContainText("its own git repository");
     expect(m.writes.find((w) => w.path.endsWith("/archive"))!.body).toEqual({ confirm: "demo" });
+  });
+});
+
+test.describe("the assistant reads several spaces", () => {
+  const panel = (page: Page) => page.locator("#assistant-panel");
+  const reads = (page: Page) => panel(page).getByRole("group", { name: /The assistant reads|L'assistant lit/ });
+  const ask = async (page: Page, q = "Where does the quokka live?") => { await panel(page).locator("#assistant-q").fill(q); await panel(page).locator("#assistant-q").press("Enter"); };
+  const open = async (page: Page, m: Mock) => {
+    await mount(page, m);
+    await page.goto("/s/demo/graph/");
+    await page.locator("#assistant-toggle").click();
+    await expect(panel(page)).toBeVisible();
+  };
+  const answer = {
+    segments: [{ html: '<p>Voir <a href="/s/carnet/wiki/journal/2026-11-27/">Journal</a> et <a href="/s/demo/wiki/concepts/alpha/">Alpha</a>.</p>' }],
+    md: "Voir [Journal](/s/carnet/wiki/journal/2026-11-27.md) et [Alpha](/s/demo/wiki/concepts/alpha.md).", cited: ["concepts/alpha"], retained: [], related: [], model: "m",
+    refs: [{ space: "carnet", id: "journal/2026-11-27", title: "Journal alpha" }, { space: "demo", id: "concepts/alpha", title: "Alpha concept" }],
+  };
+
+  test("this space by default, said, and nothing sent about spaces; all my spaces, or the ones picked, are asked as such", async ({ page }) => {
+    const m = newMock({ answer });
+    await open(page, m);
+    await expect(reads(page).getByRole("radio", { name: /This space|Cet espace/ })).toBeChecked();
+    await expect(reads(page).getByRole("radio")).toHaveCount(3);
+    await ask(page);
+    await expect(panel(page).getByRole("link", { name: "Alpha", exact: true })).toBeVisible();
+    expect(m.asks).toEqual([{ path: "/s/demo/api/ask", body: expect.not.objectContaining({ spaces: expect.anything() }) }]);
+
+    await reads(page).getByRole("radio", { name: /All my spaces|Tous mes espaces/ }).check();
+    await ask(page, "And across everything?");
+    await expect.poll(() => m.asks.length).toBe(2);
+    expect(m.asks[1]!.path).toBe("/s/demo/api/ask"); // the conversation stays in the space where it is asked
+    expect(m.asks[1]!.body.spaces).toBe("all");
+
+    await reads(page).getByRole("radio", { name: /Choose the spaces|Choisir les espaces/ }).check();
+    await expect(page.getByText(/Choose at least one space for the assistant|Choisissez au moins un espace à faire lire/)).toBeVisible();
+    await expect(panel(page).getByRole("button", { name: /^(Send|Envoyer)/ })).toBeDisabled(); // nothing to read: nothing is sent
+    await reads(page).getByRole("checkbox", { name: /Carnet personnel/ }).check();
+    await reads(page).getByRole("checkbox", { name: /Famille/ }).check();
+    await ask(page, "Only two?");
+    await expect.poll(() => m.asks.length).toBe(3);
+    expect(m.asks[2]!.body.spaces).toEqual(["carnet", "ro"]);
+  });
+
+  test("the answer cites pages of other spaces: links to their own sites, and the pages listed by space", async ({ page }) => {
+    const m = newMock({ answer });
+    await open(page, m);
+    await reads(page).getByRole("radio", { name: /All my spaces|Tous mes espaces/ }).check();
+    await ask(page);
+    const body = panel(page).locator("article");
+    await expect(body.getByRole("link", { name: "Journal", exact: true })).toHaveAttribute("href", "/s/carnet/wiki/journal/2026-11-27/");
+    await expect(body.getByRole("link", { name: "Alpha", exact: true })).toHaveAttribute("href", "/s/demo/wiki/concepts/alpha/");
+    const listed = body.getByRole("link", { name: /Journal alpha, in the space carnet|Journal alpha, dans l'espace carnet/ });
+    await expect(listed).toHaveAttribute("href", "/s/carnet/wiki/journal/2026-11-27/");
+    await expect(body.getByRole("link", { name: /Alpha concept, (in the space|dans l'espace) demo/ })).toHaveAttribute("href", "/s/demo/wiki/concepts/alpha/");
+  });
+
+  test("the server's refusal of the scope is said, and a visitor with one space has no choice, only the space named", async ({ page }) => {
+    const m = newMock({ askStatus: 400 });
+    await open(page, m);
+    await reads(page).getByRole("radio", { name: /All my spaces|Tous mes espaces/ }).check();
+    await ask(page);
+    await expect(panel(page).locator("article").getByText(/None of the spaces you chose|Aucun des espaces choisis/)).toBeVisible();
+    const single = await page.context().newPage();
+    await mount(single, newMock({ spaces: [{ name: "demo", title: "Demo space", read_only: false, content: ["resources"] }] }));
+    await single.goto("/s/demo/graph/");
+    await single.locator("#assistant-toggle").click();
+    await expect(single.locator("#assistant-panel").getByRole("radio")).toHaveCount(0);
+    await expect(single.locator("#assistant-panel").getByText(/The assistant reads:|L'assistant lit :/)).toContainText("Demo space");
   });
 });

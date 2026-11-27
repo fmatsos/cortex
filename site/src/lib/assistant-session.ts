@@ -1,6 +1,6 @@
 import { ApiError } from "./api";
 import { spaceApi } from "./space";
-import { assistant, keysOf, type Segment, type SavedTurn, type Turn } from "./assistant.svelte";
+import { assistant, keysOf, type PageRef, type Segment, type SavedTurn, type Turn } from "./assistant.svelte";
 import { conversationActions, createConversation, getConversation, updateConversation, type Conversation } from "./conversations";
 import { conversationFilename, conversationMarkdown, normalizeTitle } from "./conversation-markdown";
 import { download, siteUrl } from "./export-file";
@@ -71,14 +71,14 @@ export async function exportSaved(id: string) {
 // ---- resume -----------------------------------------------------------------------------------------------------------
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-/** The saved answers drawn again by the server (POST /api/ask/render); where it cannot, the Markdown as plain text: nothing is lost. */
-async function drawAll(mds: string[]): Promise<Segment[][]> {
-	const plain = (md: string): Segment[] => [{ html: `<p class="whitespace-pre-wrap">${escape(md)}</p>` }];
+/** The saved answers drawn again by the server (POST /api/ask/render); where it cannot, the Markdown as plain text: nothing is lost. `refs`: the pages an answer over several spaces cites. */
+async function drawAll(mds: string[]): Promise<{ segments: Segment[]; refs?: PageRef[] }[]> {
+	const plain = (md: string): { segments: Segment[] } => ({ segments: [{ html: `<p class="whitespace-pre-wrap">${escape(md)}</p>` }] });
 	try {
 		const res = await fetch(spaceApi("/api/ask/render"), { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ answers: mds }) });
-		const body = (await res.json().catch(() => ({}))) as { answers?: { segments?: Segment[] }[] };
+		const body = (await res.json().catch(() => ({}))) as { answers?: { segments?: Segment[]; refs?: PageRef[] }[] };
 		if (!res.ok || !Array.isArray(body.answers) || body.answers.length !== mds.length) return mds.map(plain);
-		return body.answers.map((a, i) => (Array.isArray(a?.segments) ? a.segments : plain(mds[i]!)));
+		return body.answers.map((a, i) => (Array.isArray(a?.segments) ? { segments: a.segments, ...(Array.isArray(a.refs) ? { refs: a.refs } : {}) } : plain(mds[i]!)));
 	} catch { return mds.map(plain); }
 }
 

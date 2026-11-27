@@ -1,4 +1,5 @@
 import { spaceApi } from "./space";
+import type { Scope } from "./space-search";
 import { spaceKey } from "./storage";
 
 /** Longest question the server accepts (src/serve.ts MAX_QUESTION): checked before sending. */
@@ -13,10 +14,12 @@ export type Block =
 	| { type: "facts"; title?: string; items: { label: string; html: string }[] }
 	| { type: "pages"; title?: string; items: { id: string; title: string; html: string }[] };
 export type Segment = { html: string } | { block: Block };
-/** `md`: the answer as written, sent back as history; retained and related: the pages the judge chose, by id. */
-export type Answer = { segments: Segment[]; md: string; cited: string[]; retained: string[]; related: string[]; model?: string };
+/** A page an answer cites, with the space it is in (an answer that read several spaces cites pages of each). */
+export type PageRef = { space: string; id: string; title: string };
+/** `md`: the answer as written, sent back as history; retained and related: the pages the judge chose, by id. `refs`: only for an answer that read several spaces, the pages it cites, each with its space. */
+export type Answer = { segments: Segment[]; md: string; cited: string[]; retained: string[]; related: string[]; model?: string; refs?: PageRef[] };
 /** `stopped`: the visitor stopped the answer on its way (never an HTTP status). */
-export type AskErrorKind = "busy" | "off" | "invalid" | "failed" | "network" | "stopped";
+export type AskErrorKind = "busy" | "off" | "invalid" | "scope" | "failed" | "network" | "stopped";
 /** What the agent is doing (the server's `step` event): the panel words it; `path` and `title` of a page read, `query` of a search. */
 export type Step = { kind: "pages" | "read" | "search" | "layout" | "write" | "work"; path?: string; title?: string; query?: string };
 /**
@@ -51,6 +54,9 @@ class Assistant {
 	open = $state(false);
 	turns = $state<Turn[]>([]);
 	draft = $state("");
+	/** Where the next question reads: this space, all the visitor's, or the ones they picked (the server drops what they may not see). A conversation stays in the space it is asked in. */
+	scope = $state<Scope>("current");
+	picked = $state<string[]>([]);
 	/** Bumped when the panel must take focus on its question field (entry points outside the panel). */
 	focusSeq = $state(0);
 	/** The saved copy of this conversation (null: never saved). Kept with the turns, so a reload does not start a second copy. */
@@ -65,6 +71,10 @@ class Assistant {
 	private ctl?: AbortController;
 
 	get pending() { return this.turns.some((t) => t.pending); }
+	/** `spaces` of the next question: nothing for this space, "all", or the picked names; undefined too when "choose" holds none yet (then `scopeReady` is false). */
+	get spaces(): "all" | string[] | undefined { return this.scope === "all" ? "all" : this.scope === "set" && this.picked.length ? this.picked : undefined; }
+	/** A scope that names no space cannot be asked. */
+	get scopeReady() { return this.scope !== "set" || this.picked.length > 0; }
 	/** The exchanges that got an answer: what is saved and exported (a failed or waiting one is not). */
 	get complete() { return this.turns.filter((t) => t.answer); }
 	/** The conversation holds as many answered exchanges as the server passes on: the next ones push the oldest out of the agent's memory. */
@@ -113,11 +123,12 @@ class Assistant {
 	/** Sends a question; false when it is not sent (empty, another one pending, too long: then the turn says why). */
 	ask(question: string): boolean {
 		const q = question.trim();
-		if (!q || this.pending) return false;
+		if (!q || this.pending || !this.scopeReady) return false;
 		this.open = true;
 		this.focusSeq++;
 		const turn: Turn = { id: this.next++, q, pending: q.length <= MAX_QUESTION, error: q.length > MAX_QUESTION ? "invalid" : undefined };
 		// the earlier turns that got an answer: what the agent needs to understand a follow-up
+		const spaces = this.spaces;
 		const history = this.turns.flatMap((t) => (t.answer ? [{ role: "user", text: t.q }, { role: "assistant", text: t.answer.md }] : []));
 		this.turns = [...this.turns, turn];
 		this.draft = "";
@@ -134,14 +145,15 @@ class Assistant {
 		const done = (b: any) => {
 			if (!Array.isArray(b.segments)) return keep("failed");
 			const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-			settle({ at: new Date().toISOString(), answer: { segments: b.segments, md: String(b.md ?? ""), cited: ids(b.cited), retained: ids(b.retained), related: ids(b.related), model: b.model } });
+			const refs = Array.isArray(b.refs) ? b.refs.flatMap((r: any): PageRef[] => (r && typeof r.space === "string" && typeof r.id === "string" ? [{ space: r.space, id: r.id, title: String(r.title ?? r.id) }] : [])) : undefined;
+			settle({ at: new Date().toISOString(), answer: { segments: b.segments, md: String(b.md ?? ""), cited: ids(b.cited), retained: ids(b.retained), related: ids(b.related), model: b.model, ...(refs?.length ? { refs } : {}) } });
 		};
 		void (async () => {
 			try {
-				const r = await fetch(spaceApi("/api/ask"), { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history }), signal: ctl.signal });
+				const r = await fetch(spaceApi("/api/ask"), { method: "POST", headers: { "content-type": "application/json", accept: "application/x-ndjson, application/json" }, body: JSON.stringify({ q, history, ...(spaces && { spaces }) }), signal: ctl.signal });
 				if (!r.ok || !r.body || !r.headers.get("content-type")?.includes("application/x-ndjson")) {
 					const b = await r.json().catch(() => ({}));
-					return r.ok ? done(b) : settle({ error: askErrorKind(r.status) });
+					return r.ok ? done(b) : settle({ error: spaces && r.status === 400 ? "scope" : askErrorKind(r.status) });
 				}
 				// one JSON event per line: the text so far and its rendering (shown a few times a second, not saved), then the final payload
 				let buf = "", final: any;
@@ -204,11 +216,11 @@ class Assistant {
 	 * holds the segments of each answer (the server draws them: the saved copy holds the Markdown only); the answers keep their
 	 * Markdown as written, which is also what the history sent to `/api/ask` carries.
 	 */
-	load(c: { id: string; title: string; created_at: string; turns: SavedTurn[] }, drawn: Segment[][]) {
+	load(c: { id: string; title: string; created_at: string; turns: SavedTurn[] }, drawn: { segments: Segment[]; refs?: PageRef[] }[]) {
 		this.generation++;
 		this.turns = c.turns.map((t, i) => ({
 			id: this.next++, q: t.question, at: t.at,
-			answer: { segments: drawn[i] ?? [], md: t.answer, cited: t.pages ?? [], retained: [], related: [] },
+			answer: { segments: drawn[i]?.segments ?? [], md: t.answer, cited: t.pages ?? [], retained: [], related: [], ...(drawn[i]?.refs?.length ? { refs: drawn[i]!.refs } : {}) },
 		}));
 		this.saved = { id: c.id, title: c.title, keys: keysOf(this.turns), created_at: c.created_at };
 		this.open = true;
