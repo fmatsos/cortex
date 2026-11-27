@@ -20,6 +20,7 @@ type Mock = {
   across: { hits: { space: string; id: string; title: string; type: string; extract: string; match: string }[]; spaces: string[] };
   searches: string[];
   restoreError?: number;
+  inviteError?: number;
   archiveError?: { status: number; error: string };
   createdTaken: string[];
   calls: string[];
@@ -75,6 +76,11 @@ async function mount(page: Page, m: Mock, space = "demo") {
         return m.createdTaken.includes(b.name) ? json({ error: "exists" }, 409) : json({ name: b.name, url: `/s/${b.name}/` }, 201);
       }
       if (path === "/api/spaces/archived") return json({ archived: m.archived });
+      const accept = path.match(/^\/api\/invites\/([A-Za-z0-9_-]+)\/accept$/);
+      if (accept) {
+        m.writes.push({ method, path, body: body() });
+        return m.inviteError ? json({ error: "this invitation is not valid" }, m.inviteError) : json({ space: "demo", role: "member", url: "/s/demo/" });
+      }
       if (path === "/api/search" && method === "GET") { m.searches.push(url.pathname + url.search); return json(m.across); }
       const restore = path.match(/^\/api\/spaces\/([a-z0-9-]+)\/restore$/);
       if (restore) {
@@ -93,7 +99,7 @@ async function mount(page: Page, m: Mock, space = "demo") {
         return json(m.details[name]);
       }
       if (name && api === "/api/space/invites") {
-        if (method === "POST") { m.writes.push({ method, path, body: body() }); return json({ id: "i1", role: body().role, expires_at: "2026-12-04T14:30:00.000Z", url: `/s/${name}/invite/tok` }, 201); }
+        if (method === "POST") { m.writes.push({ method, path, body: body() }); return json({ id: "i1", role: body().role, expires_at: "2026-12-04T14:30:00.000Z", url: `/s/${name}/account/invite/?token=tok` }, 201); }
         return json({ invites: [] });
       }
       if (name && api === "/api/space/archive") {
@@ -297,6 +303,45 @@ test.describe("search across spaces", () => {
   });
 });
 
+test.describe("accepting an invitation", () => {
+  const invite = "/s/demo/account/invite/?token=tok";
+  const heading = (page: Page) => page.getByRole("heading", { level: 1 });
+
+  test("signed out: the sign-in methods, and the way back to this very link", async ({ page }) => {
+    await mount(page, newMock({ signedIn: false }));
+    await page.goto(invite);
+    await expect(heading(page)).toContainText(/Join the space demo|Rejoindre l'espace demo/);
+    await expect(page.getByRole("button", { name: /Authelia/ })).toBeVisible();
+    await page.route("**/api/auth/login/oidc**", (r) => r.fulfill({ status: 200, contentType: "text/plain", body: "login" }));
+    const login = page.waitForRequest("**/api/auth/login/oidc**");
+    await page.getByRole("button", { name: /Authelia/ }).click();
+    expect(new URL((await login).url()).searchParams.get("return")).toBe(invite);
+  });
+
+  test("signed in: joining accepts the link and goes into the space; a refused link says why", async ({ page }) => {
+    const m = newMock();
+    await mount(page, m);
+    await page.goto(invite);
+    await expect(page.getByText(/Signed in as Ada Lovelace|Connecté en tant que Ada Lovelace/)).toBeVisible();
+    await page.getByRole("button", { name: /Join demo|Rejoindre demo/ }).click();
+    await expect(page).toHaveURL(/\/s\/demo\/$/);
+    expect(m.writes.find((w) => w.path === "/api/invites/tok/accept")).toBeTruthy();
+    const refused = newMock({ inviteError: 404 });
+    const second = await page.context().newPage();
+    await mount(second, refused);
+    await second.goto(invite);
+    await second.getByRole("button", { name: /Join demo|Rejoindre demo/ }).click();
+    await expect(second.getByRole("alert")).toContainText(/not valid any more|n.est plus valide/);
+    await expect(second.getByRole("button", { name: /Join demo|Rejoindre demo/ })).toHaveCount(0);
+  });
+
+  test("no token: nothing to accept", async ({ page }) => {
+    await mount(page, newMock());
+    await page.goto("/s/demo/account/invite/");
+    await expect(page.getByRole("alert")).toContainText(/not valid any more|n.est plus valide/);
+  });
+});
+
 test.describe("favorites are a space's own", () => {
   test("under /s/<name>/ a favorite is sent to the space's state alone, the preferences to the root", async ({ page }) => {
     const m = newMock();
@@ -431,7 +476,7 @@ test.describe("settings of a space", () => {
     await expect(page.getByRole("listitem").filter({ hasText: "Marie Laurent" }).getByRole("button", { name: /Remove|Retirer/ })).toBeEnabled();
     await page.getByLabel(/Role granted by the link|Rôle accordé par le lien/).selectOption("owner");
     await page.getByRole("button", { name: /Create an invitation link|Créer un lien d'invitation/ }).click();
-    await expect(page.getByLabel(/Link created|Lien créé/)).toHaveValue(/\/s\/demo\/invite\/tok$/);
+    await expect(page.getByLabel(/Link created|Lien créé/)).toHaveValue(/\/s\/demo\/account\/invite\/\?token=tok$/);
     expect(m.writes.find((w) => w.path.endsWith("/invites"))!.body).toEqual({ role: "owner" });
     await expect(page.getByText(/(Link created|Lien créé) · (Owner|Propriétaire)/)).toBeVisible();
   });

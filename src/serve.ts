@@ -36,6 +36,7 @@ import { checkTitle, spaceAdmin } from "./space-admin";
  * (a local, untracked folder), then `cortex inbox` turns it into a source and only `raw/` and `wiki/` are committed.
  * An entry that fails stays in `inbox/` and is retried at the next share, sync or start.
  * `GET /api/search`: the hybrid search with the site's operators, and with `judge=1` the judge's ranking (src/search-api.ts).
+ * In a multi-space instance, `GET /api/search?q=…&spaces=a,b|all` at the root searches several spaces for a signed-in visitor (`searchAcross`).
  * `GET /api/status`: is the site being rebuilt (a build running or waiting), and how the last one ended; the site shows a small indicator.
  * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
  * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
@@ -581,34 +582,37 @@ export async function serve(root: string, o: ServeOpts) {
     return Response.json({ name, url: `/s/${name}/` }, { status: 201, headers: noStore });
   };
 
-  /** The pages of the invitation flow, and the archive's way back, at the root: `GET /s/<name>/invite/<token>` (answered before the visibility check: the token is what lets someone in), `POST /api/invites/<token>/accept`, `GET /api/spaces/archived`, `POST /api/spaces/<name>/restore`. */
-  const invitePage = (name: string, token: string) => new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Join ${name}</title></head>
-<body style="font:16px system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 16px"><h1>Join the space <code>${name}</code></h1><p id="m">Checking your account…</p><p id="a"></p>
-<script>(async () => {
-  const space = ${JSON.stringify(name)}, token = ${JSON.stringify(token)}, m = document.getElementById("m"), a = document.getElementById("a");
-  const me = await fetch("/api/me").then((r) => (r.ok ? r.json() : null), () => null);
-  if (!me) {
-    const methods = await fetch("/api/auth/methods").then((r) => r.json(), () => ({ providers: [] }));
-    m.textContent = "Sign in to accept the invitation.";
-    for (const p of methods.providers ?? []) { const l = document.createElement("a"); l.href = "/api/auth/login/" + p.id + "?return=" + encodeURIComponent(location.pathname); l.textContent = p.label; l.style.marginRight = "1rem"; a.append(l); }
-    return;
-  }
-  m.textContent = "Signed in as " + (me.name || me.email || "you") + ".";
-  const b = document.createElement("button"); b.textContent = "Join " + space; b.style.cssText = "font:inherit;padding:.5rem 1rem";
-  b.onclick = async () => {
-    b.disabled = true;
-    const r = await fetch("/api/invites/" + encodeURIComponent(token) + "/accept", { method: "POST" });
-    if (r.ok) location.href = "/s/" + space + "/"; else { m.textContent = "This invitation is no longer valid."; b.remove(); }
+  /**
+   * The invitation flow, at the root. The page that accepts it is the site's own (`/s/<name>/account/invite/?token=…`, its route
+   * `account/invite`), served here before the visibility check: the token, validated first, is what lets a non-member in. They also need the
+   * site's files (`/_app/…`, icons, fonts) to run it, and those sit behind the same check: a valid token puts a short-lived, path-scoped
+   * cookie on the browser that lends them (`invited`), re-validated each time; the pages and the data of the space stay closed. The page is
+   * no-store and `no-referrer` (the link is the secret). A link of the earlier form, `/s/<name>/invite/<token>`, leads there.
+   * Also: `POST /api/invites/<token>/accept`, `GET /api/spaces/archived`, `POST /api/spaces/<name>/restore`.
+   */
+  const INVITE_COOKIE = "cortex_invite", INVITE_PAGE = /^\/s\/([a-z0-9][a-z0-9-]*)\/account\/invite\/$/, TOKEN = /^[A-Za-z0-9_-]{16,128}$/;
+  const lent = /^\/(_app\/|fonts\/|favicon[^/]*$|apple-touch-icon\.png$)/; // the files of the site's shell, nothing of the wiki
+  const invitedTo = (token: string | undefined | null, name: string) => {
+    try { return !!token && TOKEN.test(token) && sites.has(name) && inviteSpace(accounts.store(), token, Date.now()) === name; } catch { return false; /* closed */ }
   };
-  a.append(b);
-})();</script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+  const inviteHeaders = { ...noStore, "referrer-policy": "no-referrer" };
+  /** Whether this request, refused by the visibility check, is a GET of a file of the site's shell made with the cookie of a valid invitation. */
+  const invited = (req: Request, name: string, path: string) =>
+    (req.method === "GET" || req.method === "HEAD") && lent.test(path) && invitedTo(/(?:^|;\s*)cortex_invite=([A-Za-z0-9_-]+)/.exec(req.headers.get("cookie") ?? "")?.[1], name);
 
-  const invitations = async (req: Request, url: URL): Promise<Response | undefined> => {
-    const page = /^\/s\/([a-z0-9][a-z0-9-]*)\/invite\/([A-Za-z0-9_-]{16,128})$/.exec(url.pathname);
-    if (page && (req.method === "GET" || req.method === "HEAD")) {
-      let ok = false;
-      try { ok = inviteSpace(accounts.store(), page[2]!, Date.now()) === page[1] && sites.has(page[1]!); } catch { /* closed */ }
-      return ok ? invitePage(page[1]!, page[2]!) : notFound();
+  const invitations = async (req: Request, url: URL, srv: Server<undefined>): Promise<Response | undefined> => {
+    const get = req.method === "GET" || req.method === "HEAD";
+    const old = /^\/s\/([a-z0-9][a-z0-9-]*)\/invite\/([A-Za-z0-9_-]{16,128})$/.exec(url.pathname);
+    if (old && get) return invitedTo(old[2], old[1]!) ? new Response(null, { status: 302, headers: { ...inviteHeaders, location: `/s/${old[1]}/account/invite/?token=${old[2]}` } }) : notFound();
+    const page = INVITE_PAGE.exec(url.pathname), token = url.searchParams.get("token");
+    if (page && get && invitedTo(token, page[1]!)) {
+      const res = await sites.get(page[1]!)!.fetch(req, srv, new URL("/account/invite/", url));
+      if (res.status !== 200) return notFound(); // the site has no such page (built before it existed)
+      const headers = new Headers(res.headers);
+      for (const [k, v] of Object.entries(inviteHeaders)) headers.set(k, v);
+      const secure = url.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
+      headers.append("set-cookie", `${INVITE_COOKIE}=${token}; Path=/s/${page[1]}/; Max-Age=900; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`);
+      return new Response(res.body, { status: 200, headers });
     }
     const accept = /^\/api\/invites\/([A-Za-z0-9_-]{16,128})\/accept$/.exec(url.pathname);
     if (accept) {
@@ -693,7 +697,7 @@ export async function serve(root: string, o: ServeOpts) {
       const account = await accounts(req);
       if (account) return account;
       if (!multi) return sites.get("")!.fetch(req, srv, url);
-      const flow = await invitations(req, url) ?? await archived(req, url);
+      const flow = await invitations(req, url, srv) ?? await archived(req, url);
       if (flow) return flow;
       if (url.pathname === "/api/search") return searchAcross(req, url);
       if (url.pathname === "/api/spaces") {
@@ -711,7 +715,8 @@ export async function serve(root: string, o: ServeOpts) {
         const miss = (why: string) => { say(`404 ${req.method} ${url.pathname}: ${why}`); return notFound(); };
         if (!site) return miss("no such site (unknown, archived, or not mounted yet)");
         const allowed = await access(name, req);
-        if (allowed !== "ok") return miss(allowed === "error" ? "the accounts' store failed (closed)" : "not allowed to see this space"); // a space the visitor may not see is a space that does not exist
+        if (allowed !== "ok" && !invited(req, name, at[2] ?? "")) return miss(allowed === "error" ? "the accounts' store failed (closed)" : "not allowed to see this space"); // a space the visitor may not see is a space that does not exist
+        if (allowed !== "ok") return site.fetch(req, srv, Object.assign(new URL(url), { pathname: at[2]! })); // the shell of the site, lent to someone who holds an invitation
         if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${name}/${url.search}` } });
         const managed = await admin(req, name, at[2]) ?? await accounts(req, { space: name, path: at[2] });
         if (managed) return managed;

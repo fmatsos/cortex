@@ -111,7 +111,7 @@ export function spaceAdmin(d: AdminDeps) {
       const body = await readJson(req), r = body.role ?? "member";
       if (r !== "owner" && r !== "member") return fail(400, '"role" must be "owner" or "member".');
       const inv = createInvite(store, name, r, user.id, Date.now());
-      return json({ id: inv.id, role: r, expires_at: new Date(inv.expires_at).toISOString(), url: `/s/${name}/invite/${inv.token}` }, 201);
+      return json({ id: inv.id, role: r, expires_at: new Date(inv.expires_at).toISOString(), url: `/s/${name}/account/invite/?token=${inv.token}` }, 201);
     }
 
     // archive

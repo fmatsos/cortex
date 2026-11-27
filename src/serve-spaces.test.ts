@@ -16,6 +16,11 @@ if ((process.env.CORTEX_ROOT ?? "").endsWith("boom")) { console.error("boom"); p
 mkdirSync(out, { recursive: true });
 writeFileSync(out + "/index.html", (process.env.CORTEX_ROOT ?? "").split("/").at(-1) + "|" + (process.env.CORTEX_SITE_BASE ?? ""));
 writeFileSync(out + "/service-worker.js", "// sw of " + (process.env.CORTEX_SITE_BASE ?? ""));
+mkdirSync(out + "/account/invite", { recursive: true });
+writeFileSync(out + "/account/invite/index.html", "invite page of " + (process.env.CORTEX_SITE_BASE ?? ""));
+mkdirSync(out + "/_app/immutable", { recursive: true });
+writeFileSync(out + "/_app/immutable/app.js", "// shell");
+writeFileSync(out + "/favicon.svg", "<svg/>");
 `);
 const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
@@ -355,20 +360,33 @@ test("invitations: a single-use link, 7 days, stored hashed; accepted from the r
   expect((await invite({ role: "root" })).status).toBe(400);
   const made = await isJson(await invite({ role: "owner" }));
   expect(made.status).toBe(201);
-  expect(made.body.url).toMatch(/^\/s\/mine\/invite\/[A-Za-z0-9_-]{43}$/);
-  const token = made.body.url.split("/").pop();
+  expect(made.body.url).toMatch(/^\/s\/mine\/account\/invite\/\?token=[A-Za-z0-9_-]{43}$/);
+  const tokenOf = (url: string) => url.split("token=")[1]!;
+  const token = tokenOf(made.body.url);
   expect(Date.parse(made.body.expires_at) - Date.now()).toBeGreaterThan(6.9 * 86_400_000);
   const db = openAccounts(accountsFile(root));
   expect(JSON.stringify(db.query("select * from space_invites").all())).not.toContain(token); // only a hash
   db.close();
   expect((await isJson(await get("/s/mine/api/space/invites", ada.cookie))).body.invites.map((i: { id: string; role: string }) => [i.id, i.role])).toEqual([[made.body.id, "owner"]]);
   expect((await get("/s/mine/api/space/invites", bob.cookie)).status).toBe(403);
-  // the page is answered to someone who is not a member, for a valid token only
+  // the site's own page is answered to someone who is not a member, for a valid token only
   const page = await get(made.body.url);
   expect([page.status, page.headers.get("referrer-policy"), page.headers.get("cache-control")]).toEqual([200, "no-referrer", "no-store"]);
-  expect(await page.text()).toContain("Join the space <code>mine</code>");
+  expect(await page.text()).toBe("invite page of /s/mine");
+  expect(page.headers.get("set-cookie")).toBe(`cortex_invite=${token}; Path=/s/mine/; Max-Age=900; HttpOnly; SameSite=Lax`);
+  expect((await get(`/s/mine/account/invite/?token=${"x".repeat(43)}`)).status).toBe(404);
+  expect((await get("/s/mine/account/invite/")).status).toBe(404);
+  expect((await get(`/s/open/account/invite/?token=${token}`)).headers.get("set-cookie")).toBeNull(); // another space: its own page (it is open), no lending for a token that is not its own
+  // the link of the earlier form leads there, still hidden from caches and referrers
+  const legacy = await get(`/s/mine/invite/${token}`);
+  expect([legacy.status, legacy.headers.get("location"), legacy.headers.get("cache-control"), legacy.headers.get("referrer-policy")]).toEqual([302, made.body.url, "no-store", "no-referrer"]);
   expect((await get(`/s/mine/invite/${"x".repeat(43)}`)).status).toBe(404);
-  expect((await get(`/s/open/invite/${token}`)).status).toBe(404); // another space
+  // the site's shell is lent to the browser that holds the invitation, nothing else of the space is
+  const holds = { cookie: `cortex_invite=${token}` };
+  for (const lent of ["/s/mine/_app/immutable/app.js", "/s/mine/favicon.svg"]) expect([lent, (await get(lent, holds)).status, (await get(lent)).status]).toEqual([lent, 200, 404]);
+  for (const shut of ["/s/mine/", "/s/mine/wiki/a/", "/s/mine/service-worker.js", "/s/mine/api/space", "/s/mine/api/status", "/s/mine/account/invite/"]) expect([shut, (await get(shut, holds)).status]).toEqual([shut, 404]);
+  expect((await get("/s/mine/_app/immutable/app.js", { cookie: `cortex_invite=${"y".repeat(43)}` })).status).toBe(404);
+  expect((await send("POST", "/s/mine/_app/immutable/app.js", undefined, { origin, ...holds })).status).toBe(404);
   expect((await get("/s/mine/", eve.cookie)).status).toBe(404);
   const accept = (t: string, h: Record<string, string> = { origin, ...eve.cookie }) => send("POST", `/api/invites/${t}/accept`, undefined, h);
   expect((await accept(token, { origin })).status).toBe(401);
@@ -381,20 +399,22 @@ test("invitations: a single-use link, 7 days, stored hashed; accepted from the r
   const frank = person(root, "4");
   expect((await accept(token, { origin, ...frank.cookie })).status).toBe(404); // single use
   expect((await get(made.body.url)).status).toBe(404);
+  expect((await get("/s/mine/_app/immutable/app.js", holds)).status).toBe(404); // the cookie dies with the invitation
   expect((await get("/s/mine/api/space/invites", ada.cookie).then(isJson)).body.invites).toEqual([]);
   // someone already in keeps their role and does not spend the link
-  const again = (await isJson(await invite({ role: "owner" }))).body.url.split("/").pop();
+  const again = tokenOf((await isJson(await invite({ role: "owner" }))).body.url);
   expect((await isJson(await accept(again, { origin, ...bob.cookie }))).body.role).toBe("member");
-  expect((await get(`/s/mine/invite/${again}`)).status).toBe(200);
+  expect((await get(`/s/mine/account/invite/?token=${again}`)).status).toBe(200);
   // revoked, and expired
-  const rev = await isJson(await invite()), revToken = rev.body.url.split("/").pop();
+  const rev = await isJson(await invite()), revToken = tokenOf(rev.body.url);
   expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...bob.cookie })).status).toBe(403);
   expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...ada.cookie })).status).toBe(200);
   expect((await send("DELETE", `/s/mine/api/space/invites/${rev.body.id}`, undefined, { origin, ...ada.cookie })).status).toBe(404);
   expect((await accept(revToken, { origin, ...frank.cookie })).status).toBe(404);
-  const old = (await isJson(await invite())).body.url.split("/").pop();
+  const old = tokenOf((await isJson(await invite())).body.url);
   const w = openAccounts(accountsFile(root)); w.run("update space_invites set expires_at = 1"); w.close();
   expect((await accept(old, { origin, ...frank.cookie })).status).toBe(404);
+  expect((await get(`/s/mine/account/invite/?token=${old}`)).status).toBe(404);
   expect((await get(`/s/mine/invite/${old}`)).status).toBe(404);
 });
 
