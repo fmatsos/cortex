@@ -15,6 +15,7 @@ const [out] = Bun.argv.slice(2);
 if ((process.env.CORTEX_ROOT ?? "").endsWith("boom")) { console.error("boom"); process.exit(1); }
 mkdirSync(out, { recursive: true });
 writeFileSync(out + "/index.html", (process.env.CORTEX_ROOT ?? "").split("/").at(-1) + "|" + (process.env.CORTEX_SITE_BASE ?? ""));
+writeFileSync(out + "/service-worker.js", "// sw of " + (process.env.CORTEX_SITE_BASE ?? ""));
 `);
 const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
@@ -475,4 +476,35 @@ test("with --sync the creation commit holds the space's wiki, raw and agent file
   expect(sh(d, "--git-dir=remote.git", "show", "main:spaces/mine/CLAUDE.md")).toContain("a space of personal notes");
   expect((await post("/api/spaces", { name: "plain" }, { origin, ...ada.cookie })).status).toBe(201);
   expect(sh(d, "--git-dir=remote.git", "ls-tree", "-r", "--name-only", "main")).toContain("spaces/plain/CLAUDE.md");
+});
+
+test("the service worker of a space answers right after its creation, and while it is rebuilt; every 404 under /s/<name>/ says which branch answered", async () => {
+  const root = instance(["first"], ANYONE);
+  const ada = person(root, "1");
+  const { get, post, origin, said } = await start(root);
+  expect((await post("/api/spaces", { name: "fresh" }, { origin, ...ada.cookie })).status).toBe(201);
+  const sw = async () => (await get("/s/fresh/service-worker.js", ada.cookie)).status;
+  expect(await sw()).toBe(200); // the very next request after the 201
+  expect(said.filter((m) => m.startsWith("404"))).toEqual([]);
+  // a rebuild swaps the build folders while the browser polls for a new service worker
+  const rebuilt = () => said.filter((m) => m.startsWith("site rebuilt")).length, before = rebuilt();
+  expect((await post("/api/sync", {}, {})).status).toBe(200); // both spaces are rebuilt
+  const until = Date.now() + 5000, seen = new Set<number>();
+  do { seen.add(await sw()); await Bun.sleep(1); } while (rebuilt() < before + 2 && Date.now() < until);
+  expect([...seen]).toEqual([200]);
+  // the four ways to a 404, each in the journal
+  const lines = () => said.filter((m) => m.startsWith("404 "));
+  await get("/s/ghost/service-worker.js", ada.cookie);
+  expect(lines().at(-1)).toContain("no such site");
+  await get("/s/fresh/nothing-here", ada.cookie);
+  expect(lines().at(-1)).toContain("not a file nor a route");
+  const db = openAccounts(accountsFile(root));
+  setSpace(db, "fresh", { visibility: "private" }); db.run("delete from space_members");
+  await get("/s/fresh/service-worker.js", ada.cookie);
+  expect(lines().at(-1)).toContain("not allowed");
+  db.run("drop table spaces");
+  await get("/s/fresh/service-worker.js", ada.cookie);
+  expect(lines().at(-1)).toContain("store failed");
+  db.close();
+  expect(lines().every((m) => /^404 (GET|HEAD) \/s\/(ghost|fresh)\//.test(m))).toBe(true);
 });

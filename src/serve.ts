@@ -222,6 +222,8 @@ type Site = {
   /** What `POST /api/sync` does: pull, then rebuild and take in the inbox (both queued, not awaited). */
   sync(): Promise<void>;
   stop(): void;
+  /** The build folder served now (for the journal). */
+  current(): string | undefined;
 };
 
 /** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
@@ -326,6 +328,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
     async sync() { await serial(pull); void rebuild(); void ingest(); },
     // stopping the server stops the export child too (it holds site/.export.lock)
     stop() { stopped = true; exporter?.kill(); },
+    current: () => current,
     async fetch(req, srv, url) {
       if (url.pathname === "/api/verify") {
         if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its button
@@ -654,14 +657,20 @@ export async function serve(root: string, o: ServeOpts) {
       }
       const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
       if (at) {
-        const site = sites.get(at[1]!);
-        if (!site || !(await may(at[1]!, req))) return notFound(); // a space the visitor may not see is a space that does not exist
-        if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${at[1]}/${url.search}` } });
-        const managed = await admin(req, at[1]!, at[2]) ?? await accounts(req, { space: at[1]!, path: at[2] });
+        const name = at[1]!, site = sites.get(name);
+        // one line per 404 under /s/<name>/, saying which branch answered: the service worker of a space has been seen failing, and these four look alike from outside
+        const miss = (why: string) => { say(`404 ${req.method} ${url.pathname}: ${why}`); return notFound(); };
+        if (!site) return miss("no such site (unknown, archived, or not mounted yet)");
+        const allowed = await access(name, req);
+        if (allowed !== "ok") return miss(allowed === "error" ? "the accounts' store failed (closed)" : "not allowed to see this space"); // a space the visitor may not see is a space that does not exist
+        if (!at[2]) return new Response(null, { status: 302, headers: { location: `/s/${name}/${url.search}` } });
+        const managed = await admin(req, name, at[2]) ?? await accounts(req, { space: name, path: at[2] });
         if (managed) return managed;
         const inner = new URL(url);
         inner.pathname = at[2];
-        return site.fetch(req, srv, inner);
+        const res = await site.fetch(req, srv, inner);
+        if (res.status === 404) say(`404 ${req.method} ${url.pathname}: not a file nor a route of the site (build in use: ${site.current() ?? "none"})`);
+        return res;
       }
       if (url.pathname === "/") {
         const to = await landing(await visible(req));
