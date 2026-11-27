@@ -21,6 +21,10 @@ writeFileSync(out + "/account/invite/index.html", "invite page of " + (process.e
 mkdirSync(out + "/_app/immutable", { recursive: true });
 writeFileSync(out + "/_app/immutable/app.js", "// shell");
 writeFileSync(out + "/favicon.svg", "<svg/>");
+mkdirSync(out + "/wiki/p1", { recursive: true });
+writeFileSync(out + "/wiki/p1/index.html", "page p1 of " + (process.env.CORTEX_SITE_BASE ?? ""));
+mkdirSync(out + "/search", { recursive: true });
+writeFileSync(out + "/search/index.html", "search of " + (process.env.CORTEX_SITE_BASE ?? ""));
 `);
 const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
@@ -698,4 +702,43 @@ test("GET /api/search?spaces=…: each space the visitor may see is searched and
   // the fusion itself: one ranking per space, reciprocal rank, a tie to the first space listed
   const { fuseSpaces } = await import("./search");
   expect(fuseSpaces([{ space: "a", hits: [{ t: 1 }, { t: 2 }] }, { space: "b", hits: [{ t: 3 }] }], 3).map((h) => [h.space, h.t])).toEqual([["a", 1], ["b", 3], ["a", 2]]);
+});
+
+test("multi-space: a path of the site from before the spaces leads to the default space (301, query kept), never the API nor a path that is no page", async () => {
+  const root = instance(["a", "b"], { default_space: "b" });
+  const { get, origin } = await start(root);
+  const to = async (path: string) => { const r = await get(path); return [r.status, r.headers.get("location")] as const; };
+  expect(await to("/wiki/p1/")).toEqual([301, "/s/b/wiki/p1/"]);
+  expect(await to("/search/?q=context%20rot&x=1")).toEqual([301, "/s/b/search/?q=context%20rot&x=1"]);
+  expect(await to("/account/invite/")).toEqual([301, "/s/b/account/invite/"]);
+  expect(await to("/favicon.svg")).toEqual([301, "/s/b/favicon.svg"]);
+  expect((await get("/wiki/p1/")).headers.get("cache-control")).toBe("no-store"); // it depends on who asks and on the default space of the day
+  expect((await fetch(`${origin}/wiki/p1/`, { method: "HEAD", redirect: "manual" })).status).toBe(301);
+  const followed = await fetch(`${origin}/wiki/p1/`);
+  expect(await followed.text()).toBe("page p1 of /s/b");
+  expect((await get("/wiki/missing/")).status).toBe(404); // not a page of the site
+  expect((await get("/graph/")).status).toBe(404);
+  expect((await get("/api/status")).status).toBe(404); // the API is the instance's: not redirected
+  expect((await get("/api/anything")).status).toBe(404);
+  expect((await get("/s/nope/wiki/p1/")).status).toBe(404);
+  expect((await get("/s/b/wiki/p1/")).status).toBe(200);
+  expect((await fetch(`${origin}/wiki/p1/`, { method: "POST", redirect: "manual" })).status).toBe(404);
+});
+
+test("multi-space: a legacy path with no default_space leads to the only space; several spaces without a default give a 404", async () => {
+  const one = await start(instance(["veille"]));
+  expect([(await one.get("/wiki/p1/")).status, (await one.get("/wiki/p1/")).headers.get("location")]).toEqual([301, "/s/veille/wiki/p1/"]);
+  const two = await start(instance(["a", "b"]));
+  expect((await two.get("/wiki/p1/")).status).toBe(404);
+});
+
+test("multi-space: a legacy path is a 404 for a visitor who may not see the default space, a redirect for one who may", async () => {
+  const root = instance(["priv", "open"], { ...AUTH, default_space: "priv" });
+  const ada = person(root, "ada"), bob = person(root, "bob");
+  hold(root, "priv", ada.id);
+  const { get } = await start(root);
+  expect((await get("/wiki/p1/")).status).toBe(404);
+  expect((await get("/wiki/p1/", bob.cookie)).status).toBe(404);
+  const r = await get("/wiki/p1/", ada.cookie);
+  expect([r.status, r.headers.get("location")]).toEqual([301, "/s/priv/wiki/p1/"]);
 });

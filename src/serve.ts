@@ -535,6 +535,16 @@ export async function serve(root: string, o: ServeOpts) {
   };
   const may = async (name: string, req: Request) => (await access(name, req)) === "ok";
   const visible = async (req: Request) => { const out: string[] = []; for (const n of sites.keys()) if (await may(n, req)) out.push(n); return out; };
+  /** The space the paths of the site from before the spaces lead to: `default_space`, else the only space (the CLI's rule). */
+  const defaultSpace = async () => {
+    const def = await loadConfig(root).then((c) => c.default_space, () => undefined);
+    return typeof def === "string" && sites.has(def) ? def : sites.size === 1 ? [...sites.keys()][0] : undefined;
+  };
+  /** The default space, when the visitor may see it and its build has a file for this path (`/wiki/x/` is wiki/x/index.html); else undefined. */
+  const legacyTarget = async (req: Request, url: URL) => {
+    const name = await defaultSpace(), built = name && sites.get(name)?.current();
+    return name && built && fileFor(built, url.pathname) && await may(name, req) ? name : undefined;
+  };
   /** The space `/` leads to: `default_space` if the visitor may see it, else the first they may. */
   const landing = async (names: string[]) => { const def = await loadConfig(root).then((c) => c.default_space, () => undefined); return def && names.includes(def) ? def : names[0]; };
 
@@ -739,6 +749,13 @@ export async function serve(root: string, o: ServeOpts) {
         if (!loopback(req, srv)) return new Response(null, { status: 403 });
         try { for (const site of sites.values()) await site.sync(); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }
         return Response.json({ ok: true });
+      }
+      // a path of the site from before the instance had spaces (a bookmark, a link shared as `/wiki/<id>/`, `/search/?q=…`): the page of the
+      // default space that has it, for a visitor who may see that space. Not the API (`/api/*` is the instance's, never a site's), not a path
+      // that is no page of it: those stay a 404, as does a default space the visitor may not see.
+      if ((req.method === "GET" || req.method === "HEAD") && !url.pathname.startsWith("/api/") && url.pathname !== "/service-worker.js") {
+        const to = await legacyTarget(req, url);
+        if (to) return new Response(null, { status: 301, headers: { location: `/s/${to}${url.pathname}${url.search}`, ...noStore } });
       }
       return notFound();
     },
