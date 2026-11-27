@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { answerSegments, blockRegistry, draftMarkdown, flattenBlocks } from "./answer-blocks";
+import { answerSegments, blockRegistry, type Block, draftMarkdown, flattenBlocks } from "./answer-blocks";
 import { runExtra } from "./backends/backend";
 
 const titles = new Map([["wiki/concepts/bun.md", "Bun"]]);
@@ -108,4 +108,26 @@ test("assemble logs the names it drops (unknown, duplicate), once; draft stays s
   expect(lines).toEqual(["ask: dropped block {{bloc-9}} (unknown), {{bloc-1}} (duplicate), {{bloc-3}} (unknown)"]);
   r.assemble("A {{bloc-1}}");
   expect(lines).toHaveLength(1);
+});
+
+test("a block placed right after a heading that says its title loses the title (compared loosely); other titles, and blocks not right after the heading, keep it", async () => {
+  /** Title of the block named in `md` (a registry with one block per call), as the final answer and the draft carry it. */
+  const titleOf = async (block: Block, md: string) => {
+    const r = blockRegistry();
+    await runExtra(r.tool, { blocks: [block] });
+    const of = (text: string) => answerSegments(text, titles).flatMap((x) => ("block" in x ? [(x.block as { title?: string }).title] : []));
+    const final = of(r.assemble(md));
+    expect(of(r.draft(md))).toEqual(final); // the live draft behaves as the final answer
+    return final[0];
+  };
+  const steps = (title: string): Block => ({ type: "steps", title, items: [{ title: "A" }, { title: "B" }] });
+  expect(await titleOf(steps("Application pratique"), "## Application pratique\n\n{{bloc-1}}")).toBeUndefined();
+  expect(await titleOf(steps("Application pratique"), "Intro\n\n### Application pratique\n\n\n{{bloc-1}}\n\nSuite")).toBeUndefined();
+  expect(await titleOf(steps("Application pratique :"), "## **application   PRATIQUE**\n\n{{bloc-1}}")).toBeUndefined();
+  expect(await titleOf(steps("Autre titre"), "## Application pratique\n\n{{bloc-1}}")).toBe("Autre titre");
+  expect(await titleOf(steps("Application pratique"), "## Application pratique\n\nUn paragraphe.\n\n{{bloc-1}}")).toBe("Application pratique");
+  expect(await titleOf(steps("Application pratique"), "Application pratique\n\n{{bloc-1}}")).toBe("Application pratique"); // not a heading
+  expect(await titleOf(steps("Application pratique"), "## Application pratique {{bloc-1}}")).toBe("Application pratique"); // not on its own line
+  // a callout loses its title the same way: the site then shows its tone label
+  expect(await titleOf({ type: "callout", tone: "warning", title: "Limites", text: "Attention" }, "## Limites\n\n{{bloc-1}}")).toBeUndefined();
 });

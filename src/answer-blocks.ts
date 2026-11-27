@@ -31,6 +31,20 @@ const FENCE = new RegExp("```" + LANG + "\\n([\\s\\S]*?)\\n```", "g");
 const PLACEHOLDER = /\{\{\s*(bloc-\d+)\s*\}\}/g;
 const HALF_NAME = /\{\{[^}]*\}?$/; // a name still being written at the end of a streamed text
 
+/** A heading or a block title compared loosely: NFC, Markdown emphasis and trailing punctuation stripped, whitespace collapsed, case ignored. */
+const sameTitle = (a: string, b: string) => {
+  const norm = (s: string) => s.normalize("NFC").replace(/[*_`~]/g, "").replace(/\s+/g, " ").replace(/[\s:.!?;,…]+$/, "").trim().toLowerCase();
+  return !!norm(a) && norm(a) === norm(b);
+};
+
+/** The text of the heading a block name directly follows (only blank lines between), if any. */
+function headingBefore(before: string): string | undefined {
+  const lines = before.split("\n");
+  if (lines.pop()!.trim()) return undefined; // text on the name's own line
+  while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();
+  return /^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(lines.at(-1) ?? "")?.[1];
+}
+
 /** Blocks as they travel in the answer text; a backtick is escaped so no text can close the fence. */
 const fence = (b: Block) => `\n\n\`\`\`${LANG}\n${JSON.stringify(b).replaceAll("`", "\\u0060")}\n\`\`\`\n\n`;
 
@@ -64,13 +78,14 @@ export function blockRegistry(o: { titles?: Map<string, string>; log?: (m: strin
   /** Each name replaced by its block (the first time it appears); `rest`: the blocks never named, at the end; `lost`: the names dropped, with why. */
   const place = (md: string, rest: boolean, lost?: string[]) => {
     const placed = new Set<string>();
-    const take = (id: string, named = true) => {
+    const take = (id: string, named = true, before?: string) => {
       const b = blocks.get(id), why = !b ? "unknown" : placed.has(id) ? "duplicate" : b.type === "pages" && !b.items.some((p) => exists(p.path)) ? "undrawable" : "";
       if (why) { if (named) lost?.push(`{{${id}}} (${why})`); return ""; }
       placed.add(id);
-      return fence(b!);
+      const h = before === undefined ? undefined : headingBefore(before); // a title the heading above already says is not repeated
+      return fence(h !== undefined && "title" in b! && b.title && sameTitle(h, b.title) ? { ...b!, title: undefined } as Block : b!);
     };
-    return md.replace(PLACEHOLDER, (_, id: string) => take(id)) + (rest ? [...blocks.keys()].map((id) => take(id, false)).join("") : "");
+    return md.replace(PLACEHOLDER, (_, id: string, at: number) => take(id, true, md.slice(0, at))) + (rest ? [...blocks.keys()].map((id) => take(id, false)).join("") : "");
   };
   /** The final answer, each name replaced by its block, the unnamed blocks at the end; the names dropped are logged, once. */
   const assemble = (md: string) => {
