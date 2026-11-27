@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountsFile, addSpaceMember, createSession, openAccounts, randomToken, sha256, spaceMembers, upsertUser } from "./accounts";
+import { accountsFile, addSpaceMember, createSession, getSpace, openAccounts, randomToken, setSpace, sha256, spaceMembers, upsertUser, type Role } from "./accounts";
 import { serve } from "./serve";
 
 // `cortex serve` on a multi-space instance: /s/<space>/ routing, who may see a space, and creating one from the site.
@@ -37,8 +37,9 @@ const person = (root: string, sub: string) => {
   db.close();
   return { id: user.id, cookie: { cookie: `cortex_session=${token}` } };
 };
-const members = (root: string, space: string) => { const db = openAccounts(accountsFile(root)); try { return spaceMembers(db, space); } finally { db.close(); } };
-const hold = (root: string, space: string, userId: string) => { const db = openAccounts(accountsFile(root)); addSpaceMember(db, space, userId); db.close(); };
+const members = (root: string, space: string) => { const db = openAccounts(accountsFile(root)); try { return spaceMembers(db, space).map((m) => m.id); } finally { db.close(); } };
+/** Makes `userId` a member of `space`, which becomes private (what `cortex space set --visibility private` and `member add` do). */
+const hold = (root: string, space: string, userId: string, role: Role = "owner") => { const db = openAccounts(accountsFile(root)); setSpace(db, space, { visibility: "private" }); addSpaceMember(db, space, userId, role); db.close(); };
 
 const servers: { stop(force?: boolean): unknown }[] = [];
 afterEach(() => { servers.splice(0).forEach((s) => s.stop(true)); });
@@ -94,7 +95,7 @@ test("a broken first build of one space does not stop the others", async () => {
   expect(said.some((m) => m.startsWith("space boom:"))).toBe(true);
 });
 
-test("a space with members is for them alone: files, APIs and the listing answer 404 to anyone else; one without is open", async () => {
+test("a private space is for its members alone: files, APIs and the listing answer 404 to anyone else; an open one is for everybody", async () => {
   const root = instance(["open", "priv"], { default_space: "priv", ...AUTH });
   const ada = person(root, "1"), bob = person(root, "2");
   hold(root, "priv", ada.id);
@@ -119,14 +120,36 @@ test("a space with members is for them alone: files, APIs and the listing answer
   expect(await (await get("/api/spaces")).json()).toMatchObject({ canCreate: false });
 });
 
-test("without sign-in configured every space is open, and none can be created", async () => {
-  const root = instance(["priv"]);
+test("without sign-in configured an open space stays open, a private one is hidden (nobody can be its member), and none can be created", async () => {
+  const root = instance(["priv", "open"]);
   hold(root, "priv", "someone");
+  const db = openAccounts(accountsFile(root)); addSpaceMember(db, "open", "someone", "owner"); db.close(); // members do not make a space private
   const { get, post, origin } = await start(root);
-  expect(await (await get("/s/priv/")).text()).toBe("priv|/s/priv");
+  expect(await (await get("/s/open/")).text()).toBe("open|/s/open");
+  expect((await get("/s/priv/")).status).toBe(404);
+  expect(((await (await get("/api/spaces")).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "open" }]);
   expect((await post("/api/spaces", { name: "new" })).status).toBe(403);
   expect(existsSync(join(root, "spaces/new"))).toBe(false);
   expect((await post("/api/spaces", { name: "new" }, { origin })).status).toBe(403);
+});
+
+test("a private space never becomes open by losing its member rows; a broken store hides every space", async () => {
+  const root = instance(["priv", "open"], AUTH);
+  const ada = person(root, "1");
+  hold(root, "priv", ada.id);
+  const { get } = await start(root);
+  expect((await get("/s/priv/", ada.cookie)).status).toBe(200);
+  const db = openAccounts(accountsFile(root));
+  db.run("delete from space_members"); // however the rows went (a manual edit, a bug): the space stays private
+  expect(getSpace(db, "priv")?.visibility).toBe("private");
+  expect((await get("/s/priv/", ada.cookie)).status).toBe(404);
+  expect((await get("/s/priv/")).status).toBe(404);
+  expect((await get("/s/open/")).status).toBe(200);
+  db.run("drop table spaces"); // the store fails: closed for everyone, the open space too
+  expect((await get("/s/open/")).status).toBe(404);
+  expect((await get("/s/priv/", ada.cookie)).status).toBe(404);
+  expect(((await (await get("/api/spaces", ada.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([]);
+  db.close();
 });
 
 test("POST /api/spaces: same origin, signed in, a valid new name; the creator is its only member and sees it built", async () => {
@@ -149,6 +172,9 @@ test("POST /api/spaces: same origin, signed in, a valid new name; the creator is
   expect(existsSync(join(root, "spaces/mine/wiki/index.md"))).toBe(true); // the same empty space `cortex space add` makes
   expect(existsSync(join(root, "spaces/mine/raw/.gitkeep"))).toBe(true);
   expect(members(root, "mine")).toEqual([ada.id]);
+  const row = openAccounts(accountsFile(root)); // private, and its creator owns it
+  expect([getSpace(row, "mine")?.visibility, spaceMembers(row, "mine").map((m) => m.role)]).toEqual(["private", ["owner"]]);
+  row.close();
   expect(await (await get("/s/mine/", ada.cookie)).text()).toBe("mine|/s/mine"); // built, and served
   expect((await get("/s/mine/", bob.cookie)).status).toBe(404); // private by default
   expect((await get("/s/mine/")).status).toBe(404);

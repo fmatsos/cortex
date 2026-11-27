@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accountsFile } from "./accounts";
+import { Database } from "bun:sqlite";
+import { accountsFile, addSpaceMember, deleteUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, spaceVisibility, upsertUser } from "./accounts";
 import { confine } from "./backends/sandbox";
 import { configFile, lintConfig, loadConfig } from "./config";
 import { findRoot, instanceRoot, listSpaces } from "./lib";
@@ -160,12 +161,12 @@ describe("cortex space", () => {
     expect(cortex(root, ["space", "add", "veille"]).code).toBe(2); // exists
     expect(cortex(root, ["space", "add", "Bad Name"]).code).toBe(2);
     expect(cortex(root, ["space", "add", "pro"]).code).toBe(0);
-    expect(cortex(root, ["space", "list"]).out).toBe("  pro\n  veille\n");
+    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open\n  veille  open\n");
     writeFileSync(join(root, "cortex.json"), '{"default_space":"veille"}');
-    expect(cortex(root, ["space", "list"]).out).toBe("  pro\n* veille\n");
+    expect(cortex(root, ["space", "list"]).out).toBe("  pro  open\n* veille  open\n");
     expect(cortex(root, ["space", "nope"]).code).toBe(2);
     // from inside a space, `space` still acts on the instance
-    expect(cortex(join(root, "spaces/pro"), ["space", "list"]).out).toBe("  pro\n* veille\n");
+    expect(cortex(join(root, "spaces/pro"), ["space", "list"]).out).toBe("  pro  open\n* veille  open\n");
   });
 
   test("add refuses a legacy wiki that still has wiki/ at its root: migrate first", () => {
@@ -493,5 +494,117 @@ describe("search across spaces", () => {
       }
       expect(data(await m.call("search", { q: "zythum" })).hits.length).toBe(2); // its own space still answers
     } finally { m.close(); }
+  });
+});
+
+describe("visibility and roles", () => {
+  /** The accounts database as it was before spaces had a visibility: members were rows, and a space with any row was private. */
+  const OLD = `
+    create table users (id text primary key, provider text not null, subject text not null, name text, email text, created_at integer not null, last_login_at integer not null, unique (provider, subject));
+    create table space_members (space text not null, user_id text not null, primary key (space, user_id));`;
+  const user = (db: Database, sub: string, email: string | null = null) => upsertUser(db, "github", sub, sub, email, 1).id;
+
+  test("an accounts.db of an earlier version is migrated in place: its members become owners and their spaces stay private, the others stay open", () => {
+    const path = join(tmp(), "accounts.db"), old = new Database(path, { create: true });
+    old.run(OLD);
+    old.run("insert into users values ('u1', 'github', '1', 'Ada', null, 1, 1), ('u2', 'github', '2', 'Bob', null, 1, 1)");
+    old.run("insert into space_members values ('priv', 'u1'), ('priv', 'u2')");
+    old.close();
+    const db = openAccounts(path);
+    expect(spaceMembers(db, "priv").map((m) => [m.id, m.role])).toEqual([["u1", "owner"], ["u2", "owner"]]);
+    expect(spaceVisibility(db, "priv")).toBe("private"); // not opened by the upgrade
+    expect(spaceVisibility(db, "veille")).toBe("open"); // no row: open, nothing to migrate
+    setSpace(db, "priv", { visibility: "open" });
+    db.close();
+    const again = openAccounts(path); // opening again changes nothing
+    expect(spaceVisibility(again, "priv")).toBe("open");
+    expect(spaceMembers(again, "priv").length).toBe(2);
+    again.close();
+  });
+
+  test("the last owner cannot be removed or downgraded; with another owner, they can", () => {
+    const db = openAccounts(join(tmp(), "a.db")), ada = user(db, "1"), bob = user(db, "2"), eve = user(db, "3");
+    addSpaceMember(db, "s", ada, "owner"); addSpaceMember(db, "s", bob, "member");
+    expect(removeSpaceMember(db, "s", ada)).toBe("last-owner");
+    expect(setMemberRole(db, "s", ada, "member")).toBe("last-owner");
+    expect(memberRole(db, "s", ada)).toBe("owner");
+    expect(setMemberRole(db, "s", bob, "owner")).toBe("ok");
+    expect(setMemberRole(db, "s", ada, "member")).toBe("ok"); // bob owns it too
+    expect(removeSpaceMember(db, "s", bob)).toBe("last-owner");
+    expect(removeSpaceMember(db, "s", ada)).toBe("ok"); // a plain member goes freely
+    expect(removeSpaceMember(db, "s", eve)).toBe("unknown");
+    addSpaceMember(db, "s", bob, "member"); // already in: keeps their role
+    expect(memberRole(db, "s", bob)).toBe("owner");
+    db.close();
+  });
+
+  test("an account that is the last owner of a space cannot be deleted; any other can, and leaves no membership behind", () => {
+    const db = openAccounts(join(tmp(), "a.db")), ada = user(db, "1"), bob = user(db, "2");
+    addSpaceMember(db, "s", ada, "owner"); addSpaceMember(db, "s", bob, "member"); addSpaceMember(db, "t", bob, "owner");
+    expect(deleteUser(db, ada)).toEqual(["s"]);
+    expect(deleteUser(db, bob)).toEqual(["t"]);
+    expect(db.query("select count(*) as n from users").get()).toEqual({ n: 2 });
+    setMemberRole(db, "s", bob, "owner");
+    expect(deleteUser(db, ada)).toEqual([]); // not the last owner any more
+    expect(spaceMembers(db, "s").map((m) => m.id)).toEqual([bob]);
+    db.close();
+  });
+
+  test("forgetting a space removes its people, visibility and title: a later space of that name inherits nothing", () => {
+    const db = openAccounts(join(tmp(), "a.db")), ada = user(db, "1");
+    setSpace(db, "s", { visibility: "private", title: "Secret" }); addSpaceMember(db, "s", ada, "owner");
+    forgetSpace(db, "s");
+    expect([getSpace(db, "s"), spaceMembers(db, "s"), spaceVisibility(db, "s")]).toEqual([undefined, [], "open"]);
+    db.close();
+  });
+
+  test("cortex space set and member: visibility, title and roles from the command line; list shows them", () => {
+    const root = instance(["a", "b"], { default_space: "a" }), db = openAccounts(accountsFile(root));
+    const ada = user(db, "1", "ada@example.org"), bob = user(db, "2", "bob@example.org");
+    db.close();
+    expect(cortex(root, ["space", "set", "a", "--visibility", "private", "--title", "  Ma   veille "]).code).toBe(0);
+    let list = cortex(root, ["space", "list"]).out;
+    expect(list).toContain('* a  private  "Ma veille"');
+    expect(list).toContain("  b  open");
+    expect(cortex(root, ["space", "member", "a", "add", "ADA@example.org", "--role", "owner"]).code).toBe(0); // by e-mail, any case
+    expect(cortex(root, ["space", "member", "a", "add", bob]).code).toBe(0); // by id
+    const members = cortex(root, ["space", "member", "a"]).out;
+    expect(members).toMatch(/owner\s+1/);
+    expect(members).toMatch(/member\s+2/);
+    for (const args of [["remove", "ada@example.org"], ["add", "ada@example.org", "--role", "member"]]) { // the last owner
+      const r = cortex(root, ["space", "member", "a", ...args]);
+      expect([r.code, r.err]).toEqual([1, expect.stringContaining("last owner")]);
+    }
+    expect(cortex(root, ["space", "member", "a", "add", "bob@example.org", "--role", "owner"]).code).toBe(0); // an existing member is promoted
+    expect(cortex(root, ["space", "member", "a", "remove", "ada@example.org"]).code).toBe(0);
+    expect(cortex(root, ["space", "member", "a", "remove", "ada@example.org"]).code).toBe(2); // no longer a member
+    expect(cortex(root, ["space", "member", "a", "add", "nobody@example.org"]).err).toContain("sign in once");
+    expect(cortex(root, ["space", "member", "a", "add", "bob@example.org", "--role", "root"]).code).toBe(2);
+    expect(cortex(root, ["space", "member", "nope", "add", "bob@example.org"]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "b", "--read-only", "true"]).code).toBe(0);
+    expect(cortex(root, ["space", "list"]).out).toContain("  b  open  read-only");
+    expect(cortex(root, ["space", "set", "b", "--read-only", "maybe"]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "b", "--read-only", "false"]).code).toBe(0);
+    expect(cortex(root, ["space", "list"]).out).not.toContain("read-only");
+    expect(cortex(root, ["space", "set", "a", "--visibility", "secret"]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "a"]).code).toBe(2);
+    expect(cortex(root, ["space", "set", "a", "--visibility", "open", "--title", ""]).code).toBe(0);
+    list = cortex(root, ["space", "list"]).out;
+    expect(list).toContain("* a  open");
+    expect(list).not.toContain("Ma veille");
+    const check = openAccounts(accountsFile(root));
+    expect(spaceMembers(check, "a").map((m) => [m.id, m.role])).toEqual([[bob, "owner"]]);
+    check.close();
+  });
+
+  test("cortex space add starts clean: nothing of an earlier space of that name is inherited", () => {
+    const root = instance(["keep"]), db = openAccounts(accountsFile(root));
+    const ada = user(db, "1");
+    setSpace(db, "again", { visibility: "private", title: "Old" }); addSpaceMember(db, "again", ada, "owner");
+    db.close();
+    expect(cortex(root, ["space", "add", "again"]).code).toBe(0);
+    const check = openAccounts(accountsFile(root));
+    expect([getSpace(check, "again"), spaceMembers(check, "again")]).toEqual([undefined, []]);
+    check.close();
   });
 });

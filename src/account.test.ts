@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ACCOUNT_LIMITS, SESSION_DAYS, accountRoute, safeReturn } from "./account-api";
-import { accountsFile, sha256 } from "./accounts";
+import { accountsFile, addSpaceMember, openAccounts, sha256 } from "./accounts";
 import { lintConfig, type Config } from "./config";
 import { serve } from "./serve";
 
@@ -640,6 +640,23 @@ test("deleting the account removes the user and everything under it, and only th
   // signing in again makes a new, empty account
   const again = await signInAs(a, "alice");
   expect((await again.json("/api/conversations")).body.conversations).toEqual([]);
+});
+
+test("the last owner of a space cannot delete their account (409, nothing deleted) until the space has another owner", async () => {
+  const a = await setup(ALL);
+  const alice = await signInAs(a, "alice"), bob = await signInAs(a, "bob");
+  const [aliceId, bobId] = [(await alice.json("/api/me")).body.id, (await bob.json("/api/me")).body.id];
+  const w = openAccounts(accountsFile(a.root));
+  addSpaceMember(w, "mine", aliceId, "owner"); addSpaceMember(w, "mine", bobId, "member");
+  const refused = await alice.json("/api/me", { method: "DELETE" });
+  expect([refused.status, refused.body.error]).toEqual([409, expect.stringContaining("mine")]);
+  expect((await alice.json("/api/me")).status).toBe(200); // still there, still signed in
+  expect((await bob.json("/api/me", { method: "DELETE" })).status).toBe(200); // a plain member leaves freely, and takes his membership with him
+  expect((await alice.json("/api/me", { method: "DELETE" })).status).toBe(409); // alone again
+  const carol = await signInAs(a, "carol");
+  addSpaceMember(w, "mine", (await carol.json("/api/me")).body.id, "owner");
+  w.close();
+  expect((await alice.json("/api/me", { method: "DELETE" })).status).toBe(200); // another owner: she may go
 });
 
 // ---- through `cortex serve`, against a local OIDC issuer over real HTTP ----

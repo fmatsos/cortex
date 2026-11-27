@@ -18,7 +18,7 @@ import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
-import { addSpaceMember, deleteSpaceMembers, spaceMembers } from "./accounts";
+import { addSpaceMember, forgetSpace, getSpace, memberRole, setSpace, spaceVisibility } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { addSpace } from "./space";
@@ -495,14 +495,19 @@ export async function serve(root: string, o: ServeOpts) {
     previous = await sites.get("")!.start();
   }
 
-  /** A space with no member is open; one with members is for them only (and open when sign-in is not configured: nobody could be one). */
-  const may = async (name: string, req: Request) => {
-    let who: string[];
-    try { who = spaceMembers(accounts.store(), name); } catch { return false; } // fail closed
-    if (!who.length || !(await accounts.configured())) return true;
-    const user = await accounts.userOf(req);
-    return !!user && who.includes(user.id);
+  /**
+   * Who may see a space: anyone for an open one (no row in `spaces` is open), its members for a private one. Whatever is not sure is a no:
+   * a private space stays hidden when the store fails, when sign-in is not configured (nobody can be a member) or when cortex.json is broken.
+   */
+  const access = async (name: string, req: Request): Promise<"ok" | "denied" | "error"> => {
+    const store = accounts.store();
+    try {
+      if (spaceVisibility(store, name) === "open") return "ok";
+      const user = await accounts.userOf(req);
+      return user && memberRole(store, name, user.id) ? "ok" : "denied";
+    } catch { return "error"; }
   };
+  const may = async (name: string, req: Request) => (await access(name, req)) === "ok";
   const visible = async (req: Request) => { const out: string[] = []; for (const n of sites.keys()) if (await may(n, req)) out.push(n); return out; };
   /** The space `/` leads to: `default_space` if the visitor may see it, else the first they may. */
   const landing = async (names: string[]) => { const def = await loadConfig(root).then((c) => c.default_space, () => undefined); return def && names.includes(def) ? def : names[0]; };
@@ -523,12 +528,14 @@ export async function serve(root: string, o: ServeOpts) {
     let site: Site | undefined;
     try {
       await addSpace(root, name, undefined, schema ?? undefined); // what `cortex space add` does
-      addSpaceMember(store, name, user.id);
+      forgetSpace(store, name); // nothing of an earlier space of that name carries over
+      setSpace(store, name, { visibility: "private" });
+      addSpaceMember(store, name, user.id, "owner");
       site = await mount(name);
       await site.start();
       sites.set(name, site);
     } catch (e) {
-      site?.stop(); rmSync(spaceRoot(root, name), { recursive: true, force: true }); deleteSpaceMembers(store, name);
+      site?.stop(); rmSync(spaceRoot(root, name), { recursive: true, force: true }); forgetSpace(store, name);
       if (schema) await readConfig(root).then((c) => { delete (c.spaces as Record<string, unknown> | undefined)?.[name]; return writeConfig(configFile(root), c); }).catch(() => {});
       say(`space ${name}: ${(e as Error).message}`);
       return Response.json({ error: `the space could not be created: ${(e as Error).message}` }, { status: 500, headers: noStore });
@@ -549,7 +556,8 @@ export async function serve(root: string, o: ServeOpts) {
         if (req.method === "POST") { srv.timeout(req, 0); return createSpace(req); } // the first build of the space outlasts Bun's 10 s idle timeout
         if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
         const names = await visible(req);
-        return Response.json({ spaces: names.map((name) => ({ name })), canCreate: !!(await accounts.userOf(req)) && (await accounts.configured()), default: (await landing(names)) ?? null }, { headers: noStore });
+        const title = (name: string) => { try { return getSpace(accounts.store(), name)?.title ?? undefined; } catch { return undefined; } };
+        return Response.json({ spaces: names.map((name) => ({ name, ...(title(name) && { title: title(name) }) })), canCreate: !!(await accounts.userOf(req)) && (await accounts.configured()), default: (await landing(names)) ?? null }, { headers: noStore });
       }
       const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
       if (at) {

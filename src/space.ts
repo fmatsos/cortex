@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { Database } from "bun:sqlite";
+import { accountsFile, addSpaceMember, findUser, forgetSpace, getSpace, memberRole, openAccounts, removeSpaceMember, setMemberRole, setSpace, spaceMembers, type Role } from "./accounts";
 import { regenerateCtx } from "./catalog";
 import { BUILT_IN_SCHEMAS, configFile, lintConfig, readConfig, writeConfig } from "./config";
 import { openWiki } from "./context";
@@ -9,7 +11,14 @@ import { paint } from "./style";
 import { git } from "./sync";
 
 const usage = (msg: string) => new CortexError(msg, "usage");
-const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name>";
+const USAGE = "Usage: cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name> | set <name> [--visibility open|private] [--title \"…\"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]";
+const MAX_TITLE = 120;
+
+/** The accounts' database for the length of `f`. */
+function withAccounts<T>(instance: string, f: (db: Database) => T): T {
+  const db = openAccounts(accountsFile(instance));
+  try { return f(db); } finally { db.close(); }
+}
 
 /** What a space owns at the instance root of a legacy wiki (everything else there is shared by the instance). */
 const SPACE_PATHS = ["wiki", "raw", "paths", "inbox"];
@@ -53,20 +62,67 @@ export async function addSpace(instance: string, name: string | undefined, repo?
   await writeSchema(dir, false); // the agent file of this space (CLAUDE.md or AGENTS.md), from its effective schema
 }
 
-/** cortex space list|add|migrate, run at the instance root (the folder holding cortex.json). */
-export async function spaceCmd(instance: string, [sub, name]: string[], opts: { repo?: string; schema?: string }) {
+/** cortex space list|add|migrate|set|member, run at the instance root (the folder holding cortex.json). */
+export async function spaceCmd(instance: string, [sub, name, action, ref]: string[], opts: { repo?: string; schema?: string; visibility?: string; title?: string; role?: string; "read-only"?: string }) {
+  const known = () => { if (!listSpaces(instance).includes(checkName(name))) throw usage(`unknown space: ${name} (spaces: ${listSpaces(instance).join(", ") || "none"}).`); return name!; };
   switch (sub) {
     case "list": {
       const config = await readConfig(instance), names = listSpaces(instance);
       const def = typeof config.default_space === "string" ? config.default_space : names.length === 1 ? names[0] : undefined;
+      const rows = existsSync(accountsFile(instance)) ? withAccounts(instance, (db) => new Map(names.map((n) => [n, getSpace(db, n)]))) : new Map<string, ReturnType<typeof getSpace>>();
       if (!names.length) console.log(paint.dim("No space (cortex space add <name>)."));
-      for (const n of names) console.log(`${n === def ? "*" : " "} ${n}${existsSync(join(spaceRoot(instance, n), ".git")) ? paint.dim("  (own repo)") : ""}`);
+      for (const n of names) {
+        const r = rows.get(n);
+        console.log(`${n === def ? "*" : " "} ${n}  ${r?.visibility ?? "open"}${r?.read_only ? "  read-only" : ""}${r?.title ? `  "${r.title}"` : ""}${existsSync(join(spaceRoot(instance, n), ".git")) ? paint.dim("  (own repo)") : ""}`);
+      }
       return;
     }
     case "add":
       await addSpace(instance, name, opts.repo, opts.schema);
+      if (existsSync(accountsFile(instance))) withAccounts(instance, (db) => forgetSpace(db, name!)); // nothing of an earlier space of that name carries over
       console.log(`${paint.ok("✓")} space ${name} created${opts.repo ? ` (own repo: ${opts.repo})` : ""}${opts.schema ? ` (schema: ${opts.schema})` : ""}: spaces/${name}/`);
       return;
+    case "set": {
+      known();
+      const { visibility, title } = opts, ro = opts["read-only"];
+      if (visibility === undefined && title === undefined && ro === undefined) throw usage(USAGE);
+      if (ro !== undefined && ro !== "true" && ro !== "false") throw usage("--read-only expects true or false.");
+      if (visibility !== undefined && visibility !== "open" && visibility !== "private") throw usage("--visibility expects open or private.");
+      const t = title === undefined ? undefined : title.replace(/\s+/g, " ").trim();
+      if (t !== undefined && [...t].length > MAX_TITLE) throw usage(`--title is at most ${MAX_TITLE} characters.`);
+      withAccounts(instance, (db) => setSpace(db, name!, { ...(visibility && { visibility }), ...(t !== undefined && { title: t || null }), ...(ro !== undefined && { read_only: ro === "true" }) }));
+      console.log(`${paint.ok("✓")} space ${name}${visibility ? `: ${visibility}` : ""}${ro !== undefined ? `${visibility ? "," : ":"} ${ro === "true" ? "read-only" : "writable"}` : ""}${t !== undefined ? (t ? `, title "${t}"` : ", title cleared") : ""}.`);
+      return;
+    }
+    case "member": {
+      known();
+      const role = (opts.role ?? "member") as Role;
+      if (role !== "owner" && role !== "member") throw usage("--role expects owner or member.");
+      if (action !== undefined && action !== "add" && action !== "remove") throw usage(USAGE);
+      withAccounts(instance, (db) => {
+        if (!action) {
+          const rows = spaceMembers(db, name!);
+          if (!rows.length) console.log(paint.dim(`No member: ${name} is administered from the command line only.`));
+          for (const m of rows) console.log(`${m.role.padEnd(6)}  ${m.name ?? m.email ?? "(deleted account)"}  ${paint.dim(m.id)}`);
+          return;
+        }
+        if (!ref) throw usage(USAGE);
+        const found = findUser(db, ref), id = found.user?.id ?? (memberRole(db, name!, ref) ? ref : undefined);
+        if (!id) throw usage(found.ambiguous ? `several accounts have the e-mail ${ref}: give the user id (cortex space member ${name}).` : `no account ${ref}: they sign in once first (an id or the e-mail of their account).`);
+        if (action === "add") {
+          if (memberRole(db, name!, id) && opts.role) {
+            if (setMemberRole(db, name!, id, role) === "last-owner") throw new CortexError(`${ref} is the last owner of ${name}: name another owner first.`, "refused");
+          } else addSpaceMember(db, name!, id, role);
+          console.log(`${paint.ok("✓")} ${ref}: ${memberRole(db, name!, id)} of ${name}.`);
+        } else {
+          const r = removeSpaceMember(db, name!, id);
+          if (r === "last-owner") throw new CortexError(`${ref} is the last owner of ${name}: name another owner first.`, "refused");
+          if (r === "unknown") throw usage(`${ref} is not a member of ${name}.`);
+          console.log(`${paint.ok("✓")} ${ref} removed from ${name}.`);
+        }
+      });
+      return;
+    }
     case "migrate": {
       checkName(name);
       if (isMultiSpace(instance)) throw usage("spaces/ already exists: nothing to migrate.");

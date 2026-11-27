@@ -32,8 +32,10 @@ export const HELP = `cortex — second brain
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
   cortex space list | add <name> [--repo <git url>] [--schema notes] | migrate <name>
+  cortex space set <name> [--visibility open|private] [--title "…"] [--read-only true|false] | member <name> [add|remove <user id or e-mail> [--role owner|member]]
                                                (spaces: isolated wikis under spaces/<name>/, sharing cortex.json; add --repo clones one
-                                               into its own git repository; migrate moves a wiki/ + raw/ at the root into a space)
+                                               into its own git repository; migrate moves a wiki/ + raw/ at the root into a space;
+                                               a private space is for its members alone, owners administer it)
   cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>
                                                (keys: ${CONFIG_KEYS.join(", ")})
 
