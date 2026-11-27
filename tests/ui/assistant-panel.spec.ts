@@ -7,7 +7,7 @@ async function mockAsk(page: Page) {
   await page.route("**/api/ask", (route: Route) => route.fulfill({ status: 204 }));
 }
 const panel = (page: Page) => page.locator("#assistant-panel");
-const handle = (page: Page) => panel(page).getByRole("separator");
+const handle = (page: Page) => panel(page).locator("[role=separator][aria-orientation=vertical]");
 const widthOf = (page: Page) => panel(page).evaluate((el) => el.getBoundingClientRect().width);
 const varOf = (page: Page) => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--assistant-width").trim());
 const mainWidth = (page: Page) => page.locator("main").first().evaluate((el) => el.getBoundingClientRect().width);
@@ -117,6 +117,92 @@ test("Send and Stop are plain icons: no border, no background, a hit area of 36 
   expect(await stop.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none"); // focus ring stays
 });
 
+// The question field: one line, growing with its text to 3 lines (then scrolling inside), enlarged by hand to 10 at most.
+const field = (page: Page) => page.locator("#assistant-q");
+const grip = (page: Page) => panel(page).locator("[role=separator][aria-orientation=horizontal]");
+const sendBtn = (page: Page) => panel(page).getByRole("button", { name: /Envoyer la question|Send the question/ });
+// the field's height as a number of text lines, with its scroll state and the vertical centers/bottom of field and button
+const fieldLook = (page: Page) => field(page).evaluate((el, btn) => {
+  const s = getComputedStyle(el), r = el.getBoundingClientRect(), b = document.querySelector<HTMLElement>(btn)!.getBoundingClientRect();
+  const lh = parseFloat(s.lineHeight), pad = parseFloat(s.paddingTop) + parseFloat(s.paddingBottom);
+  return { lines: (r.height - pad) / lh, h: r.height, lh, pad, overflows: el.scrollHeight > el.clientHeight, fieldCenter: r.top + r.height / 2, fieldBottom: r.bottom, btnCenter: b.top + b.height / 2, btnBottom: b.bottom };
+}, "#assistant-panel form button");
+const FIVE = ["one", "two", "three", "four", "five"].join("\n");
+
+test("the question field is one line tall when empty, and its text line is centered on the Send button", async ({ page }) => {
+  await open(page);
+  const l = await fieldLook(page);
+  expect(l.lines).toBe(1);
+  expect(Math.abs(l.fieldCenter - l.btnCenter), "the one text line and the button share their vertical center").toBeLessThanOrEqual(1);
+  expect(l.overflows).toBe(false);
+});
+
+test("the field grows with its text to 3 lines then scrolls inside; the button stays at the bottom; emptying brings it back to one line", async ({ page }) => {
+  await open(page);
+  await field(page).fill(FIVE);
+  const l = await fieldLook(page);
+  expect(l.lines).toBe(3);
+  expect(l.overflows).toBe(true);
+  expect(Math.abs(l.fieldBottom - l.btnBottom)).toBeLessThanOrEqual(1);
+  await field(page).fill("one\ntwo");
+  expect((await fieldLook(page)).lines).toBe(2);
+  await field(page).fill("");
+  const e = await fieldLook(page);
+  expect(e.lines).toBe(1);
+  expect(Math.abs(e.fieldCenter - e.btnCenter)).toBeLessThanOrEqual(1);
+});
+
+test("the field is enlarged by hand (keyboard or drag) to 10 lines at most, never under one; that size wins until the draft is emptied", async ({ page }) => {
+  await open(page);
+  const h = grip(page);
+  await expect(h).toHaveAttribute("aria-label", /Resize the question field|Redimensionner le champ de question/);
+  await expect(h).toHaveAttribute("aria-valuemin", "1");
+  await expect(h).toHaveAttribute("aria-valuemax", "10");
+  await expect(h).toHaveAttribute("aria-valuenow", "1");
+  await expect(h).toHaveAttribute("tabindex", "0");
+  await h.focus();
+  await page.keyboard.press("ArrowUp");
+  expect((await fieldLook(page)).lines).toBe(2);
+  await page.keyboard.press("Shift+ArrowUp");
+  expect((await fieldLook(page)).lines).toBe(5);
+  await expect(h).toHaveAttribute("aria-valuenow", "5");
+  for (let i = 0; i < 12; i++) await page.keyboard.press("ArrowUp");
+  expect((await fieldLook(page)).lines).toBe(10);
+  await expect(h).toHaveAttribute("aria-valuenow", "10");
+  await page.keyboard.press("Home");
+  expect((await fieldLook(page)).lines).toBe(1);
+  await page.keyboard.press("ArrowDown");
+  expect((await fieldLook(page)).lines).toBe(1); // never under one line
+  await page.keyboard.press("End");
+  expect((await fieldLook(page)).lines).toBe(10);
+  await page.keyboard.press("Enter"); // back to automatic
+  expect((await fieldLook(page)).lines).toBe(1);
+
+  // by pointer: up enlarges, far beyond the limit stops at 10 lines
+  const box = (await h.boundingBox())!, x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y - 120, { steps: 6 });
+  const mid = (await fieldLook(page)).lines;
+  expect(mid).toBeGreaterThan(5);
+  expect(mid).toBeLessThan(10);
+  await page.mouse.move(x, y - 450, { steps: 6 });
+  await page.mouse.up();
+  const full = await fieldLook(page);
+  expect(full.lines).toBe(10);
+  expect(full.h).toBe(10 * full.lh + full.pad);
+
+  // the manual size wins over the automatic one while there is a draft; emptying it (or sending) gives it up
+  await field(page).fill("short");
+  expect((await fieldLook(page)).lines).toBe(10);
+  await field(page).fill("");
+  expect((await fieldLook(page)).lines).toBe(1);
+  await h.focus();
+  await page.keyboard.press("Shift+ArrowUp");
+  await field(page).fill("a\nb\nc\nd\ne\nf\ng");
+  expect((await fieldLook(page)).lines).toBe(4); // 7 lines of text, but the hand-set 4 lines hold (scrolling inside)
+});
+
 test("an answer card is two sections: the prose, then (separated by a border) the pages and the notice", async ({ page }) => {
   await answered(page, { segments: [{ html: "<p>Body.</p>" }], md: "x", cited: ["concepts/alpha"], retained: ["concepts/alpha"], related: [], model: "m" });
   const card = panel(page).locator("article > div").last();
@@ -128,6 +214,29 @@ test("an answer card is two sections: the prose, then (separated by a border) th
   expect(b.pt).toBeGreaterThan(0);
   expect(b.mt).toBeGreaterThan(0);
   await expect(card.locator(".wiki").first().locator("xpath=ancestor::div[contains(@class,'border-t')]")).toHaveCount(0); // the prose is not inside it
+});
+
+test("a table in an answer (Markdown or display block) uses the font family and size of the answer's paragraphs, header cells too", async ({ page }) => {
+  const md = "<table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Alpha</td><td>1</td></tr></tbody></table>";
+  await answered(page, { segments: [{ html: `<p>Body text.</p>${md}` }, { block: { type: "table", columns: ["Name", "Value"], rows: [["Beta", "2"]] } }], md: "x", cited: [], retained: [], related: [], model: "m" });
+  const font = (loc: ReturnType<Page["locator"]>) => loc.first().evaluate((el) => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize }; });
+  const prose = await font(panel(page).locator("article .wiki > p"));
+  expect(prose.family).toContain("Source Serif 4");
+  for (const cell of ["td:has-text('Alpha')", "th:has-text('Name')", "td:has-text('Beta')"]) {
+    expect(await font(panel(page).locator(`article .wiki ${cell}`))).toEqual(prose);
+  }
+  expect(await panel(page).locator("article .wiki th").first().evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
+});
+
+test("a pages block is its own section: preceded by the same separator as the pages below the answer; other blocks get none", async ({ page }) => {
+  await answered(page, { segments: [{ html: "<p>Body.</p>" }, { block: { type: "pages", title: "Pages", items: [{ id: "concepts/alpha", title: "Alpha concept", html: "<p>About alpha.</p>" }] } }, { block: { type: "callout", tone: "info", html: "<p>A note</p>" } }], md: "x", cited: ["concepts/alpha"], retained: ["concepts/alpha"], related: [], model: "m" });
+  const edge = (el: ReturnType<Page["locator"]>) => el.evaluate((e) => { const s = getComputedStyle(e); return { w: s.borderTopWidth, c: s.borderTopColor, pt: s.paddingTop, mt: s.marginTop }; });
+  const blocks = panel(page).locator(".answer-block");
+  const pages = await edge(blocks.filter({ hasText: "Alpha concept" }));
+  const below = await edge(panel(page).locator("article > div").last().locator("> div").last());
+  expect(pages).toEqual(below);
+  expect(pages.w).toBe("1px");
+  expect((await edge(blocks.filter({ hasText: "A note" }))).w).toBe("0px");
 });
 
 test.describe("desktop 1440", () => {
@@ -245,6 +354,10 @@ test.describe("desktop 1440", () => {
     const bar = await scroll.evaluate((el) => ({ width: getComputedStyle(el).scrollbarWidth, color: getComputedStyle(el).scrollbarColor }));
     expect(bar.width).toBe("thin");
     expect(bar.color).not.toBe("auto");
+    // its own bar, not the page's: another colour than the page's (docked, the two sit side by side), and set in from the panel's edge
+    expect(bar.color).not.toBe(await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarColor));
+    const gap = await scroll.evaluate((el) => el.closest("dialog")!.getBoundingClientRect().right - el.getBoundingClientRect().right);
+    expect(gap).toBeGreaterThanOrEqual(4);
   });
 
   test("a streamed answer (NDJSON): the final event replaces the provisional text, and no partial text is kept", async ({ page }) => {

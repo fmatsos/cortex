@@ -28,6 +28,7 @@
 	let list = $state<HTMLElement | null>(null);
 	let docked = $state(false);
 	let vw = $state(0);
+	let vh = $state(0);
 	let pref = $state(DEFAULT);
 	let dragging = $state(false);
 	const max = $derived(Math.max(MIN, Math.min(MAX, Math.floor(vw / 2))));
@@ -148,6 +149,61 @@
 	// the answer ends by itself while Stop has focus: Stop goes away, focus goes to the question field (not lost to the dialog)
 	let stopButton = $state<HTMLButtonElement>();
 	$effect.pre(() => { if (!assistant.pending && stopButton && document.activeElement === stopButton) void tick().then(() => area?.focus()); });
+	// the question field: one line, growing with its text up to LINES, then scrolling inside. Measured in script (scrollHeight against
+	// the computed line height), not with `field-sizing: content`, which Firefox lacks. The reader can enlarge it at the handle on the
+	// top edge of its frame (pointer or keyboard), up to MAX_LINES: that size then wins over the automatic one until the draft is
+	// emptied (sent, or wiped) or the conversation is cleared; it is never under one line nor over MAX_LINES (nor half the window).
+	const LINES = 3, MAX_LINES = 10;
+	let manual = $state<number | null>(null); // px, null: automatic
+	let fieldH = $state(0), lineH = $state(20), padY = $state(0);
+	const lines = $derived(Math.max(1, Math.min(MAX_LINES, Math.round((fieldH - padY) / lineH))));
+	function fit() {
+		if (!area) return;
+		const s = getComputedStyle(area);
+		lineH = parseFloat(s.lineHeight) || parseFloat(s.fontSize) * 1.25;
+		padY = parseFloat(s.paddingTop) + parseFloat(s.paddingBottom);
+		const lo = lineH + padY, hi = Math.max(lo, Math.min(MAX_LINES * lineH + padY, window.innerHeight * 0.5));
+		let h = manual;
+		if (h === null) {
+			const top = area.scrollTop;
+			area.style.height = "auto";
+			h = Math.min(area.scrollHeight, LINES * lineH + padY);
+			area.scrollTop = top;
+		}
+		area.style.height = `${(fieldH = Math.min(hi, Math.max(lo, h)))}px`;
+	}
+	$effect(() => { void assistant.draft; void manual; void vh; void area; fit(); });
+	// the panel's width (resized, opened, window changed) moves the line breaks
+	$effect(() => {
+		const a = area;
+		if (!a) return;
+		let w = a.clientWidth;
+		const ro = new ResizeObserver(() => { if (a.clientWidth !== w) { w = a.clientWidth; fit(); } });
+		ro.observe(a);
+		return () => ro.disconnect();
+	});
+	$effect(() => { if (!assistant.draft) manual = null; });
+	$effect(() => { if (!assistant.turns.length) manual = null; });
+	const setField = (px: number) => { manual = px; fit(); };
+	let grip: { y: number; h: number } | null = null;
+	let gripping = $state(false);
+	function gripDown(e: PointerEvent) {
+		if (e.button !== 0) return;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		grip = { y: e.clientY, h: fieldH };
+		gripping = true;
+		e.preventDefault();
+	}
+	function gripMove(e: PointerEvent) { if (grip) setField(grip.h + grip.y - e.clientY); }
+	function gripUp() { grip = null; gripping = false; }
+	function onGripKey(e: KeyboardEvent) {
+		const step = (e.shiftKey ? LINES : 1) * lineH;
+		if (e.key === "Enter") { e.preventDefault(); manual = null; return; }
+		const next = e.key === "ArrowUp" ? fieldH + step : e.key === "ArrowDown" ? fieldH - step : e.key === "Home" ? 0 : e.key === "End" ? Infinity : undefined;
+		if (next === undefined) return;
+		e.preventDefault();
+		setField(next);
+	}
 	const send = () => { if (assistant.ask(assistant.draft)) void tick().then(() => area?.focus()); };
 	function onKey(e: KeyboardEvent) {
 		if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
@@ -161,7 +217,7 @@
 	});
 </script>
 
-<svelte:window bind:innerWidth={vw} />
+<svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
 
 <!-- the segments of an answer, as drawn by the server; the draft of a pending one uses the same markup, so the switch is seamless -->
 {#snippet segments(list: Segment[], fix: (html: string) => string)}
@@ -186,7 +242,7 @@
 	<div class="flex h-full flex-col">
 		<AssistantHeader {flow} onclose={close} />
 
-		<div bind:this={list} class="min-h-0 flex-1 space-y-8 overflow-y-auto p-4" aria-busy={assistant.pending}>
+		<div bind:this={list} class="assistant-scroll mr-1.5 min-h-0 flex-1 space-y-8 overflow-y-auto p-4" aria-busy={assistant.pending}>
 			{#if !assistant.turns.length}
 				<div class="text-sm">
 					<p class="font-medium">{t("assistant.welcome")}</p>
@@ -259,9 +315,15 @@
 		<form class="border-t p-3" onsubmit={(e) => { e.preventDefault(); send(); }}>
 			<label for="assistant-q" class="sr-only">{t("assistant.label")}</label>
 			<!-- the field sits in a frame: the frame carries the design system's opaque 2 px outline (a translucent ring is under 3:1) -->
-			<div class="focus-within:outline-ring flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:outline-2 focus-within:outline-offset-2">
-				<textarea bind:this={area} id="assistant-q" rows="2" bind:value={assistant.draft} onkeydown={onKey} placeholder={t("assistant.placeholder")} aria-invalid={over} aria-describedby="assistant-hint"
-					class="max-h-40 min-h-11 flex-1 resize-none bg-transparent text-sm outline-none field-sizing-content"></textarea>
+			<div class="focus-within:outline-ring relative flex items-end gap-2 rounded-md border px-2 py-1.5 focus-within:outline-2 focus-within:outline-offset-2">
+				<!-- the field's own padding makes one line as tall as the Send/Stop button: centered on each other at one line, the button stays at the bottom when it grows -->
+				<textarea bind:this={area} id="assistant-q" rows="1" bind:value={assistant.draft} onkeydown={onKey} placeholder={t("assistant.placeholder")} aria-invalid={over} aria-describedby="assistant-hint"
+					class="min-w-0 flex-1 resize-none bg-transparent py-2 text-sm outline-none pointer-coarse:py-3"></textarea>
+				<!-- handle on the top edge of the frame: drag, or Up/Down (a line; Shift: three), Home/End (1 / 10 lines), Enter (back to automatic) -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+				<div class="grip" class:active={gripping} role="separator" aria-orientation="horizontal" aria-label={t("assistant.resizeField")} aria-controls="assistant-q"
+					aria-valuenow={lines} aria-valuemin={1} aria-valuemax={MAX_LINES} tabindex="0"
+					onpointerdown={gripDown} onpointermove={gripMove} onpointerup={gripUp} onpointercancel={gripUp} onlostpointercapture={gripUp} ondblclick={() => (manual = null)} onkeydown={onGripKey}></div>
 				{#if assistant.pending}
 					<!-- Stop takes the place of Send while an answer is on its way (one question at a time); a plain filled square, no frame -->
 					<button bind:this={stopButton} type="button" class="text-primary hover:text-foreground inline-flex size-9 shrink-0 items-center justify-center pointer-coarse:size-11" aria-label={t("assistant.stop")} title={t("assistant.stop")} onclick={stop}>
@@ -350,6 +412,36 @@
 		background: var(--primary);
 	}
 	.resize:focus-visible {
+		outline-offset: -2px;
+	}
+	/* the question field's handle: the same, along the top edge of its frame */
+	.grip {
+		position: absolute;
+		inset: -4px 0 auto 0;
+		height: 8px;
+		z-index: 1;
+		cursor: row-resize;
+		touch-action: none;
+	}
+	@media (pointer: coarse) {
+		.grip {
+			inset: -6px 0 auto 0;
+			height: 12px;
+		}
+	}
+	.grip::after {
+		content: "";
+		position: absolute;
+		inset: 3px 0 auto 0;
+		height: 2px;
+		background: transparent;
+	}
+	.grip:hover::after,
+	.grip:focus-visible::after,
+	.grip.active::after {
+		background: var(--primary);
+	}
+	.grip:focus-visible {
 		outline-offset: -2px;
 	}
 	:global(html[data-assistant-resizing]) {

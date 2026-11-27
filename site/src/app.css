@@ -104,6 +104,9 @@
 :root {
 	--scrollbar-thumb: color-mix(in oklab, var(--foreground) 32%, transparent);
 	--scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 52%, transparent);
+	/* the assistant's own bar: tinted with the accent, so that it is not mistaken for the page's (docked, the two sit side by side) */
+	--scrollbar-assistant: color-mix(in oklab, var(--primary) 55%, transparent);
+	--scrollbar-assistant-hover: color-mix(in oklab, var(--primary) 85%, transparent);
 	--anchor-offset: 5rem; /* height of the sticky header: anchors land below it (taller on mobile: search on a second line) */
 }
 
@@ -213,13 +216,22 @@
 		font-variant-numeric: tabular-nums;
 	}
 	/* scrollbars: the native thin bar, a muted ink thumb on no track, a little stronger over the scroll area being hovered;
-	   one rule for the page and every inner scroll area (aside, palette, tables, assistant), never hidden */
+	   one rule for the page and every inner scroll area (aside, palette, tables), never hidden; the assistant's list differs (below) */
 	* {
 		scrollbar-width: thin;
 		scrollbar-color: var(--scrollbar-thumb) transparent;
 	}
 	:not(html):hover {
 		scrollbar-color: var(--scrollbar-thumb-hover) transparent;
+	}
+	/* the assistant's message list is the exception: the same native thin bar (standard properties, so Firefox and Chromium alike),
+	   but in the accent colour, and set in from the panel's edge by its margin (see the list in assistant-panel.svelte), so that it
+	   reads as the panel's own and not as the page's bar beside it */
+	.assistant-scroll {
+		scrollbar-color: var(--scrollbar-assistant) transparent;
+	}
+	.assistant-scroll:hover {
+		scrollbar-color: var(--scrollbar-assistant-hover) transparent;
 	}
 	:focus-visible {
 		outline: 2px solid var(--ring);
@@ -242,7 +254,8 @@
 }
 
 /* reading body: Source Serif 4, 17 px on mobile and 18 px from 640 px, line height 1.7 (in the components layer: a page
-   utility keeps the upper hand). Headings and callout titles are Hauora Sans (--font-display), tables stay in Inter. */
+   utility keeps the upper hand). Headings and callout titles are Hauora Sans (--font-display), tables stay in Inter (wiki pages
+   only: in the assistant's answers they follow the prose, see `.assistant .wiki table` below). */
 @layer components {
 	.wiki {
 		font-family: var(--font-serif);
@@ -418,6 +431,13 @@ a.link-content:visited {
 	padding: 0.5rem 0.75rem;
 	text-align: left;
 	vertical-align: top;
+}
+/* in the assistant's answers (Markdown tables and `table` display blocks, both inside .wiki) a table is part of the prose:
+   same family and size as the paragraphs around it, so that it does not look foreign (header weight, tabular figures and the
+   frame are kept; the narrower size also helps it fit the panel, which still scrolls it sideways when needed) */
+.assistant .wiki table {
+	font-family: inherit;
+	font-size: inherit;
 }
 .wiki tr > :first-child {
 	border-left: 0;

@@ -30,7 +30,8 @@
 	{#if title}<p class="mb-2 text-sm font-semibold">{@html title}</p>{/if}
 {/snippet}
 
-<div class="answer-block my-4">
+<!-- the pages block is its own section: the same separator as the one above "Pages retenues" (mt-4 border-t pt-3) -->
+<div class="answer-block my-4 {block.type === 'pages' ? 'border-t pt-3' : ''}">
 	{#if block.type === "callout"}
 		{@const tone = TONES[block.tone] ?? TONES.info}
 		<div class="rounded-md border border-l-4 px-3 py-2 {tone.cls}" role="note" aria-label={t(tone.label)}>
