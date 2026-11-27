@@ -5,6 +5,7 @@
 	import ConversationsSection from "#lib/components/account/conversations-section.svelte";
 	import JourneysSection from "#lib/components/account/journeys-section.svelte";
 	import SpacesSection from "#lib/components/account/spaces-section.svelte";
+	import ArchivedSpacesSection from "#lib/components/account/archived-spaces-section.svelte";
 	import { spaces } from "#lib/spaces.svelte.js";
 	import Icon from "#lib/components/icon.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
@@ -41,7 +42,7 @@
 			</div>
 		</section>
 
-		{#if spaces.available}<SpacesSection />{/if}
+		{#if spaces.available}<SpacesSection /><ArchivedSpacesSection />{/if}
 		<ConversationsSection />
 		<JourneysSection />
 

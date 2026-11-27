@@ -1,61 +1,77 @@
 <script lang="ts">
-	import { ApiError } from "#lib/api.js";
-	import { account } from "#lib/account.svelte.js";
+	import { onMount } from "svelte";
+	import Icon from "#lib/components/icon.svelte";
+	import SpaceBadges from "#lib/components/space-badges.svelte";
+	import { Badge } from "#lib/components/ui/badge/index.js";
 	import { Button } from "#lib/components/ui/button/index.js";
-	import { Input } from "#lib/components/ui/input/index.js";
-	import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+	import { toRoute } from "#lib/links.js";
+	import { labelOf, spaces } from "#lib/spaces.svelte.js";
 	import { t } from "#lib/i18n/index.js";
-	import { spaces } from "#lib/spaces.svelte.js";
-	import ListSection from "./list-section.svelte";
-	import RowAction from "./row-action.svelte";
-	import Row from "./row.svelte";
 
-	// The spaces the visitor can open (`GET /api/spaces`), and a small form to create one (private to them). The server builds the
-	// new space's site before it answers: the visitor is then taken to it.
+	// "My spaces": every space the visitor may open, in a table (title and slug, what it holds, who can see it, where it is stored,
+	// read-only), with "Open" and, for the owners, "Settings". Creating one has its own page. The visibility, members and storage are
+	// a member's knowledge (the space's own `GET /api/space`): a space this visitor reads without being a member shows as open.
 	const uid = $props.id();
-	let name = $state(""), kind = $state<"" | "notes">(""), pending = $state(false), error = $state("");
-
-	async function create(e: SubmitEvent) {
-		e.preventDefault();
-		if (pending || !name) return;
-		pending = true; error = "";
-		try { location.assign(await spaces.create(name, kind || undefined)); }
-		catch (err) {
-			const status = err instanceof ApiError ? err.status : 0;
-			if (status === 401) account.expire();
-			error = t(status === 400 ? "spaces.create.invalid" : status === 409 ? "spaces.create.exists" : status === 401 || status === 403 ? "spaces.create.refused" : "spaces.create.failed");
-			pending = false;
-		}
-	}
+	const rows = $derived(spaces.list);
+	onMount(() => { void spaces.ensure(spaces.names); });
+	const detailOf = (n: string) => spaces.details[n] ?? undefined;
+	const slugUrl = (n: string) => `/s/${n}/`;
 </script>
 
-<ListSection heading={t("spaces.label")} icon="space" status={t("spaces.count", { count: spaces.names.length })} loading={false} failed={false} empty={!spaces.names.length} emptyTitle={t("spaces.empty.title")} emptyText={t("spaces.empty.text")} onretry={() => void spaces.load()}>
-	{#snippet tools()}
-		{#if spaces.canCreate}
-			<form onsubmit={create} class="flex flex-col gap-1.5">
-				<label for="{uid}-name" class="text-sm font-medium">{t("spaces.create")}</label>
-				<div class="flex flex-wrap items-end gap-2">
-					<Input id="{uid}-name" bind:value={name} pattern="[a-z0-9][a-z0-9\-]*" maxlength={40} required autocomplete="off" spellcheck={false} aria-describedby="{uid}-hint" class="w-48" />
-					<div class="flex flex-col gap-1.5">
-						<label for="{uid}-kind" class="text-sm font-medium">{t("spaces.create.kind")}</label>
-						<NativeSelect.Root id="{uid}-kind" bind:value={kind}>
-							<NativeSelect.Option value="">{t("spaces.create.kind.watch")}</NativeSelect.Option>
-							<NativeSelect.Option value="notes">{t("spaces.create.kind.notes")}</NativeSelect.Option>
-						</NativeSelect.Root>
-					</div>
-					<Button type="submit" disabled={pending || !name}>{t("spaces.create.submit")}</Button>
-				</div>
-				<p id="{uid}-hint" class="text-muted-foreground text-xs">{t("spaces.create.hint")}</p>
-				<p role={error ? "alert" : "status"} class="{error ? 'text-destructive' : 'text-muted-foreground'} text-sm">{pending ? t("spaces.create.pending") : error}</p>
-			</form>
-		{/if}
-	{/snippet}
-	{#each spaces.names as space (space)}
-		<Row title={space}>
-			{#snippet meta()}{space === spaces.current ? t("spaces.current") : ""}{/snippet}
-			{#snippet actions()}
-				<RowAction icon="space" href="/s/{space}/" label={t("spaces.open", { name: space })} />
-			{/snippet}
-		</Row>
-	{/each}
-</ListSection>
+<section aria-labelledby="{uid}-h" class="border-border bg-card shadow-surface border">
+	<header class="border-border flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b p-4">
+		<div class="min-w-0">
+			<h2 id="{uid}-h" class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Icon name="space" size={22} />{t("spaces.mine")}</h2>
+			<p aria-live="polite" class="text-muted-foreground mt-0.5 text-sm tabular-nums">{t("spaces.count", { count: rows.length })}</p>
+		</div>
+		{#if spaces.canCreate}<Button href={toRoute("/account/new")}><Icon name="kind-add" size={16} />{t("spaces.create")}</Button>{/if}
+	</header>
+	{#if !rows.length}
+		<p class="text-muted-foreground p-4 text-sm">{t("spaces.empty.text")}</p>
+	{:else}
+		<div class="overflow-x-auto">
+			<table class="w-full border-collapse text-left text-sm">
+				<caption class="sr-only">{t("spaces.table.caption")}</caption>
+				<thead class="max-md:sr-only">
+					<tr class="bg-secondary text-muted-foreground text-xs">
+						<th scope="col" class="px-4 py-3 font-medium">{t("spaces.col.space")}</th>
+						<th scope="col" class="px-4 py-3 font-medium">{t("spaces.col.access")}</th>
+						<th scope="col" class="px-4 py-3 font-medium">{t("spaces.col.storage")}</th>
+						<th scope="col" class="px-4 py-3 font-medium">{t("spaces.col.actions")}</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each rows as space (space.name)}
+						{@const d = detailOf(space.name)}
+						{@const content = space.content.length ? space.content : (d?.content ?? [])}
+						<tr class="border-border border-t max-md:grid max-md:grid-cols-2 max-md:gap-x-2 max-md:p-2">
+							<td class="px-4 py-4 align-middle max-md:col-span-full max-md:p-2">
+								<a href={slugUrl(space.name)} data-sveltekit-reload class="text-link link-content inline-flex items-center gap-1.5 text-base font-semibold [overflow-wrap:anywhere] underline-offset-4 hover:underline"><Icon name="space" size={18} />{labelOf(space)}</a>
+								<span class="text-muted-foreground mt-1 block text-xs">{space.name} · <code>/s/{space.name}/</code></span>
+								<span class="mt-1.5 flex flex-wrap gap-1"><SpaceBadges {content} readOnly={space.readOnly || (d?.readOnly ?? false)} current={space.name === spaces.current} /></span>
+							</td>
+							<td class="px-4 py-4 align-middle max-md:p-2 max-md:before:text-muted-foreground max-md:before:mb-1 max-md:before:block max-md:before:text-xs max-md:before:content-[attr(data-label)]" data-label={t("spaces.col.visibility")}>
+								<SpaceBadges visibility={d?.visibility ?? "open"} size="default" />
+								<span class="text-muted-foreground mt-1 block text-xs">{d ? (d.visibility === "open" ? t("spaces.people.open") : t("spaces.people.members", { count: d.members.length })) : t("spaces.people.open")}</span>
+							</td>
+							<td class="px-4 py-4 align-middle max-md:p-2 max-md:before:text-muted-foreground max-md:before:mb-1 max-md:before:block max-md:before:text-xs max-md:before:content-[attr(data-label)]" data-label={t("spaces.col.storage")}>
+								{#if d}{d.storage === "own repo" ? t("spaces.storage.repo") : t("spaces.storage.instance")}{:else}<span class="text-muted-foreground">{t("spaces.storage.unknown")}</span>{/if}
+							</td>
+							<td class="px-4 py-4 align-middle max-md:col-span-full max-md:p-2" data-label={t("spaces.col.actions")}>
+								<div class="flex flex-wrap gap-1.5">
+									<Button href={slugUrl(space.name)} data-sveltekit-reload variant="outline" size="icon" aria-label={t("spaces.open", { name: labelOf(space) })} title={t("spaces.open", { name: labelOf(space) })}><Icon name="external-link" size={18} /></Button>
+									{#if d?.you === "owner"}
+										<Button href="{toRoute('/account/settings')}?space={encodeURIComponent(space.name)}" variant="outline" aria-label={t("spaces.settings.of", { name: labelOf(space) })}>{t("spaces.settings")}</Button>
+									{:else if d}
+										<Badge variant="outline">{t("spaces.role.member")}</Badge>
+									{/if}
+								</div>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+	<p class="text-muted-foreground border-border border-t p-4 text-xs">{t("spaces.note")}</p>
+</section>
