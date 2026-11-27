@@ -494,10 +494,10 @@ describe("search across spaces", () => {
   });
 
   /** The MCP server over stdio: `call(name, args)` resolves the tool result. */
-  async function mcp(env: Record<string, string>) {
+  async function mcp(env: Record<string, string>, args = ["mcp"]) {
     const e: Record<string, string | undefined> = { ...process.env, ...env };
     for (const k of ["CORTEX_SPACE", "CORTEX_WIKI"]) delete e[k];
-    const proc = Bun.spawn(["bun", CLI, "mcp"], { env: e, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["bun", CLI, ...args], { env: e, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
     let buf = "", n = 0;
     const rpc = async (method: string, params?: object) => {
@@ -531,6 +531,24 @@ describe("search across spaces", () => {
       expect((await m.call("related", { path: "/wiki/beta.md", space: "b" })).isError).toBeFalsy();
       expect((await m.call("get", { path: "/wiki/beta.md", space: "a,b" })).isError).toBe(true);
       expect((await m.call("search", { q: "zythum", space: "nope" })).isError).toBe(true);
+    } finally { m.close(); }
+  });
+
+  test("MCP over ssh: the server starts at the instance, so the space argument works and the default space is the one selected; a key that holds one space stays confined", async () => {
+    const root = fixture(), remote = (argv: string[]) => ["remote-exec", encodePayload({ argv })];
+    let m = await mcp({ CORTEX_ROOT: root }, remote(["mcp"]));
+    try {
+      expect(data(await m.call("search", { q: "zythum" })).hits.map((h: { title: string }) => h.title)).toEqual(["Zythum Alpha", "Brew"]); // default_space: a
+      expect(data(await m.call("search", { q: "zythum", space: "all" })).hits.map((h: { space: string }) => h.space)).toEqual(["a", "b", "a"]);
+      expect((await m.call("get", { path: "/wiki/beta.md", space: "b" })).content[0].text).toContain("Zythum Beta");
+    } finally { m.close(); }
+    m = await mcp({ CORTEX_ROOT: root }, remote(["mcp", "--space", "b"]));
+    try { expect(data(await m.call("search", { q: "zythum" })).hits.map((h: { title: string }) => h.title)).toEqual(["Zythum Beta"]); } finally { m.close(); }
+    m = await mcp({ CORTEX_ROOT: join(root, "spaces/a") }, remote(["mcp"])); // the key's forced command points into a space
+    try {
+      const r = await m.call("search", { q: "zythum", space: "all" });
+      expect([r.isError, r.content[0].text]).toEqual([true, expect.stringContaining("confined")]);
+      expect(data(await m.call("search", { q: "zythum" })).hits.length).toBe(2);
     } finally { m.close(); }
   });
 

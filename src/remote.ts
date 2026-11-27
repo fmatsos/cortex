@@ -4,7 +4,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { OPTIONS } from "./cli-options";
-import { CortexError, findRoot, isSpaceList } from "./lib";
+import { confinedSpace, CortexError, findRoot, isMultiSpace, isSpaceList } from "./lib";
 import { withSync } from "./sync";
 import pkg from "../package.json";
 
@@ -237,9 +237,12 @@ export async function remoteExec(args: string[], self: string[]): Promise<number
     stdin = e.stdin === undefined ? "ignore" : new Blob([e.stdin]);
   }
   const { SSH_ORIGINAL_COMMAND: _, ...env } = process.env;
+  // the MCP server of a key that holds the instance starts at the instance, with the space it names (else the default one) selected by $CORTEX_SPACE:
+  // it is then not confined, so its `space` argument reaches the other spaces as a local server's does. A key that holds one space keeps its confinement.
+  const hoist = cmd === "mcp" && isMultiSpace(instance) && !confinedSpace(instance);
   const run = async () => {
     // CORTEX_PUBLIC_ONLY: a URL given from another machine never reaches the host's own network (loopback, private), as through MCP
-    const p = Bun.spawn([...self, ...argv], { cwd: root, env: { ...env, CORTEX_ROOT: root, CORTEX_PUBLIC_ONLY: "1", ...(cmd === "mcp" && { CORTEX_SYNC: "1" }) }, stdin, stdout: "inherit", stderr: "inherit" });
+    const p = Bun.spawn([...self, ...argv], { cwd: hoist ? instance : root, env: { ...env, CORTEX_ROOT: hoist ? instance : root, ...(hoist && { CORTEX_SPACE: basename(root) }), CORTEX_PUBLIC_ONLY: "1", ...(cmd === "mcp" && { CORTEX_SYNC: "1" }) }, stdin, stdout: "inherit", stderr: "inherit" });
     return p.exited;
   };
   try { return cmd === "mcp" || several ? await run() : await withSync(root, cmd, run, undefined, (code) => code !== 0); }
