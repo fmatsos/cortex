@@ -82,7 +82,7 @@ bun link                      # puts `cortex` on your PATH
 
 ## Quick start
 
-A wiki is any directory that contains a `cortex.json`. Cortex finds it by walking up from the current directory to the nearest `cortex.json`, or uses `$CORTEX_ROOT`.
+A wiki is any directory that contains a `cortex.json`. Cortex finds it by walking up from the current directory to the nearest `cortex.json`, or uses `$CORTEX_ROOT`. One instance can also hold several isolated wikis: see [Spaces](#spaces).
 
 ```sh
 mkdir -p ~/notes/{raw,wiki,inbox} && cd ~/notes && git init
@@ -138,6 +138,7 @@ By default, every source and page is named by a [UUID v7](https://www.rfc-editor
 | `cortex export [--out <dir>]` | Builds the static site (default `.cortex/site`). The output directory is emptied first. |
 | `cortex mcp` | Starts an MCP server on stdio. |
 | `cortex schema [--write]` | Prints the agent schema, or rewrites `CLAUDE.md` / `AGENTS.md` with it. |
+| `cortex space list \| add <name> [--repo <url>] \| migrate <name>` | Manages the [spaces](#spaces) of an instance. |
 | `cortex config init [client] \| lint \| get [key] \| set <key> <value> \| remove <key>` | Manages `cortex.json` (`cortex help` lists the keys; an invalid key or value is rejected with what is allowed). `init` also writes the agent schema. |
 
 ### Choosing the agent
@@ -175,7 +176,7 @@ The schema is what your agent follows: the rules, the page format and the ingest
 | Key | Effect |
 |---|---|
 | `language` | Fills the wiki language into the schema (default `English`). |
-| `schema` | Path, relative to the wiki root, of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
+| `schema` | Path, relative to the instance root (the folder holding `cortex.json`), of your own Markdown schema, used instead of the built-in one. `{{language}}` works there too. |
 | `fetch_timeout` | Seconds before fetching a URL gives up (default `30`). With `--via`, each mirror gets that much. |
 | `parser.social.external_link.limit` | Pages a social post links to that `cortex add` also captures, as sources tied to the post (default `5`, `0` = links not followed). Each one is compiled in its own agent session. `parser.social.<network>.external_link.limit` (`x`, `bluesky`, `mastodon`, `linkedin`) overrides it for one network. Example: `{ "parser": { "social": { "external_link": { "limit": 2 }, "linkedin": { "external_link": { "limit": 0 } } } } }`. |
 | `parser.social.linkedin` | Selectors LinkedIn is read with outside its JSON-LD, to update when LinkedIn changes its page: `card` (link card), `activity_text`, `activity_author`, `activity_images` (activity page), `shortlink` (destination link on the lnkd.in interstitial), `carousel` (attribute holding the carousel's JSON). Each key is optional, defaults in `src/social/linkedin.ts`. Example: `{ "parser": { "social": { "linkedin": { "card": "a.card" } } } }`. |
@@ -185,6 +186,8 @@ The schema is what your agent follows: the rules, the page format and the ingest
 | `review` | Review notion on the site: « never reviewed » and « to review again » marks, the `is:verified` / `is:unverified` / `is:review` filters and facets, the reviewer in the page details, the « Mark as reviewed » button, the footer count and the read-only review queue (`/review/`, validation stays on each page). `true` to turn it on; absent = off, and none of it reaches the exported site. |
 | `drafts` | Draft status on the site: the draft mark, the `status:draft` filter and facet. `true` to turn it on; absent = off, draft pages are shown as stable. |
 | `judge` | A System One model that answers yes/no and choice questions at `POST <base_url>/systemone`: TypeSafe's hosted Jev, or d3-mini behind llama.cpp; absent = off. `{ "base_url": …, "model": "d3-mini" }`, every key optional. `base_url`: its own, else `$CORTEX_JEV_BASE_URL` (key in `$CORTEX_JEV_API_KEY`, sent only there), else as for `embed`. `model`: default `$CORTEX_JEV_MODEL`, else `d3-mini`. The former `CORTEX_JUDGE_*` names (`CORTEX_JUDGE_BASE_URL`, `CORTEX_JUDGE_API_KEY`, ...) are still read when the new one is absent, with a one-time deprecation warning; the new name wins if both are set, and an old key is only sent with the old URL (or with the new one when no old URL is set). Settings that depend on the model, each from cortex.json, else `$CORTEX_JEV_<NAME>` (e.g. `CORTEX_JEV_ROUTE_YES`), else the default: `route_yes` (0.5) and `dup_yes` (0.7), the probabilities from which a page is suggested to `compile` or a new page refused; `route_candidates` (10) and `dup_candidates` (5), the pages offered to the judge; `route_chars` (1500), the characters of the source it reads; `ask_retained` (0.5), `ask_related` (0.3) and `ask_candidates` (16) for the site's questions (see `site_ask`); `search_retained` (0.5), `search_related` (0.3, never above `search_retained`: checked by `cortex config lint`, and lowered at run time otherwise) and `search_candidates` (20) for the judged ranking of the site's search (`GET /api/search?judge=1`, below); `concurrency` (6), the simultaneous calls of one batch. Each page is judged in its own call (a batch in one call scored the same page 0.24 first and 0.75 last), and every score is kept in `.cortex/judge.db` as soon as it arrives, under the hash of the model, the question's wording, the normalized query (lowercase, spaces collapsed), the page and the text the judge reads of it: a page edited, or another model, is judged again; scores older than 30 days, and the oldest beyond 20,000, are forgotten. For Jev: `CORTEX_JEV_BASE_URL=https://api.typesafe.ai/v1`, `CORTEX_JEV_MODEL=jev-1.13.0`, `CORTEX_JEV_ROUTE_YES=0.65` (best F1 measured on a real wiki). Used by `cortex new` (does the new page duplicate one of the 5 closest pages by meaning? refused at probability 0.7) and by `compile` (the pages the source probably updates, listed in the agent's prompt). Needs `embed` for both. Server down or slow: one warning, then the same behaviour as without it (cosine alone for `new`, nothing for `compile`). The judge's endpoint is `judge.base_url`, else `$CORTEX_JEV_BASE_URL`; the key is optional and only in `$CORTEX_JEV_API_KEY` (sent to that URL alone, never read from cortex.json); in a batch of calls (the site's questions and search) one call that fails, or that gets an unusable answer, does not stop the others. |
+| `default_space` | The space used when none is chosen, in a multi-space instance (see [Spaces](#spaces)). |
+| `spaces` | Per-space settings, by name: `{ "veille": { "repo": "<git url>" } }`. `repo` is written by `cortex space add --repo`. |
 | `max_tags` | Most tags on a page an agent creates (default `4`). Beyond it, `compile --batch` keeps the tags already in use first. |
 
 ```sh
@@ -269,6 +272,32 @@ An optional introduction, in Markdown.
 The file name (`learn-fermentation.md`: lowercase letters, digits, dashes) is the address of the path. `title` and `goal` are required. Each step is an item of an ordered list that opens with a root-relative link to a wiki page (`/wiki/….md`, the same links as in the pages), then the reason, an inline Markdown text that may run over several lines; a `:` or a dash between the link and the reason is dropped. Text after the list is ignored.
 
 `cortex lint` reports, against `paths/<name>.md`: an invalid front matter, a missing `title` or `goal`, a path with no step, a step that does not open with a link, a link to a page that does not exist (errors), a step with no reason and a page listed twice (warnings). `cortex export` publishes the valid ones, readable without WebGL or an account: `/paths/` lists them, `/paths/<name>/` shows one, and an article opened from a path (`?path=<name>` in its address) shows the step, the reason and "Previous / Next" links. A step on a missing page is dropped, a page named twice keeps its first step, and a wiki with no `paths/` folder has no path page link. The graph's Journey export can write its route as a draft in this format (`goal` left empty for you to write).
+
+### Spaces
+
+One `cortex.json`, one `.cortex/accounts.db` and one git repository can hold several isolated wikis, called spaces (a watch space, a work one, a personal one…). A space is a folder `spaces/<name>/` with its own `wiki/`, `raw/`, optional `paths/` and `inbox/`, and its own `.cortex/` (search index, judge scores…). The configuration is shared by the instance; only `repo` can be set per space.
+
+```
+instance/
+  cortex.json                 shared by all the spaces
+  .cortex/accounts.db         one for the instance
+  spaces/veille/{wiki,raw,.cortex}
+  spaces/pro/{wiki,raw,.cortex}
+```
+
+An instance with a `spaces/` folder is multi-space; without one it works as always (`wiki/` and `raw/` at its root). In a multi-space instance, every command runs on one space, chosen in this order: the space whose folder you are in (or that `$CORTEX_ROOT` points into), `--space <name>`, `$CORTEX_SPACE`, `default_space` of `cortex.json`, the only space if there is one. Otherwise the command fails and lists the spaces. `--space` is kept when a command goes to a [remote wiki](#remote-wiki). The agents and the `serve` and `export` children Cortex starts stay in the space of the command.
+
+```sh
+cortex space add veille                  # spaces/veille/{wiki,raw}, with its index and journal
+cortex space add pro --repo git@host:me/pro.git   # clones it into spaces/pro/, adds /spaces/pro/ to .gitignore, records it under spaces
+cortex space list                        # * marks the default, "(own repo)" a space with its own .git
+cortex space migrate veille              # legacy wiki: moves wiki/, raw/, paths/, inbox/ and .cortex/ (except accounts.db) into spaces/veille/
+cortex --space pro search "context rot"
+```
+
+**One repository or several.** By default the instance's git repository holds all the spaces, and `serve --sync`, `remote` and the other git steps commit only the files of the space they run on. A space cloned with `--repo` is its own repository (ignored by the instance's): git finds the nearest `.git`, so the same steps pull, commit and push into that repository. `migrate` uses `git mv` for what is tracked: commit the move afterwards.
+
+**Isolation.** With a named client, the agent of a space can write nowhere in the instance but `spaces/<name>/wiki/` (`bwrap` on Linux, `sandbox-exec` on macOS), and the other spaces are hidden from it: it cannot read them.
 
 ### Wiki status
 

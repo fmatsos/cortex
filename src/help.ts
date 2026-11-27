@@ -29,6 +29,9 @@ export const HELP = `cortex — second brain
   cortex upgrade [--check]                     (compiled binary: installs the latest GitHub release)
   cortex mcp                                   (stdio MCP server: search, get, related, lint, add, log)
   cortex schema [--write]                      (the schema the agent follows; --write rewrites it into CLAUDE.md or AGENTS.md)
+  cortex space list | add <name> [--repo <git url>] | migrate <name>
+                                               (spaces: isolated wikis under spaces/<name>/, sharing cortex.json; add --repo clones one
+                                               into its own git repository; migrate moves a wiki/ + raw/ at the root into a space)
   cortex config init [claude|codex|opencode|openai] | lint | get [key] | set <key> <value> | remove <key>
                                                (keys: ${CONFIG_KEYS.join(", ")})
 
@@ -41,5 +44,7 @@ $CORTEX_AGENT (interactive, default "claude"), $CORTEX_AGENT_BATCH (default "cla
                                                --identity: the ssh private key for that wiki, no ~/.ssh/config needed)
 
 Root: $CORTEX_ROOT, otherwise the first parent folder that contains cortex.json, otherwise the default remote wiki.
+With a spaces/ folder there, the root is one space: the one you are in, else --space <name>, $CORTEX_SPACE, default_space,
+the only one. The agent of a space writes only its wiki/ and cannot read the other spaces.
 --wiki <name> (or $CORTEX_WIKI) sends the command to that remote wiki over ssh, even inside a local one. Through a
 remote wiki: serve, share, export, inbox and compile are refused; config only reads; ask runs the host's agent.`;
