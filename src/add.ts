@@ -8,9 +8,9 @@ import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { openWiki, type Wiki } from "./context";
-import { disabledKind } from "./config";
+import { contentOf, disabledKind } from "./config";
 import { rawId, type SourceContent } from "./doc";
-import { CortexError, cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256 } from "./lib";
+import { CortexError, cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256, spaceNameOf } from "./lib";
 import { free } from "./naming";
 import { expand } from "./template";
 import { appendLogCtx } from "./log";
@@ -252,7 +252,7 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
 
 /** `url`: origin of a text or file given as input (a page captured from the browser): kept as the source's `url`, never fetched. */
 /** `linkedFrom`: id of a source already in raw/ this input was found in (a newsletter and the pages it points to): tied both ways. */
-/** `as`: what the source is (`resource` or `note`), instead of what its input says: stdin is a note, a URL, a PDF or a file a resource. */
+/** `as`: what the source is (`resource` or `note`), instead of what its input says: a URL, a PDF or a captured page is a resource; stdin, a text file or a text are what the space holds (a note when it holds both). */
 type AddOpts = { note?: string; dryRun?: boolean; as?: SourceContent; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string } & FetchOpts;
 /** `refused` (dry run only): why a real `add` would be refused, the space not holding this kind of source. */
 type AddResult = { id: string; duplicate: boolean; ex?: Extract; refused?: string; linked?: (AddResult | { url: string; error: string })[] };
@@ -323,8 +323,10 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   const input = /^https?:\/\//.test(rawInput) ? cleanUrl(rawInput) : rawInput; // the one point every captured URL (given or followed) passes
   const root = w.root;
   // what it is is known before anything is fetched: a space takes only the kinds its content holds (a dry run says so and goes on)
-  const content: SourceContent = opts.as ?? (input === "-" && !opts.url ? "note" : "resource");
-  const refused = disabledKind(await w.config(), root, content);
+  const cfg = await w.config(), held = contentOf(cfg, spaceNameOf(root));
+  const sure = /^https?:\/\//.test(input) || /\.pdf$/i.test(input) || !!opts.url; // only these name their kind; any other input takes the space's content
+  const content: SourceContent = opts.as ?? (sure ? "resource" : held.length === 1 && held[0] === "resources" ? "resource" : "note");
+  const refused = disabledKind(cfg, root, content);
   if (refused && !opts.dryRun) throw new CortexError(refused, "refused");
   const result = (r: AddResult): AddResult => (refused ? { ...r, refused } : r);
   const now = opts.now ?? new Date();
@@ -333,7 +335,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   if (isUrl) {
     const known = await findDuplicate(w, [input]); // before the fetch: no needless request
     if (known) return result({ id: known, duplicate: true });
-    const cfg = await w.config(), secs = cfg.fetch_timeout;
+    const secs = cfg.fetch_timeout;
     ex = await extractUrl(input, { ...opts, timeoutMs: opts.timeoutMs ?? (secs ? secs * 1000 : undefined), linkedin: opts.linkedin ?? cfg.parser?.social?.linkedin ?? undefined });
   }
   else if (input === "-") ex = extractText(opts.text ?? await Bun.stdin.text()); // text: content supplied without stdin (MCP server)

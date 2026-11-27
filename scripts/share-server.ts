@@ -32,7 +32,7 @@ type Share = { title?: string; text?: string; url?: string; note?: string };
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
  * optional) goes on the `.url` line, or in `<name>.md.note` next to a text. A text with an explicit `url` (a page captured by the
  * browser extension: the text is what the page showed, behind its paywall or login) keeps it in `<name>.md.origin`: the source's
- * `url`, not fetched. A text with no link at all (what the person typed) gets `<name>.md.kind` = `note`.
+ * `url`, not fetched.
  */
 export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
   title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
@@ -45,7 +45,6 @@ export function toInbox({ title = "", text = "", url = "", note = "" }: Share): 
   const extra: [string, string][] = [];
   if (url) extra.push(["md.origin", `${url}\n`]);
   if (note) extra.push(["md.note", `${note}\n`]);
-  if (!link) extra.push(["md.kind", "note\n"]); // a text with no link is what the person wrote: a note
   return [md, ...extra];
 }
 

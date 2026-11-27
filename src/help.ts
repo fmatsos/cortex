@@ -4,8 +4,8 @@ import { CONFIG_KEYS } from "./config";
 export const HELP = `cortex — second brain
 
   cortex add <url|file|-> [--note "why I keep this"] [--as note|resource] [--via freedium (then archive.ph, Wayback)] [--linked-from <id>] [--dry-run]
-                                               (a URL or PDF is a resource, "-" (stdin) a note, a text file a resource unless --as note;
-                                               a space refuses a kind its content does not include)
+                                               (a URL or PDF is a resource; stdin and text files take what the space holds, a note when it holds both;
+                                               --as overrides; a space refuses a kind its content does not include)
   cortex inbox [--dry-run]   (add on inbox/: urls.txt and files; successful entries leave it)
   cortex search "<query>" [--in wiki|raw] [--json] [--limit N] [--space a,b|all]   (--space a,b or all: several spaces, one fused list)
   cortex index

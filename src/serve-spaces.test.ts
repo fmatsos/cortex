@@ -491,21 +491,19 @@ test("the share target: /s/<space>/share/ delivers into that space (behind its v
   expect([inbox("a").length, inbox("b").length, inbox("priv").length]).toEqual([1, 1, 1]); // each in its own space; the default one got the root's
 });
 
-test("a share the space does not hold is a 409 with the reason (a typed text is a note, a link or a captured page a resource); the others are delivered", async () => {
+test("a link or a captured page is refused (409, with the reason) by a space of notes; a typed text takes the space's content and is delivered", async () => {
   const root = instance(["a", "n"], { ...AUTH, default_space: "a", spaces: { n: { content: ["notes"] } } });
   const { send } = await start(root);
   const share = (space: string, body: object) => send("POST", `/s/${space}/share/api`, body, {});
-  const inbox = (space: string) => { try { return readdirSync(join(root, "spaces", space, "inbox")).filter((f) => !f.endsWith(".kind")).length; } catch { return 0; } };
-  const typed = await share("a", { text: "Une idée que je viens de taper." });
-  expect([typed.status, await typed.text()]).toEqual([409, expect.stringContaining("space a holds resources, not notes")]);
   const link = await share("n", { url: "http://127.0.0.1:1/x" });
   expect([link.status, await link.text()]).toEqual([409, expect.stringContaining("space n holds notes, not resources")]);
   expect((await share("n", { text: "Un texte capturé", url: "http://127.0.0.1:1/y" })).status).toBe(409); // a captured page has an origin: a resource
-  expect((await share("a", { text: "Un post avec un lien https://127.0.0.1:1/z" })).status).toBe(200); // a link inside: a resource
+  expect((await share("a", { text: "Une idée que je viens de taper." })).status).toBe(200); // typed: what the space holds
   expect((await share("n", { text: "Une idée tapée sur le téléphone." })).status).toBe(200);
   expect((await share("a", { url: "http://127.0.0.1:1/ok" })).status).toBe(200);
-  expect(inbox("a")).toBeGreaterThan(0);
-  expect(existsSync(join(root, "spaces/n/inbox")) || existsSync(join(root, "spaces/n/raw"))).toBe(true);
+  const until = Date.now() + 5000, raws = (space: string) => { try { return readdirSync(join(root, "spaces", space, "raw", String(new Date().getFullYear()), String(new Date().getMonth() + 1).padStart(2, "0"))).length; } catch { return 0; } };
+  while ((!raws("a") || !raws("n")) && Date.now() < until) await Bun.sleep(20);
+  expect([raws("a"), raws("n")]).toEqual([1, 1]); // the typed texts became sources (the unreachable link stays in a's inbox/)
 });
 
 test("with --sync the creation commit holds the space's wiki, raw and agent file (and cortex.json for a content)", async () => {

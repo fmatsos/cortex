@@ -118,12 +118,12 @@ export function buildServer(root: string, language?: string, confined = false): 
   }));
 
   s.registerTool("add", {
-    description: "Adds a source to raw/ (status pending; never touches the wiki): an http(s) URL (a resource) or a text (a note, the user's own writing, unless `as` says resource). No local file: an MCP client must not be able to copy a file of the machine into the repository.",
+    description: "Adds a source to raw/ (status pending; never touches the wiki): an http(s) URL (a resource) or a text (what the space holds: a note when it holds both, unless `as` says). No local file: an MCP client must not be able to copy a file of the machine into the repository.",
     inputSchema: z.object({
       input: z.string().optional().describe("http(s) URL"),
       text: z.string().optional().describe("text to add, instead of input"),
       note: z.string().optional().describe("why the user keeps this source (optional)"),
-      as: z.enum(["note", "resource"]).optional().describe("what it is: a URL is a resource, a text a note (the user's own writing) unless this says otherwise; a space refuses a kind its content does not hold"),
+      as: z.enum(["note", "resource"]).optional().describe("what it is: a URL is a resource, a text takes the space's content (a note when it holds both) unless this says otherwise; a space refuses a kind its content does not hold"),
     }),
   }, tool(async ({ input, text: txt, note, as }) => {
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Give either input (URL or path) or text.");

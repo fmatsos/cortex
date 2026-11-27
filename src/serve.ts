@@ -14,7 +14,7 @@ import { search } from "./search";
 import { searchSite } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
-import { inbox, sharedKind } from "./inbox";
+import { inbox, sharesResource } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
@@ -312,7 +312,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
   const { route: shareRoute, ShareRefused } = await import("../scripts/share-server");
   const deliver = async (files: { path: string; content: string }[]) => {
-    const why = disabledKind(await loadConfig(root), root, sharedKind(files)); // a space takes only the kinds its content holds: the phone is told
+    const why = sharesResource(files) ? disabledKind(await loadConfig(root), root, "resource") : undefined; // a link is refused by a notes space: the phone is told; a typed text takes the space's content
     if (why) throw new ShareRefused(why);
     mkdirSync(join(root, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(root, f.path), f.content);
