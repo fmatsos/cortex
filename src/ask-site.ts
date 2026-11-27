@@ -10,7 +10,9 @@ import { getFile, relatedForAgent } from "./mcp";
 import { related } from "./lib";
 import { isUnder } from "./paths";
 import { prompt } from "./prompts";
-import { search } from "./search";
+import { search, searchSpaces } from "./search";
+import { instanceRoot, spaceRoot } from "./lib";
+import { parseSpacePath, spaceCite, spaceRoots } from "./ask-scope";
 import { flattenBlocks } from "./answer-blocks";
 
 // --- Site questions (cortex serve, POST /api/ask): the pages an answer rests on, chosen by code before the agent runs, and
@@ -153,3 +155,40 @@ export const wikiTools = (root: string): ExtraTool[] => [
     run: async ({ path, limit }: { path: string; limit?: number }) => JSON.stringify(relatedForAgent(related(await openWiki(root).pages(), path), limit ?? 8), null, 1),
   },
 ];
+
+/**
+ * The same three tools for a question that reads several spaces (`root`: any folder of the instance; `spaces`: the names the question may
+ * read, fixed by the server, not by the arguments). A page is named by its citation link, `/s/<space>/wiki/x.md`, in what the tools return
+ * and in what they take: a space outside the list is refused whatever the path says.
+ */
+export const spacesTools = (root: string, spaces: string[]): ExtraTool[] => {
+  const instance = instanceRoot(root), inside = (path: string) => { const { space, file } = parseSpacePath(spaces, path); return { space, file, root: spaceRoot(instance, space) }; };
+  return [
+    {
+      name: "search", read: true,
+      description: "Hybrid search in the wiki of every space of this question at once (words and meaning; one ranking, one result per page, with the extract of its best section; each result names its space). Use 2 or 3 key terms, never the whole question.",
+      schema: z.object({ q: z.string().describe("search terms"), limit: z.number().int().min(1).max(20).optional().describe("maximum number of results (default 8)") }),
+      run: async ({ q, limit }: { q: string; limit?: number }) =>
+        JSON.stringify((await searchSpaces(spaceRoots(instance, spaces), q, { in: "wiki", limit: limit ?? 8 })).map((h) => ({ space: h.space, path: spaceCite(h.space, h.path), title: h.title, snippet: h.snippet })), null, 1),
+    },
+    {
+      name: "get", read: true,
+      description: "Reads the content of a wiki page of one of the spaces, for example /s/<space>/wiki/concepts/x.md: a page found by search or related.",
+      schema: z.object({ path: z.string().describe("path of the page, as search gives it: /s/<space>/wiki/….md") }),
+      run: async ({ path }: { path: string }) => {
+        const p = inside(path);
+        if (!isUnder(p.root, "wiki", join(p.root, fromResource(p.file)))) throw new Error(`Path refused: ${path} (expected: a .md under wiki/)`);
+        return getFile(p.root, p.file);
+      },
+    },
+    {
+      name: "related", read: true,
+      description: "Wiki pages related to a page of one of the spaces: outgoing links, backlinks, shared sources and tags, ranked by strength with the reason.",
+      schema: z.object({ path: z.string().describe("wiki page, for example /s/<space>/wiki/concepts/x.md"), limit: z.number().int().min(1).max(20).optional().describe("maximum number of pages (default 8)") }),
+      run: async ({ path, limit }: { path: string; limit?: number }) => {
+        const p = inside(path);
+        return JSON.stringify(relatedForAgent(related(await openWiki(p.root).pages(), p.file), limit ?? 8).map((r) => ({ ...r, path: spaceCite(p.space, r.path) })), null, 1);
+      },
+    },
+  ];
+};

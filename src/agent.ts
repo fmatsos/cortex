@@ -21,7 +21,7 @@ import { appendLogCtx } from "./log";
 import { split } from "./backends/backend";
 import { collator } from "./text";
 import { tagKey } from "./lint";
-import { askPrompt, compilePrompt, scopePrefix } from "./prompts";
+import { askPrompt, askSpacesPrompt, askSpacesSystem, compilePrompt, scopePrefix, spacesPrefix } from "./prompts";
 
 async function git(root: string, ...args: string[]) {
   const p = Bun.spawn(["git", "-C", root, ...args], { stdout: "pipe", stderr: "ignore" });
@@ -71,7 +71,7 @@ export async function outOfScope(root: string, before: Map<string, string>, repo
 }
 
 /** Bridge abstraction: the backend (agnostic, Claude, Codex, opencode) is chosen by cortex.json. */
-async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report, check?: Check): Promise<number> {
+async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report, check?: Check, spaces?: string[]): Promise<number> {
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
   if (mode === "write") { const why = (await import("./read-only")).readOnlyReason(root); if (why) { report({ level: "fail", text: why }); return 1; } } // never in write mode on a read-only space
@@ -79,17 +79,17 @@ async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: 
   // inherited by every agent process: cortex new --force stays a human-only option. Bun.spawn reads the environment of
   // the start, not process.env as it is now: every spawn of an agent passes `env: process.env` (the SDKs read it themselves)
   process.env.CORTEX_IN_AGENT = "1";
-  prompt = scopePrefix(root, mode === "write", (await w.config()).language) + prompt;
+  prompt = (spaces ? spacesPrefix(root, spaces, (await w.config()).language) : scopePrefix(root, mode === "write", (await w.config()).language)) + prompt;
   // interactive session confined as well: a too-quick human approval cannot write outside wiki/
   if (!batch) {
     // Ctrl+C targets the agent; without this handler, cortex would die too (same process group) before checking the Source page and flipping the status
     const keep = () => {};
     process.on("SIGINT", keep);
-    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode), { cwd: root, env: process.env, stdio: ["inherit", "inherit", "inherit"] }).exited; }
+    try { return await Bun.spawn(confine(root, backend.interactive(prompt), mode, spaces), { cwd: root, env: process.env, stdio: ["inherit", "inherit", "inherit"] }).exited; }
     catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
     finally { process.off("SIGINT", keep); }
   }
-  try { report({ level: "info", text: await backend.run(root, prompt, mode, report, check) }); return 0; }
+  try { report({ level: "info", text: await backend.run(root, prompt, mode, report, check, undefined, spaces ? { system: askSpacesSystem(spaces, (await w.config()).language) } : undefined, spaces) }); return 0; }
   catch (e) { report({ level: "fail", text: (e as Error).message }); return 1; }
 }
 
@@ -398,16 +398,18 @@ export async function compileCtx(w: Wiki, ids: string[], opts: CompileOpts, repo
 }
 export const compile = (root: string, ids: string[], opts: CompileOpts, report?: Report) => compileCtx(openWiki(root), ids, opts, report);
 
-type AskOpts = { file?: boolean; interactive?: boolean };
+/** `spaces`: the question reads these spaces of the instance `w` is the root of (never with `file`): ask-scope.ts. */
+type AskOpts = { file?: boolean; interactive?: boolean; spaces?: string[] };
 export async function askCtx(w: Wiki, question: string, opts: AskOpts, report?: Report): Promise<Result> {
   const { say, done } = collector(report);
   const sink: Report = (m) => say(m.level, m.text, m.mark);
   const root = w.root;
   const cfg = await w.config();
-  const prompt = askPrompt({ agentFile: agentFile(cfg.client), question, file: opts.file, language: cfg.language });
+  if (opts.spaces && opts.file) throw new Error("a question that reads several spaces never writes a page: not with --file.");
+  const prompt = opts.spaces ? askSpacesPrompt({ agentFile: agentFile(cfg.client), question }) : askPrompt({ agentFile: agentFile(cfg.client), question, file: opts.file, language: cfg.language });
   const before = await changed(root, sink);
   const checked = opts.file ? await runChecked(w, prompt, !opts.interactive, sink) : undefined;
-  const code = checked ? checked.code : await run(w, prompt, !opts.interactive, "read", sink);
+  const code = checked ? checked.code : await run(w, prompt, !opts.interactive, "read", sink, undefined, opts.spaces);
   const left = checked ? await checked.errors() : [];
   if (left.length) say("warn", `errors left in the files the agent changed:\n${left.map((e) => `  - ${e}`).join("\n")}`, "⚠");
   const after = await changed(root, sink);

@@ -35,10 +35,13 @@ export function wikiUrl(path: string, site: string): string {
 }
 
 const WIKI_LINK = /\]\(\/?(wiki\/[^)\s#]+\.md)(#[^)\s]*)?\)/g;
+const SPACE_LINK = /\]\(\/(?:s|spaces)\/([a-z0-9][a-z0-9-]{0,39})\/(wiki\/[^)\s#]+\.md)(#[^)\s]*)?\)/g;
 const RAW_LINK = /\[([^\]\n]*)\]\(\/?raw\/[^)\s]*\)/g;
 /** `](/wiki/x.md#a)` becomes `](https://site/wiki/x/#a)`; a link to `raw/` (not published) is left as its label. */
 export const absoluteLinks = (md: string, site: string) =>
-	outsideCode(md, (p) => p.replace(RAW_LINK, "$1").replace(WIKI_LINK, (_, path: string, frag = "") => `](${wikiUrl(path, site)}${frag})`));
+	outsideCode(md, (p) => p.replace(RAW_LINK, "$1").replace(WIKI_LINK, (_, path: string, frag = "") => `](${wikiUrl(path, site)}${frag})`)
+		// an answer that read several spaces cites `/s/<space>/wiki/x.md`: the page on that space's site, whatever space the export was made in
+		.replace(SPACE_LINK, (_, space: string, path: string, frag = "") => `](${wikiUrl(path, new URL(`/s/${space}/`, site).href)}${frag})`));
 
 /** Footnote ids get a prefix per part (`q2-`, `s3-`): in one document the `[^1]` of two parts would collide. */
 export const prefixNotes = (md: string, prefix: string) => outsideCode(md, (p) => p.replace(/\[\^([\w-]+)\]/g, (_, id: string) => `[^${prefix}${id}]`));

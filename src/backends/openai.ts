@@ -51,10 +51,10 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
   return {
     // no CLI to start: interactive only through $CORTEX_AGENT
     interactive: interactiveWith(() => { throw new Error("the openai client runs in batch only: use --batch (or set $CORTEX_AGENT)."); }),
-    async run(root, prompt, mode, report, check, extra = [], stream) {
+    async run(root, prompt, mode, report, check, extra = [], stream, spaces) {
       if (!cfg.model) throw new Error(`the openai client needs a model: cortex config set model <name>.`);
       const { schemaText } = await import("../schema");
-      const tools = [...(stream?.onlyExtra ? [] : toolPack(mode)), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
+      const tools = [...(stream?.onlyExtra ? [] : toolPack(mode, spaces)), ...extra.map((t) => ({ name: t.name, description: t.description, parameters: jsonSchema(t.schema) }))].map((t) => ({ type: "function", function: t }));
       const own = new Map(extra.map((t) => [t.name, t]));
       const isRead = (name: string) => !own.has(name) || !!own.get(name)!.read; // the pack's tools and the extra tools marked `read`
       const extraTools = tools.filter((t) => !isRead(t.function.name)); // all that stays offered once `stream.toolRounds` read rounds are done
@@ -118,7 +118,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
           try { args = JSON.parse(c.function.arguments || "{}"); } catch (e) { args = {}; messages.push({ role: "tool", tool_call_id: c.id, content: `error: ${(e as Error).message}` }); continue; }
           stream?.step?.(c.function.name, args);
           const x = own.get(c.function.name);
-          const content = x ? await runExtra(x, args) : await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }));
+          const content = x ? await runExtra(x, args) : await callTool(root, mode, c.function.name, args, (reason) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" }), spaces);
           messages.push({ role: "tool", tool_call_id: c.id, content });
         }
         if (stream?.toolRounds && !capped && msg.tool_calls.some((c: any) => isRead(c.function.name)) && ++reads >= stream.toolRounds) {

@@ -3,6 +3,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 import type { Mode } from "./backends/backend";
 import { callTool, toolPack, zodShape } from "./backends/tools";
+import { askSpacesFromEnv } from "./ask-scope";
 import pkg from "../package.json";
 
 /**
@@ -10,11 +11,11 @@ import pkg from "../package.json";
  * the openai backend, over stdio. Not the `cortex mcp` server of a human's agent (search, get, add…): read mode lists
  * no writing tool.
  */
-export function buildAgentServer(root: string, mode: Mode): McpServer {
+export function buildAgentServer(root: string, mode: Mode, spaces: string[] | undefined = askSpacesFromEnv()): McpServer {
   const s = new McpServer({ name: "cortex", version: pkg.version });
-  for (const t of toolPack(mode))
+  for (const t of toolPack(mode, spaces))
     s.registerTool(t.name, { description: t.description, inputSchema: z.object(zodShape(t)) },
-      async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args) }] }));
+      async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, undefined, spaces) }] }));
   return s;
 }
 

@@ -7,10 +7,11 @@ import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
 import { EXTRA_TOOLS, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
-import { askSitePrompt, askSiteSystem, scopePrefix } from "./prompts";
-import { historyPart, pagesPart, relevantPages, wikiTools, type Core, type Turn } from "./ask-site";
+import { askSitePrompt, askSiteSystem, scopePrefix, spacesPrefix } from "./prompts";
+import { historyPart, pagesPart, relevantPages, spacesTools, wikiTools, type Core, type Turn } from "./ask-site";
+import { spaceCite, spaceRoots } from "./ask-scope";
 import { LIMITS } from "./limits";
-import { fuseSpaces, search } from "./search";
+import { fuseSpaces, search, searchSpaces } from "./search";
 import { searchSite, type SearchHit } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
@@ -20,7 +21,7 @@ import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { checkContent, configFile, contentOf, disabledKind, loadConfig, readConfig, writeConfig } from "./config";
-import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
+import { instanceRoot, isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { readOnlyMessage, readOnlyReason } from "./read-only";
 import { addedPaths, addSpace, archiveSpace, recordable, restoreSpace } from "./space";
 import { checkTitle, spaceAdmin } from "./space-admin";
@@ -53,8 +54,11 @@ export type ServeOpts = {
 };
 /** `draft`: set by the agent that prepares display blocks, so the live draft can draw them (the text so far in, Markdown with the blocks out). `log`: the service journal. */
 export type AskStream = Stream & { draft?: (md: string) => string; log?: (m: string) => void };
-/** A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests). */
-export type AskFn = (root: string, question: string, history: Turn[], stream?: AskStream) => Promise<{ md: string; core?: Core }>;
+/**
+ * A site question and the earlier turns → the agent's Markdown answer, and the pages it rests on when a judge chose them (injectable for tests).
+ * `spaces`: the question reads these spaces of the instance (`root`'s own, as it is chosen by the server for the visitor), not `root` alone.
+ */
+export type AskFn = (root: string, question: string, history: Turn[], stream?: AskStream, spaces?: string[]) => Promise<{ md: string; core?: Core }>;
 
 /** The cheapest model of each SDK client, used when `site_ask.model` is not set. */
 const CHEAP: Record<string, string> = { claude: "haiku", codex: "gpt-6-luna" };
@@ -92,17 +96,42 @@ export function askAnswer(md: string, titles: Map<string, string>) {
   return { segments: answerSegments(md, titles), cited };
 }
 /**
+ * The answer to a question that read several spaces: the same segments, with each citation `/s/<space>/wiki/….md` drawn as the link to that page
+ * on its own site, and `refs`, the pages it cites (space, id, title) in the order it cites them; `cited` keeps only those of `home`, the space the
+ * question was asked in (the ids the conversation saves). `titles`: space → wiki path → title, of the spaces the question read.
+ */
+export function askAnswerSpaces(md: string, titles: Map<string, Map<string, string>>, home?: string, partial = false) {
+  const seen = new Set<string>(), refs: { space: string; id: string; title: string }[] = [];
+  for (const m of md.matchAll(/\]\(\/(?:s|spaces)\/([a-z0-9][a-z0-9-]{0,39})\/(wiki\/[^)\s#]+\.md)/g)) {
+    const title = titles.get(m[1]!)?.get(m[2]!), key = `${m[1]}/${m[2]}`;
+    if (title === undefined || seen.has(key)) continue;
+    seen.add(key);
+    refs.push({ space: m[1]!, id: pageId(m[2]!), title });
+  }
+  return { segments: answerSegments(md, new Map(), partial, titles), cited: refs.filter((r) => r.space === home).map((r) => r.id), refs };
+}
+/** Wiki path → title of each of `names`, the spaces a question reads (a space that cannot be read is left out). */
+export async function spaceTitles(instance: string, names: string[]) {
+  const out = new Map<string, Map<string, string>>();
+  for (const { space, root } of spaceRoots(instance, names)) {
+    try { out.set(space, new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]))); } catch { /* a broken space does not hide the others */ }
+  }
+  return out;
+}
+/**
  * What the agent is doing, as the site words it (structured, never free text from the model): a tool about to run, or "pages"
  * (choosing the pages). `titles`: wiki path → title. The path is read as the `get` tool does: relative to the root even with a
  * leading "/" (the prompt lists "/wiki/x.md"). `related` is only "work".
  */
-export function stepOf(name: string, args: Record<string, unknown>, titles: Map<string, string>) {
+export function stepOf(name: string, args: Record<string, unknown>, titles: Map<string, string>, spaces?: Map<string, Map<string, string>>) {
   if (name === "pages") return { kind: "pages" };
   if (name === "render_blocks") return { kind: "layout" };
   const arg = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
   if (name === "search") return { kind: "search", query: arg("q").slice(0, 60) };
   const path = arg("path").trim().replace(/^\.?\/+/, "");
   if (name === "get" && /^wiki\/.+\.md$/.test(path)) return { kind: "read", path, title: titles.get(path) };
+  const at = spaces && /^(?:s|spaces)\/([a-z0-9][a-z0-9-]{0,39})\/(wiki\/.+\.md)$/.exec(path); // a page of one of several spaces
+  if (name === "get" && at) return { kind: "read", path: at[2], title: spaces.get(at[1]!)?.get(at[2]!) };
   return { kind: "work" };
 }
 const MAX_QUESTION = 500;
@@ -123,9 +152,10 @@ export function turnsOf(value: unknown, exchanges: number): Turn[] {
  * are given in full (ask-site.ts); without one, the site search's hits (BM25 fused with the embeddings when `embed` is on).
  * Not `askCtx`: no tree hashing, and process.env stays untouched.
  */
-export const agentAsk: AskFn = async (root, question, history, stream) => {
+export const agentAsk: AskFn = async (root, question, history, stream, spaces) => {
   stream?.step?.("pages", {});
   const cfg = await openWiki(root).config();
+  if (spaces) return agentAskSpaces(root, cfg, question, history, spaces, stream);
   const core = await relevantPages(root, question, history);
   stream?.signal?.throwIfAborted(); // the reader left while the pages were judged: the agent never starts
   let hits: string[] = [];
@@ -145,6 +175,24 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, system: askSiteSystem(cfg.language), toolRounds: LIMITS.askToolRounds, blocksReady: blocks?.ready });
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
+
+/**
+ * `agentAsk` for a question that reads several spaces of the instance `root` belongs to. No judge: it scores the pages of one wiki, one call per page,
+ * and a question over several spaces would multiply that bill without being asked; the agent starts from the fused search (`searchSpaces`) and reads
+ * with the tools of `spacesTools` (the openai and claude clients) or the tool pack of the sandboxed process (the others), both bound to `spaces`.
+ * No display blocks either: a block names a page by its path in one space.
+ */
+async function agentAskSpaces(root: string, cfg: Config, question: string, history: Turn[], spaces: string[], stream?: AskStream) {
+  const instance = instanceRoot(root), ask = askSetup(cfg);
+  const find = (any: boolean) => searchSpaces(spaceRoots(instance, spaces), question, { in: "wiki", limit: 8, any }).catch(() => []);
+  const all = await find(false), hits = (all.length ? all : await find(true)).map((h) => `${spaceCite(h.space, h.path)} « ${h.title} »`);
+  stream?.signal?.throwIfAborted();
+  const prompt = spacesPrefix(instance, spaces, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(undefined, hits), history: historyPart(history, askHistoryTurns(cfg)), spaces });
+  const { backendFor } = await import("./backends");
+  const extra = EXTRA_TOOLS.has(ask.cfg.client ?? "") ? spacesTools(instance, spaces) : undefined;
+  const md = await (await backendFor(instance, ask.cfg, ask.ep)).run(instance, prompt, "read", undefined, undefined, extra, { ...stream, onlyExtra: true, system: askSiteSystem(cfg.language, spaces), toolRounds: LIMITS.askToolRounds }, spaces);
+  return { md, core: undefined };
+}
 
 export { commitAndPush, pullRebase };
 
@@ -234,7 +282,9 @@ type Site = {
 };
 
 /** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
-async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined): Promise<Site> {
+/** The spaces a visitor may have a question read, from what they asked for (`spaces` of the body): the names (those they may see), or the response to give instead. */
+type Reach = (req: Request, asked: string[] | "all") => Promise<string[] | Response>;
+async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined, reach?: Reach): Promise<Site> {
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
   const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
   // the newest complete build of a previous run is served at once; the other folder is where the next build goes
@@ -406,7 +456,12 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
           return Response.json({ error: "expected { answers } (up to 200 Markdown answers, 1,000,000 characters in all)" }, { status: 400 });
         }
         const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
-        return Response.json({ answers: (answers as string[]).map((md) => askAnswer(md, titles)) });
+        // an answer that cites pages of several spaces (`/s/<space>/wiki/…`) is drawn with the spaces its reader may see: the conversation is theirs
+        const wide = reach && (answers as string[]).some((md) => /\]\(\/s\/[a-z0-9-]+\/wiki\//.test(md));
+        const seen = wide ? await reach!(req, "all") : undefined;
+        const across = seen && !(seen instanceof Response) ? await spaceTitles(instanceRoot(root), seen) : undefined;
+        const home = base.replace(/^\/s\//, "");
+        return Response.json({ answers: (answers as string[]).map((md) => across && /\]\(\/s\/[a-z0-9-]+\/wiki\//.test(md) ? askAnswerSpaces(md, across, home) : askAnswer(md, titles)) });
       }
       if (url.pathname === "/api/ask") {
         // opt-in (the route spends tokens), and only through an SDK client: the agnostic CLI ignores the model and may keep its own tools
@@ -416,14 +471,27 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
         if (req.method !== "POST") return new Response(null, { status: 405 });
         // a browser always sends Origin on a POST fetch: no Origin is a script, not the site
         if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
-        const body = await req.json().then((b: { q?: unknown; history?: unknown }) => b ?? {}, () => ({} as { q?: unknown; history?: unknown }));
+        const body = await req.json().then((b: { q?: unknown; history?: unknown; spaces?: unknown }) => b ?? {}, () => ({} as { q?: unknown; history?: unknown; spaces?: unknown }));
         const q = body.q;
         if (typeof q !== "string" || !q.trim() || q.length > MAX_QUESTION) return Response.json({ error: `expected { q } (1 to ${MAX_QUESTION} characters)` }, { status: 400 });
+        // more than this space: the spaces the visitor asked for and may see (several of them, or `all`, for someone signed in), read for this question only
+        let scope: string[] | undefined;
+        if (body.spaces !== undefined) {
+          const asked = body.spaces === "all" ? "all" : Array.isArray(body.spaces) && body.spaces.length <= 40 && body.spaces.every((s) => typeof s === "string") ? (body.spaces as string[]) : undefined;
+          if (!asked || !reach) return Response.json({ error: 'expected spaces: a list of space names, or "all"' }, { status: 400 });
+          const names = await reach(req, asked);
+          if (names instanceof Response) return names;
+          if (!names.length) return Response.json({ error: "none of these spaces can be read" }, { status: 400 });
+          scope = names.length === 1 && names[0] === base.replace(/^\/s\//, "") ? undefined : names; // this space alone is the ordinary question
+        }
         if (busy.asking) return Response.json({ error: "a question is already being answered" }, { status: 429 });
         busy.asking = true;
         srv.timeout(req, 0); // an agent answer outlasts Bun's 10 s idle timeout
+        const across = scope && await spaceTitles(instanceRoot(root), scope); // titles of the spaces this question reads, for the links of the answer
+        const home = base.replace(/^\/s\//, "");
         const answer = async (stream?: AskStream) => {
-          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history, askHistoryTurns(askCfg)), stream);
+          const { md, core } = await (o.ask ?? agentAsk)(root, q.trim(), turnsOf(body.history, askHistoryTurns(askCfg)), stream, scope);
+          if (across) return { ...askAnswerSpaces(md, across, home), md, retained: [], related: [], model: askModel(askCfg) ?? askClient(askCfg) };
           const titles = new Map((await openWiki(root).pages()).map((p) => [p.path, String(p.fm.title ?? p.path)]));
           // the pages under the answer: retained and related are chosen by code (the judge), never by what the model wrote
           const ids = (refs?: { id: string }[]) => refs?.map((r) => r.id) ?? [];
@@ -438,11 +506,11 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
           const send = (e: object) => { if (!left.signal.aborted) try { ctrl.enqueue(enc.encode(`${JSON.stringify(e)}\n`)); } catch { /* the client is gone */ } };
           // the text so far, drawn as the final answer is (same renderer, so already sanitized), at most every 200 ms and always the last state
           let draft = "", timer: ReturnType<typeof setTimeout> | undefined;
-          const flush = () => { timer = undefined; try { send({ t: "draft", segments: answerSegments(live.draft?.(draft) ?? draftMarkdown(draft), known, true) }); } catch { /* half-written Markdown: the next draft will do */ } };
+          const flush = () => { timer = undefined; try { send({ t: "draft", segments: across ? answerSegments(draftMarkdown(draft), new Map(), true, across) : answerSegments(live.draft?.(draft) ?? draftMarkdown(draft), known, true) }); } catch { /* half-written Markdown: the next draft will do */ } };
           const live: AskStream = {
             text: (text) => { draft += text; send({ t: "delta", text }); timer ??= setTimeout(flush, 200); },
             reset: () => { draft = ""; clearTimeout(timer); timer = undefined; send({ t: "reset" }); },
-            step: (name, args) => send({ t: "step", step: stepOf(name, args, known) }),
+            step: (name, args) => send({ t: "step", step: stepOf(name, args, known, across || undefined) }),
             signal: left.signal,
             log: say,
           };
@@ -510,7 +578,10 @@ export async function serve(root: string, o: ServeOpts) {
   });
   /** Why a write to this space is refused now (it is read-only), else undefined; a store that fails refuses too. */
   const readOnlyOf = (name: string) => () => { try { return getSpace(accounts.store(), name)?.read_only ? readOnlyMessage(name) : undefined; } catch { return `space ${name}: the accounts' store failed, nothing is written.`; } };
-  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`, readOnlyOf(name));
+  // the spaces a question or a search across may read: decided once `may` and `visible` exist (below); the sites are mounted before
+  let scopeOf: Reach = async () => new Response(null, { status: 404 });
+  const reach: Reach = (req, asked) => scopeOf(req, asked);
+  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`, readOnlyOf(name), reach);
   if (multi) {
     for (const name of listSpaces(root)) {
       const site = await mount(name);
@@ -536,6 +607,18 @@ export async function serve(root: string, o: ServeOpts) {
   };
   const may = async (name: string, req: Request) => (await access(name, req)) === "ok";
   const visible = async (req: Request) => { const out: string[] = []; for (const n of sites.keys()) if (await may(n, req)) out.push(n); return out; };
+  /**
+   * The spaces one request may read when it names several (a search across, a question): `all`, or the names asked for. More than one space (or all) is for
+   * someone signed in, decided on what was asked, before anything is checked; a single named space is that space's own, open or private as it is. Each
+   * is checked with `may`: a space the visitor may not see, one that does not exist and an archived one (not mounted) are silently left out.
+   */
+  scopeOf = async (req, asked) => {
+    const every = asked === "all";
+    if ((every || asked.length > 1) && !(await accounts.userOf(req))) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+    const out: string[] = [];
+    for (const n of every ? await visible(req) : asked) if (sites.has(n) && (every || await may(n, req))) out.push(n);
+    return out;
+  };
   /** The space the paths of the site from before the spaces lead to: `default_space`, else the only space (the CLI's rule). */
   const defaultSpace = async () => {
     const def = await loadConfig(root).then((c) => c.default_space, () => undefined);
@@ -688,9 +771,8 @@ export async function serve(root: string, o: ServeOpts) {
     const q = url.searchParams.get("q") ?? "", limit = Math.min(Math.max(Math.trunc(Number(url.searchParams.get("limit"))) || LIMITS.searchLimit, 1), LIMITS.searchMaxLimit);
     if (!q.trim() || q.length > LIMITS.searchQueryChars) return Response.json({ error: `expected q (1 to ${LIMITS.searchQueryChars} characters)` }, { status: 400, headers: noStore });
     if (!every && !names.length) return Response.json({ error: "expected spaces=a,b or spaces=all" }, { status: 400, headers: noStore });
-    if ((every || names.length > 1) && !(await accounts.userOf(req))) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
-    const targets: string[] = [];
-    for (const n of every ? await visible(req) : names) if (sites.has(n) && (every || await may(n, req))) targets.push(n);
+    const targets = await scopeOf(req, every ? "all" : names);
+    if (targets instanceof Response) return targets;
     const lists = await Promise.all(targets.map(async (space) => {
       try { return { space, hits: ((await searchSite(spaceRoot(root, space), q, { limit })).body.hits ?? []) as SearchHit[] }; }
       catch (e) { say(`search in ${space}: ${(e as Error).message}`); return { space, hits: [] as SearchHit[] }; } // one broken space does not hide the others

@@ -150,13 +150,29 @@ function dropEmptyHeadings(md: string, partial: boolean): string {
   return gone.size ? lines.filter((_, i) => !gone.has(i)).join("\n") : md;
 }
 
+/** A link to a page of a space as an answer cites it: `](/s/<space>/wiki/x.md#frag)`, the file form `spaces/<space>/…` too. */
+const SPACE_LINK = /\]\(\/(?:s|spaces)\/([a-z0-9][a-z0-9-]{0,39})\/(wiki\/[^)\s#]+)\.md(#[^)\s]*)?\)/g;
+
+/**
+ * An answer to a question that read several spaces: each citation of a page of `spaces` (space → wiki path → title) becomes the link to that
+ * page on its own site, absolute (`/s/<space>/wiki/x/`), whatever space the visitor is in; a citation of a page that is not there, or of a
+ * space that was not read, and a link with no space (it would mean the visitor's own space, which a several-spaces answer never meant), become
+ * a missing page, never a link.
+ */
+export function qualifyLinks(md: string, spaces: Map<string, Map<string, string>>): string {
+  const missing = "](/wiki/unknown-page.md)";
+  return md.replace(/\]\(\/wiki\/[^)\s#]+\.md(?:#[^)\s]*)?\)/g, missing).replace(SPACE_LINK, (_all, space: string, path: string, frag = "") =>
+    spaces.get(space)?.has(`${path}.md`) ? `](/s/${space}/${path}/${frag})` : missing);
+}
+
 /**
  * The answer as the site draws it: prose segments (sanitized HTML, wiki links relative to the site root, footnotes listed at
  * the end) and blocks. Labels are escaped; text fields go through the same rendering as the prose. A page of a `pages`
  * block that does not exist is dropped, and a heading left with nothing under it (its block was dropped) goes with it, unless
  * the text is still being written (`partial`: a heading at the very end may get its text). `titles`: wiki path → page title.
  */
-export function answerSegments(md: string, titles: Map<string, string>, partial = false): Segment[] {
+export function answerSegments(md: string, titles: Map<string, string>, partial = false, spaces?: Map<string, Map<string, string>>): Segment[] {
+  if (spaces) md = qualifyLinks(md, spaces);
   const paths = new Set(titles.keys());
   const html = (s: string) => render(s, "", paths).html;
   const inline = (s: string) => html(s).trim().replace(/^<p>([\s\S]*)<\/p>$/, "$1");

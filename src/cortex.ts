@@ -20,6 +20,7 @@ import { LIMITS } from "./limits";
 import pkg from "../package.json";
 import { HELP } from "./help";
 import { OPTIONS } from "./cli-options";
+import { askSpaceNames, askSpacesFromEnv, narrowSpaces } from "./ask-scope";
 
 
 
@@ -74,9 +75,13 @@ try {
   // upgrade and doctor concern the CLI, not a wiki: they run anywhere (the root is never read)
   // help and version too: no command, `--help`, `--version` (the release workflow runs them outside any wiki)
   if (o.version) { console.log(pkg.version); process.exit(0); }
-  // several spaces (`a,b`, `all`) are for a search alone, here and on a remote host
-  const spaces = isSpaceList(o.space);
-  if (spaces && cmd !== "search") throw usage("--space with several spaces (a,b or all) is only for cortex search.");
+  // several spaces (`a,b`, `all`) are for a search and a question, here (on a remote host: a search alone). A process started for a question that
+  // reads several spaces (the pack's server, a command of the agent) is bound to them by its environment, which the agent cannot change
+  const wide = askSpacesFromEnv();
+  const spaces = isSpaceList(o.space) || !!wide;
+  if (spaces && !wide && cmd !== "search" && cmd !== "ask") throw usage("--space with several spaces (a,b or all) is only for cortex search and cortex ask.");
+  if (wide && cmd !== "search" && !(cmd === "mcp" && o.agent !== undefined)) throw usage("this question reads several spaces: only cortex search is available.");
+  if (cmd === "ask" && spaces && o.file) throw usage("cortex ask --file writes a page into one space: not with several spaces (a,b or all).");
   // remote wiki (docs/REMOTE-PLAN.md): the remotes.json commands, the server side of a forwarded call, then the forwarding
   if (cmd === "remote" || cmd === "remote-exec") {
     const r = await import("./remote");
@@ -122,7 +127,7 @@ try {
       if (!q) throw usage('Usage: cortex search "<query>"');
       if (o.in && o.in !== "wiki" && o.in !== "raw") throw usage("--in expects wiki or raw");
       const opts = { in: o.in as any, limit: int("--limit", o.limit, { min: 1 }) };
-      const searched = spaces ? findSpaces(o.space!) : undefined; // another space than the one chosen: on request only
+      const searched = spaces ? findSpaces(wide ? narrowSpaces(o.space, wide).join(",") : o.space!) : undefined; // another space than the one chosen: on request only
       const hits = searched ? await searchSpaces(searched, q, opts) : await search(root, q, opts);
       if (o.json) { console.log(JSON.stringify(hits, null, 2)); break; }
       if (!hits.length) console.log(paint.dim("No results."));
@@ -191,8 +196,8 @@ try {
       break;
     case "ask": {
       const q = args.join(" ");
-      if (!q) throw usage('Usage: cortex ask "<question>" [--file]');
-      finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive }, print));
+      if (!q) throw usage('Usage: cortex ask "<question>" [--file] [--space a,b|all]');
+      finish(await (await import("./agent")).askCtx(wiki, q, { file: o.file, interactive: o.interactive, spaces: spaces ? askSpaceNames(o.space!) : undefined }, print));
       break;
     }
     case "share": {

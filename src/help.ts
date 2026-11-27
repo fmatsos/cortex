@@ -14,7 +14,7 @@ export const HELP = `cortex — second brain
   cortex log [--limit N] [--json] [--kind k]     (the journal, newest first; 20 entries by default)
   cortex log add <add|ingest|query|lint|update> "<text>" [--source <raw id>]… [--page <wiki/….md>]…
   cortex compile <id…> | --pending [--batch]   (interactive by default; --batch: pages as draft)
-  cortex ask "<question>" [--file] [--interactive]
+  cortex ask "<question>" [--file] [--interactive] [--space a,b|all]   (--space a,b or all: the agent reads several spaces, read-only, never with --file)
   cortex export [--out <folder>]                (the wiki as an interactive HTML site; default: .cortex/site)
   cortex serve [--port <n>] [--sync]            (serves the site, pages can be marked reviewed from it as $CORTEX_REVIEWER,
                                                and the phone share target under /share/ (shares → inbox/ → sources);

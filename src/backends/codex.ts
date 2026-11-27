@@ -9,11 +9,11 @@ import { packServer } from "./tools";
 export default function codex(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["codex", ...flag("-m", cfg.model), ...flag("-c", cfg.effort && `model_reasoning_effort="${cfg.effort}"`), p]),
-    async run(root, prompt, mode) {
+    async run(root, prompt, mode, _report, _check, _extra, _stream, spaces) {
       const { Codex } = await load<typeof import("@openai/codex-sdk")>("@openai/codex-sdk", () => import("@openai/codex-sdk"));
       // approvalPolicy "never" refuses every MCP call that needs approval (codex ≥ 0.167): the pack is pre-approved, its own
       // guard (tools.ts) is the check
-      const config = { mcp_servers: { cortex: { ...packServer(root, mode), default_tools_approval_mode: "approve" } }, features: { shell_tool: false } };
+      const config = { mcp_servers: { cortex: { ...packServer(root, mode, spaces), default_tools_approval_mode: "approve" } }, features: { shell_tool: false } };
       const thread = new Codex({ codexPathOverride: cli("codex"), config: config as any }).startThread({
         // workspace-write only allows writing under workingDirectory (verified: raw/ and the agent file stay read-only)
         workingDirectory: mode === "write" ? join(root, "wiki") : root,

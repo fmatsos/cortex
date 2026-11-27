@@ -118,3 +118,8 @@ test("title: one line, 120 characters", () => {
   expect(normalizeTitle("  une\n question   longue ")).toBe("une question longue");
   expect(normalizeTitle("é".repeat(200))).toHaveLength(120);
 });
+
+test("export: a citation of a page of a space (an answer that read several spaces) becomes the page on that space's site", () => {
+  const md = absoluteLinks("Voir [A](/s/veille/wiki/concepts/alpha.md#x), [B](/spaces/pro/wiki/entities/beta.md) et [C](/wiki/concepts/gamma.md).", "https://wiki.example.org/s/pro/");
+  expect(md).toBe("Voir [A](https://wiki.example.org/s/veille/wiki/concepts/alpha/#x), [B](https://wiki.example.org/s/pro/wiki/entities/beta/) et [C](https://wiki.example.org/s/pro/wiki/concepts/gamma/).");
+});

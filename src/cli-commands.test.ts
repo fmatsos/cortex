@@ -485,7 +485,7 @@ mkdir -p wiki/concepts; printf -- '---\\ntype: Concept\\ntitle: C\\ndescription:
   test("ask usage error: no question → 2", () => {
     const r = cortex(wiki(), ["ask"], { env: silent() });
     expect(r.code).toBe(2);
-    expect(r.err).toBe('✗ Usage: cortex ask "<question>" [--file]\n');
+    expect(r.err).toBe('✗ Usage: cortex ask "<question>" [--file] [--space a,b|all]\n');
   });
   test("ask success: the agent answer is printed → 0", () => {
     const r = cortex(wiki(), ["ask", "quoi ?"], { env: agent("cat >/dev/null; echo réponse") });

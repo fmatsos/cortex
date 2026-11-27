@@ -6,6 +6,7 @@ import { usage } from "./policy";
 import { confine } from "./sandbox";
 import { LIMITS } from "../limits";
 import { frontmatterError, identityChange, serializeDoc } from "../lib";
+import { ASK_SPACES_ENV, spaceCite, spacePath } from "../ask-scope";
 
 // --- The cortex tool pack: the tools every agent gets, whatever the backend. openai calls `callTool` in its own loop;
 // the other backends reach the same pack over MCP (`cortex mcp --agent`, or in process for the Claude SDK).
@@ -37,8 +38,21 @@ const WRITE_TOOLS = [
   def("Edit", "Replace one exact, unique string of a file under wiki/.", { file_path: str("path under wiki/"), old_string: str("exact text to replace"), new_string: str("replacement") }),
 ];
 
-/** The tools of a mode: read mode never lists a writing tool. */
-export const toolPack = (mode: Mode): ToolDef[] => (mode === "write" ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS);
+/**
+ * The tools that read several spaces (a question asked with `--space a,b`): the instance is the root and a page is
+ * `spaces/<space>/wiki/…`. `Search` looks in exactly the spaces of the question (one fused ranking); the others only open files of those.
+ */
+const SPACES_TOOLS: ToolDef[] = [
+  def("Search", "Hybrid search in the wiki of every space of this question at once (one ranking; each result names its space and gives the path to read and the link to cite). Use 2 or 3 key terms, never the whole question.",
+    { q: str("search terms"), limit: { type: "integer", description: "maximum number of results (default 8)" } }, ["q"]),
+  def("Read", "Read a file of a space of this question.", { file_path: str("e.g. spaces/<space>/wiki/concepts/x.md"), offset }, ["file_path"]),
+  def("Glob", "List the files matching a glob pattern, in a space of this question.", { pattern: str("e.g. spaces/<space>/wiki/**/*.md"), offset }, ["pattern"]),
+  def("Grep", "Lines matching a regular expression, in the files of a folder of a space of this question.", { pattern: str("regular expression"), path: str("folder, e.g. spaces/<space>/wiki"), offset }, ["pattern"]),
+  READ_TOOLS[3]!,
+];
+
+/** The tools of a mode: read mode never lists a writing tool. `spaces`: the question reads several spaces (read mode only). */
+export const toolPack = (mode: Mode, spaces?: string[]): ToolDef[] => (spaces ? SPACES_TOOLS : mode === "write" ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS);
 
 /** Zod shape of a tool's parameters, for the MCP servers (they take zod, the OpenAI API takes the JSON schema above). */
 export function zodShape(t: ToolDef): Record<string, z.ZodType> {
@@ -50,12 +64,13 @@ export function zodShape(t: ToolDef): Record<string, z.ZodType> {
  * MCP config that starts the pack for an agent CLI: `cortex mcp --agent <mode>` with this very cortex (the compiled
  * binary, or bun and the script), on `root`.
  */
-export function packServer(root: string, mode: Mode) {
+export function packServer(root: string, mode: Mode, spaces?: string[]) {
   const self = /\.[jt]s$/.test(Bun.main) ? [process.execPath, Bun.main] : [process.execPath];
-  return { command: self[0], args: [...self.slice(1), "mcp", "--agent", mode], env: { CORTEX_ROOT: root } };
+  // the spaces of a question that reads several: the server's own environment, which the agent cannot change
+  return { command: self[0], args: [...self.slice(1), "mcp", "--agent", mode], env: { CORTEX_ROOT: root, ...(spaces && { [ASK_SPACES_ENV]: spaces.join(",") }) } };
 }
 /** The same, as a Claude Code `--mcp-config` document. */
-export const packMcpConfig = (root: string, mode: Mode) => JSON.stringify({ mcpServers: { cortex: packServer(root, mode) } });
+export const packMcpConfig = (root: string, mode: Mode, spaces?: string[]) => JSON.stringify({ mcpServers: { cortex: packServer(root, mode, spaces) } });
 
 /** One part of a tool result, from `from`; the rest is never dropped: the part names the offset of the next one. */
 export function part(s: string, from = 0): string {
@@ -68,20 +83,27 @@ export function part(s: string, from = 0): string {
  * backend: reads in the repository, writes under wiki/, Bash limited to cortex), then the tool. The result, a refusal
  * or an error is text for the model. `refused` hears each refusal (a live notice).
  */
-export async function callTool(root: string, mode: Mode, name: string, args: Record<string, any>, refused?: (reason: string) => void): Promise<string> {
+export async function callTool(root: string, mode: Mode, name: string, args: Record<string, any>, refused?: (reason: string) => void, spaces?: string[]): Promise<string> {
   try {
     const a = { ...args };
     // the schema writes repo paths as `/raw/…`: a leading / outside the root means the repository root, not the system's
-    for (const k of ["file_path", "path"]) if (typeof a[k] === "string" && a[k].startsWith("/") && !a[k].startsWith(root)) a[k] = "." + a[k];
+    for (const k of ["file_path", "path"]) if (typeof a[k] === "string") {
+      if (spaces) a[k] = spacePath(a[k]); // `/s/<space>/wiki/x.md`, the link of a citation, reads like `spaces/<space>/wiki/x.md`
+      if (a[k].startsWith("/") && !a[k].startsWith(root)) a[k] = "." + a[k];
+    }
+    if (spaces) {
+      if (mode !== "read") return "A question that reads several spaces never writes.";
+      if (name === "Search") return await searchTool(root, spaces, a);
+    }
     // WritePage, Append and NewPage write one page under wiki/: the Write rule (NewPage on a stand-in path)
-    const v = guard(root, /^(WritePage|Append|NewPage)$/.test(name) ? "Write" : name, name === "NewPage" ? { ...a, file_path: "wiki/new.md" } : a, mode);
+    const v = guard(root, /^(WritePage|Append|NewPage)$/.test(name) ? "Write" : name, name === "NewPage" ? { ...a, file_path: "wiki/new.md" } : a, mode, spaces);
     if (!v.allow) { refused?.(v.reason); return v.reason; }
-    return await exec(root, mode, name, a);
+    return await exec(root, mode, name, a, spaces);
   } catch (e) { return `error: ${(e as Error).message}`; }
 }
 
 /** Runs one tool call already allowed by `guard`. */
-async function exec(root: string, mode: Mode, name: string, a: Record<string, any>): Promise<string> {
+async function exec(root: string, mode: Mode, name: string, a: Record<string, any>, spaces?: string[]): Promise<string> {
   const abs = (p = ".") => resolve(root, p);
   // a page whose frontmatter does not parse never lands on disk, nor a page replacing another or created outside NewPage
   const save = async (path: string, text: string, done: string) => {
@@ -134,10 +156,22 @@ async function exec(root: string, mode: Mode, name: string, a: Record<string, an
     }
     case "Bash": {
       // guard allowed a single cortex command, quotes without expansion; sh only parses them, bwrap still confines it
-      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode), { cwd: root, env: process.env, stdout: "pipe", stderr: "pipe" });
+      const p = Bun.spawn(confine(root, ["sh", "-c", a.command], mode, spaces), { cwd: root, env: spaces ? { ...process.env, CORTEX_ROOT: root, [ASK_SPACES_ENV]: spaces.join(",") } : process.env, stdout: "pipe", stderr: "pipe" });
       const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
       return part(`${out}${err}${code ? `\n(exit ${code})` : ""}`, a.offset);
     }
   }
   return `unknown tool ${name}`;
+}
+
+/**
+ * `Search` of a question that reads several spaces: the hybrid search of each allowed space, fused (`searchSpaces`). The spaces are the
+ * question's own list, never something the arguments can change; a result carries the path `Read` opens and the link to cite.
+ */
+async function searchTool(root: string, spaces: string[], a: Record<string, any>): Promise<string> {
+  if (typeof a.q !== "string" || !a.q.trim()) return "q must be a non-empty string.";
+  const limit = Math.min(20, Math.max(1, Math.trunc(Number(a.limit)) || 8));
+  const { searchSpaces } = await import("../search");
+  const hits = await searchSpaces(spaces.map((space) => ({ space, root: join(root, "spaces", space) })), a.q, { in: "wiki", limit });
+  return part(JSON.stringify(hits.map((h) => ({ space: h.space, path: `spaces/${h.space}/${h.path}`, cite: spaceCite(h.space, h.path), title: h.title, snippet: h.snippet })), null, 1), a.offset);
 }

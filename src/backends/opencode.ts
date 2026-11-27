@@ -11,8 +11,8 @@ export default function opencode(cfg: Config): Backend {
   const [providerID, ...id] = model.split("/");
   return {
     interactive: interactiveWith((p) => ["opencode", "--model", cfg.effort ? `${model}#${cfg.effort}` : model, "--prompt", p]),
-    async run(root, prompt, mode) {
-      const pack = packServer(root, mode);
+    async run(root, prompt, mode, _report, _check, _extra, _stream, spaces) {
+      const pack = packServer(root, mode, spaces);
       const server = await startOpencode({ mcp: { servers: { cortex: { type: "local", command: [pack.command, ...pack.args], environment: pack.env } } } });
       try {
         const api = async (method: string, path: string, body?: unknown) => {

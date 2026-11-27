@@ -44,9 +44,10 @@ export interface Backend {
   /**
    * Non-interactive execution; returns the final text, throws on failure. `report` receives live notices (e.g. a refused tool
    * call). `extra`: tools of this run only; the openai and claude clients offer them, the others ignore them (`EXTRA_TOOLS`).
-   * `stream`: the answer as it is written; only the openai client sends it, the others ignore it.
+   * `stream`: the answer as it is written; only the openai client sends it, the others ignore it. `spaces`: a question that reads several
+   * spaces of an instance (`root`): read mode only, the tools and the sandbox reach exactly those (ask-scope.ts).
    */
-  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check, extra?: ExtraTool[], stream?: Stream): Promise<string>;
+  run(root: string, prompt: string, mode: Mode, report?: Report, check?: Check, extra?: ExtraTool[], stream?: Stream, spaces?: string[]): Promise<string>;
 }
 
 /** The clients that offer a run's extra tools to the model. */

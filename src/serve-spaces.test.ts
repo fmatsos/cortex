@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { accountsFile, addSpaceMember, createSession, getSpace, memberRole, openAccounts, randomToken, setSpace, sha256, spaceMembers, upsertUser, type Role } from "./accounts";
-import { serve } from "./serve";
+import { serve, type AskFn } from "./serve";
 
 // `cortex serve` on a multi-space instance: /s/<space>/ routing, who may see a space, and creating one from the site.
 // The site is not built for real: a small script stands for `cortex export --out` and writes what it was told (the space, the base path).
@@ -56,9 +56,9 @@ const hold = (root: string, space: string, userId: string, role: Role = "owner")
 
 const servers: { stop(force?: boolean): unknown }[] = [];
 afterEach(() => { servers.splice(0).forEach((s) => s.stop(true)); });
-const start = async (root: string, sync = false) => {
+const start = async (root: string, sync = false, ask?: AskFn) => {
   const said: string[] = [];
-  const server = await serve(root, { port: 0, sync, reviewer: "t", say: (m) => said.push(m), exportCmd, settleMs: 5, embeddings: async () => undefined });
+  const server = await serve(root, { port: 0, sync, reviewer: "t", say: (m) => said.push(m), exportCmd, settleMs: 5, embeddings: async () => undefined, ask });
   servers.push(server);
   const origin = `http://localhost:${server.port}`;
   const get = (path: string, headers: Record<string, string> = {}) => fetch(origin + path, { redirect: "manual", headers });
@@ -762,4 +762,91 @@ test("a legacy instance still serves its own service-worker.js at the root", asy
   mkdirSync(join(root, "wiki"), { recursive: true });
   const { get } = await start(root);
   expect(await (await get("/service-worker.js")).text()).toBe("// sw of ");
+});
+
+// --- a question that reads several spaces (`POST /s/<space>/api/ask` with `spaces`) ---
+const page = (root: string, space: string, id: string, title: string) => {
+  mkdirSync(join(root, "spaces", space, "wiki/concepts"), { recursive: true });
+  writeFileSync(join(root, "spaces", space, `wiki/concepts/${id}.md`), `---\ntype: Concept\ntitle: ${title}\n---\n\n${title}.\n`);
+};
+const asking = () => {
+  const root = instance(["a", "b", "c"], { ...AUTH, client: "claude", site_ask: {} });
+  page(root, "a", "idea", "Idea of a"); page(root, "b", "idea", "Idea of b"); page(root, "c", "other", "Other of c");
+  const ada = person(root, "ada"), bob = person(root, "bob");
+  hold(root, "b", ada.id); // b is private: ada's
+  return { root, ada, bob };
+};
+type Asked = { spaces?: string[]; root: string; q: string };
+const fake = (seen: Asked[]): AskFn => async (root, q, _h, _s, spaces) => {
+  seen.push({ root, q, spaces });
+  return { md: "See [A](/s/a/wiki/concepts/idea.md), [B](/s/b/wiki/concepts/idea.md#x), [C](/s/c/wiki/concepts/other.md), [no](/s/c/wiki/concepts/nope.md) and [bare](/wiki/concepts/idea.md)." };
+};
+
+test("ask across spaces: someone signed in reads the spaces they may see, the others are silently left out", async () => {
+  const { root, ada, bob } = asking();
+  const seen: Asked[] = [];
+  const { server } = await start(root, false, fake(seen)), origin = server.port;
+  const post = (body: object, who: Record<string, string> = {}) => fetch(`http://localhost:${origin}/s/a/api/ask`, { method: "POST", headers: { "content-type": "application/json", origin: `http://localhost:${origin}`, ...who }, body: JSON.stringify(body) });
+  expect((await post({ q: "why", spaces: ["a", "c"] })).status).toBe(401); // several spaces: for someone signed in
+  expect((await post({ q: "why", spaces: "all" })).status).toBe(401);
+  expect(seen).toEqual([]);
+
+  const r = await post({ q: "why", spaces: ["a", "b", "c"] }, ada.cookie);
+  expect(r.status).toBe(200);
+  expect(seen).toEqual([{ root: join(root, "spaces/a"), q: "why", spaces: ["a", "b", "c"] }]);
+  const body = await r.json() as { segments: { html: string }[]; cited: string[]; refs: { space: string; id: string; title: string }[]; retained: string[] };
+  const html = body.segments.map((x) => x.html).join("");
+  expect(html).toContain('href="/s/a/wiki/concepts/idea/"');
+  expect(html).toContain('href="/s/b/wiki/concepts/idea/#x"'); // the same id in two spaces: two pages
+  expect(html).toContain('href="/s/c/wiki/concepts/other/"');
+  expect(html).not.toContain("nope/"); // a page that does not exist, and a link with no space: never a link
+  expect(html).not.toContain('href="/wiki/');
+  expect((html.match(/missing-link/g) ?? []).length).toBe(2);
+  expect(body.refs).toEqual([{ space: "a", id: "concepts/idea", title: "Idea of a" }, { space: "b", id: "concepts/idea", title: "Idea of b" }, { space: "c", id: "concepts/other", title: "Other of c" }]);
+  expect(body.cited).toEqual(["concepts/idea"]); // the ids of the space the question was asked in: what the conversation saves
+  expect(body.retained).toEqual([]);
+
+  seen.length = 0;
+  const b = await post({ q: "why", spaces: ["a", "b", "c"] }, bob.cookie); // b is private and bob is not a member
+  expect(b.status).toBe(200);
+  expect(seen[0]!.spaces).toEqual(["a", "c"]);
+  const hb = ((await b.json()) as { segments: { html: string }[]; refs: unknown[] });
+  expect(hb.segments.map((x) => x.html).join("")).not.toContain('href="/s/b/'); // what b held does not come back through a citation either
+  expect(hb.refs).toHaveLength(2);
+  seen.length = 0;
+  await post({ q: "why", spaces: "all" }, bob.cookie);
+  expect(seen[0]!.spaces).toEqual(["a", "c"]);
+  await post({ q: "why", spaces: ["a", "ghost", "c"] }, bob.cookie); // an unknown space is dropped the same way
+  expect(seen[1]!.spaces).toEqual(["a", "c"]);
+  seen.length = 0;
+  expect((await post({ q: "why", spaces: ["b"] }, bob.cookie)).status).toBe(400); // nothing left to read: not an answer from nothing
+  expect((await post({ q: "why", spaces: ["ghost", "b"] }, bob.cookie)).status).toBe(400);
+  expect((await post({ q: "why", spaces: "everything" }, bob.cookie)).status).toBe(400);
+  expect((await post({ q: "why", spaces: [1] }, bob.cookie)).status).toBe(400);
+  expect(seen).toEqual([]);
+  // one space of the list alone, signed out: that space's own question, open as it is
+  expect((await post({ q: "why", spaces: ["c"] })).status).toBe(200);
+  expect(seen[0]!.spaces).toEqual(["c"]);
+  // the space the question is asked in, alone, is the ordinary question
+  seen.length = 0;
+  await post({ q: "why", spaces: ["a"] });
+  expect(seen[0]!.spaces).toBeUndefined();
+  await post({ q: "why" });
+  expect(seen[1]!.spaces).toBeUndefined();
+  // not from another site
+  expect((await fetch(`http://localhost:${origin}/s/a/api/ask`, { method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example" }, body: JSON.stringify({ q: "why", spaces: "all" }) })).status).toBe(403);
+});
+
+test("ask across spaces: a saved answer is drawn again with the spaces its reader may see", async () => {
+  const { root, ada, bob } = asking();
+  const { server } = await start(root, false, fake([]));
+  const render = (who: Record<string, string>, answers: string[]) => fetch(`http://localhost:${server.port}/s/a/api/ask/render`, { method: "POST", headers: { "content-type": "application/json", origin: `http://localhost:${server.port}`, ...who }, body: JSON.stringify({ answers }) }).then((r) => r.json() as Promise<{ answers: { segments: { html: string }[]; refs?: unknown[] }[] }>);
+  const md = "See [B](/s/b/wiki/concepts/idea.md) and [C](/s/c/wiki/concepts/other.md).";
+  const mine = (await render(ada.cookie, [md])).answers[0]!.segments.map((x) => x.html).join("");
+  expect(mine).toContain('href="/s/b/wiki/concepts/idea/"');
+  const his = (await render(bob.cookie, [md])).answers[0]!.segments.map((x) => x.html).join("");
+  expect(his).not.toContain('href="/s/b/');
+  expect(his).toContain('href="/s/c/wiki/concepts/other/"');
+  // an answer of one space keeps its own links
+  expect((await render(ada.cookie, ["See [A](/wiki/concepts/idea.md)."])).answers[0]!.segments.map((x) => x.html).join("")).toContain("idea/");
 });

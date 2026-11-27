@@ -9,15 +9,15 @@ import { toLabel, toRegex, usage } from "./policy";
 export default function claude(cfg: Config): Backend {
   return {
     interactive: interactiveWith((p) => ["claude", ...flag("--model", cfg.model), ...flag("--effort", cfg.effort), p]),
-    async run(root, prompt, mode, report, _check, extra = [], stream) {
+    async run(root, prompt, mode, report, _check, extra = [], stream, spaces) {
       const { query, createSdkMcpServer, tool } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
       const { callTool, toolPack, zodShape } = await import("./tools");
       const schema = stream?.system ?? await schemaText(root);
       const refused = (reason: string) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" });
       // the cortex tool pack, in process: the same tools as every backend; Claude Code's own tools are off
-      const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: (stream?.onlyExtra ? [] : toolPack(mode)).map((t) =>
-        tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused) }] })))
+      const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: (stream?.onlyExtra ? [] : toolPack(mode, spaces)).map((t) =>
+        tool(t.name, t.description, zodShape(t) as any, async (args: Record<string, unknown>) => ({ content: [{ type: "text" as const, text: await callTool(root, mode, t.name, args, refused, spaces) }] })))
         .concat(extra.map((t) => tool(t.name, t.description, t.schema.shape as any, async (args: unknown) => ({ content: [{ type: "text" as const, text: await runExtra(t, args) }] })))) });
       let out: string | undefined;
       for await (const m of query({
@@ -64,17 +64,23 @@ const CORTEX_CMD = { read: toRegex("read"), write: toRegex("write") };
 const READ_ONLY = new Set(["Read", "Glob", "Grep", "LS"]);
 const WRITERS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
-/** Reads (Read, Glob, Grep, LS) are confined to the wiki root: every path argument, symlinks resolved. */
-function readViolation(root: string, tool: string, input: Record<string, any>): string | undefined {
+/**
+ * Reads (Read, Glob, Grep, LS) are confined to the wiki root: every path argument, symlinks resolved. `spaces`: a question that reads
+ * several spaces, run from the instance: only inside `spaces/<name>/` of those (the other spaces, the accounts, the archive are not).
+ */
+function readViolation(root: string, tool: string, input: Record<string, any>, spaces?: string[]): string | undefined {
   const base = String(input.path ?? root);
-  const paths = [base];
-  if (input.file_path !== undefined) paths.push(String(input.file_path));
+  // a question over several spaces runs from the instance: the root itself is no place to read, only what is named (or, by default, the whole instance: refused)
+  const paths: string[] = spaces ? [...(input.path !== undefined ? [base] : []), ...(input.file_path !== undefined ? [String(input.file_path)] : [])] : [base];
+  if (input.file_path !== undefined && !spaces) paths.push(String(input.file_path));
   // Glob: the static prefix of the pattern (before the first wildcard) must stay in the root too
   if (tool === "Glob" && typeof input.pattern === "string") {
     const pre = input.pattern.split(/[*?[{]/)[0];
     paths.push(isAbsolute(pre) ? pre : join(isAbsolute(base) ? base : resolve(root, base), pre));
   }
-  return paths.find((p) => p.startsWith("~") || !isUnder(root, ".", p, { self: true }));
+  if (spaces && !paths.length) paths.push(base);
+  const inside = (p: string) => (spaces ? spaces.some((s) => isUnder(root, join("spaces", s), p, { self: true })) : isUnder(root, ".", p, { self: true }));
+  return paths.find((p) => p.startsWith("~") || !inside(p));
 }
 
 export type Verdict = { allow: true } | { allow: false; reason: string };
@@ -109,11 +115,11 @@ function hint(cmd: string): string {
 }
 
 /** Pure function: is a tool requested by the agent allowed? Writes limited to wiki/, Bash limited to cortex. */
-export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode): Verdict {
+export function guard(root: string, tool: string, input: Record<string, any>, mode: Mode, spaces?: string[]): Verdict {
   if (tool === "TodoWrite") return { allow: true };
   if (READ_ONLY.has(tool)) {
-    const bad = readViolation(root, tool, input);
-    return bad === undefined ? { allow: true } : { allow: false, reason: `Read refused outside the wiki repository: ${bad}` };
+    const bad = readViolation(root, tool, input, spaces);
+    return bad === undefined ? { allow: true } : { allow: false, reason: spaces ? `Read refused outside the spaces of this question (${spaces.join(", ")}): ${bad}. Give a path under spaces/<space>/.` : `Read refused outside the wiki repository: ${bad}` };
   }
   if (tool === "Bash") {
     const raw = String(input.command ?? "").trim();
