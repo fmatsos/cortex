@@ -30,7 +30,14 @@
 
 	function place() {
 		const t = menu.triggerEl, c = ref;
-		if (anchored || !t || !c) return;
+		if (!t || !c) return;
+		if (anchored) {
+			// placed by CSS against the trigger's edge; a trigger that is not at the edge of a narrow header (the account button
+			// followed by the help button) would take the menu out of the screen: it then goes to the nearest margin
+			const m = c.getBoundingClientRect();
+			if (m.left < 8 || m.right > innerWidth - 8) fallback = `left:${Math.max(8, Math.min(m.left, innerWidth - m.width - 8))}px;right:auto`;
+			return;
+		}
 		const r = t.getBoundingClientRect(), w = c.offsetWidth;
 		const left = Math.max(8, Math.min(align === "end" ? r.right - w : r.left, innerWidth - w - 8));
 		fallback = `left:${left}px;top:${r.bottom}px`;
@@ -49,6 +56,7 @@
 			menu.focusTarget = "first";
 		} else {
 			menu.active = null;
+			if (anchored) fallback = "";
 			// Escape and item selection leave the focus inside the menu: bring it back to the trigger. A click elsewhere
 			// already moved it, which is left alone.
 			if (focusWasInside && !leaving) menu.triggerEl?.focus();

@@ -535,6 +535,58 @@ mark {
 	50% { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
 
+/* cards that come forward on hover / keyboard focus: a hair larger, the in-page surface shadow a touch stronger (still soft).
+   Transform only, so neighbours do not move; the corners stay square. Under reduced motion the card does not move at all,
+   only the shadow changes (a static state, no animation: the global rule above zeroes the transition). */
+.lift {
+	transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+.lift:is(:hover, :focus-visible) {
+	box-shadow: 0 2px 6px color-mix(in oklab, var(--foreground) 16%, transparent), 0 1px 2px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+	.lift:is(:hover, :focus-visible) {
+		transform: scale(1.02);
+	}
+}
+
+/* tooltip of the type cards: shown on hover (pointers that hover only, so a tap on a touch screen is never in its way)
+   and on keyboard focus, after a short delay; Escape closes it (data-dismissed, set by the page). It never takes the pointer on
+   a touch screen, and the host is `position: relative`. Odd cards open to the right of their left edge, even ones to the left of
+   their right edge, so it stays inside the viewport at 2 columns; at 4 columns (sm) the first two open to the right, the last two to the left. */
+.type-tip {
+	position: absolute;
+	top: 100%;
+	z-index: 30;
+	width: max-content;
+	max-width: min(18rem, calc(100vw - 2rem));
+	padding-top: 6px;
+	visibility: hidden;
+	opacity: 0;
+	transition: opacity 120ms ease-out, visibility 0s linear 120ms;
+}
+.type-tip-host:nth-child(odd) .type-tip { left: 0; }
+.type-tip-host:nth-child(even) .type-tip { right: 0; }
+@media (min-width: 40rem) {
+	.type-tip-host:nth-child(-n + 2) .type-tip { left: 0; right: auto; }
+	.type-tip-host:nth-child(n + 3) .type-tip { right: 0; left: auto; }
+}
+.type-tip-host:has(> a:focus-visible):not([data-dismissed]) .type-tip {
+	visibility: visible;
+	opacity: 1;
+	transition-delay: 350ms;
+}
+@media (hover: hover) {
+	.type-tip-host:hover:not([data-dismissed]) .type-tip {
+		visibility: visible;
+		opacity: 1;
+		transition-delay: 350ms;
+	}
+}
+@media (pointer: coarse) {
+	.type-tip { pointer-events: none; }
+}
+
 /* print: the article alone, black on white whatever the theme, without controls or navigation */
 @media print {
 	/* the palette itself (black on white, whatever the theme) is generated into lib/design/tokens.css */

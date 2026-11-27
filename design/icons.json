@@ -52,6 +52,7 @@
     "assistant": "sparkle",
     "download": "download-simple",
     "kind-query": "question",
+    "help": "question-mark",
     "kind-lint": "list-checks",
     "kind-update": "arrows-clockwise",
     "zoom-in": "magnifying-glass-plus",

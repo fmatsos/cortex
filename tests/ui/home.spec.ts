@@ -163,3 +163,100 @@ test("home: the tab title is 'Cortex · subtitle' in both languages", async ({ p
   await pick("English");
   await expect(page).toHaveTitle("Cortex · Knowledge wiki");
 });
+
+// The four type cards (Concept, Entité, Synthèse, Source) come forward on hover and keyboard focus: a slight scale and a
+// stronger surface shadow. Under reduced motion they do not move (only the shadow changes, with no transition).
+test.describe("type cards: hover and focus", () => {
+  const cards = (page: import("@playwright/test").Page) => page.getByRole("list", { name: /^(Pages par type|Pages by type)$/ }).getByRole("link");
+  const state = (el: Element) => { const c = getComputedStyle(el); return { transform: c.transform, shadow: c.boxShadow, radius: c.borderTopLeftRadius }; };
+
+  test("a hover scales the card slightly and strengthens its shadow, the corners stay square", async ({ page, isMobile }) => {
+    test.skip(isMobile, "no hover on a touch screen");
+    await page.goto("/");
+    const card = cards(page).first();
+    await expect(card).toBeVisible();
+    const before = await card.evaluate(state);
+    expect(before.transform).toBe("none");
+    await card.hover();
+    await expect.poll(async () => (await card.evaluate(state)).transform).not.toBe("none");
+    const after = await card.evaluate(state);
+    expect(after.shadow).not.toBe(before.shadow);
+    expect(after.radius).toBe("0px");
+    const scale = Number(/^matrix\(([\d.]+),/.exec(after.transform)![1]);
+    expect(scale).toBeGreaterThan(1);
+    expect(scale).toBeLessThanOrEqual(1.03);
+  });
+
+  test("keyboard focus brings the card forward too", async ({ page }) => {
+    await page.goto("/");
+    const card = cards(page).first();
+    await card.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab"); // back on the card through the keyboard: :focus-visible applies
+    await expect(card).toBeFocused();
+    await expect.poll(async () => (await card.evaluate(state)).transform).not.toBe("none");
+  });
+
+  test("focusing a card shows its description (tooltip), exposed as its accessible description; Escape closes it", async ({ page }) => {
+    await page.goto("/");
+    const card = cards(page).first();
+    const tip = page.locator("#" + (await card.getAttribute("aria-describedby")));
+    await expect(tip).toHaveRole("tooltip");
+    await expect(tip).toBeHidden();
+    await page.keyboard.press("Tab"); // walks to the first focusable ... until the card
+    for (let i = 0; i < 40 && !(await card.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press("Tab");
+    await expect(card).toBeFocused();
+    await expect(tip).toBeVisible();
+    await expect(tip).toHaveText(/\S{3,}/);
+    await expect(card).toHaveAccessibleDescription((await tip.textContent())!.trim());
+    const box = (await tip.boundingBox())!;
+    expect(box.x, "inside the viewport").toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.keyboard.press("Escape");
+    await expect(tip).toBeHidden();
+  });
+
+  test("a tap on a card opens its list, the tooltip does not get in the way", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "touch project only");
+    await page.goto("/");
+    await cards(page).first().tap();
+    await expect(page).toHaveURL(/search\/?\?q=type/);
+  });
+
+  test("under reduced motion the card does not move", async ({ page, isMobile }) => {
+    test.skip(isMobile, "no hover on a touch screen");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    const card = cards(page).first();
+    await card.hover();
+    await page.waitForTimeout(100);
+    expect((await card.evaluate(state)).transform).toBe("none");
+  });
+});
+
+// Favorites live in a bordered panel of their own, a region named by its heading.
+test("favorites: a dedicated bordered panel (region named Favoris) holding the favorite pages", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("cortex:favs", JSON.stringify(["entities/gamma"])));
+  await page.goto("/");
+  const fav = page.getByRole("region", { name: /^(Favoris|Favorites)/ });
+  await expect(fav).toHaveCount(1);
+  await expect(fav.getByRole("heading", { level: 2, name: /^(Favoris|Favorites)/ })).toBeVisible();
+  await expect(fav.getByRole("link").first()).toBeVisible();
+  const style = await fav.evaluate((el) => { const c = getComputedStyle(el); return { border: c.borderTopWidth, pad: c.paddingTop, r: c.borderTopLeftRadius, shadow: c.boxShadow }; });
+  expect(style).toMatchObject({ border: "1px", r: "0px" });
+  expect(parseFloat(style.pad)).toBeGreaterThanOrEqual(16);
+  expect(style.shadow).not.toBe("none");
+  // a surface of its own (not the page background) spanning the whole content width, like the other panels
+  const bg = await fav.evaluate((el) => ({ panel: getComputedStyle(el).backgroundColor, page: getComputedStyle(document.body).backgroundColor }));
+  expect(bg.panel, "distinct from the page background").not.toBe(bg.page);
+  const box = (await fav.boundingBox())!, grid = (await section(page, FEATURED).or(section(page, NEWS)).first().boundingBox())!;
+  expect(Math.abs(box.x - grid.x), "left edge aligned with the home panels").toBeLessThanOrEqual(1);
+  // a clear break from the search block above (the search block ends well above the panel)
+  const search = (await page.locator("section[aria-labelledby=h-home]").boundingBox())!;
+  expect(box.y - (search.y + search.height)).toBeGreaterThanOrEqual(32);
+});
+
+test("favorites: no favorite, no panel", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: /^(Favoris|Favorites)/ })).toHaveCount(0);
+});

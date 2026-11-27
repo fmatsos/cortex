@@ -4,7 +4,7 @@
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import HomeNews from "#lib/components/home-news.svelte";
-	import PageList from "#lib/components/page-list.svelte";
+	import ResultRow from "#lib/components/result-row.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
 	import { toPage, toRoute, toTag } from "#lib/links.js";
@@ -19,6 +19,9 @@
 	const FACTS = 3;
 	const FEATURED = 3;
 	const FAVS_SHOWN = 6;
+	const TYPE_TIPS: Record<string, "home.types.tip.Concept" | "home.types.tip.Entity" | "home.types.tip.Source" | "home.types.tip.Synthesis"> = {
+		Concept: "home.types.tip.Concept", Entity: "home.types.tip.Entity", Source: "home.types.tip.Source", Synthesis: "home.types.tip.Synthesis",
+	};
 	const urlOf = (q: string) => `${toRoute("/search")}?q=${encodeURIComponent(q)}`;
 
 	// Favorites are specific to this browser: they are found in the search index (loaded only if there are any)
@@ -77,10 +80,16 @@
 </section>
 
 {#if favs.ids.length}
-	<section id="favorites" aria-labelledby="h-favorites" class="mt-6 flex flex-col">
+	<section id="favorites" aria-labelledby="h-favorites" class="bg-muted mt-10 flex flex-col border p-4 shadow-surface sm:p-5">
 		<h2 id="h-favorites" class="anchor-target flex items-center gap-2 text-xl font-semibold"><Icon name="favorites" size={24} class="text-favorite" />{t("favs.title")} <span class="text-muted-foreground text-sm font-normal">{t("favs.count", { count: favs.ids.length })}</span></h2>
 		{#if engine}
-			<PageList pages={favDocs.slice(0, FAVS_SHOWN)} filter={false} showFav />
+			<!-- the panel spans the whole width: the favorites flow in two columns on wide screens -->
+			<p class="sr-only" role="status">{t("common.pages", { count: Math.min(favDocs.length, FAVS_SHOWN) })}</p>
+			<ul class="mt-3 grid gap-x-8 lg:grid-cols-2">
+				{#each favDocs.slice(0, FAVS_SHOWN) as p (p.id)}
+					<li class="border-border border-t py-3.5"><ResultRow doc={p} href={toPage(p.id)} showFav /></li>
+				{/each}
+			</ul>
 			{#if favDocs.length > FAVS_SHOWN}
 				<a href={urlOf("is:fav")} class="text-link link-content mt-2 inline-flex min-h-9 items-center self-end underline underline-offset-4">{t("favs.seeAll", { count: favDocs.length })}</a>
 			{/if}
@@ -94,9 +103,13 @@
 <!-- encyclopedia-style front page: kinds of pages, then featured, news, did you know, central pages, portals -->
 <ul class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("home.types")}>
 	{#each data.seed.types.filter((x) => x.count) as x (x.type)}
-		<li><a href={urlOf(`type:${x.type.toLowerCase()}`)} class="hover:bg-muted bg-card shadow-surface focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
+		<!-- the tooltip (CSS: hover and keyboard focus, after a short delay, Escape closes it) is also the accessible description of the card -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<li class="type-tip-host relative" onkeydown={(e) => { if (e.key === "Escape") e.currentTarget.dataset.dismissed = ""; }} onpointerleave={(e) => delete e.currentTarget.dataset.dismissed} onfocusout={(e) => delete e.currentTarget.dataset.dismissed}><a href={urlOf(`type:${x.type.toLowerCase()}`)} aria-describedby={TYPE_TIPS[x.type] ? `tip-${x.type}` : undefined} class="lift hover:bg-muted bg-card shadow-surface focus-visible:ring-ring/50 flex min-h-11 items-center gap-2 rounded-lg border px-3 focus-visible:ring-3">
 			<Icon name={typeIcon(x.type)} size={20} style="color: {typeColor(x.type)}" />{typePlural(x.type)}<span class="text-muted-foreground ml-auto text-sm tabular-nums">{x.count}</span>
-		</a></li>
+		</a>
+		{#if TYPE_TIPS[x.type]}<span id="tip-{x.type}" role="tooltip" class="type-tip"><span class="bg-popover text-popover-foreground shadow-overlay block border px-3 py-2 text-sm">{t(TYPE_TIPS[x.type]!)}</span></span>{/if}
+		</li>
 	{/each}
 </ul>
 

@@ -131,6 +131,10 @@
 				</Button>
 			{/if}
 			<PreferencesMenu />
+			<!-- help: right after the account / preferences button, same size and label rule; a link (the help page), so it is marked as the current page there -->
+			<Button href={toRoute("/help")} variant="outline" class="aria-[current=page]:bg-muted gap-2 px-2 @6xl:px-3 [&_svg:not([class*='size-'])]:size-5" aria-current={current("/help") ? "page" : undefined} title={t("help.label")}>
+				<Icon name="help" size={20} /><span class="sr-only @6xl:not-sr-only">{t("help.label")}</span>
+			</Button>
 		</div>
 	</div>
 </header>
