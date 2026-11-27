@@ -4,6 +4,10 @@
 	import CortexMark from "#lib/components/cortex-mark.svelte";
 	import CortexWordmark from "#lib/components/cortex-wordmark.svelte";
 	import HomeNews from "#lib/components/home-news.svelte";
+	import HomeNotes from "#lib/components/home-notes.svelte";
+	import SearchScope from "#lib/components/search-scope.svelte";
+	import SpaceBadges from "#lib/components/space-badges.svelte";
+	import { labelOf, spaces } from "#lib/spaces.svelte.js";
 	import ResultRow from "#lib/components/result-row.svelte";
 	import SearchBox from "#lib/components/search-box.svelte";
 	import { favs } from "#lib/favs.svelte.js";
@@ -38,6 +42,10 @@
 		const start = pool.length ? (day * FACTS) % pool.length : 0;
 		return [...pool.slice(start), ...pool.slice(0, start)].slice(0, FACTS);
 	});
+	// a space of several: what it holds decides the home (known in the browser only: the prerendered page is the one of Resources)
+	const info = $derived(spaces.available ? spaces.info : undefined);
+	const showNotes = $derived(!!info?.content.includes("notes"));
+	const showResources = $derived(!showNotes || !!info?.content.includes("resources"));
 	const favDocs = $derived(engine ? engine.docs.filter((d) => favs.has(d.id)).sort((a, b) => a.title.localeCompare(b.title, "fr")) : []);
 </script>
 
@@ -49,6 +57,9 @@
 		<CortexMark size={72} />
 		<div class="min-w-0 pb-2">
 			<h1 id="h-home" class="flex flex-wrap items-baseline gap-x-3 text-3xl font-semibold tracking-tight"><CortexWordmark /><span class="text-muted-foreground relative -top-[0.1125rem] text-sm leading-tight font-normal tracking-normal">{t("home.tagline")}</span></h1>
+			{#if info}
+				<p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"><strong class="text-base">{labelOf(info)}</strong><code class="text-muted-foreground">/s/{info.name}/</code><SpaceBadges content={info.content} readOnly={info.readOnly} /></p>
+			{/if}
 			<p class="text-muted-foreground mt-2">
 				{t("home.intro", { pages: data.seed.total, tags: data.seed.nbTags })}
 				<a href={toRoute("/graph")} class="text-link link-content underline underline-offset-4">{t("home.intro.graph")}</a>.
@@ -56,6 +67,13 @@
 		</div>
 	</div>
 	<SearchBox variant="main" class="mt-5" />
+	<SearchScope />
+	{#if showNotes && showResources}
+		<nav aria-label={t("home.sections")} class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+			<a href="#notes-follow-up" class="hover:bg-muted bg-card inline-flex min-h-8 items-center border px-3 pointer-coarse:min-h-11">{t("home.sections.notes")}</a>
+			<a href="#resources-section" class="hover:bg-muted bg-card inline-flex min-h-8 items-center border px-3 pointer-coarse:min-h-11">{t("home.sections.resources")}</a>
+		</nav>
+	{/if}
 	{#if data.seed.examples.length}
 		<ul class="touch-gap mt-4 flex flex-wrap items-center gap-2" aria-label={t("home.examples")}>
 			<li class="text-muted-foreground text-sm" aria-hidden="true">{t("home.try")}</li>
@@ -100,6 +118,13 @@
 	</section>
 {/if}
 
+{#if showNotes}
+	<div class="mt-10"><HomeNotes recent={data.recent} people={data.people} news={data.news} onlyNotes={!showResources} /></div>
+{/if}
+
+{#if showResources}
+<div id="resources-section" class={showNotes ? "anchor-target border-border mt-10 border-t pt-8" : undefined}>
+{#if showNotes}<h2 class="text-2xl font-semibold tracking-tight">{t("spaces.content.resources")}</h2>{/if}
 <!-- encyclopedia-style front page: kinds of pages, then featured, news, did you know, central pages, portals -->
 <ul class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t("home.types")}>
 	{#each data.seed.types.filter((x) => x.count) as x (x.type)}
@@ -184,4 +209,6 @@
 		</ul>
 		<a href={toRoute("/tags")} class="text-link link-content mt-auto inline-flex min-h-9 items-center gap-1 self-end pt-3 text-sm underline-offset-4 hover:underline">{t("home.portals.all")}<Icon name="chevron-down" size={16} class="-rotate-90" /></a>
 	</section>
+{/if}
+</div>
 {/if}
