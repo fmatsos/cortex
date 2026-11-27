@@ -19,6 +19,7 @@ writeFileSync(out + "/index.html", (process.env.CORTEX_ROOT ?? "").split("/").at
 const exportCmd = (_: string, out: string) => [process.execPath, script, out];
 
 const AUTH = { auth: { public_urls: ["http://localhost"], github: { client_id: "x", allow: [1] } } };
+const ANYONE = { ...AUTH, site_spaces: { create: "anyone" } };
 const SECRET = "CORTEX_GITHUB_CLIENT_SECRET";
 let saved: string | undefined;
 beforeAll(() => { saved = process.env[SECRET]; process.env[SECRET] = "s"; });
@@ -116,7 +117,7 @@ test("a private space is for its members alone: files, APIs and the listing answ
   expect(await list(ada.cookie)).toEqual(["open", "priv"]);
   expect((await get("/", ada.cookie)).headers.get("location")).toBe("/s/priv/");
   expect(await (await get("/api/spaces", ada.cookie)).json()).toMatchObject({ canCreate: true, default: "priv" });
-  expect(await (await get("/api/spaces", bob.cookie)).json()).toMatchObject({ canCreate: true, default: "open" });
+  expect(await (await get("/api/spaces", bob.cookie)).json()).toMatchObject({ canCreate: false, default: "open" }); // creating is for owners
   expect(await (await get("/api/spaces")).json()).toMatchObject({ canCreate: false });
 });
 
@@ -153,7 +154,7 @@ test("a private space never becomes open by losing its member rows; a broken sto
 });
 
 test("POST /api/spaces: same origin, signed in, a valid new name; the creator is its only member and sees it built", async () => {
-  const root = instance(["first"], AUTH);
+  const root = instance(["first"], ANYONE);
   const ada = person(root, "1"), bob = person(root, "2");
   const { get, post, origin } = await start(root);
   const create = (name: unknown, h: Record<string, string> = { origin, ...ada.cookie }) => post("/api/spaces", { name }, h);
@@ -184,8 +185,26 @@ test("POST /api/spaces: same origin, signed in, a valid new name; the creator is
   expect(((await (await get("/api/spaces", bob.cookie)).json()) as { spaces: unknown[] }).spaces).toEqual([{ name: "first" }]);
 });
 
-test("POST /api/spaces with schema: \"notes\" records it and writes the space's agent file; any other schema is a 400", async () => {
+test("POST /api/spaces is for the owners of a space unless site_spaces.create is \"anyone\"; the listing says who can", async () => {
   const root = instance(["first"], AUTH);
+  const ada = person(root, "1"), bob = person(root, "2");
+  hold(root, "first", ada.id); hold(root, "first", bob.id, "member");
+  const { get, post, origin } = await start(root);
+  const create = (who: { cookie: Record<string, string> }) => post("/api/spaces", { name: "mine" }, { origin, ...who.cookie });
+  expect((await create(bob)).status).toBe(403); // a member is not an owner
+  expect(await (await get("/api/spaces", bob.cookie)).json()).toMatchObject({ canCreate: false });
+  expect(existsSync(join(root, "spaces/mine"))).toBe(false);
+  expect(await (await get("/api/spaces", ada.cookie)).json()).toMatchObject({ canCreate: true });
+  expect((await create(ada)).status).toBe(201);
+  expect(existsSync(join(root, "spaces/mine"))).toBe(true);
+  // the other value: anyone signed in
+  const open = instance(["first"], ANYONE), eve = person(open, "3"), s2 = await start(open);
+  expect(await (await s2.get("/api/spaces", eve.cookie)).json()).toMatchObject({ canCreate: true });
+  expect((await s2.post("/api/spaces", { name: "eves" }, { origin: s2.origin, ...eve.cookie })).status).toBe(201);
+});
+
+test("POST /api/spaces with schema: \"notes\" records it and writes the space's agent file; any other schema is a 400", async () => {
+  const root = instance(["first"], ANYONE);
   const ada = person(root, "1");
   const { post, origin } = await start(root);
   const create = (body: object) => post("/api/spaces", body, { origin, ...ada.cookie });
@@ -200,7 +219,7 @@ test("POST /api/spaces with schema: \"notes\" records it and writes the space's 
 });
 
 test("POST /api/spaces: a space whose first build fails is not left behind", async () => {
-  const root = instance(["first"], AUTH);
+  const root = instance(["first"], ANYONE);
   const ada = person(root, "1");
   const { post, get, origin, said } = await start(root);
   const r = await post("/api/spaces", { name: "boom" }, { origin, ...ada.cookie });

@@ -18,7 +18,7 @@ import { inbox } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
-import { addSpaceMember, forgetSpace, getSpace, memberRole, setSpace, spaceVisibility } from "./accounts";
+import { addSpaceMember, forgetSpace, getSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
 import { addSpace } from "./space";
@@ -512,12 +512,18 @@ export async function serve(root: string, o: ServeOpts) {
   /** The space `/` leads to: `default_space` if the visitor may see it, else the first they may. */
   const landing = async (names: string[]) => { const def = await loadConfig(root).then((c) => c.default_space, () => undefined); return def && names.includes(def) ? def : names[0]; };
 
+  /** Who may create a space: any signed-in person with `site_spaces.create: "anyone"`; by default only someone who already owns a space (the first owner is named with `cortex space member <name> add <user> --role owner`). */
+  const mayCreate = async (user: User) => {
+    try { return (await loadConfig(root)).site_spaces?.create === "anyone" || ownsASpace(accounts.store(), user.id); } catch { return false; }
+  };
+
   /** `POST /api/spaces`: a signed-in visitor creates a space they alone can see, and gets its URL once its first build is served. */
   const createSpace = async (req: Request): Promise<Response> => {
     if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403, headers: noStore });
     if (!(await accounts.configured())) return Response.json({ error: "sign-in is not configured: spaces are created with cortex space add." }, { status: 403, headers: noStore });
     const user = await accounts.userOf(req);
     if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+    if (!(await mayCreate(user))) return Response.json({ error: "creating a space is for the owners of a space (site_spaces.create in cortex.json)." }, { status: 403, headers: noStore });
     const body = await req.json().then((b: { name?: unknown; schema?: unknown }) => b ?? {}, () => ({} as { name?: unknown; schema?: unknown }));
     const { name, schema } = body;
     if (typeof name !== "string" || !SPACE_NAME.test(name) || (schema != null && schema !== "notes")) // the schema is never a path from the web
@@ -557,7 +563,7 @@ export async function serve(root: string, o: ServeOpts) {
         if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
         const names = await visible(req);
         const title = (name: string) => { try { return getSpace(accounts.store(), name)?.title ?? undefined; } catch { return undefined; } };
-        return Response.json({ spaces: names.map((name) => ({ name, ...(title(name) && { title: title(name) }) })), canCreate: !!(await accounts.userOf(req)) && (await accounts.configured()), default: (await landing(names)) ?? null }, { headers: noStore });
+        return Response.json({ spaces: names.map((name) => ({ name, ...(title(name) && { title: title(name) }) })), canCreate: await (async () => { const user = await accounts.userOf(req); return !!user && (await accounts.configured()) && (await mayCreate(user)); })(), default: (await landing(names)) ?? null }, { headers: noStore });
       }
       const at = /^\/s\/([a-z0-9][a-z0-9-]*)(\/.*)?$/.exec(url.pathname);
       if (at) {

@@ -149,6 +149,10 @@ const SHAPE = {
       allow: list("auth.google.allow", text("auth.google.allow").refine((v) => /^[^@\s]+@[^@\s]+$/.test(v), { error: '"auth.google.allow" holds e-mail addresses.' }), "e-mail addresses"),
     }, "client_id, allow").nullish(),
   }, { error: (i) => i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" in "auth" (public_urls, oidc, github, google).` : '"auth" must be an object (public_urls, oidc, github, google), or null.' }).nullish(),
+  /** Who may create a space from the site (`POST /api/spaces` of `cortex serve`): "owners" (default) the people who already own a space, "anyone" any signed-in person. */
+  site_spaces: z.strictObject({
+    create: z.enum(["owners", "anyone"], { error: '"site_spaces.create" must be "owners" or "anyone".' }).nullish(),
+  }, { error: '"site_spaces" must be an object (create), or null.' }).nullish(),
   /** Space used when none is chosen (--space, $CORTEX_SPACE, the folder): multi-space instances (`spaces/`), see `cortex space`. */
   default_space: str("default_space").refine((v) => v == null || SPACE_NAME.test(v), { error: `"default_space" must be a space name (${SPACE_NAME}).` }),
   /**

@@ -123,6 +123,9 @@ describe("shared config", () => {
     expect(errors({ default_space: "Not Valid" })[0]).toContain("default_space");
     expect(errors({ spaces: { "Bad Name": {} } })[0]).toContain("invalid space name");
     expect(errors({ spaces: { a: { repo: "x", branch: "y" } } }).length).toBe(1); // strict: only repo, schema
+    expect(errors({ site_spaces: { create: "anyone" } })).toEqual([]);
+    expect(errors({ site_spaces: { create: "everyone" } })[0]).toContain("site_spaces.create");
+    expect(errors({ site_spaces: { create: "owners", more: 1 } }).length).toBe(1);
   });
 
   test("spaces.<name>.schema: the built-in notes, or a path; a bare unknown name is refused", () => {
