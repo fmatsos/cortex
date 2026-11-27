@@ -48,6 +48,8 @@
 	// favorites, search history, theme and language: specific to this browser (localStorage); an account, when the server has
 	// one, then keeps theme, language and favorites (account.init reads the stores, so it comes after them)
 	onMount(() => {
+		// The prerendered page differs from the hydrated one where the browser knows more (the picks of the day, what the space holds): this marks the moment it is settled
+		document.documentElement.dataset.hydrated = "";
 		theme.init(); lang.init(); search.init(); assistant.probe(); const stop = favs.init(); void account.init().then(() => spaces.load());
 		fetch(resolve("/footer.json")).then((r) => (r.ok ? r.json() : undefined)).then((v: Footer | undefined) => { f = v; }, () => {});
 		return stop;

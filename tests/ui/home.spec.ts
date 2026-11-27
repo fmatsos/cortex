@@ -63,11 +63,15 @@ test.describe("home rows at 1440", () => {
 });
 
 test("featured pages: the same day gives the same picks after a reload", async ({ page }) => {
+  // The prerendered picks are those of the day of the last log entry, the hydrated ones those of today: read both times once hydrated (the layout marks <html data-hydrated>), never the markup of the server
+  const hydrated = () => page.locator("html[data-hydrated]").waitFor({ state: "attached" });
+  const links = () => section(page, FEATURED).locator("li > a").evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).href));
   await page.goto("/");
-  const links = () => section(page, FEATURED).locator("li > a").evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).href)); // resolved: the SSR markup is relative ("./wiki/"), the hydrated one is not
   if (!(await section(page, FEATURED).count())) return;
+  await hydrated();
   const first = await links();
   await page.reload();
+  await hydrated();
   expect(await links()).toEqual(first);
 });
 
