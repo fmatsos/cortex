@@ -295,9 +295,9 @@ cortex space migrate veille              # legacy wiki: moves wiki/, raw/, paths
 cortex --space pro search "context rot"
 ```
 
-**One repository or several.** By default the instance's git repository holds all the spaces, and `serve --sync`, `remote` and the other git steps commit only the files of the space they run on. A space cloned with `--repo` is its own repository (ignored by the instance's): git finds the nearest `.git`, so the same steps pull, commit and push into that repository. `migrate` uses `git mv` for what is tracked: commit the move afterwards.
+**One repository or several.** By default the instance's git repository holds all the spaces, and `serve --sync`, a remote wiki host and the other git steps commit only the files of the space they run on. A space cloned with `--repo` is its own repository (ignored by the instance's): git finds the nearest `.git`, so the same steps pull, commit and push into that repository. `migrate` uses `git mv` for what is tracked: commit the move afterwards.
 
-**Isolation.** With a named client, the agent of a space can write nowhere in the instance but `spaces/<name>/wiki/` (`bwrap` on Linux, `sandbox-exec` on macOS), and the other spaces are hidden from it: it cannot read them.
+**Isolation.** The agent of a space cannot reach the others. The file tools of the SDK clients are confined to the space's folder and write to its `wiki/` only. Everything that runs as a process (the shell tool, the default engine, interactive sessions) goes through `bwrap` on Linux or `sandbox-exec` on macOS: the whole instance (`cortex.json` and `.cortex/` included) is read-only except `spaces/<name>/wiki/`, and the other spaces are hidden, so they cannot be read. A `cortex --space <other>` run by the agent is refused: the folder it runs in decides.
 
 ### Wiki status
 
