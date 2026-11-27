@@ -54,6 +54,13 @@ function checkIssuer(v: string): string | undefined {
   if (u.protocol !== "https:" && !(u.protocol === "http:" && isLoopbackHost(u.hostname))) return `"auth.oidc.issuer" "${v}" must be an https:// URL.`;
   if (u.search || u.hash) return `"auth.oidc.issuer" "${v}" must not have a query or fragment.`;
 }
+/** Built-in schemas a `schema` value can name instead of a file (src/schema-notes.md). */
+export const BUILT_IN_SCHEMAS = ["notes"] as const;
+/** `schema` / `spaces.<name>.schema`: a file (has a `/` or `.md`) relative to the instance root, or a built-in name. */
+const schemaRef = (k: string) => str(k).superRefine((v, ctx) => {
+  if (v && !v.includes("/") && !v.includes(".md") && !(BUILT_IN_SCHEMAS as readonly string[]).includes(v))
+    ctx.addIssue({ code: "custom", message: `unknown built-in schema "${v}" in "${k}" (${BUILT_IN_SCHEMAS.join(", ")}), or give a path to a .md file.`, input: v });
+});
 const text = (k: string) => z.string({ error: `"${k}" must be a non-empty string.` }).trim().min(1, { error: `"${k}" must be a non-empty string.` });
 const refined = (k: string, check: (v: string) => string | undefined) => text(k).superRefine((v, ctx) => { const e = check(v); if (e) ctx.addIssue({ code: "custom", message: e, input: v }); });
 const list = <T extends z.ZodType>(k: string, item: T, what: string) => z.array(item, { error: `"${k}" must be a list of ${what}.` }).min(1, { error: `"${k}" needs at least one entry (an empty list would refuse everyone): leave the provider out instead.` });
@@ -69,7 +76,7 @@ const SHAPE = {
   effort: str("effort"),
   base_url: str("base_url"),
   language: str("language"),
-  schema: str("schema"),
+  schema: schemaRef("schema"),
   raw_path: template("raw_path"),
   page_path: template("page_path"),
   /** Most tags on a page an agent creates (default LIMITS.maxTags). */
@@ -144,9 +151,12 @@ const SHAPE = {
   }, { error: (i) => i.code === "unrecognized_keys" ? `unknown property "${i.keys.join(", ")}" in "auth" (public_urls, oidc, github, google).` : '"auth" must be an object (public_urls, oidc, github, google), or null.' }).nullish(),
   /** Space used when none is chosen (--space, $CORTEX_SPACE, the folder): multi-space instances (`spaces/`), see `cortex space`. */
   default_space: str("default_space").refine((v) => v == null || SPACE_NAME.test(v), { error: `"default_space" must be a space name (${SPACE_NAME}).` }),
-  /** Per-space settings, by space name. repo: the space is its own git repository (cloned by `cortex space add --repo`, ignored by the instance's). */
-  spaces: z.record(z.string(), z.strictObject({ repo: str("spaces.<name>.repo") }, { error: '"spaces.<name>" must be an object (repo).' }), {
-    error: '"spaces" must be an object: one entry (repo) per space name, or null.',
+  /**
+   * Per-space settings, by space name. repo: the space is its own git repository (cloned by `cortex space add --repo`, ignored by the instance's).
+   * schema: the agent schema of the space, instead of the global one (a path relative to the instance root, or the built-in `notes`).
+   */
+  spaces: z.record(z.string(), z.strictObject({ repo: str("spaces.<name>.repo"), schema: schemaRef("spaces.<name>.schema") }, { error: '"spaces.<name>" must be an object (repo, schema).' }), {
+    error: '"spaces" must be an object: one entry (repo, schema) per space name, or null.',
   }).nullish().superRefine((v, ctx) => {
     for (const n of Object.keys(v ?? {})) if (!SPACE_NAME.test(n)) ctx.addIssue({ code: "custom", message: `"spaces" has an invalid space name "${n}" (${SPACE_NAME}).`, input: n });
   }),
