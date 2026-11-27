@@ -447,7 +447,10 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
           return Response.json({ error: (e as Error).message }, { status: 500 });
         } finally { busy.asking = false; }
       }
-      if (url.pathname === "/share" || url.pathname.startsWith("/share/")) return shareRoute(req, deliver);
+      if (url.pathname === "/share" || url.pathname.startsWith("/share/")) {
+        const full = new URL(req.url).pathname; // what this site is mounted under (`/s/<space>`, or nothing): the share app's links and API stay inside it
+        return shareRoute(req, deliver, full.slice(0, full.length - url.pathname.length));
+      }
       if (url.pathname === "/api/sync" && req.method === "POST") {
         if (!loopback(req, srv)) return new Response(null, { status: 403 });
         try { await site.sync(); } catch (e) { return Response.json({ error: (e as Error).message }, { status: 500 }); }

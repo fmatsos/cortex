@@ -107,3 +107,24 @@ test("share: route hands the inbox files to the given deliver (cortex serve writ
   const failed = await route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify({ url: "https://a.b/c" }) }), async () => { throw new Error("disk full"); });
   expect(failed.status).toBe(502);
 });
+
+test("share: mounted under a base (a space of cortex serve), the page, the manifest and the API URL stay under it; at the root nothing changes", async () => {
+  const { route } = await import("./share-server");
+  const at = (base: string, path: string) => route(new Request(`http://x${base}${path}`), async () => {}, base);
+  for (const base of ["", "/s/pro"]) {
+    const m = await (await at(base, "/share/manifest.webmanifest")).json() as { start_url: string; scope: string; icons: { src: string }[]; share_target: { action: string } };
+    expect([m.start_url, m.scope, m.share_target.action]).toEqual([`${base}/share/`, `${base}/share/`, `${base}/share/`]);
+    expect(m.icons.map((i) => i.src)).toEqual([`${base}/share/icon-192.png`, `${base}/share/icon-512.png`]);
+    const html = await (await at(base, "/share/")).text();
+    expect(html).toContain(`fetch("${base}/share/api"`);
+    expect(html).toContain(`href="${base}/share/manifest.webmanifest"`);
+    expect((await at(base, "/share")).status).toBe(200);
+    expect((await at(base, "/share/icon-192.png")).status).toBe(200);
+    const got: unknown[] = [];
+    const r = await route(new Request(`http://x${base}/share/api`, { method: "POST", body: JSON.stringify({ text: "a note" }) }), async (f) => { got.push(f); }, base);
+    expect(r.status).toBe(200);
+    expect(got.length).toBe(1);
+  }
+  const book = await (await route(new Request("http://x/s/pro/share/bookmarklet", { headers: { host: "cortex.example", "x-forwarded-proto": "https" } }), async () => {}, "/s/pro")).text();
+  expect(book).toContain("https://cortex.example/s/pro"); // the bookmarklet posts to this space
+});

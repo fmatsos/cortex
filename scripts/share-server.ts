@@ -50,19 +50,20 @@ export function toInbox({ title = "", text = "", url = "", note = "" }: Share): 
 
 const icon = Bun.file(new URL("../assets/logo/cortex-192.png", import.meta.url));
 const icon512 = Bun.file(new URL("../assets/logo/cortex-512.png", import.meta.url));
-const manifest = {
-  name: "Cortex", short_name: "Cortex", start_url: "/share/", scope: "/share/", display: "standalone",
+/** The web manifest of the share app mounted under `base` ("" at the root, `/s/<space>` for the share target of one space of a `cortex serve`). */
+const manifest = (base: string) => ({
+  name: "Cortex", short_name: "Cortex", start_url: `${base}/share/`, scope: `${base}/share/`, display: "standalone",
   background_color: "#ffffff", theme_color: "#ffffff",
-  icons: [{ src: "/share/icon-192.png", sizes: "192x192", type: "image/png" }, { src: "/share/icon-512.png", sizes: "512x512", type: "image/png" }],
+  icons: [{ src: `${base}/share/icon-192.png`, sizes: "192x192", type: "image/png" }, { src: `${base}/share/icon-512.png`, sizes: "512x512", type: "image/png" }],
   // GET: the share survives an SSO redirect (the query comes back), a POST body would not
-  share_target: { action: "/share/", method: "GET", params: { title: "title", text: "text", url: "url" } },
-};
+  share_target: { action: `${base}/share/`, method: "GET", params: { title: "title", text: "text", url: "url" } },
+});
 
-const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cortex — partage</title><link rel="manifest" href="/share/manifest.webmanifest" crossorigin="use-credentials">
+const page = (base: string) => `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cortex — partage</title><link rel="manifest" href="${base}/share/manifest.webmanifest" crossorigin="use-credentials">
 <style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea,input{width:100%;box-sizing:border-box;font:inherit;margin:.25rem 0}
 button{font:inherit;padding:.5rem 1rem}#s{white-space:pre-line}</style></head><body>
-<h1>Cortex</h1><p id="s"></p><p><a href="/share/bookmarklet">Capturer un bloc d'une page sur Android (bookmarklet)</a></p>
+<h1>Cortex</h1><p id="s"></p><p><a href="${base}/share/bookmarklet">Capturer un bloc d'une page sur Android (bookmarklet)</a></p>
 <form id="f"><input id="u" placeholder="Lien (facultatif)"><textarea id="t" rows="6" placeholder="Texte (facultatif avec un lien)"></textarea>
 <textarea id="n" rows="2" placeholder="Pourquoi je garde ça (note, facultative)"></textarea><button>Envoyer à l'inbox</button></form>
 <script>
@@ -73,7 +74,7 @@ async function flush() {
   let q = load(), sent = 0;
   for (const item of [...q]) {
     try {
-      const r = await fetch("/share/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(item), redirect: "error" });
+      const r = await fetch("${base}/share/api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(item), redirect: "error" });
       if (!r.ok) throw new Error(await r.text());
       q = q.filter((x) => x !== item); save(q); sent++;
     } catch (e) { s.textContent = "Pas envoyé (" + e.message + "). Gardé sur le téléphone : rouvre Cortex pour réessayer."; return; }
@@ -87,7 +88,7 @@ const p = new URLSearchParams(location.hash.slice(1) || location.search);
 let title = "";
 if (p.get("title") || p.get("text") || p.get("url")) {
   const item = { title: p.get("title") || "", text: p.get("text") || "", url: p.get("url") || "" };
-  history.replaceState(null, "", "/share/");
+  history.replaceState(null, "", "${base}/share/");
   const link = item.url || (item.text.trim().match(/^https?:\\/\\/\\S+$/) || [""])[0];
   // the link repeated at the end of the text is taken out of it (an Android share); a link inside a captured text stays
   const rest = (link && item.text.trim().endsWith(link) ? item.text.trim().slice(0, -link.length) : item.text).trim();
@@ -133,12 +134,12 @@ async function put(share: Share, deliver: Deliver): Promise<Response> {
 }
 
 /** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */
-async function bookmarkletPage(req: Request): Promise<Response> {
+async function bookmarkletPage(req: Request, base: string): Promise<Response> {
   const u = new URL(req.url), h = req.headers;
   const proto = h.get("x-forwarded-proto")?.split(",")[0].trim() || u.protocol.replace(":", "");
   const server = (SHARE_PUBLIC_URL || `${proto}://${h.get("x-forwarded-host")?.split(",")[0].trim() || h.get("host") || u.host}`).replace(/\/+$/, "");
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-  const code = esc(await bookmarklet(server));
+  const code = esc(await bookmarklet(server + base));
   return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cortex — bookmarklet</title><style>body{font:16px system-ui,sans-serif;margin:0 16px;max-width:40rem}textarea{width:100%;box-sizing:border-box;font:12px ui-monospace,monospace}
 button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1>Cortex : capturer un bloc</h1>
@@ -151,19 +152,24 @@ button{font:inherit;padding:.75rem 1rem;min-height:48px}</style></head><body><h1
 <textarea id="code" rows="6" readonly>${code}</textarea>
 <h2>Si le code collé est tronqué</h2><p>Le champ URL d'un favori sur Android peut couper un code long. Installe-le plutôt depuis Chrome sur ordinateur, connecté au même compte Google avec la synchronisation des favoris : ouvre cette page sur l'ordinateur et <b>glisse ce lien dans la barre de favoris</b> (Ctrl+Maj+B pour l'afficher). Il arrive tel quel sur le téléphone, dans « Favoris sur ordinateur ».</p>
 <p><a href="${code}" style="display:inline-block;padding:.75rem 1rem;border:2px dashed #1a73e8;border-radius:8px;font-weight:bold">cortex</a></p>
-<p>Adresse du serveur intégrée au code : <code>${server.replace(/[<&>"]/g, "")}</code>. Si elle est fausse, ouvre cette page par la bonne adresse.</p>
+<p>Adresse du serveur intégrée au code : <code>${(server + base).replace(/[<&>"]/g, "")}</code>. Si elle est fausse, ouvre cette page par la bonne adresse.</p>
 <h2>Rien ne se passe ?</h2><p>Chrome Android peut refuser un favori trop long. Copie un de ces favoris de test (il encadre la page en rouge), installe-le comme ci-dessus sous le nom <b>cortextest</b>, et note la plus grande taille qui marche.</p>
 ${probes().map(({ k, code: c }) => `<p><button data-p="${k}">Copier le test ${k} Ko</button></p><textarea id="p${k}" hidden>${esc(c)}</textarea>`).join("")}
-<p><a href="/share/">Retour au partage</a></p>
+<p><a href="${base}/share/">Retour au partage</a></p>
 <script>document.getElementById("c").onclick = async () => { const t = document.getElementById("code"), m = document.getElementById("m");
 try { await navigator.clipboard.writeText(t.value); m.textContent = "Copié ✓"; } catch { t.select(); m.textContent = document.execCommand("copy") ? "Copié ✓" : "Sélectionné : copie-le à la main."; } };
 for (const b of document.querySelectorAll("[data-p]")) b.onclick = async () => { await navigator.clipboard.writeText(document.getElementById("p" + b.dataset.p).value); b.textContent += " ✓"; };</script>
 </body></html>`, { headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
-/** The browser extension (chrome-extension://<id>) posts from its own origin: it is answered, other origins are not. */
-export async function route(req: Request, deliver: Deliver = gitDeliver): Promise<Response> {
-  const { pathname } = new URL(req.url);
+/**
+ * The browser extension (chrome-extension://<id>) posts from its own origin: it is answered, other origins are not. `base`: where the app is
+ * mounted when it is not at the root (`/s/<space>` under `cortex serve`): the request's path starts with it, and the pages, the manifest and
+ * the API URL they carry are under it too, so a share made there is delivered by the space that serves it.
+ */
+export async function route(req: Request, deliver: Deliver = gitDeliver, base = ""): Promise<Response> {
+  let { pathname } = new URL(req.url);
+  if (base && pathname.startsWith(`${base}/`)) pathname = pathname.slice(base.length);
   const origin = req.headers.get("origin") ?? "";
   const cors: Record<string, string> = /^chrome-extension:\/\/[a-p]{32}$/.test(origin)
     ? { "access-control-allow-origin": origin, "access-control-allow-methods": "POST, OPTIONS", "access-control-allow-headers": "content-type", "access-control-max-age": "600", vary: "origin" }
@@ -174,11 +180,11 @@ export async function route(req: Request, deliver: Deliver = gitDeliver): Promis
     for (const [k, v] of Object.entries(cors)) r.headers.set(k, v);
     return r;
   }
-  if (pathname === "/share/manifest.webmanifest") return Response.json(manifest, { headers: { "content-type": "application/manifest+json" } });
-  if (pathname === "/share/bookmarklet" && req.method === "GET") return bookmarkletPage(req);
+  if (pathname === "/share/manifest.webmanifest") return Response.json(manifest(base), { headers: { "content-type": "application/manifest+json" } });
+  if (pathname === "/share/bookmarklet" && req.method === "GET") return bookmarkletPage(req, base);
   if (pathname === "/share/icon-192.png") return new Response(icon);
   if (pathname === "/share/icon-512.png") return new Response(icon512);
-  if (pathname === "/share/" || pathname === "/share") return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
+  if (pathname === "/share/" || pathname === "/share") return new Response(page(base), { headers: { "content-type": "text/html; charset=utf-8" } });
   return new Response("not found", { status: 404 });
 }
 

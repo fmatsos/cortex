@@ -436,3 +436,25 @@ test("a space's conversations, journeys and favorites are served under /s/<space
   expect(await (await get("/s/open/api/me/state", ada.cookie)).json()).toEqual({ favs: ["wiki/x"] });
   expect(await (await get("/s/priv/api/me/state", ada.cookie)).json()).toEqual({});
 });
+
+test("the share target: /s/<space>/share/ delivers into that space (behind its visibility check), the root /share/ into the default one", async () => {
+  const root = instance(["a", "b", "priv"], { ...AUTH, default_space: "b" });
+  const ada = person(root, "1"), bob = person(root, "2");
+  hold(root, "priv", ada.id);
+  const { get, send } = await start(root);
+  const share = (path: string, url: string, who?: Record<string, string>) => send("POST", path, { url }, who ?? {});
+  const unreachable = (n: string) => `http://127.0.0.1:1/${n}`; // never fetched: a failed entry stays in the space's inbox/
+  const inbox = (space: string) => { try { return readdirSync(join(root, "spaces", space, "inbox")); } catch { return []; } };
+  const manifest = await (await get("/s/a/share/manifest.webmanifest")).json() as { scope: string };
+  expect(manifest.scope).toBe("/s/a/share/");
+  expect(await (await get("/share/manifest.webmanifest")).json()).toMatchObject({ scope: "/share/" });
+  expect((await get("/s/a/share/")).status).toBe(200);
+  expect((await share("/s/a/share/api", unreachable("a"))).status).toBe(200);
+  expect((await share("/share/api", unreachable("root"))).status).toBe(200);
+  expect((await share("/s/priv/share/api", unreachable("p"), bob.cookie)).status).toBe(404); // not a member
+  expect((await get("/s/priv/share/", bob.cookie)).status).toBe(404);
+  expect((await share("/s/priv/share/api", unreachable("p"), ada.cookie)).status).toBe(200);
+  const until = Date.now() + 5000;
+  while ((!inbox("a").length || !inbox("b").length || !inbox("priv").length) && Date.now() < until) await Bun.sleep(20);
+  expect([inbox("a").length, inbox("b").length, inbox("priv").length]).toEqual([1, 1, 1]); // each in its own space; the default one got the root's
+});
