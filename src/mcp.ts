@@ -15,6 +15,7 @@ import type { RelatedReason } from "../site/src/lib/types";
 import { mcpInstructions } from "./prompts";
 import { loadConfig } from "./config";
 import pkg from "../package.json";
+import { assertWritable } from "./read-only";
 import { withSync } from "./sync";
 
 /** A structured related reason as the external agent reads it: the French text the CLI used to emit as data. */
@@ -125,6 +126,7 @@ export function buildServer(root: string, language?: string, confined = false): 
     }),
   }, tool(async ({ input, text: txt, note }) => {
     if ((input === undefined) === (txt === undefined) || input === "-") throw new Error("Give either input (URL or path) or text.");
+    assertWritable(root); // a read-only space takes no source
     // no local path: an MCP client would copy any file of the machine (key, secret) into raw/, then into git
     if (input !== undefined && !/^https?:\/\//.test(input)) throw new Error("input must be an http(s) URL; for a local file, use cortex add or cortex inbox.");
     const r = await add(root, input ?? "-", { note, text: txt, publicOnly: true });

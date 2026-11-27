@@ -74,6 +74,7 @@ export async function outOfScope(root: string, before: Map<string, string>, repo
 async function run(w: Wiki, prompt: string, batch: boolean, mode: Mode, report: Report, check?: Check): Promise<number> {
   const root = w.root;
   if (homeInside(root)) { report({ level: "fail", text: "the wiki root contains your home directory: the agent could no longer write its state (~/.claude…). Use a dedicated folder." }); return 1; }
+  if (mode === "write") { const why = (await import("./read-only")).readOnlyReason(root); if (why) { report({ level: "fail", text: why }); return 1; } } // never in write mode on a read-only space
   const backend = await backendFor(root, await w.config());
   // inherited by every agent process: cortex new --force stays a human-only option. Bun.spawn reads the environment of
   // the start, not process.env as it is now: every spawn of an agent passes `env: process.env` (the SDKs read it themselves)

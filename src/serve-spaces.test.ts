@@ -508,3 +508,47 @@ test("the service worker of a space answers right after its creation, and while 
   db.close();
   expect(lines().every((m) => /^404 (GET|HEAD) \/s\/(ghost|fresh)\//.test(m))).toBe(true);
 });
+
+test("read-only: the space stays visible and searchable, every write to its wiki and raw is refused (409), the person's own data is not one", async () => {
+  const { root, ada, bob, get, send, origin, said } = await manage();
+  mkdirSync(join(root, "spaces/mine/inbox"), { recursive: true });
+  const patch = (body: unknown) => send("PATCH", "/s/mine/api/space", body, { origin, ...ada.cookie });
+  const verify = (method = "POST") => send(method, "/s/mine/api/verify", method === "POST" ? { id: "concepts/x" } : undefined, { origin, ...ada.cookie });
+  const share = () => send("POST", "/s/mine/share/api", { url: "http://127.0.0.1:1/x" }, ada.cookie);
+  expect((await verify("HEAD")).status).toBe(204);
+  expect((await patch({ read_only: true })).status).toBe(200);
+  expect((await verify("HEAD")).status).toBe(409); // the probe: no button, the site says why
+  const refused = await verify();
+  expect([refused.status, ((await refused.json()) as { error: string }).error]).toEqual([409, expect.stringContaining("read-only")]);
+  const shared = await share();
+  expect([shared.status, await shared.text()]).toEqual([409, expect.stringContaining("read-only")]);
+  expect(readdirSync(join(root, "spaces/mine/inbox"))).toEqual([]); // nothing was delivered
+  // reading is as visible as its visibility says
+  expect((await get("/s/mine/", ada.cookie)).status).toBe(200);
+  expect((await get("/s/mine/", bob.cookie)).status).toBe(200);
+  expect((await get("/s/mine/api/status", ada.cookie)).status).toBe(200);
+  expect(await (await get("/api/spaces", ada.cookie)).json()).toMatchObject({ spaces: [{ name: "mine", read_only: true }, { name: "open", read_only: false }] });
+  expect((await (await get("/s/mine/api/space", ada.cookie)).json() as { read_only: boolean }).read_only).toBe(true);
+  // the person's own conversations and favorites are theirs, not the space's content
+  const o = "http://localhost";
+  expect((await send("POST", "/s/mine/api/conversations", { turns: [{ question: "q", answer: "a" }] }, { origin: o, ...ada.cookie })).status).toBe(201);
+  expect((await send("PUT", "/s/mine/api/me/state", { favs: ["x"] }, { origin: o, ...ada.cookie })).status).toBe(200);
+  expect((await send("PATCH", "/s/mine/api/space", { read_only: true }, { origin, ...bob.cookie })).status).toBe(403); // owners only
+  // and back
+  expect((await patch({ read_only: false })).status).toBe(200);
+  expect((await verify("HEAD")).status).toBe(204);
+  expect((await share()).status).toBe(200);
+  expect(said.some((m) => m.includes("read-only"))).toBe(false);
+});
+
+test("read-only: what waits in a space's inbox/ is not taken in while it is read-only", async () => {
+  const root = instance(["ro"], AUTH);
+  mkdirSync(join(root, "spaces/ro/inbox"), { recursive: true });
+  writeFileSync(join(root, "spaces/ro/inbox/waiting.url"), "http://127.0.0.1:1/x\n");
+  const db = openAccounts(accountsFile(root)); setSpace(db, "ro", { read_only: true }); db.close();
+  const { said } = await start(root);
+  const until = Date.now() + 3000;
+  while (!said.some((m) => m.startsWith("inbox:")) && Date.now() < until) await Bun.sleep(20);
+  expect(said.find((m) => m.startsWith("inbox:"))).toContain("read-only");
+  expect(readdirSync(join(root, "spaces/ro/inbox"))).toEqual(["waiting.url"]);
+});

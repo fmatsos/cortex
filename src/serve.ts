@@ -21,6 +21,7 @@ import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { configFile, loadConfig, readConfig, writeConfig } from "./config";
 import { isMultiSpace, listSpaces, spaceRoot, SPACE_NAME } from "./lib";
+import { readOnlyMessage } from "./read-only";
 import { addedPaths, addSpace, archiveSpace, restoreSpace } from "./space";
 import { spaceAdmin } from "./space-admin";
 
@@ -227,7 +228,7 @@ type Site = {
 };
 
 /** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
-async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = ""): Promise<Site> {
+async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined): Promise<Site> {
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
   const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
   // the newest complete build of a previous run is served at once; the other folder is where the next build goes
@@ -296,6 +297,8 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
 
   /** `cortex inbox`, then (sync) the new sources committed and pushed; the site rebuilt when something was added. */
   const ingest = () => serial(async () => {
+    const why = readOnly();
+    if (why) return say(`inbox: ${why}`); // a read-only space takes in nothing: what waits in inbox/ stays there
     pull();
     const r = await inbox(root, {}, (m) => say(m.text));
     if (!r.ok) say("inbox: some entries failed, they stay in inbox/ for the next run");
@@ -331,9 +334,11 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
     current: () => current,
     async fetch(req, srv, url) {
       if (url.pathname === "/api/verify") {
-        if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: 204 }); // probe: the site shows its button
+        const why = readOnly(); // a read-only space: the probe answers 409 (the site tells why instead of offering the button), a review is refused
+        if (req.method === "HEAD" || req.method === "GET") return new Response(null, { status: why ? 409 : 204 }); // probe: the site shows its button
         if (req.method !== "POST") return new Response(null, { status: 405 });
         if (!sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
+        if (why) return Response.json({ error: why }, { status: 409 });
         const id = await req.json().then((b: { id?: unknown }) => b?.id, () => undefined);
         if (typeof id !== "string" || !id) return Response.json({ error: "expected { id }" }, { status: 400 });
         try {
@@ -451,6 +456,8 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
         } finally { busy.asking = false; }
       }
       if (url.pathname === "/share" || url.pathname.startsWith("/share/")) {
+        const why = req.method === "POST" && url.pathname === "/share/api" ? readOnly() : undefined;
+        if (why) return new Response(why, { status: 409 }); // a share is a write: the phone keeps it and says why
         const full = new URL(req.url).pathname; // what this site is mounted under (`/s/<space>`, or nothing): the share app's links and API stay inside it
         return shareRoute(req, deliver, full.slice(0, full.length - url.pathname.length));
       }
@@ -490,7 +497,9 @@ export async function serve(root: string, o: ServeOpts) {
     root, say, config: () => loadConfig(root),
     titles: async (space) => multi && !space ? new Map() : new Map((await openWiki(space ? spaceRoot(root, space) : root).pages()).map((p) => [pageId(p.path), String(p.fm.title ?? p.path)])),
   });
-  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`);
+  /** Why a write to this space is refused now (it is read-only), else undefined; a store that fails refuses too. */
+  const readOnlyOf = (name: string) => () => { try { return getSpace(accounts.store(), name)?.read_only ? readOnlyMessage(name) : undefined; } catch { return `space ${name}: the accounts' store failed, nothing is written.`; } };
+  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`, readOnlyOf(name));
   if (multi) {
     for (const name of listSpaces(root)) {
       const site = await mount(name);

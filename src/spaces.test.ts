@@ -677,6 +677,52 @@ describe("visibility and roles", () => {
     check.close();
   });
 
+  test("a read-only space takes no write from the CLI, the MCP server or the agent, and reads as before; the others are unaffected", async () => {
+    const root = instance(["a", "b"], { default_space: "a" });
+    writeFileSync(join(root, "spaces/a/wiki/p.md"), page);
+    expect(cortex(root, ["space", "set", "a", "--read-only", "true"]).code).toBe(0);
+    for (const args of [["add", "https://example.invalid/x"], ["new", "Concept", "T"], ["index"], ["compile", "--pending"], ["inbox"], ["log", "add", "note", "x"], ["links", "--write"], ["ask", "q", "--file"], ["schema", "--write"]]) {
+      const r = cortex(root, [...args, "--space", "a"]);
+      expect([args[0], r.code, r.err]).toEqual([args[0], 1, expect.stringContaining("read-only")]);
+    }
+    for (const args of [["ls"], ["search", "T"], ["lint"], ["log"], ["show", "wiki/p.md"], ["related", "wiki/p.md"], ["links"], ["schema"]]) {
+      const r = cortex(root, [...args, "--space", "a"]);
+      expect([args[0], r.err.includes("read-only")]).toEqual([args[0], false]);
+    }
+    expect(cortex(root, ["add", "--dry-run", "-", "--space", "a"]).err).not.toContain("read-only");
+    expect(cortex(root, ["index", "--space", "b"]).code).toBe(0); // another space
+    const exec = (...argv: string[]) => Bun.spawnSync(["bun", CLI, "remote-exec", encodePayload({ argv })], { cwd: root, env: { ...process.env, NO_COLOR: "1", CORTEX_ROOT: root } });
+    const remote = exec("index", "--space", "a");
+    expect([remote.exitCode, remote.stderr.toString()]).toEqual([expect.any(Number), expect.stringContaining("read-only")]);
+    expect(remote.exitCode).not.toBe(0);
+    // the agent never runs in write mode there, and its tool server for a write run does not start
+    expect(cortex(root, ["mcp", "--agent", "write", "--space", "a"]).err).toContain("read-only");
+    const m = await (async () => { const e = { ...process.env, CORTEX_ROOT: root } as Record<string, string>; delete e.CORTEX_SPACE; return e; })();
+    const proc = Bun.spawn(["bun", CLI, "mcp"], { env: m, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
+    const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = "", n = 0;
+    const rpc = async (method: string, params?: object) => {
+      const id = ++n;
+      proc.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n"); proc.stdin.flush();
+      for (;;) {
+        const nl = buf.indexOf("\n");
+        if (nl >= 0) { const msg = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1); if (msg.id === id) return msg.result; continue; }
+        const { value, done } = await reader.read();
+        if (done) throw new Error("mcp ended");
+        buf += value;
+      }
+    };
+    try {
+      await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+      const added = await rpc("tools/call", { name: "add", arguments: { text: "a note" } });
+      expect([added.isError, added.content[0].text]).toEqual([true, expect.stringContaining("read-only")]);
+      expect((await rpc("tools/call", { name: "search", arguments: { q: "T" } })).isError).toBeFalsy();
+    } finally { proc.stdin.end(); proc.kill(); }
+    // lifted
+    expect(cortex(root, ["space", "set", "a", "--read-only", "false"]).code).toBe(0);
+    expect(cortex(root, ["index", "--space", "a"]).code).toBe(0);
+  }, 60_000);
+
   test("cortex space archive and restore: out of spaces/ and out of the lists, nothing else lost, the name stays taken", () => {
     const root = instance(["a", "b"], { default_space: "a" });
     writeFileSync(join(root, "spaces/a/wiki/p.md"), page);
