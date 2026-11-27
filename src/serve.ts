@@ -7,7 +7,7 @@ import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
 import { EXTRA_TOOLS, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
-import { askSitePrompt, scopePrefix } from "./prompts";
+import { askSitePrompt, askSiteSystem, scopePrefix } from "./prompts";
 import { historyPart, pagesPart, relevantPages, wikiTools, type Core, type Turn } from "./ask-site";
 import { LIMITS } from "./limits";
 import { search } from "./search";
@@ -135,7 +135,7 @@ export const agentAsk: AskFn = async (root, question, history, stream) => {
   const prompt = scopePrefix(root, false, cfg.language) + askSitePrompt({ question, language: cfg.language, pages: pagesPart(core, hits), history: historyPart(history, askHistoryTurns(cfg)), blocks: !!blocks });
   const { backendFor } = await import("./backends");
   if (blocks && stream) stream.draft = blocks.draft; // the live draft draws the blocks the agent prepared, where the text names them
-  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, toolRounds: LIMITS.askToolRounds, blocksReady: blocks?.ready });
+  const md = await (await backendFor(root, ask.cfg, ask.ep)).run(root, prompt, "read", undefined, undefined, blocks && [...wikiTools(root), blocks.tool], { ...stream, onlyExtra: true, system: askSiteSystem(cfg.language), toolRounds: LIMITS.askToolRounds, blocksReady: blocks?.ready });
   return { md: blocks ? blocks.assemble(md) : md, core };
 };
 

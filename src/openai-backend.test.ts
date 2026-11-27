@@ -467,3 +467,17 @@ test("openai: tool_choice required is sent until a block is registered, then omi
   expect(choices).toEqual([...Array(n).fill("required"), undefined]);
   expect(r3.ready()).toBe(false);
 });
+
+test("openai: the system prompt is the wiki schema, or `stream.system` when the run gives one (the site's questions)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-openai-"));
+  const { schemaText } = await import("./schema");
+  const first = async (stream?: { system?: string }) => {
+    const seen: any[] = [];
+    const server = Bun.serve({ port: 0, async fetch(req) { seen.push(await req.json()); return Response.json({ choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }] }); } });
+    try { await openai({ model: "m", base_url: `http://127.0.0.1:${server.port}/v1` }).run(root, "q", "read", undefined, undefined, [], stream); }
+    finally { server.stop(true); }
+    return seen[0].messages[0];
+  };
+  expect(await first()).toEqual({ role: "system", content: await schemaText(root) });
+  expect(await first({ system: "short" })).toEqual({ role: "system", content: "short" });
+});

@@ -50,5 +50,8 @@ export function askPrompt(o: { agentFile: string; question: string; file?: boole
 export const askSitePrompt = (o: { question: string; pages: string; history?: string; blocks?: boolean; language?: string }) =>
   prompt("ask-site", { question: o.question, pages: o.pages, history: o.history ?? "", blocks: o.blocks ? prompt("ask-site-blocks", {}) : "", language: lang(o.language) }).replace(/\n{3,}/g, "\n\n");
 
+/** System prompt of the site's agent, in place of the wiki schema: what the wiki is and how to link its pages. */
+export const askSiteSystem = (language?: string) => prompt("ask-site-system", { language: lang(language) });
+
 /** `instructions` string of the MCP server, in the wiki language. */
 export const mcpInstructions = (language?: string) => prompt("mcp-instructions", { language: lang(language) });

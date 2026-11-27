@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { askPrompt, compilePrompt, mcpInstructions, prompt, scopePrefix } from "./prompts";
+import { askPrompt, askSiteSystem, compilePrompt, mcpInstructions, prompt, scopePrefix } from "./prompts";
 import { buildServer } from "./mcp";
 
 const compile = (language?: string, batch = false) =>
@@ -60,4 +60,15 @@ test("site question: the pages given in full are not read again, the wiki tools 
   expect(prompt("ask-site-blocks", {})).toContain("same turn as your last reading calls");
   expect(prompt("ask-site-blocks", {})).toContain("always at least one block"); // every answer is laid out
   expect(() => prompt("ask-site-blocks-missing", {})).toThrow("prompt not found"); // no send-back any more
+});
+
+test("site system prompt: short, in the wiki language, read-only, with the page kinds and the link format", () => {
+  const s = askSiteSystem("French");
+  expect(s).toContain("in French");
+  expect(s).toContain("[title](/wiki/concepts/<id>.md)");
+  for (const dir of ["sources/", "concepts/", "entities/", "syntheses/"]) expect(s).toContain(dir);
+  expect(s).toContain("character for character");
+  expect(s).not.toMatch(/<kind>|\/wiki\/(concept|source|entity|synthesis)\//);
+  expect(s).not.toContain("{{");
+  expect(s.length).toBeLessThan(1200);
 });

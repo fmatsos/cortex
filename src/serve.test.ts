@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { openWiki } from "./context";
 import { pageState } from "./doc";
 import { parseDoc } from "./lib";
+import { askSiteSystem } from "./prompts";
 import { commitAndPush, fileFor, sameOrigin, serve } from "./serve";
 import { verifyPage } from "./verify";
 
@@ -263,6 +264,7 @@ test("site agent: a long answer written without any block is the final answer (n
   try {
     const events = await post(`http://127.0.0.1:${a.port}/v1`, "q");
     expect(seenA).toHaveLength(1);
+    expect(seenA[0].messages[0]).toEqual({ role: "system", content: askSiteSystem(undefined) }); // the short system prompt, not the wiki schema
     const done = events.at(-1);
     expect(done.t).toBe("done");
     expect(done.md).toBe(long.trim());

@@ -55,7 +55,7 @@ export default function openai(cfg: Config, ep: { url: string; key?: string } = 
       const own = new Map(extra.map((t) => [t.name, t]));
       const isRead = (name: string) => !own.has(name) || !!own.get(name)!.read; // the pack's tools and the extra tools marked `read`
       const extraTools = tools.filter((t) => !isRead(t.function.name)); // all that stays offered once `stream.toolRounds` read rounds are done
-      const messages: any[] = [{ role: "system", content: await schemaText(root) }, { role: "user", content: prompt }];
+      const messages: any[] = [{ role: "system", content: stream?.system ?? await schemaText(root) }, { role: "user", content: prompt }];
       const { url, key } = ep, signal = stream?.signal;
       let fixes = 0, cuts = 0, text = "", keep = false; // text: the parts of a final answer cut by the output limit; keep: the next turn goes on with it
       let reads = 0, capped = false; // reads: turns that ran reading tools; capped: past stream.toolRounds, only the extra tools that do not read are offered

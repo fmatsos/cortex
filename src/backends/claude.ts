@@ -13,7 +13,7 @@ export default function claude(cfg: Config): Backend {
       const { query, createSdkMcpServer, tool } = await load<typeof import("@anthropic-ai/claude-agent-sdk")>("@anthropic-ai/claude-agent-sdk", () => import("@anthropic-ai/claude-agent-sdk"));
       const { schemaText } = await import("../schema");
       const { callTool, toolPack, zodShape } = await import("./tools");
-      const schema = await schemaText(root);
+      const schema = stream?.system ?? await schemaText(root);
       const refused = (reason: string) => report?.({ level: "warn", text: `refused: ${reason}`, mark: "  ⊘" });
       // the cortex tool pack, in process: the same tools as every backend; Claude Code's own tools are off
       const cortex = createSdkMcpServer({ name: "cortex", alwaysLoad: true, tools: (stream?.onlyExtra ? [] : toolPack(mode)).map((t) =>
