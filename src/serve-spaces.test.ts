@@ -56,9 +56,9 @@ const hold = (root: string, space: string, userId: string, role: Role = "owner")
 
 const servers: { stop(force?: boolean): unknown }[] = [];
 afterEach(() => { servers.splice(0).forEach((s) => s.stop(true)); });
-const start = async (root: string, sync = false, ask?: AskFn) => {
+const start = async (root: string, sync = false, ask?: AskFn, cmd = exportCmd) => {
   const said: string[] = [];
-  const server = await serve(root, { port: 0, sync, reviewer: "t", say: (m) => said.push(m), exportCmd, settleMs: 5, embeddings: async () => undefined, ask });
+  const server = await serve(root, { port: 0, sync, reviewer: "t", say: (m) => said.push(m), exportCmd: cmd, settleMs: 5, embeddings: async () => undefined, ask });
   servers.push(server);
   const origin = `http://localhost:${server.port}`;
   const get = (path: string, headers: Record<string, string> = {}) => fetch(origin + path, { redirect: "manual", headers });
@@ -262,6 +262,28 @@ test("POST /api/sync at the root pulls and rebuilds every space (loopback only)"
   const until = Date.now() + 10_000;
   while (said.filter((m) => m.startsWith("site rebuilt")).length < before + 2 && Date.now() < until) await Bun.sleep(20);
   expect(said.filter((m) => m.startsWith("site rebuilt")).length).toBe(before + 2);
+});
+
+test("the exports of several spaces never overlap: they share one build folder and its lock, so each waits for the other instead of failing", async () => {
+  const root = instance(["a", "b", "c"]);
+  // a stand-in for `cortex export`, which takes `site/.export.lock` (here: a folder, created atomically) and fails at once when it is held
+  const lock = join(dir, "lock-" + Date.now()), guarded = join(dir, "guarded.ts");
+  writeFileSync(guarded, `
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+const [out, lock] = Bun.argv.slice(2);
+try { mkdirSync(lock); } catch { console.error("an export is already running"); process.exit(1); }
+await Bun.sleep(150);
+mkdirSync(out, { recursive: true });
+writeFileSync(out + "/index.html", "ok");
+rmSync(lock, { recursive: true });
+`);
+  const { post, said } = await start(root, false, undefined, (_, out) => [process.execPath, guarded, out, lock]);
+  const rebuilt = () => said.filter((m) => m.startsWith("site rebuilt")).length, before = rebuilt();
+  expect((await post("/api/sync", {}, {})).status).toBe(200); // the three spaces are rebuilt at the same time
+  const until = Date.now() + 10_000;
+  while (rebuilt() < before + 3 && Date.now() < until) await Bun.sleep(20);
+  expect(rebuilt()).toBe(before + 3);
+  expect(said.filter((m) => m.startsWith("export failed"))).toEqual([]);
 });
 
 // ---- the administration of a space: /s/<space>/api/space

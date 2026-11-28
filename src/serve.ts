@@ -264,8 +264,8 @@ async function runChild(root: string, argv: string[], onStart: (c: Subprocess) =
   } finally { children.delete(child); }
 }
 
-/** What the sites of one server share: the git queue, and the guards of the routes that cost (a model call). */
-type Shared = { say: (m: string) => void; serial: <T>(f: () => Promise<T> | T) => Promise<T>; busy: { asking: boolean; judging: boolean } };
+/** What the sites of one server share: the git queue, the export queue (the build folder `site/` and its lock are single), and the guards of the routes that cost (a model call). */
+type Shared = { say: (m: string) => void; serial: <T>(f: () => Promise<T> | T) => Promise<T>; exports: <T>(f: () => Promise<T> | T) => Promise<T>; busy: { asking: boolean; judging: boolean } };
 /** One space's site and APIs, as `serve` mounts it: `fetch` gets the URL with the space's prefix already stripped. */
 type Site = {
   fetch(req: Request, srv: Server<undefined>, url: URL): Promise<Response>;
@@ -285,7 +285,7 @@ type Site = {
 /** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
 /** The spaces a visitor may have a question read, from what they asked for (`spaces` of the body): the names (those they may see), or the response to give instead. */
 type Reach = (req: Request, asked: string[] | "all") => Promise<string[] | Response>;
-async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined, reach?: Reach): Promise<Site> {
+async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined, reach?: Reach): Promise<Site> {
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
   const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
   // the newest complete build of a previous run is served at once; the other folder is where the next build goes
@@ -313,7 +313,8 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
           rmSync(markerOf(out), { force: true }); // first: a folder being emptied is never taken for a complete one
           await rm(out, { recursive: true, force: true });
           try {
-            await runChild(root, exportCmd(root, out), (c) => (exporter = c), base ? { CORTEX_SITE_BASE: base } : {});
+            // one export at a time for the whole process: every space's export writes `site/` under one lock, so the others wait their turn
+            await exports(() => (stopped ? undefined : runChild(root, exportCmd(root, out), (c) => (exporter = c), base ? { CORTEX_SITE_BASE: base } : {})));
             if (!existsSync(join(out, "index.html"))) throw new Error("the export wrote no index.html");
             markComplete(out);
             current = out; next = 1 - next;
@@ -579,7 +580,10 @@ export async function serve(root: string, o: ServeOpts) {
   // ponytail: one queue (and one "question at a time") for every space of the instance, a monorepo has one git index; per space when it hurts
   let queue: Promise<unknown> = Promise.resolve();
   const serial = <T>(f: () => Promise<T> | T): Promise<T> => { const r = queue.then(f); queue = r.catch(() => {}); return r; };
-  const shared: Shared = { say, serial, busy: { asking: false, judging: false } };
+  // the exports have their own queue (a build is long: it must not hold up the pulls and commits of `serial`)
+  let exportQueue: Promise<unknown> = Promise.resolve();
+  const exports = <T>(f: () => Promise<T> | T): Promise<T> => { const r = exportQueue.then(f); exportQueue = r.catch(() => {}); return r; };
+  const shared: Shared = { say, serial, exports, busy: { asking: false, judging: false } };
   // multi-space instance (a `spaces/` folder): every space under /s/<name>/, the accounts and /api/spaces at the root. Otherwise one site, at the root.
   const multi = isMultiSpace(root), sites = new Map<string, Site>(), creating = new Set<string>();
   let previous: number | undefined;
