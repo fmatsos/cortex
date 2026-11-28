@@ -126,3 +126,52 @@ test("add an image: a dry run never calls the model, and what cannot describe an
   }
   expect(existsSync(join(root, "raw"))).toBe(false);
 });
+
+/** A `pandoc` on the PATH for the length of `run`: a script that logs its arguments, and answers by `body` (shell) for anything but `--version`. */
+async function withPandoc<T>(body: string, run: (log: string) => Promise<T>): Promise<T> {
+  const bin = mkdtempSync(join(tmpdir(), "cortex-bin-")), log = join(bin, "args.log"), path = process.env.PATH;
+  await Bun.write(join(bin, "pandoc"), `#!/bin/sh\n[ "$1" = "--version" ] && { echo "pandoc 9.9.1"; exit 0; }\necho "$@" > ${log}\ncat > /dev/null\n${body}\n`);
+  Bun.spawnSync(["chmod", "+x", join(bin, "pandoc")]);
+  process.env.PATH = `${bin}:${path}`;
+  try { return await run(log); } finally { process.env.PATH = path; }
+}
+
+test("add a document: pandoc's Markdown is the source (title from its heading, else the file's name), the original a blob; a failure or no pandoc writes nothing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const docx = new Uint8Array([0x50, 0x4b, 3, 4, 9, 9]);
+  await Bun.write(join(root, "rapport.docx"), docx);
+  await Bun.write(join(root, "page.HTM"), "<p>x</p>");
+  const now = new Date("2026-11-04T10:00:00");
+  await withPandoc(`printf '# Rapport annuel\\n\\nUn texte.\\n'`, async (log) => {
+    const dry = await add(root, join(root, "rapport.docx"), { dryRun: true, now });
+    expect(dry).toMatchObject({ duplicate: false, ex: { kind: "document", extractor: "pandoc/9.9.1" } });
+    expect(existsSync(join(root, "raw"))).toBe(false);
+    const a = await add(root, join(root, "rapport.docx"), { now });
+    expect(await Bun.file(log).text()).toBe("-f docx -t gfm --wrap=none\n");
+    const text = await Bun.file(join(root, rawPath(root, a.id)!)).text();
+    expect(text).toContain("title: Rapport annuel\n");
+    expect(text).toContain("kind: document\n");
+    expect(text).toContain("content: resource\n");
+    expect(text).toContain("extractor: pandoc/9.9.1\n");
+    const blob = text.match(/^blob: (.+)$/m)![1];
+    expect(blob).toEndWith(".docx");
+    expect(new Uint8Array(await Bun.file(join(root, blob)).arrayBuffer())).toEqual(docx);
+    await add(root, join(root, "page.HTM"), { now }); // html: the same, the format named for pandoc
+    expect(await Bun.file(log).text()).toBe("-f html -t gfm --wrap=none\n");
+  });
+  const before = await Bun.file(join(root, "wiki/log.jsonl")).text();
+  await Bun.write(join(root, "autre.odt"), new Uint8Array([0x50, 0x4b, 3, 4]));
+  await withPandoc(`echo "boom" >&2; exit 3`, async () => { await expect(add(root, join(root, "autre.odt"), { now })).rejects.toThrow("pandoc failed: boom"); });
+  await withPandoc(`printf '  \\n'`, async () => { await expect(add(root, join(root, "autre.odt"), { now })).rejects.toThrow("Document without text"); });
+  const path = process.env.PATH;
+  process.env.PATH = mkdtempSync(join(tmpdir(), "cortex-empty-")); // no pandoc here, whatever the machine has
+  try {
+    const err = await add(root, join(root, "autre.odt"), { now }).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toHaveProperty("code", "refused"); // a failure: the inbox keeps the entry
+    expect((err as Error).message).toContain("pandoc not found");
+    expect((err as Error).message).toContain("apt install pandoc");
+  } finally { process.env.PATH = path; }
+  expect(await Bun.file(join(root, "wiki/log.jsonl")).text()).toBe(before); // nothing was added by the failures
+});

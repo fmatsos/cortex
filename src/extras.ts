@@ -46,6 +46,7 @@ export async function relatedCtx(w: Wiki, ref: string, limit: number) {
 const TOOLS: [string, string, string][] = [
   ["git", "compile (checks writes outside wiki/)", "apt install git"],
   ["pdftotext", "add of a PDF", "apt install poppler-utils"],
+  ["pandoc", "add of a Word, OpenDocument, RTF, EPUB or HTML file", "apt install pandoc"],
   process.platform === "darwin"
     ? ["sandbox-exec", "compile/ask without SDK (confinement)", "built into macOS"]
     : ["bwrap", "compile/ask without SDK (confinement)", "apt install bubblewrap"],

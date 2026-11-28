@@ -148,6 +148,7 @@ test("inbox: sharedKinds names the kind of each entry: as first, then a link, a 
   expect(sharedKinds(f("inbox/b.md", "inbox/b.md.note"))).toEqual([]);
   expect(sharedKinds(f("inbox/p.png", "inbox/q.JPG", "inbox/r.webp", "inbox/s.gif"))).toEqual(["resource", "resource", "resource", "resource"]); // an image is a resource
   expect(sharedKinds(f("inbox/p.png", "inbox/p.png.as"))).toEqual(["note"]);
+  expect(sharedKinds(f("inbox/a.docx", "inbox/b.odt", "inbox/c.rtf", "inbox/d.epub", "inbox/e.html", "inbox/f.htm"))).toEqual(Array(6).fill("resource")); // a document is a resource
 });
 
 test("inbox: an attachment (<name>.of) is added after its note whatever the names sort to, tied to it both ways; it waits while the note is not added, and keeps the note's id", async () => {

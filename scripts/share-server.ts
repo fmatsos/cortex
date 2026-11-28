@@ -38,7 +38,10 @@ const isShareAs = (v: unknown): v is ShareAs => v === "note" || v === "resource"
  */
 export const UPLOAD_TYPES: Readonly<Record<string, string>> = {
   ".pdf": "pdf", ".md": "md", ".markdown": "md", ".txt": "txt", ".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".webp": "webp", ".gif": "gif",
+  ".docx": "docx", ".odt": "odt", ".rtf": "rtf", ".epub": "epub", ".html": "html", ".htm": "html", // read by pandoc (add.ts DOCUMENT_FORMATS)
 };
+/** The first bytes a document must start with (ZIP for the Office, OpenDocument and EPUB ones, RTF's own); HTML is only text, unchecked. */
+const SIGNATURES: Record<string, string> = { docx: "PK\x03\x04", odt: "PK\x03\x04", epub: "PK\x03\x04", rtf: "{\\rtf" };
 /** One uploaded file at most this big (a bigger one is a 413); Bun's default request limit (128 MiB) is above it. */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** Files in one request at most. */
@@ -152,7 +155,7 @@ const gitDeliver: Deliver = (files, id) => {
   return run;
 };
 
-/** An uploaded file as an inbox entry, or the refusal: 415 (not a type of `UPLOAD_TYPES`, or a "PDF" or an image that is not one) or 413 (over `MAX_UPLOAD_BYTES`). The client's name only gives the extension, and a title to a text with none. */
+/** An uploaded file as an inbox entry, or the refusal: 415 (not a type of `UPLOAD_TYPES`, or a "PDF", an image or a document that is not one) or 413 (over `MAX_UPLOAD_BYTES`). The client's name only gives the extension, and a title to a text with none. */
 async function upload(f: File, n: number): Promise<{ ext: string; content: string | Uint8Array } | Response> {
   const dot = f.name.lastIndexOf("."), ext = UPLOAD_TYPES[dot < 0 ? "" : f.name.slice(dot).toLowerCase()];
   if (!ext) return new Response(`unsupported file type: ${JSON.stringify(f.name.slice(0, 80))} (accepted: ${Object.keys(UPLOAD_TYPES).join(", ")})`, { status: 415 });
@@ -164,6 +167,10 @@ async function upload(f: File, n: number): Promise<{ ext: string; content: strin
   if (["png", "jpg", "webp", "gif"].includes(ext)) { // its first bytes say what it is: the client's name and type prove nothing
     const bytes = new Uint8Array(await f.arrayBuffer());
     return imageType(bytes) ? { ext, content: bytes } : new Response(`${JSON.stringify(f.name.slice(0, 80))} is not a PNG, JPEG, WebP or GIF image`, { status: 415 });
+  }
+  if (ext in SIGNATURES || ext === "html") { // kept as is, for pandoc
+    const bytes = new Uint8Array(await f.arrayBuffer()), sig = SIGNATURES[ext];
+    return !sig || new TextDecoder("latin1").decode(bytes.subarray(0, sig.length)) === sig ? { ext, content: bytes } : new Response(`${JSON.stringify(f.name.slice(0, 80))} is not a .${ext} file`, { status: 415 });
   }
   // a text with no `# heading` takes its file's name for one (otherwise its title would be the generated name of the inbox file)
   const text = await f.text(), stem = f.name.slice(0, dot).replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 80);

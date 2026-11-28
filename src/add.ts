@@ -240,6 +240,38 @@ export async function extractPdf(bytes: Uint8Array, url?: string, name = "docume
   return { title, content: out, kind: "pdf", url, extractor: "pdftotext", blob: bytes, blobExt: "pdf" };
 }
 
+/** Office and web documents `add` reads through pandoc: file extension → pandoc's input format. The one place to extend (the share route and the site's file picker mirror it). */
+export const DOCUMENT_FORMATS: Readonly<Record<string, string>> = { docx: "docx", odt: "odt", rtf: "rtf", epub: "epub", html: "html", htm: "html" };
+export const DOCUMENT_FILE = new RegExp(`\\.(${Object.keys(DOCUMENT_FORMATS).join("|")})$`, "i");
+
+/** Files whose type names a resource (a PDF, an image, a document), as a URL does: the kind of source they make is not the space's default. */
+export const isResourceFile = (path: string) => /\.pdf$/i.test(path) || IMAGE_FILE.test(path) || DOCUMENT_FILE.test(path);
+
+const pandocVersions = new Map<string, Promise<string>>();
+/** First line of `pandoc --version` (« pandoc 3.1.3 » → « pandoc/3.1.3 »), asked once per binary. */
+const pandocExtractor = (bin: string) => {
+  let v = pandocVersions.get(bin);
+  if (!v) pandocVersions.set(bin, v = new Response(Bun.spawn([bin, "--version"], { stdout: "pipe", stderr: "ignore" }).stdout).text().then((t) => (t.split("\n")[0].trim().replace(/\s+/, "/") || "pandoc")));
+  return v;
+};
+
+/**
+ * Office or web document → Markdown with pandoc (GitHub-flavored, unwrapped), like a PDF with pdftotext: the original is kept as a blob.
+ * Images inside the document are not extracted (their references may stay in the text).
+ */
+export async function extractDocument(bytes: Uint8Array, ext: string, name = "document"): Promise<Extract> {
+  const format = DOCUMENT_FORMATS[ext.toLowerCase()];
+  if (!format) throw new Error(`Unsupported document format: .${ext}`);
+  const bin = Bun.which("pandoc", { PATH: process.env.PATH });
+  if (!bin) throw new Error("pandoc not found: it reads Word, OpenDocument, RTF, EPUB and HTML files. Install it (apt install pandoc, brew install pandoc).");
+  const p = Bun.spawn([bin, "-f", format, "-t", "gfm", "--wrap=none"], { stdin: bytes, stdout: "pipe", stderr: "pipe" });
+  const out = await new Response(p.stdout).text();
+  if ((await p.exited) !== 0) throw new Error(`pandoc failed: ${(await new Response(p.stderr).text()).trim()}`);
+  if (!countWords(out)) throw new Error(`Document without text: ${name}.${ext}.`);
+  const title = out.match(/^#[ \t]+(.+)$/m)?.[1].trim().slice(0, LIMITS.pdfTitleChars) || name;
+  return { title, content: out, kind: "document", extractor: await pandocExtractor(bin), blob: bytes, blobExt: format === "html" ? "html" : ext.toLowerCase() };
+}
+
 /** The file types `add` reads as images (the extension only chooses the path; the bytes decide). */
 export const IMAGE_FILE = /\.(png|jpe?g|webp|gif)$/i;
 
@@ -351,7 +383,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   const root = w.root;
   // what it is is known before anything is fetched: a space takes only the kinds its content holds (a dry run says so and goes on)
   const cfg = await w.config(), held = contentOf(cfg, spaceNameOf(root));
-  const sure = /^https?:\/\//.test(input) || /\.pdf$/i.test(input) || IMAGE_FILE.test(input) || !!opts.url; // only these name their kind; any other input takes the space's content
+  const sure = /^https?:\/\//.test(input) || /\.pdf$/i.test(input) || isResourceFile(input) || !!opts.url; // only these name their kind; any other input takes the space's content
   const content: SourceContent = opts.as ?? (sure ? "resource" : held.length === 1 && held[0] === "resources" ? "resource" : "note");
   const refused = disabledKind(cfg, root, content);
   if (refused && !opts.dryRun) throw new CortexError(refused, "refused");
@@ -375,9 +407,10 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
       const known = await findDuplicate(w, [], sha256(bytes)); // before the model: a description is paid for
       if (known) return result({ id: known, duplicate: true });
       ex = await extractImage(bytes, name, cfg, opts.describe, opts.dryRun);
-    } else ex = /\.pdf$/i.test(input) ? await extractPdf(new Uint8Array(await f.arrayBuffer()), undefined, name)
+    } else if (DOCUMENT_FILE.test(input)) ex = await extractDocument(new Uint8Array(await f.arrayBuffer()), input.split(".").at(-1)!, name);
+    else ex = /\.pdf$/i.test(input) ? await extractPdf(new Uint8Array(await f.arrayBuffer()), undefined, name)
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
-      : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf, .png, .jpg, .webp, .gif)`); })();
+      : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf, .png, .jpg, .webp, .gif, .docx, .odt, .rtf, .epub, .html)`); })();
   }
   if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: socialFor(opts.url) ? "social" : "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
   const hash = ex.hash ?? sha256(ex.content);

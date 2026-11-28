@@ -5,7 +5,7 @@
 
 	// Files to send with an addition: chosen with the button or dropped on the zone, listed with a button to take each one back out. Which types the
 	// server takes is its own list (scripts/share-server.ts, UPLOAD_TYPES); `ACCEPT` only narrows the file picker to the same ones.
-	const ACCEPT = ".pdf,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp,image/gif";
+	const ACCEPT = ".pdf,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.docx,.odt,.rtf,.epub,.html,.htm,application/pdf,text/markdown,text/plain,image/png,image/jpeg,image/webp,image/gif";
 	let { files = $bindable([]), label, hint, error = "" }: { files?: File[]; label: string; hint: string; error?: string } = $props();
 	const uid = $props.id();
 	let picker = $state<HTMLInputElement | null>(null);

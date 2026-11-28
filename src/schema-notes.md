@@ -124,7 +124,7 @@ This file has no frontmatter. It holds one section per type, and one bullet per 
 
 ## INGEST workflow
 
-1. Read the raw note in full, `note` field included. For an image, describe it with your vision.
+1. Read the raw note in full, `note` field included. An image source already holds the model's description and the text read in it; open its `blob` only if you need to look at it.
 2. Look for related pages: start with 2 or 3 searches, `cortex search "<terms>" --limit 20`, on the note's title, the names it mentions (people, projects, clients) and its key terms, then read the pages found (no pipe, `head` or `grep`: the commands run alone, `--limit` shortens the output). Do not read `wiki/index.md`: it is a catalog for humans, too long to load.
 3. **Present to the human**, in 5 to 10 lines, what the note brings (decisions, dates, action items), what contradicts existing pages, and the list of pages to create or modify. Wait for their approval or corrections.
 4. Write:

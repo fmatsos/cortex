@@ -74,6 +74,8 @@ test("share: multipart uploads are named by the server (never by the client), ch
   expect((await bad("fake.pdf", "not a pdf")).status).toBe(415);
   expect((await bad("noext", "x")).status).toBe(415);
   expect((await bad("fake.png", "not an image")).status).toBe(415); // its bytes decide, not its name
+  expect((await bad("fake.docx", "not a zip")).status).toBe(415);
+  expect((await bad("fake.rtf", "plain text")).status).toBe(415);
   expect((await bad("trunc.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).status).toBe(415); // a truncated signature is no image
   expect((await bad("big.txt", new Uint8Array(MAX_UPLOAD_BYTES + 1))).status).toBe(413);
   expect((await bad("a.txt", "x", { as: "page" })).status).toBe(400);
@@ -97,6 +99,17 @@ test("share: an image upload is accepted as is (by its bytes), whatever its exte
   expect(r.status).toBe(200);
   expect(got[0]!.filter((f) => !/\.(as|note)$/.test(f.path)).map((f) => f.path.replace(/^.*\./, ""))).toEqual(["png", "jpg"]);
   expect(got[0]![0]!.content).toEqual(png);
+});
+
+test("share: documents are kept as is when their first bytes fit (ZIP for docx, odt and epub, {\\rtf, HTML unchecked), .htm saved as .html", async () => {
+  const { route } = await import("./share-server");
+  const got: { path: string; content: string | Uint8Array }[][] = [];
+  const zip = new Uint8Array([0x50, 0x4b, 3, 4, 1]), rtf = new TextEncoder().encode("{\\rtf1 hello}"), html = new TextEncoder().encode("<p># not a heading</p>");
+  const form = new FormData();
+  for (const [bytes, name] of [[zip, "a.DOCX"], [zip, "b.odt"], [zip, "c.epub"], [rtf, "d.rtf"], [html, "e.htm"], [html, "f.html"]] as const) form.append("file", new File([bytes], name));
+  expect((await route(new Request("http://x/share/api", { method: "POST", body: form }), async (f) => { got.push(f); })).status).toBe(200);
+  expect(got[0]!.map((f) => f.path.replace(/^.*\./, ""))).toEqual(["docx", "odt", "epub", "rtf", "html", "html"]);
+  expect(got[0]![4]!.content).toEqual(html); // no title prepended: it is not a text
 });
 
 test("share: a note with files makes its files attachments (<file>.of names the note, no as or note on them); without a text each file carries them", async () => {

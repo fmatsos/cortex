@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
-import { add, formatAdd } from "./add";
+import { add, formatAdd, isResourceFile } from "./add";
 import { SOURCE_CONTENTS, type SourceContent } from "./doc";
 import { CortexError } from "./lib";
 import { collector, type Report, type Result } from "./print";
@@ -17,13 +17,13 @@ import { paint } from "./style";
  * and are returned; `ok` is false when an entry failed.
  */
 /**
- * The kind of each entry of a share (its inbox files) that names one: `<name>.as` (`note` or `resource`), else `resource` for a link, a PDF, an image or a captured
- * page (`.url`, `.pdf`, `.png`…, `.origin`). A typed text or a text file names none: it takes the space's content.
+ * The kind of each entry of a share (its inbox files) that names one: `<name>.as` (`note` or `resource`), else `resource` for a link, a PDF, an image, a document or a captured
+ * page (`.url`, `.pdf`, `.png`, `.docx`…, `.origin`). A typed text or a text file names none: it takes the space's content.
  */
 export const sharedKinds = (files: { path: string; content: string | Uint8Array }[]): SourceContent[] => {
   const text = (path: string) => { const c = files.find((f) => f.path === path)?.content; return typeof c === "string" ? c : undefined; };
   return files.filter((f) => !SIDE.test(f.path)).flatMap((f) => {
-    const kind = asKind(text(`${f.path}.as`)) ?? (/\.(url|pdf|png|jpe?g|webp|gif)$/i.test(f.path) || files.some((g) => g.path === `${f.path}.origin`) ? "resource" : undefined);
+    const kind = asKind(text(`${f.path}.as`)) ?? (/\.url$/.test(f.path) || isResourceFile(f.path) || files.some((g) => g.path === `${f.path}.origin`) ? "resource" : undefined);
     return kind ? [kind] : [];
   });
 };

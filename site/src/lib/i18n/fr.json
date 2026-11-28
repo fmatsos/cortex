@@ -1338,7 +1338,7 @@
 	"add.resource.url.label": "Lien",
 	"add.resource.url.hint": "L'adresse d'une page, d'un article ou d'un PDF (http ou https).",
 	"add.resource.files.label": "Fichiers",
-	"add.resource.files.hint": "PDF, Markdown (.md, .markdown), texte (.txt) ou image (.png, .jpg, .webp, .gif), 25 Mo au maximum chacun. Une image est décrite par le modèle de l'installation.",
+	"add.resource.files.hint": "PDF, Markdown (.md, .markdown), texte (.txt), image (.png, .jpg, .webp, .gif) ou document (.docx, .odt, .rtf, .epub, .html), 25 Mo au maximum chacun. Une image est décrite par le modèle de l'installation.",
 	"add.resource.choose": "Choisir des fichiers",
 	"add.resource.drop": "ou les déposer ici",
 	"add.resource.remove": "Retirer {name}",
@@ -1355,5 +1355,5 @@
 	"add.resource.files_one": "{count} fichier",
 	"add.resource.files_other": "{count} fichiers",
 	"add.note.attach.label": "Pièces jointes (facultatif)",
-	"add.note.attach.hint": "PDF, Markdown (.md, .markdown), texte (.txt) ou image (.png, .jpg, .webp, .gif), 25 Mo au maximum chacun. Chaque fichier devient une source à part, liée à la note."
+	"add.note.attach.hint": "PDF, Markdown (.md, .markdown), texte (.txt), image (.png, .jpg, .webp, .gif) ou document (.docx, .odt, .rtf, .epub, .html), 25 Mo au maximum chacun. Chaque fichier devient une source à part, liée à la note."
 }
