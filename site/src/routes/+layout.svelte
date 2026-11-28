@@ -27,6 +27,7 @@
 	import { registerConversationActions } from "#lib/assistant-session.js";
 	import { registerJourneyActions } from "#lib/journeys.js";
 	import AuthNotice from "#lib/components/auth-notice.svelte";
+	import CompileNotice from "#lib/components/compile-notice.svelte";
 	import BuildStatus from "#lib/components/build-status.svelte";
 	import SpaceSwitcher from "#lib/components/space-switcher.svelte";
 	import SpaceContext from "#lib/components/space-context.svelte";
@@ -149,6 +150,7 @@
 
 <SpaceContext />
 <AuthNotice />
+<CompileNotice />
 
 <main id="main-content" tabindex="-1" class="anchor-target mx-auto w-full max-w-7xl flex-1 px-4 py-8 lg:px-8 outline-none">
 	{@render children()}

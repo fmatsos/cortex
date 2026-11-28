@@ -18,7 +18,8 @@ import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
 import { inbox, sharedKinds } from "./inbox";
 import { verifyPage } from "./verify";
-import { commitAndPush, pullRebase } from "./sync";
+import { commitAndPush, git, pullRebase } from "./sync";
+import { pendingSources } from "./pending";
 import { accountRoute } from "./account-api";
 import { acceptInvite, addSpaceMember, archivedSpaces, forgetSpace, getSpace, inviteSpace, memberRole, ownsASpace, setSpace, spaceVisibility, type User } from "./accounts";
 import { checkContent, configFile, contentOf, disabledKind, loadConfig, readConfig, writeConfig } from "./config";
@@ -41,6 +42,8 @@ import { legacyWorker } from "./legacy-worker";
  * `GET /api/search`: the hybrid search with the site's operators, and with `judge=1` the judge's ranking (src/search-api.ts).
  * In a multi-space instance, `GET /api/search?q=…&spaces=a,b|all` at the root searches several spaces for a signed-in visitor (`searchAcross`).
  * `GET /api/status`: is the site being rebuilt (a build running or waiting), and how the last one ended; the site shows a small indicator.
+ * `POST /api/compile`: compiles the space's pending sources now, one `cortex compile <id> --batch` child at a time, each committed (with
+ * `sync`) and followed by a rebuild; `GET /api/compile` tells how far it is. For a signed-in member of the space, never an anonymous visitor.
  * User accounts (`auth` in cortex.json, src/account-api.ts): `/api/auth/*`, `/api/me*`, `/api/conversations*`, `/api/journeys*`,
  * stored in `.cortex/accounts.db`. The exported site (`cortex export`) has none of these routes and works without them.
  */
@@ -52,6 +55,8 @@ export type ServeOpts = {
   settleMs?: number;
   /** The page embeddings' refresh (injectable for tests). Default: embed.ts. */
   embeddings?: (root: string) => Promise<{ embedded: number; removed: number } | undefined>;
+  /** The command that compiles one source of `root` (a child process; exit 0 = compiled). Default: this very cortex, `compile <id> --batch`. */
+  compileCmd?: (root: string, id: string) => string[];
 };
 /** `draft`: set by the agent that prepares display blocks, so the live draft can draw them (the text so far in, Markdown with the blocks out). `log`: the service journal. */
 export type AskStream = Stream & { draft?: (md: string) => string; log?: (m: string) => void };
@@ -251,8 +256,13 @@ const EXPORT_TIMEOUT_MS = 15 * 60_000;
 /** The child that exports the site: the cortex running this code (the sources, or the sources a binary unpacked; `BUN_BE_BUN` is inherited in the latter). */
 export const exportArgv = (_root: string, out: string) => [process.execPath, join(import.meta.dir, "cortex.ts"), "export", "--out", out];
 
-/** Runs `argv` with `root` as the wiki; resolves on exit 0, rejects with the end of its output otherwise (or when it is killed). */
-async function runChild(root: string, argv: string[], onStart: (c: Subprocess) => void, env: Record<string, string> = {}): Promise<void> {
+/** The child that compiles one source: the cortex running this code, as `exportArgv`. `--batch`: no conversation, the Source page is prepared by cortex. */
+export const compileArgv = (_root: string, id: string) => [process.execPath, join(import.meta.dir, "cortex.ts"), "compile", id, "--batch"];
+/** Most sources one click of the site's compile button takes (a click spends model tokens; the next one goes on). */
+export const MAX_COMPILE = 40;
+
+/** Runs `argv` with `root` as the wiki; resolves on exit 0, rejects with the end of its output otherwise (or when it is killed). `what` names it in the error. */
+async function runChild(root: string, argv: string[], onStart: (c: Subprocess) => void, env: Record<string, string> = {}, what = "export"): Promise<void> {
   hookExit();
   const child = Bun.spawn(argv, { env: { ...process.env, ...env, CORTEX_ROOT: root }, stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: EXPORT_TIMEOUT_MS });
   children.add(child); onStart(child);
@@ -260,12 +270,12 @@ async function runChild(root: string, argv: string[], onStart: (c: Subprocess) =
     const [out, err, code] = await Promise.all([new Response(child.stdout as ReadableStream).text(), new Response(child.stderr as ReadableStream).text(), child.exited]);
     if (code === 0) return;
     const tail = `${err}\n${out}`.trim().split("\n").slice(-6).join("\n");
-    throw new Error(`export exited with ${child.signalCode ?? `code ${code}`}${tail ? `:\n${tail}` : ""}`);
+    throw new Error(`${what} exited with ${child.signalCode ?? `code ${code}`}${tail ? `:\n${tail}` : ""}`);
   } finally { children.delete(child); }
 }
 
 /** What the sites of one server share: the git queue, the export queue (the build folder `site/` and its lock are single), and the guards of the routes that cost (a model call). */
-type Shared = { say: (m: string) => void; serial: <T>(f: () => Promise<T> | T) => Promise<T>; exports: <T>(f: () => Promise<T> | T) => Promise<T>; busy: { asking: boolean; judging: boolean } };
+type Shared = { say: (m: string) => void; serial: <T>(f: () => Promise<T> | T) => Promise<T>; exports: <T>(f: () => Promise<T> | T) => Promise<T>; busy: { asking: boolean; judging: boolean; compiling: boolean } };
 /** One space's site and APIs, as `serve` mounts it: `fetch` gets the URL with the space's prefix already stripped. */
 type Site = {
   fetch(req: Request, srv: Server<undefined>, url: URL): Promise<Response>;
@@ -285,7 +295,11 @@ type Site = {
 /** `base`: where the site is mounted (`/s/<space>` in a multi-space instance, "" otherwise), the export's `CORTEX_SITE_BASE`. */
 /** The spaces a visitor may have a question read, from what they asked for (`spaces` of the body): the names (those they may see), or the response to give instead. */
 type Reach = (req: Request, asked: string[] | "all") => Promise<string[] | Response>;
-async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined, reach?: Reach): Promise<Site> {
+/** The response that refuses a request to a route of members who write (401 not signed in, 403 signed in but not of the space), undefined when the visitor may. */
+type Writer = (req: Request) => Promise<Response | undefined>;
+/** The state of the space's compile run: what `GET /api/compile` tells, with the count of pending sources read at that moment. */
+type CompileRun = { running: boolean; done: number; failed: number; current?: { id: string; title: string }; lastError?: string };
+async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy }: Shared, base = "", readOnly: () => string | undefined = () => undefined, reach?: Reach, writer: Writer = async () => Response.json({ error: "not signed in" }, { status: 401, headers: noStore })): Promise<Site> {
   const dirs = [join(root, ".cortex/serve/a"), join(root, ".cortex/serve/b")];
   const settleMs = o.settleMs ?? 300, exportCmd = o.exportCmd ?? exportArgv, embeddings = o.embeddings ?? refresh;
   // the newest complete build of a previous run is served at once; the other folder is where the next build goes
@@ -366,6 +380,60 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy
     if (o.sync) commitAndPush(root, inboxCommitMessage(r.sources), ["raw", "wiki"]);
     void rebuild();
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
+  // Compile now (`POST /api/compile`), what the scheduled job does for the whole queue: one `cortex compile <id> --batch` child at a time, in the space's
+  // folder. The child runs outside `serial` (it lasts minutes: reviews and shares must not wait for it); the pull before the batch, each commit and each
+  // restore go through it. A source the child fails on is put back as it was in git (raw/ and wiki/ of the space) and stays pending; the next one goes on.
+  const compileCmd = o.compileCmd ?? compileArgv, run: CompileRun = { running: false, done: 0, failed: 0 };
+  let compiler: Subprocess | undefined, compiling: Promise<void> | undefined;
+  const compileStatus = async () => ({ running: run.running, pending: (await pendingSources(root)).length, done: run.done, failed: run.failed, ...(run.current && { current: run.current }), ...(run.lastError && { lastError: run.lastError }) });
+  const lines = (e: unknown, n = 600) => (e as Error).message.slice(0, n);
+  /** raw/ and wiki/ back to HEAD, files the child created included (what the scheduled job does for a source that fails). Only with `sync`: without it nothing is committed, so HEAD holds none of the sources compiled before. */
+  const restore = () => {
+    if (!o.sync) return say("compile: not restored (without --sync nothing is committed, there is no state to go back to)");
+    for (const d of ["raw", "wiki"]) {
+      try { git(root, "checkout", "-q", "HEAD", "--", d); } catch (e) { if (!/did not match/.test((e as Error).message)) throw e; } // nothing tracked there yet
+      git(root, "clean", "-fdq", "--", d);
+    }
+  };
+  const compileBatch = async (by: string) => {
+    const tried = new Set<string>(), t0 = performance.now();
+    const took = (t = t0) => `${((performance.now() - t) / 1000).toFixed(1)} s`;
+    try {
+      if (o.sync) await serial(() => { if (!stopped) pull(); }); // what the scheduled job pushed meanwhile is compiled already
+      while (tried.size < MAX_COMPILE && !stopped) {
+        // read again before each source: the next pending one now (one the hourly job compiled and a pull brought in is not), never one already tried in this run
+        const next = (await pendingSources(root)).find((s) => !tried.has(s.id));
+        if (!next) break;
+        tried.add(next.id);
+        run.current = { id: next.id, title: next.title };
+        const t1 = performance.now();
+        say(`compile: ${next.id} (${tried.size} of at most ${MAX_COMPILE})`);
+        try {
+          await runChild(root, compileCmd(root, next.id), (c) => (compiler = c), {}, "compile");
+          if ((await pendingSources(root)).some((s) => s.id === next.id)) throw new Error("the source is still pending after the compile");
+        } catch (e) {
+          compiler = undefined;
+          if (stopped) break; // the server stops or the space is archived: nothing more is touched
+          run.failed++; run.lastError = `${next.id}: ${lines(e)}`;
+          say(`compile: ${next.id} failed after ${took(t1)}: ${lines(e, 300).split("\n")[0]}`);
+          await serial(() => { if (!stopped) restore(); });
+          continue;
+        }
+        compiler = undefined;
+        try { await serial(() => { if (!stopped && o.sync) commitAndPush(root, `compile: ${next.id} (${by})`, ["raw", "wiki"]); }); }
+        catch (e) { run.done++; run.lastError = `${next.id}: compiled but not committed: ${lines(e)}`; void rebuild(); throw e; } // the checkout is no longer clean: nothing else is run on it
+        run.done++;
+        void rebuild();
+        say(`compile: ${next.id} compiled in ${took(t1)}`);
+      }
+    } catch (e) {
+      run.lastError ??= lines(e);
+      say(`compile: stopped: ${lines(e, 300)}`);
+    } finally {
+      say(`compile: ${run.done} compiled, ${run.failed} failed in ${took()}`);
+      run.running = false; run.current = undefined; busy.compiling = false; compiler = undefined;
+    }
+  };
   const { route: shareRoute, ShareRefused } = await import("../scripts/share-server");
   const deliver = async (files: { path: string; content: string | Uint8Array }[]) => {
     const cfg = await loadConfig(root), why = sharedKinds(files).map((k) => disabledKind(cfg, root, k)).find(Boolean); // a link, a PDF (or a share that says `as`) is refused by a space that leaves its kind out: the sender is told; a typed text takes the space's content
@@ -392,9 +460,9 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy
     async sync() { await serial(pull); void rebuild(); void ingest(); },
     rebuild() { void rebuild(); },
     // stopping the server stops the export child too (it holds site/.export.lock)
-    stop() { stopped = true; exporter?.kill(); },
+    stop() { stopped = true; exporter?.kill(); compiler?.kill(); },
     current: () => current,
-    async halt() { site.stop(); await exporter?.exited.catch(() => {}); await building?.catch(() => {}); },
+    async halt() { site.stop(); await exporter?.exited.catch(() => {}); await building?.catch(() => {}); await compiling?.catch(() => {}); },
     async fetch(req, srv, url) {
       if (url.pathname === "/api/verify") {
         const why = readOnly(); // a read-only space: the probe answers 409 (the site tells why instead of offering the button), a review is refused
@@ -425,6 +493,25 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, exports, busy
         if (req.method !== "GET") return new Response(null, { status: 405, headers });
         const isBuilding = building !== undefined; // a build, or the quiet time before it, or one more build waiting behind it
         return Response.json({ building: isBuilding, ...(isBuilding && since !== undefined && { since: new Date(since).toISOString() }), ...(last && { last }) }, { headers });
+      }
+      if (url.pathname === "/api/compile") {
+        // compile the pending sources now. It spends model tokens: for a signed-in member of the space who may write, never anonymous, even on an open space
+        if (req.method !== "GET" && req.method !== "POST") return new Response(null, { status: 405, headers: noStore });
+        const post = req.method === "POST", fail = (error: string, status: number) => Response.json({ error }, { status, headers: noStore });
+        if (post && (!req.headers.get("origin") || !sameOrigin(req.headers))) return fail("cross-origin request refused", 403);
+        const refused = await writer(req);
+        if (refused) return refused;
+        if (!post) return Response.json(await compileStatus(), { headers: noStore }); // the site probes it: only a member who writes gets an answer
+        const why = readOnly();
+        if (why) return fail(why, 409);
+        const cfg = await loadConfig(root).catch((e: Error) => e);
+        if (cfg instanceof Error) return fail(cfg.message, 500);
+        if (!cfg.client) return fail("compile needs a client in cortex.json (claude, codex…): cortex compile --batch runs the model's agent.", 400);
+        if (run.running) return fail("this space is already being compiled", 409);
+        if (busy.compiling) return fail("another space is being compiled: one compile at a time for the server", 409);
+        busy.compiling = true; run.running = true; run.done = 0; run.failed = 0; run.current = undefined; run.lastError = undefined;
+        compiling = compileBatch(`${cfg.client}/${cfg.model ?? "default"}`);
+        return Response.json(await compileStatus(), { status: 202, headers: noStore });
       }
       if (url.pathname === "/api/search") {
         // the hybrid search with the site's operators; `judge=1` also ranks the hits with the judge (search-api.ts). Always on in serve: reading, no account
@@ -583,7 +670,7 @@ export async function serve(root: string, o: ServeOpts) {
   // the exports have their own queue (a build is long: it must not hold up the pulls and commits of `serial`)
   let exportQueue: Promise<unknown> = Promise.resolve();
   const exports = <T>(f: () => Promise<T> | T): Promise<T> => { const r = exportQueue.then(f); exportQueue = r.catch(() => {}); return r; };
-  const shared: Shared = { say, serial, exports, busy: { asking: false, judging: false } };
+  const shared: Shared = { say, serial, exports, busy: { asking: false, judging: false, compiling: false } };
   // multi-space instance (a `spaces/` folder): every space under /s/<name>/, the accounts and /api/spaces at the root. Otherwise one site, at the root.
   const multi = isMultiSpace(root), sites = new Map<string, Site>(), creating = new Set<string>();
   let previous: number | undefined;
@@ -593,10 +680,19 @@ export async function serve(root: string, o: ServeOpts) {
   });
   /** Why a write to this space is refused now (it is read-only), else undefined; a store that fails refuses too. */
   const readOnlyOf = (name: string) => () => { try { return getSpace(accounts.store(), name)?.read_only ? readOnlyMessage(name) : undefined; } catch { return `space ${name}: the accounts' store failed, nothing is written.`; } };
+  /** Who may use the routes that spend tokens or write (`/api/compile`): someone signed in and, in a multi-space instance, a member of the space (open or private: seeing is not enough). Whatever is not sure is a refusal. */
+  const writerOf = (name: string): Writer => async (req) => {
+    try {
+      const user = await accounts.userOf(req);
+      if (!user) return Response.json({ error: "not signed in" }, { status: 401, headers: noStore });
+      if (!name || memberRole(accounts.store(), name, user.id)) return;
+      return Response.json({ error: "only the members of this space may do that" }, { status: 403, headers: noStore });
+    } catch { return Response.json({ error: "cannot tell who you are: nothing is done" }, { status: 403, headers: noStore }); }
+  };
   // the spaces a question or a search across may read: decided once `may` and `visible` exist (below); the sites are mounted before
   let scopeOf: Reach = async () => new Response(null, { status: 404 });
   const reach: Reach = (req, asked) => scopeOf(req, asked);
-  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`, readOnlyOf(name), reach);
+  const mount = (name: string) => makeSite(spaceRoot(root, name), o, shared, `/s/${name}`, readOnlyOf(name), reach, writerOf(name));
   if (multi) {
     for (const name of listSpaces(root)) {
       const site = await mount(name);
@@ -604,7 +700,7 @@ export async function serve(root: string, o: ServeOpts) {
     }
     if (!sites.size) throw new Error("no space to serve: cortex space add <name> first.");
   } else {
-    sites.set("", await makeSite(root, o, shared, "", () => readOnlyReason(root))); // a space served alone (--space) is still read-only if it is set so
+    sites.set("", await makeSite(root, o, shared, "", () => readOnlyReason(root), undefined, writerOf(""))); // a space served alone (--space) is still read-only if it is set so
     previous = await sites.get("")!.start();
   }
 

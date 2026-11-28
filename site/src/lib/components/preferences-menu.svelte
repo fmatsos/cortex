@@ -4,6 +4,7 @@
 	import OfflineStatus from "#lib/components/offline-status.svelte";
 	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 	import { account } from "#lib/account.svelte.js";
+	import { compile } from "#lib/compile.svelte.js";
 	import { toRoute } from "#lib/links.js";
 	import { theme, type Mode } from "#lib/theme.svelte.js";
 	import { lang, type LangChoice } from "#lib/lang.svelte.js";
@@ -37,7 +38,7 @@
 
 <OfflineStatus>
 	{#snippet children({ section, refresh, offline, attention })}
-		<DropdownMenu.Root onOpenChange={(open) => { if (open) refresh(); }}>
+		<DropdownMenu.Root onOpenChange={(open) => { if (open) { refresh(); if (compile.available && !compile.running) void compile.refresh(); } }}>
 			<DropdownMenu.Trigger variant="outline" data-prefs-trigger class="relative gap-2 px-2 @6xl:px-3 [&_svg:not([class*='size-'])]:size-5 {className}" title={me ? named : label}
 				aria-label={me ? (offline ? `${named}, ${t("offline.offline")}` : named) : undefined}>
 				<Icon name={account.enabled ? "account" : "system"} size={20} /><span class="sr-only @6xl:not-sr-only">{label}</span>
@@ -79,6 +80,13 @@
 					{/each}
 				</div>
 				<DropdownMenu.Separator />
+				{#if compile.available}
+					<!-- compile the pending sources now, instead of at the next scheduled run: only where the server says the visitor may (compile.svelte.ts); the progress is told under the header (compile-notice.svelte), so the menu stays out of the way -->
+					<DropdownMenu.Item disabled={compile.running || compile.status.pending === 0} class="gap-2" onSelect={() => void compile.start()}>
+						<Icon name="generated" size={16} />{compile.running ? t("compile.running") : t("compile.action", { count: compile.status.pending })}
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+				{/if}
 				{@render section()}
 				{#if me}
 					<DropdownMenu.Separator />
