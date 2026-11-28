@@ -8,7 +8,8 @@ import { Defuddle } from "defuddle/node";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { openWiki, type Wiki } from "./context";
-import { contentOf, disabledKind } from "./config";
+import { contentOf, disabledKind, type Config } from "./config";
+import { imageModel, imageType } from "./describe-image";
 import { rawId, type SourceContent } from "./doc";
 import { CortexError, cleanUrl, localIso, normUrl, rawPath, serializeDoc, sha256, spaceNameOf } from "./lib";
 import { free } from "./naming";
@@ -30,6 +31,8 @@ const countWords = (s: string) => s.split(/\s+/).filter(Boolean).length;
 export type Extract = {
   title: string; content: string; kind: string; extractor: string;
   url?: string; author?: string; published?: string; partial?: string; blob?: Uint8Array; blobExt?: string;
+  /** What `sha256` (and so the duplicate check) is taken of, when it is not `content`: the bytes of an image (its description is the model's, never the same twice). */
+  hash?: string;
   /** The social network it was read from (parser.social.<network> in cortex.json). */
   network?: "x" | "bluesky" | "mastodon" | "linkedin";
   /** Files written next to source.md (content links them by name): media whose URL expires. */
@@ -237,6 +240,29 @@ export async function extractPdf(bytes: Uint8Array, url?: string, name = "docume
   return { title, content: out, kind: "pdf", url, extractor: "pdftotext", blob: bytes, blobExt: "pdf" };
 }
 
+/** The file types `add` reads as images (the extension only chooses the path; the bytes decide). */
+export const IMAGE_FILE = /\.(png|jpe?g|webp|gif)$/i;
+
+/** The model's description of an image (`describeImage`'s default), told by `(bytes, mime, config)`: injectable for tests. */
+export type Describer = (bytes: Uint8Array, mime: string, cfg: Config) => Promise<string>;
+
+/**
+ * Image → source: the text is what the installation's model wrote of it (`# title`, a description, the text read in it), the image is kept as a blob
+ * like a PDF. `describe` is not called when `dry` (the caller has checked the model exists with `imageModel`).
+ */
+export async function extractImage(bytes: Uint8Array, name: string, cfg: Config, describe?: Describer, dry?: boolean): Promise<Extract> {
+  const type = imageType(bytes);
+  if (!type) throw new Error(`${name}: not a PNG, JPEG, WebP or GIF image.`);
+  const extractor = imageModel(cfg);
+  const base = { kind: "image", extractor, blob: bytes, blobExt: type.ext, hash: sha256(bytes) };
+  if (dry) return { ...base, title: name, content: "" };
+  let text = (await (describe ?? (await import("./describe-image")).describeImage)(bytes, type.mime, cfg)).trim();
+  text = text.replace(/^```(?:markdown|md)?[ \t]*\n([\s\S]*?)\n```$/, "$1").trim(); // a model that wraps its answer in a fence
+  if (!text) throw new Error(`${extractor} described nothing: nothing written.`);
+  const title = text.match(/^#[ \t]+(.+)$/m)?.[1].trim().slice(0, LIMITS.pdfTitleChars) || name;
+  return { ...base, title, content: text };
+}
+
 export function extractText(txt: string, name?: string): Extract {
   const h1 = txt.match(/^#\s+(.+)$/m)?.[1];
   return { title: h1 ?? name ?? txt.trim().split("\n")[0].slice(0, LIMITS.textTitleChars), content: txt, kind: "note", extractor: "manual" };
@@ -252,8 +278,9 @@ export async function findDuplicate(w: Wiki, urls: (string | undefined)[], hash?
 
 /** `url`: origin of a text or file given as input (a page captured from the browser): kept as the source's `url`, never fetched. */
 /** `linkedFrom`: id of a source already in raw/ this input was found in (a newsletter and the pages it points to): tied both ways. */
-/** `as`: what the source is (`resource` or `note`), instead of what its input says: a URL, a PDF or a captured page is a resource; stdin, a text file or a text are what the space holds (a note when it holds both). */
-type AddOpts = { note?: string; dryRun?: boolean; as?: SourceContent; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string } & FetchOpts;
+/** `describe`: the model call that describes an image (default: the installation's own, describe-image.ts), injectable for tests. */
+/** `as`: what the source is (`resource` or `note`), instead of what its input says: a URL, a PDF, an image or a captured page is a resource; stdin, a text file or a text are what the space holds (a note when it holds both). */
+type AddOpts = { note?: string; dryRun?: boolean; as?: SourceContent; now?: Date; text?: string; follow?: boolean; url?: string; linkedFrom?: string; describe?: Describer } & FetchOpts;
 /** `refused` (dry run only): why a real `add` would be refused, the space not holding this kind of source. */
 type AddResult = { id: string; duplicate: boolean; ex?: Extract; refused?: string; linked?: (AddResult | { url: string; error: string })[] };
 
@@ -324,7 +351,7 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
   const root = w.root;
   // what it is is known before anything is fetched: a space takes only the kinds its content holds (a dry run says so and goes on)
   const cfg = await w.config(), held = contentOf(cfg, spaceNameOf(root));
-  const sure = /^https?:\/\//.test(input) || /\.pdf$/i.test(input) || !!opts.url; // only these name their kind; any other input takes the space's content
+  const sure = /^https?:\/\//.test(input) || /\.pdf$/i.test(input) || IMAGE_FILE.test(input) || !!opts.url; // only these name their kind; any other input takes the space's content
   const content: SourceContent = opts.as ?? (sure ? "resource" : held.length === 1 && held[0] === "resources" ? "resource" : "note");
   const refused = disabledKind(cfg, root, content);
   if (refused && !opts.dryRun) throw new CortexError(refused, "refused");
@@ -343,12 +370,17 @@ async function addOne(w: Wiki, rawInput: string, opts: AddOpts): Promise<AddResu
     const f = Bun.file(input);
     if (!(await f.exists())) throw new Error(`File not found: ${input}`);
     const name = input.split("/").at(-1)!.replace(/\.[^.]+$/, "");
-    ex = /\.pdf$/i.test(input) ? await extractPdf(new Uint8Array(await f.arrayBuffer()), undefined, name)
+    if (IMAGE_FILE.test(input)) {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const known = await findDuplicate(w, [], sha256(bytes)); // before the model: a description is paid for
+      if (known) return result({ id: known, duplicate: true });
+      ex = await extractImage(bytes, name, cfg, opts.describe, opts.dryRun);
+    } else ex = /\.pdf$/i.test(input) ? await extractPdf(new Uint8Array(await f.arrayBuffer()), undefined, name)
       : /\.(md|markdown|txt)$/i.test(input) ? extractText(await f.text(), name)
-      : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf)`); })();
+      : (() => { throw new Error(`Unsupported format: ${input} (URL, .md, .txt, .pdf, .png, .jpg, .webp, .gif)`); })();
   }
   if (opts.url && !isUrl) ex = { ...ex, url: opts.url, kind: socialFor(opts.url) ? "social" : "article", extractor: "browser" }; // text captured from a rendered page (extension, share app)
-  const hash = sha256(ex.content);
+  const hash = ex.hash ?? sha256(ex.content);
   const dup = await findDuplicate(w, [isUrl ? input : undefined, ex.url && cleanUrl(ex.url)], hash);
   if (dup) return result({ id: dup, duplicate: true, ex });
 
@@ -405,5 +437,6 @@ export function formatAdd(r: Awaited<ReturnType<typeof add>>, dryRun?: boolean):
 function formatOne(r: AddResult, dryRun?: boolean): string {
   const refused = r.refused ? `\n  ${paint.warn("!")} not added for real: ${r.refused}` : "";
   if (r.duplicate || !r.ex) return `${paint.dim("=")} already present: ${r.id}${refused}`;
+  if (dryRun && r.ex.kind === "image") return `${paint.accent("~ (dry-run)")} ${paint.bold(r.id)}  [${r.ex.extractor}] image, to be described by the model${refused}`;
   return `${dryRun ? paint.accent("~ (dry-run)") : paint.ok("+")} ${paint.bold(r.id)}  [${r.ex.extractor}${r.ex.partial ? ", partial" : ""}] ${r.ex.content.split(/\s+/).length} words${refused}`;
 }

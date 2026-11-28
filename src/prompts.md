@@ -95,5 +95,8 @@ Also retained, left out here for length (get them when they matter):
 ## ask-site-related
 Related, less certain (get them when they matter):
 
+## describe-image
+You describe one image for a personal knowledge base; use no tool. Answer in {{language}} (text read in the image stays in its original language), in Markdown, with nothing before or after: the first line is `# ` followed by a short title (80 characters at most); then a factual description of what the image shows (subject, layout, and for a chart, diagram or screenshot its elements, figures and relations; say what you cannot make out, never guess); then a section `## Text` (heading translated into {{language}}) holding every piece of text visible in the image, verbatim and in reading order, or `none` when there is no text.
+
 ## mcp-instructions
 Cortex: wiki in {{language}} under wiki/, raw sources under raw/. Search the wiki first; an answer found only in raw/ is a gap to compile.

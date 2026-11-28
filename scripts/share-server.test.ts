@@ -73,6 +73,8 @@ test("share: multipart uploads are named by the server (never by the client), ch
   expect([exe.status, await exe.text()]).toEqual([415, expect.stringContaining(Object.keys(UPLOAD_TYPES).join(", "))]);
   expect((await bad("fake.pdf", "not a pdf")).status).toBe(415);
   expect((await bad("noext", "x")).status).toBe(415);
+  expect((await bad("fake.png", "not an image")).status).toBe(415); // its bytes decide, not its name
+  expect((await bad("trunc.png", new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).status).toBe(415); // a truncated signature is no image
   expect((await bad("big.txt", new Uint8Array(MAX_UPLOAD_BYTES + 1))).status).toBe(413);
   expect((await bad("a.txt", "x", { as: "page" })).status).toBe(400);
   expect(got).toEqual([]);
@@ -81,6 +83,20 @@ test("share: multipart uploads are named by the server (never by the client), ch
   expect((await send(text)).status).toBe(200);
   expect(got[0]!.map((f) => f.path.replace(/^.*\./, ""))).toEqual(["md"]);
   expect((await send(new FormData())).status).toBe(400); // nothing at all
+});
+
+test("share: an image upload is accepted as is (by its bytes), whatever its extension among the image ones", async () => {
+  const { route } = await import("./share-server");
+  const got: { path: string; content: string | Uint8Array }[][] = [];
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]), jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0]);
+  const form = new FormData();
+  form.set("as", "resource");
+  form.append("file", new File([png], "Photo.PNG"));
+  form.append("file", new File([jpg], "scan.jpeg"));
+  const r = await route(new Request("http://x/share/api", { method: "POST", body: form }), async (f) => { got.push(f); });
+  expect(r.status).toBe(200);
+  expect(got[0]!.filter((f) => !/\.(as|note)$/.test(f.path)).map((f) => f.path.replace(/^.*\./, ""))).toEqual(["png", "jpg"]);
+  expect(got[0]![0]!.content).toEqual(png);
 });
 
 test("share: a note with files makes its files attachments (<file>.of names the note, no as or note on them); without a text each file carries them", async () => {

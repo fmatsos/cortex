@@ -17,6 +17,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { imageType } from "../src/describe-image";
 import { commitAndPush, pullRebase } from "../src/sync";
 import { bookmarklet, probes } from "./bookmarklet";
 
@@ -35,7 +36,9 @@ const isShareAs = (v: unknown): v is ShareAs => v === "note" || v === "resource"
  * The files the share route takes as uploads (`multipart/form-data`, field `file`): the extension of the client's file name (lowercased, the name
  * is never used otherwise) → the extension the file is saved under in `inbox/`. The one place to extend (`add` must read the type too).
  */
-export const UPLOAD_TYPES: Readonly<Record<string, string>> = { ".pdf": "pdf", ".md": "md", ".markdown": "md", ".txt": "txt" };
+export const UPLOAD_TYPES: Readonly<Record<string, string>> = {
+  ".pdf": "pdf", ".md": "md", ".markdown": "md", ".txt": "txt", ".png": "png", ".jpg": "jpg", ".jpeg": "jpg", ".webp": "webp", ".gif": "gif",
+};
 /** One uploaded file at most this big (a bigger one is a 413); Bun's default request limit (128 MiB) is above it. */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 /** Files in one request at most. */
@@ -149,7 +152,7 @@ const gitDeliver: Deliver = (files, id) => {
   return run;
 };
 
-/** An uploaded file as an inbox entry, or the refusal: 415 (not a type of `UPLOAD_TYPES`, or a "PDF" that is not one) or 413 (over `MAX_UPLOAD_BYTES`). The client's name only gives the extension, and a title to a text with none. */
+/** An uploaded file as an inbox entry, or the refusal: 415 (not a type of `UPLOAD_TYPES`, or a "PDF" or an image that is not one) or 413 (over `MAX_UPLOAD_BYTES`). The client's name only gives the extension, and a title to a text with none. */
 async function upload(f: File, n: number): Promise<{ ext: string; content: string | Uint8Array } | Response> {
   const dot = f.name.lastIndexOf("."), ext = UPLOAD_TYPES[dot < 0 ? "" : f.name.slice(dot).toLowerCase()];
   if (!ext) return new Response(`unsupported file type: ${JSON.stringify(f.name.slice(0, 80))} (accepted: ${Object.keys(UPLOAD_TYPES).join(", ")})`, { status: 415 });
@@ -157,6 +160,10 @@ async function upload(f: File, n: number): Promise<{ ext: string; content: strin
   if (ext === "pdf") {
     const bytes = new Uint8Array(await f.arrayBuffer());
     return new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-" ? { ext, content: bytes } : new Response(`${JSON.stringify(f.name.slice(0, 80))} is not a PDF`, { status: 415 });
+  }
+  if (["png", "jpg", "webp", "gif"].includes(ext)) { // its first bytes say what it is: the client's name and type prove nothing
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    return imageType(bytes) ? { ext, content: bytes } : new Response(`${JSON.stringify(f.name.slice(0, 80))} is not a PNG, JPEG, WebP or GIF image`, { status: 415 });
   }
   // a text with no `# heading` takes its file's name for one (otherwise its title would be the generated name of the inbox file)
   const text = await f.text(), stem = f.name.slice(0, dot).replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 80);

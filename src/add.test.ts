@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { add, pageTitle, socialPost } from "./add";
@@ -71,4 +71,58 @@ test("add --linked-from: the source and its parent tied both ways, an unknown pa
   const fm = async (id: string) => Bun.file(join(root, rawPath(root, id)!)).text();
   expect(await fm(p.id)).toContain(`linked_from: [${mail.id}]\n`);
   expect(await fm(mail.id)).toContain(`linked: [${p.id}]\n`);
+});
+
+// the smallest bytes `imageType` takes for a PNG / a JPEG
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 4, 5, 6]);
+const imageRoot = async (cfg: object) => {
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), JSON.stringify(cfg));
+  await Bun.write(join(root, "photo.png"), PNG);
+  await Bun.write(join(root, "scan.jpg"), JPG);
+  await Bun.write(join(root, "fake.png"), "not an image");
+  return root;
+};
+
+test("add an image: the model's description is the source, the title its first heading, the image a blob; a duplicate costs no model call", async () => {
+  const root = await imageRoot({ client: "openai", model: "qwen3-vl" });
+  const calls: [number, string, string | undefined][] = [];
+  const describe = async (b: Uint8Array, mime: string, cfg: { model?: string }) => { calls.push([b.length, mime, cfg.model]); return "# Facture Acme\n\nUne facture de 120 EUR.\n\n## Text\n\nTotal 120 EUR\n"; };
+  const now = new Date("2026-11-04T10:00:00");
+  const a = await add(root, join(root, "photo.png"), { note: "n", now, describe });
+  expect(calls).toEqual([[PNG.length, "image/png", "qwen3-vl"]]);
+  const text = await Bun.file(join(root, rawPath(root, a.id)!)).text();
+  expect(text).toContain("title: Facture Acme\n");
+  expect(text).toContain("kind: image\n");
+  expect(text).toContain("content: resource\n");
+  expect(text).toContain("extractor: openai:qwen3-vl\n");
+  expect(text).toContain("Total 120 EUR");
+  const blob = text.match(/^blob: (.+)$/m)![1];
+  expect(blob).toMatch(/^\.cortex\/blobs\/[0-9a-f]{64}\.png$/);
+  expect(new Uint8Array(await Bun.file(join(root, blob)).arrayBuffer())).toEqual(PNG);
+  expect((await add(root, join(root, "photo.png"), { now, describe })).duplicate).toBe(true);
+  expect(calls).toHaveLength(1); // same bytes: found before the model is asked
+  // a model that wraps its answer in a fence, and gives no title: the file's name
+  const b = await add(root, join(root, "scan.jpg"), { now, describe: async () => "```markdown\nSans titre.\n```" });
+  expect(await Bun.file(join(root, rawPath(root, b.id)!)).text()).toContain("title: scan\n");
+});
+
+test("add an image: a dry run never calls the model, and what cannot describe an image fails clearly with nothing written", async () => {
+  const root = await imageRoot({ client: "openai", model: "m" });
+  const never = async () => { throw new Error("the model was called"); };
+  const dry = await add(root, join(root, "photo.png"), { dryRun: true, describe: never });
+  expect(dry).toMatchObject({ duplicate: false, ex: { kind: "image", extractor: "openai:m" } });
+  expect(existsSync(join(root, "raw"))).toBe(false);
+  await expect(add(root, join(root, "fake.png"), { describe: never })).rejects.toThrow("not a PNG, JPEG, WebP or GIF image");
+  await expect(add(root, join(root, "photo.png"), { describe: async () => "  " })).rejects.toThrow("described nothing");
+  await expect(add(root, join(root, "photo.png"), { describe: async () => { throw new Error("HTTP 500"); } })).rejects.toThrow("HTTP 500");
+  for (const [cfg, msg] of [[{}, "no client is set"], [{ client: "opencode" }, "opencode client cannot take an image"], [{ client: "openai" }, "needs a model"]] as const) {
+    const bare = await imageRoot(cfg);
+    await expect(add(bare, join(bare, "photo.png"), { describe: never })).rejects.toThrow(msg);
+    await expect(add(bare, join(bare, "photo.png"), { dryRun: true, describe: never })).rejects.toThrow(msg); // a dry run says so too
+    expect(existsSync(join(bare, "raw"))).toBe(false); // never an empty source
+    expect(existsSync(join(bare, ".cortex"))).toBe(false);
+  }
+  expect(existsSync(join(root, "raw"))).toBe(false);
 });
