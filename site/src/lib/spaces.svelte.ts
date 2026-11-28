@@ -87,6 +87,8 @@ class Spaces {
 	}
 	/** The current space refuses writes (a note, a compilation, a validation): its favorites and journeys stay enabled. */
 	get readOnly(): boolean { return this.info?.readOnly === true; }
+	/** The current space takes this kind of source: not read-only, and its content leaves it out only when it says so (nothing known: the server decides). */
+	accepts(kind: Content): boolean { const held = this.info?.content ?? []; return !this.readOnly && (!held.length || held.includes(kind)); }
 
 	async load() {
 		try {

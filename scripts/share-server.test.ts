@@ -25,6 +25,26 @@ test("share: a text with an explicit url (page captured by the extension) keeps 
   expect(toInbox({ url: "https://a.b/c", text: "https://a.b/c" })).toEqual([["url", "https://a.b/c\n"]]);
 });
 
+test("share: an explicit as goes in a .md.as; a note keeps its Markdown links as typed, a bad as is a 400", async () => {
+  const body = "Voir [la doc](https://a.b/c) puis https://d.e/f.\n\n- [ ] à faire";
+  // a note: no link taken out of the text, no Source line, no .url even when the text is a link alone
+  expect(toInbox({ title: "Idée", text: body, note: "pour plus tard", as: "note" })).toEqual([
+    ["md", `# Idée\n\n${body}\n`], ["md.as", "note\n"], ["md.note", "pour plus tard\n"],
+  ]);
+  expect(toInbox({ title: "Lien", text: "https://a.b/c", as: "note" })).toEqual([["md", "# Lien\n\nhttps://a.b/c\n"], ["md.as", "note\n"]]);
+  expect(toInbox({ text: " ", as: "note" })).toBeNull();
+  // a resource keeps what it did (the link is taken out), and says so
+  expect(toInbox({ title: "Idée", text: "rappel", as: "resource" })).toEqual([["md", "# Idée\n\nrappel\n"], ["md.as", "resource\n"]]);
+  expect(toInbox({ title: "Idée", text: "rappel" })).toEqual([["md", "# Idée\n\nrappel\n"]]); // no as: as before
+  const { route } = await import("./share-server");
+  const sent: string[][] = [];
+  const post = (b: object) => route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify(b) }), async (files) => { sent.push(files.map((f) => f.path.split(".").slice(1).join("."))); });
+  for (const as of ["page", "", 1, null, ["note"]]) expect((await post({ text: "x", as })).status).toBe(400);
+  expect(sent).toEqual([]);
+  expect((await post({ text: "x", as: "note" })).status).toBe(200);
+  expect(sent).toEqual([["md", "md.as"]]);
+});
+
 test("share: the extension origin gets CORS headers (preflight and POST), another origin none", async () => {
   const { route } = await import("./share-server");
   const ext = "chrome-extension://" + "a".repeat(32);

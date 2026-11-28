@@ -4,6 +4,7 @@ import { join, resolve, sep } from "node:path";
 import type { Server, Subprocess } from "bun";
 import { openWiki } from "./context";
 import { answerSegments, blockRegistry, draftMarkdown } from "./answer-blocks";
+import { md } from "./export";
 import { EXTRA_TOOLS, type Stream } from "./backends/backend";
 import { pageId } from "./doc";
 import type { Config } from "./config";
@@ -15,7 +16,7 @@ import { fuseSpaces, search, searchSpaces } from "./search";
 import { searchSite, type SearchHit } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
-import { inbox, sharesResource } from "./inbox";
+import { inbox, sharedKind } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
@@ -366,7 +367,7 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
   const { route: shareRoute, ShareRefused } = await import("../scripts/share-server");
   const deliver = async (files: { path: string; content: string }[]) => {
-    const why = sharesResource(files) ? disabledKind(await loadConfig(root), root, "resource") : undefined; // a link is refused by a notes space: the phone is told; a typed text takes the space's content
+    const kind = sharedKind(files), why = kind ? disabledKind(await loadConfig(root), root, kind) : undefined; // a link (or a share that says `as`) is refused by a space that leaves its kind out: the sender is told; a typed text takes the space's content
     if (why) throw new ShareRefused(why);
     mkdirSync(join(root, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(root, f.path), f.content);
@@ -443,6 +444,14 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
           say(`search: ${(e as Error).message}`);
           return Response.json({ error: (e as Error).message }, { status: 500, headers });
         }
+      }
+      if (url.pathname === "/api/markdown") {
+        // a Markdown text drawn as the wiki's pages are (the same sanitized renderer): the preview of the site's Add page. No model, nothing written
+        if (req.method !== "POST") return new Response(null, { status: 405 });
+        if (!req.headers.get("origin") || !sameOrigin(req.headers)) return Response.json({ error: "cross-origin request refused" }, { status: 403 });
+        const text = await req.json().then((b: { md?: unknown }) => b?.md, () => undefined);
+        if (typeof text !== "string" || text.length > 1_000_000) return Response.json({ error: "expected { md } (1,000,000 characters at most)" }, { status: 400 });
+        return Response.json({ html: md(text) }, { headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/ask/render") {
         // the answers of a saved conversation drawn again as the site shows them (no model involved): the panel resumes it

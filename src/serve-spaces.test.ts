@@ -532,6 +532,42 @@ test("a link or a captured page is refused (409, with the reason) by a space of 
   expect([raws("a"), raws("n")]).toEqual([1, 1]); // the typed texts became sources (the unreachable link stays in a's inbox/)
 });
 
+test("an explicit as on a share (the site's Add page): the source is that kind, a space that leaves it out answers 409, a bad as 400, a read-only space 409", async () => {
+  const root = instance(["a", "n", "both"], { ...AUTH, default_space: "a", spaces: { n: { content: ["notes"] }, both: { content: ["notes", "resources"] } } });
+  const { send } = await start(root);
+  const share = (space: string, body: object) => send("POST", `/s/${space}/share/api`, body, {});
+  const refused = await share("a", { title: "Idée", text: "x", as: "note" });
+  expect([refused.status, await refused.text()]).toEqual([409, expect.stringContaining("space a holds resources, not notes")]);
+  expect((await share("n", { title: "Idée", text: "x", as: "resource" })).status).toBe(409);
+  expect((await share("both", { title: "Idée", text: "x", as: "other" })).status).toBe(400);
+  const body = "Voir [la doc](https://127.0.0.1:1/doc).\n\n- [ ] à faire";
+  expect((await share("both", { title: "Une note", text: body, note: "à relire", as: "note" })).status).toBe(200);
+  expect((await share("both", { title: "Une ressource", text: "Un texte gardé comme ressource, tapé à la main.", as: "resource" })).status).toBe(200);
+  const sources = () => { try { return (readdirSync(join(root, "spaces/both/raw"), { recursive: true }) as string[]).filter((f) => f.endsWith("source.md")).map((f) => readFileSync(join(root, "spaces/both/raw", f), "utf8")); } catch { return []; } };
+  const until = Date.now() + 5000;
+  while (sources().length < 2 && Date.now() < until) await Bun.sleep(20);
+  const by = (title: string) => sources().find((s) => s.includes(`title: ${title}`)) ?? "";
+  expect(by("Une note")).toContain("content: note");
+  expect(by("Une note")).toContain(body); // the link stays in the text, in Markdown
+  expect(by("Une note")).toContain("à relire");
+  expect(by("Une ressource")).toContain("content: resource");
+  expect(readdirSync(join(root, "spaces/both/inbox")).filter((f) => !f.startsWith("."))).toEqual([]); // the side file left with its entry
+});
+
+test("POST /s/<space>/api/markdown draws a Markdown text as the wiki does (sanitized), same origin only", async () => {
+  const root = instance(["a"], { ...AUTH, default_space: "a" });
+  const { send, origin } = await start(root);
+  const r = await send("POST", "/s/a/api/markdown", { md: "# Titre\n\n**gras** <script>x</script>" }, { origin });
+  const { html } = await r.json() as { html: string };
+  expect(html).toContain("<h1");
+  expect(html).toContain("<strong>gras</strong>");
+  expect(html).not.toContain("<script");
+  expect((await send("POST", "/s/a/api/markdown", { md: "x" }, {})).status).toBe(403); // no Origin
+  expect((await send("POST", "/s/a/api/markdown", { md: "x" }, { origin: "http://evil.example" })).status).toBe(403);
+  expect((await send("POST", "/s/a/api/markdown", { md: 1 }, { origin })).status).toBe(400);
+  expect((await send("GET", "/s/a/api/markdown", undefined, { origin })).status).toBe(405);
+});
+
 test("with --sync the creation commit holds the space's wiki, raw and agent file (and cortex.json for a content)", async () => {
   const d = mkdtempSync(join(tmpdir(), "cortex-spaces-sync-")), sh = (cwd: string, ...a: string[]) => { const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, stderr: "pipe", stdout: "pipe" }); if (r.exitCode) throw new Error(r.stderr.toString()); return r.stdout.toString().trim(); };
   sh(d, "init", "-q", "--bare", "-b", "main", "remote.git"); sh(d, "clone", "-q", "remote.git", "seed");

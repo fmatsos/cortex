@@ -1,13 +1,15 @@
 import { join } from "node:path";
 import { readdir, rename, unlink } from "node:fs/promises";
 import { add, formatAdd } from "./add";
+import { SOURCE_CONTENTS, type SourceContent } from "./doc";
 import { CortexError } from "./lib";
 import { collector, type Report, type Result } from "./print";
 import { paint } from "./style";
 
 /**
  * Empties `inbox/` through `add`: lines of `urls.txt` (`<url> [note…]`) and files (optional note in `<name>.note`, optional
- * origin URL in `<name>.origin`: a page captured from the browser, its text is the source and the URL is not fetched). An entry the space does not take (its `content`
+ * origin URL in `<name>.origin`: a page captured from the browser, its text is the source and the URL is not fetched; optional
+ * kind in `<name>.as`, `note` or `resource`: what the source is, instead of what its input says; anything else in it is ignored). An entry the space does not take (its `content`
  * leaves that kind out) is skipped, not failed: it stays in the inbox for when it does.
  * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
  * and are returned; `ok` is false when an entry failed.
@@ -15,12 +17,18 @@ import { paint } from "./style";
 /** Whether a share delivers a link or a captured page (`.url`, `.origin`): a resource whatever the space holds. A typed text names no kind, it takes the space's content. */
 export const sharesResource = (files: { path: string }[]) => files.some((f) => /\.(url|origin)$/.test(f.path));
 
+/** The kind a share names (`<name>.as`: `note` or `resource`), else `resource` for a link or a captured page, else undefined (a typed text takes the space's content). */
+export const sharedKind = (files: { path: string; content: string }[]): SourceContent | undefined =>
+  asKind(files.find((f) => f.path.endsWith(".as"))?.content) ?? (sharesResource(files) ? "resource" : undefined);
+/** `note` or `resource` (spaces and a final newline allowed); undefined for anything else: the files of `inbox/` are not all written by `put`. */
+const asKind = (s: string | undefined): SourceContent | undefined => SOURCE_CONTENTS.find((k) => k === s?.trim());
+
 export async function inbox(root: string, opts: { dryRun?: boolean } = {}, report?: Report): Promise<Result & { sources: string[] }> {
   const { say, done: result } = collector(report);
   const dir = join(root, "inbox");
   const urlsFile = join(dir, "urls.txt");
   const names = await readdir(dir, { withFileTypes: true }).then((es) => es.filter((e) => e.isFile()).map((e) => e.name), () => []);
-  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note") && !n.endsWith(".origin")).sort();
+  const files = names.filter((n) => !n.startsWith(".") && n !== "urls.txt" && !n.endsWith(".note") && !n.endsWith(".origin") && !n.endsWith(".as")).sort();
   const lines = (await Bun.file(urlsFile).exists()) ? (await Bun.file(urlsFile).text()).split("\n") : [];
 
   const done = new Set<string>(); // urls.txt lines to remove
@@ -32,9 +40,9 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     if (!r.duplicate && r.ex) sources.push(`${r.ex.title} (${r.id}) ← ${label}`);
     for (const l of r.linked ?? []) if (!("error" in l)) record(l, `${label} (linked)`);
   };
-  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string) => {
+  const run = async (label: string, input: string, note: string | undefined, onOk: () => Promise<unknown>, url?: string, as?: SourceContent) => {
     try {
-      const r = await add(root, input, { note, url, dryRun: opts.dryRun });
+      const r = await add(root, input, { note, url, as, dryRun: opts.dryRun });
       say("info", `${formatAdd(r, opts.dryRun)}  ← ${label}`);
       if (r.duplicate) known++; else added++;
       record(r, label);
@@ -62,7 +70,9 @@ export async function inbox(root: string, opts: { dryRun?: boolean } = {}, repor
     const note = ((await Bun.file(noteFile).exists()) ? (await Bun.file(noteFile).text()).trim() : "") || undefined;
     const originFile = join(dir, `${f}.origin`);
     const origin = ((await Bun.file(originFile).exists()) ? (await Bun.file(originFile).text()).trim() : "") || undefined;
-    await run(f, join(dir, f), note, async () => { for (const x of [join(dir, f), noteFile, originFile]) await unlink(x).catch(() => {}); }, /^https?:\/\//.test(origin ?? "") ? origin : undefined);
+    const asFile = join(dir, `${f}.as`);
+    const as = asKind((await Bun.file(asFile).exists()) ? await Bun.file(asFile).text() : undefined);
+    await run(f, join(dir, f), note, async () => { for (const x of [join(dir, f), noteFile, originFile, asFile]) await unlink(x).catch(() => {}); }, /^https?:\/\//.test(origin ?? "") ? origin : undefined, as);
   }
 
   if (done.size) {

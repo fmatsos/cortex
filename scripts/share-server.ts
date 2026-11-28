@@ -26,16 +26,24 @@ let checkout = process.env.CORTEX_ROOT ?? process.cwd();
 // one share at a time: they share the git index
 let queue: Promise<unknown> = Promise.resolve();
 
-type Share = { title?: string; text?: string; url?: string; note?: string };
+/** What a share is, when its sender says so (the site's Add page): a note or a resource, instead of what its content says. */
+export type ShareAs = "note" | "resource";
+type Share = { title?: string; text?: string; url?: string; note?: string; as?: ShareAs };
+const isShareAs = (v: unknown): v is ShareAs => v === "note" || v === "resource";
 
 /**
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
  * optional) goes on the `.url` line, or in `<name>.md.note` next to a text. A text with an explicit `url` (a page captured by the
  * browser extension: the text is what the page showed, behind its paywall or login) keeps it in `<name>.md.origin`: the source's
- * `url`, not fetched.
+ * `url`, not fetched. An explicit `as` goes in `<name>.md.as` (`inbox` hands it to `add`); for a note the text is kept as typed (a link in it
+ * is Markdown, not a source to fetch) and a `url` is ignored.
  */
-export function toInbox({ title = "", text = "", url = "", note = "" }: Share): [string, string][] | null {
+export function toInbox({ title = "", text = "", url = "", note = "", as }: Share): [string, string][] | null {
   title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
+  if (as === "note") {
+    if (!text) return null;
+    return [["md", `# ${title || text.split("\n")[0].slice(0, 80)}\n\n${text}\n`], ["md.as", "note\n"], ...(note ? [["md.note", `${note}\n`] as [string, string]] : [])];
+  }
   const link = url || text.match(/https?:\/\/\S+/)?.[0] || "";
   // a link found in the text is taken out of it; an explicit url only when it ends the text (a page's own text may quote it)
   const rest = (link ? (url ? (text.endsWith(url) ? text.slice(0, -url.length) : text) : text.replace(link, "")) : text).trim();
@@ -45,6 +53,7 @@ export function toInbox({ title = "", text = "", url = "", note = "" }: Share): 
   const extra: [string, string][] = [];
   if (url) extra.push(["md.origin", `${url}\n`]);
   if (note) extra.push(["md.note", `${note}\n`]);
+  if (as) extra.push(["md.as", `${as}\n`]);
   return [md, ...extra];
 }
 
@@ -128,6 +137,7 @@ const gitDeliver: Deliver = (files, id) => {
 };
 
 async function put(share: Share, deliver: Deliver): Promise<Response> {
+  if (share.as !== undefined && !isShareAs(share.as)) return new Response(`"as" must be "note" or "resource"`, { status: 400 });
   const files = toInbox(share);
   if (!files) return new Response("rien à envoyer", { status: 400 });
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;

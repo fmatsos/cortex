@@ -122,3 +122,20 @@ test("inbox: a file with a .origin keeps that url as the source's url, without f
     expect((await (await import("./lib")).readDocs(root, "raw")).docs.length).toBe(1);
   } finally { srv.stop(true); }
 });
+
+test("inbox: <name>.as makes the source a note or a resource whatever its input says, an invalid one is ignored, and the side file leaves with the entry", async () => {
+  const { inbox } = await import("./inbox");
+  const { readdirSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  await Bun.write(join(root, "inbox/une.md"), "# Une note\n\nTexte tapé, avec un [lien](https://a.b/c).\n");
+  await Bun.write(join(root, "inbox/une.md.as"), "note\n");
+  await Bun.write(join(root, "inbox/deux.md"), "# Une ressource\n\nTexte tapé, mais gardé comme ressource.\n");
+  await Bun.write(join(root, "inbox/deux.md.as"), "resource\n");
+  await Bun.write(join(root, "inbox/trois.md"), "# Sans kind\n\nUn texte dont le kind est invalide.\n");
+  await Bun.write(join(root, "inbox/trois.md.as"), "page\n");
+  expect((await inbox(root)).ok).toBe(true);
+  expect(readdirSync(join(root, "inbox"))).toEqual([]);
+  const { docs } = await (await import("./lib")).readDocs(root, "raw");
+  expect(Object.fromEntries(docs.map((d) => [d.fm.title, d.fm.content]))).toEqual({ "Une note": "note", "Une ressource": "resource", "Sans kind": "resource" }); // an invalid kind is ignored: the default of the content (resources)
+});

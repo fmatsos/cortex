@@ -102,6 +102,8 @@
 		// optional destinations: review only when it is turned on, paths only when the wiki has some (footer.json, once loaded)
 		...(features.review ? [{ href: toRoute("/review"), icon: "needs-review", label: "nav.review", here: current("/review") } satisfies NavItem] : []),
 		{ href: toRoute("/changes"), icon: "recent", label: "nav.changes", here: current("/changes") },
+		// adding needs a signed-in visitor, and a space that takes notes and is not read-only (the server refuses the rest anyway)
+		...(account.me && spaces.loaded && spaces.accepts("notes") ? [{ href: toRoute("/add"), icon: "kind-add", label: "nav.add", here: current("/add") } satisfies NavItem] : []),
 		...(f?.paths ? [{ href: toPaths(), icon: "journey", label: "nav.paths", here: current("/paths") } satisfies NavItem] : []),
 		{ href: `${toRoute("/search")}?q=${encodeURIComponent(token("is", "fav"))}`, icon: "favorites", label: "favs.title", here: onFavs },
 	]);
