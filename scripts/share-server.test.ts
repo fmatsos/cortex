@@ -45,6 +45,44 @@ test("share: an explicit as goes in a .md.as; a note keeps its Markdown links as
   expect(sent).toEqual([["md", "md.as"]]);
 });
 
+test("share: multipart uploads are named by the server (never by the client), checked as a whole, and carry the note and the as", async () => {
+  const { route, UPLOAD_TYPES, MAX_UPLOAD_BYTES } = await import("./share-server");
+  const got: { path: string; content: string | Uint8Array }[][] = [];
+  const send = (form: FormData) => route(new Request("http://x/share/api", { method: "POST", body: form }), async (f) => { got.push(f); });
+  const pdf = new Uint8Array([...new TextEncoder().encode("%PDF-1.7\n"), 1, 2, 3]);
+  const form = new FormData();
+  form.set("note", "à lire\nplus tard"); form.set("as", "resource");
+  form.append("file", new File([pdf], "../../etc/Rapport.PDF"));
+  form.append("file", new File(["# Mon titre\n\nCorps"], "idee.markdown"));
+  form.append("file", new File(["du texte brut"], "mes notes.txt"));
+  const ok = await send(form);
+  expect(ok.status).toBe(200);
+  const paths = got[0]!.map((f) => f.path);
+  expect(paths.every((p) => /^inbox\/partage-[\w-]+\.(pdf|md|txt)(\.note|\.as)?$/.test(p))).toBe(true); // no part of the client's names
+  expect(paths.filter((p) => !/\.(note|as)$/.test(p)).map((p) => p.replace(/^.*\./, ""))).toEqual(["pdf", "md", "txt"]); // .markdown is saved as .md
+  const by = (ext: string) => got[0]!.find((f) => f.path.endsWith(`.${ext}`))!;
+  expect(by("pdf").content).toEqual(pdf); // binary as is
+  expect(by("md").content).toBe("# Mon titre\n\nCorps"); // a heading of its own is kept
+  expect(by("txt").content).toBe("# mes notes\n\ndu texte brut"); // none: the file's name
+  expect(got[0]!.filter((f) => f.path.endsWith(".note")).map((f) => f.content)).toEqual(["à lire plus tard\n", "à lire plus tard\n", "à lire plus tard\n"]);
+  expect(got[0]!.filter((f) => f.path.endsWith(".as")).map((f) => f.content)).toEqual(["resource\n", "resource\n", "resource\n"]);
+  // refused before anything is delivered: another type (415, with the accepted ones), not a PDF, too big (413), a bad as
+  got.length = 0;
+  const bad = async (name: string, body: BlobPart, extra: Record<string, string> = {}) => { const f = new FormData(); for (const [k, v] of Object.entries(extra)) f.set(k, v); f.append("file", new File(["# ok\n\nx"], "ok.md")); f.append("file", new File([body], name)); return send(f); };
+  const exe = await bad("run.exe", "MZ");
+  expect([exe.status, await exe.text()]).toEqual([415, expect.stringContaining(Object.keys(UPLOAD_TYPES).join(", "))]);
+  expect((await bad("fake.pdf", "not a pdf")).status).toBe(415);
+  expect((await bad("noext", "x")).status).toBe(415);
+  expect((await bad("big.txt", new Uint8Array(MAX_UPLOAD_BYTES + 1))).status).toBe(413);
+  expect((await bad("a.txt", "x", { as: "page" })).status).toBe(400);
+  expect(got).toEqual([]);
+  // text fields alone (no file) still make an entry, and a JSON share is unchanged
+  const text = new FormData(); text.set("text", "Un texte tapé"); text.set("title", "Idée");
+  expect((await send(text)).status).toBe(200);
+  expect(got[0]!.map((f) => f.path.replace(/^.*\./, ""))).toEqual(["md"]);
+  expect((await send(new FormData())).status).toBe(400); // nothing at all
+});
+
 test("share: the extension origin gets CORS headers (preflight and POST), another origin none", async () => {
   const { route } = await import("./share-server");
   const ext = "chrome-extension://" + "a".repeat(32);
@@ -119,7 +157,7 @@ test("share: a share is committed to inbox/ and pushed to the checkout's remote,
 
 test("share: route hands the inbox files to the given deliver (cortex serve writes them to its local inbox/)", async () => {
   const { route } = await import("./share-server");
-  const got: { path: string; content: string }[][] = [];
+  const got: { path: string; content: string | Uint8Array }[][] = [];
   const r = await route(new Request("http://x/share/api", { method: "POST", body: JSON.stringify({ url: "https://a.b/c" }) }), async (f) => { got.push(f); });
   expect(r.status).toBe(200);
   expect(got[0]![0]!.path).toMatch(/^inbox\/partage-.+\.url$/);

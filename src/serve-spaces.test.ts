@@ -554,6 +554,34 @@ test("an explicit as on a share (the site's Add page): the source is that kind, 
   expect(readdirSync(join(root, "spaces/both/inbox")).filter((f) => !f.startsWith("."))).toEqual([]); // the side file left with its entry
 });
 
+test("an uploaded file (multipart share): a PDF is a resource, refused by a space of notes (409); a text file takes the space's content, or the as; the note goes with it", async () => {
+  const root = instance(["n", "both"], { ...AUTH, default_space: "both", spaces: { n: { content: ["notes"] }, both: { content: ["notes", "resources"] } } });
+  const { origin } = await start(root);
+  const upload = (space: string, files: [string, BlobPart][], fields: Record<string, string> = {}) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    for (const [name, body] of files) form.append("file", new File([body], name));
+    return fetch(`${origin}/s/${space}/share/api`, { method: "POST", body: form });
+  };
+  const pdf = "%PDF-1.4\nnot really a document";
+  const refused = await upload("n", [["doc.pdf", pdf]]);
+  expect([refused.status, await refused.text()]).toEqual([409, expect.stringContaining("space n holds notes, not resources")]);
+  expect((await upload("n", [["idee.md", "# Idée\n\nUn texte"], ["doc.pdf", pdf]])).status).toBe(409); // one entry refused: nothing is delivered
+  expect(existsSync(join(root, "spaces/n/inbox"))).toBe(false);
+  expect((await upload("both", [["x.exe", "MZ"]])).status).toBe(415);
+  expect((await upload("both", [["Ma liste.txt", "du texte brut, tapé à la main"], ["resume.md", "# Résumé\n\nUn autre texte"]], { note: "à relire" })).status).toBe(200);
+  expect((await upload("both", [["encore.md", "# Encore\n\nGardé comme ressource"]], { as: "resource" })).status).toBe(200);
+  const sources = () => { try { return (readdirSync(join(root, "spaces/both/raw"), { recursive: true }) as string[]).filter((f) => f.endsWith("source.md")).map((f) => readFileSync(join(root, "spaces/both/raw", f), "utf8")); } catch { return []; } };
+  const until = Date.now() + 5000;
+  while (sources().length < 3 && Date.now() < until) await Bun.sleep(20);
+  const by = (title: string) => sources().find((s) => s.includes(`title: ${title}`)) ?? "";
+  expect(by("Ma liste")).toContain("content: note"); // a text with no heading takes its file's name; a text takes the space's content
+  expect(by("Ma liste")).toContain("à relire");
+  expect(by("Résumé")).toContain("content: note");
+  expect(by("Encore")).toContain("content: resource");
+  expect(readdirSync(join(root, "spaces/both/inbox")).filter((f) => !f.startsWith("."))).toEqual([]);
+});
+
 test("POST /s/<space>/api/markdown draws a Markdown text as the wiki does (sanitized), same origin only", async () => {
   const root = instance(["a"], { ...AUTH, default_space: "a" });
   const { send, origin } = await start(root);

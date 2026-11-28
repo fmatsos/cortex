@@ -14,12 +14,17 @@ import { paint } from "./style";
  * A successful entry (added or already present) leaves the inbox, a failure stays in it. Messages go to `report` live
  * and are returned; `ok` is false when an entry failed.
  */
-/** Whether a share delivers a link or a captured page (`.url`, `.origin`): a resource whatever the space holds. A typed text names no kind, it takes the space's content. */
-export const sharesResource = (files: { path: string }[]) => files.some((f) => /\.(url|origin)$/.test(f.path));
-
-/** The kind a share names (`<name>.as`: `note` or `resource`), else `resource` for a link or a captured page, else undefined (a typed text takes the space's content). */
-export const sharedKind = (files: { path: string; content: string }[]): SourceContent | undefined =>
-  asKind(files.find((f) => f.path.endsWith(".as"))?.content) ?? (sharesResource(files) ? "resource" : undefined);
+/**
+ * The kind of each entry of a share (its inbox files) that names one: `<name>.as` (`note` or `resource`), else `resource` for a link, a PDF or a captured
+ * page (`.url`, `.pdf`, `.origin`). A typed text or a text file names none: it takes the space's content.
+ */
+export const sharedKinds = (files: { path: string; content: string | Uint8Array }[]): SourceContent[] => {
+  const text = (path: string) => { const c = files.find((f) => f.path === path)?.content; return typeof c === "string" ? c : undefined; };
+  return files.filter((f) => !/\.(note|as|origin)$/.test(f.path)).flatMap((f) => {
+    const kind = asKind(text(`${f.path}.as`)) ?? (/\.(url|pdf)$/.test(f.path) || files.some((g) => g.path === `${f.path}.origin`) ? "resource" : undefined);
+    return kind ? [kind] : [];
+  });
+};
 /** `note` or `resource` (spaces and a final newline allowed); undefined for anything else: the files of `inbox/` are not all written by `put`. */
 const asKind = (s: string | undefined): SourceContent | undefined => SOURCE_CONTENTS.find((k) => k === s?.trim());
 

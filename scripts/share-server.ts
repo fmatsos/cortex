@@ -32,6 +32,19 @@ type Share = { title?: string; text?: string; url?: string; note?: string; as?: 
 const isShareAs = (v: unknown): v is ShareAs => v === "note" || v === "resource";
 
 /**
+ * The files the share route takes as uploads (`multipart/form-data`, field `file`): the extension of the client's file name (lowercased, the name
+ * is never used otherwise) → the extension the file is saved under in `inbox/`. The one place to extend (`add` must read the type too).
+ */
+export const UPLOAD_TYPES: Readonly<Record<string, string>> = { ".pdf": "pdf", ".md": "md", ".markdown": "md", ".txt": "txt" };
+/** One uploaded file at most this big (a bigger one is a 413); Bun's default request limit (128 MiB) is above it. */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** Files in one request at most. */
+export const MAX_UPLOADS = 10;
+const MB = 1024 * 1024;
+
+const oneLine = (note: string) => note.trim().replace(/\s+/g, " ");
+
+/**
  * The inbox files of a share, as [extension, content], or null when nothing was shared. The note (why it is kept,
  * optional) goes on the `.url` line, or in `<name>.md.note` next to a text. A text with an explicit `url` (a page captured by the
  * browser extension: the text is what the page showed, behind its paywall or login) keeps it in `<name>.md.origin`: the source's
@@ -39,7 +52,7 @@ const isShareAs = (v: unknown): v is ShareAs => v === "note" || v === "resource"
  * is Markdown, not a source to fetch) and a `url` is ignored.
  */
 export function toInbox({ title = "", text = "", url = "", note = "", as }: Share): [string, string][] | null {
-  title = title.trim(); text = text.trim(); url = url.trim(); note = note.trim().replace(/\s+/g, " ");
+  title = title.trim(); text = text.trim(); url = url.trim(); note = oneLine(note);
   if (as === "note") {
     if (!text) return null;
     return [["md", `# ${title || text.split("\n")[0].slice(0, 80)}\n\n${text}\n`], ["md.as", "note\n"], ...(note ? [["md.note", `${note}\n`] as [string, string]] : [])];
@@ -122,7 +135,7 @@ flush();
 export class ShareRefused extends Error {}
 
 /** Where a share's inbox files go: written (and committed, pushed…) by the caller, which returns once they are safe. */
-export type Deliver = (files: { path: string; content: string }[], id: string) => Promise<void>;
+export type Deliver = (files: { path: string; content: string | Uint8Array }[], id: string) => Promise<void>;
 
 /** `cortex share` alone: committed to `inbox/` in its checkout and pushed to its remote, one share at a time. */
 const gitDeliver: Deliver = (files, id) => {
@@ -136,18 +149,54 @@ const gitDeliver: Deliver = (files, id) => {
   return run;
 };
 
-async function put(share: Share, deliver: Deliver): Promise<Response> {
+/** An uploaded file as an inbox entry, or the refusal: 415 (not a type of `UPLOAD_TYPES`, or a "PDF" that is not one) or 413 (over `MAX_UPLOAD_BYTES`). The client's name only gives the extension, and a title to a text with none. */
+async function upload(f: File, n: number): Promise<{ ext: string; content: string | Uint8Array } | Response> {
+  const dot = f.name.lastIndexOf("."), ext = UPLOAD_TYPES[dot < 0 ? "" : f.name.slice(dot).toLowerCase()];
+  if (!ext) return new Response(`unsupported file type: ${JSON.stringify(f.name.slice(0, 80))} (accepted: ${Object.keys(UPLOAD_TYPES).join(", ")})`, { status: 415 });
+  if (f.size > MAX_UPLOAD_BYTES) return new Response(`file too large: ${JSON.stringify(f.name.slice(0, 80))} (${MAX_UPLOAD_BYTES / MB} MB at most per file)`, { status: 413 });
+  if (ext === "pdf") {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    return new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-" ? { ext, content: bytes } : new Response(`${JSON.stringify(f.name.slice(0, 80))} is not a PDF`, { status: 415 });
+  }
+  // a text with no `# heading` takes its file's name for one (otherwise its title would be the generated name of the inbox file)
+  const text = await f.text(), stem = f.name.slice(0, dot).replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 80);
+  return { ext, content: /^#[ \t]+\S/m.test(text) || !stem ? text : `# ${stem}\n\n${text}` };
+}
+
+/** `uploads`: the files of a `multipart/form-data` share; `note` and `as` of the share go with each one (`<file>.note`, `<file>.as`). */
+async function put(share: Share, deliver: Deliver, uploads: File[] = []): Promise<Response> {
   if (share.as !== undefined && !isShareAs(share.as)) return new Response(`"as" must be "note" or "resource"`, { status: 400 });
+  if (uploads.length > MAX_UPLOADS) return new Response(`too many files (${MAX_UPLOADS} at most)`, { status: 413 });
   const files = toInbox(share);
-  if (!files) return new Response("rien à envoyer", { status: 400 });
+  const taken: { ext: string; content: string | Uint8Array }[] = [];
+  for (const [i, f] of uploads.entries()) { const u = await upload(f, i); if (u instanceof Response) return u; taken.push(u); } // all checked before anything is delivered
+  if (!files && !taken.length) return new Response("rien à envoyer", { status: 400 });
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
-  const out = files.map(([ext, content]) => ({ path: `inbox/partage-${id}.${ext}`, content }));
+  const out: { path: string; content: string | Uint8Array }[] = (files ?? []).map(([ext, content]) => ({ path: `inbox/partage-${id}.${ext}`, content }));
+  const note = oneLine(share.note ?? "");
+  for (const [i, u] of taken.entries()) {
+    const path = `inbox/partage-${id}-${i + 1}.${u.ext}`;
+    out.push({ path, content: u.content });
+    if (note) out.push({ path: `${path}.note`, content: `${note}\n` });
+    if (share.as) out.push({ path: `${path}.as`, content: `${share.as}\n` });
+  }
   try { await deliver(out, id); return Response.json({ paths: out.map((f) => f.path) }); }
   catch (e) {
     if (e instanceof ShareRefused) return new Response(e.message, { status: 409 });
     console.error(`share ${id}: ${(e as Error).message}`);
     return new Response("échec de l'enregistrement", { status: 502 });
   }
+}
+
+/** The share of a request: JSON (the phone, the extension) or `multipart/form-data` (fields `title`, `text`, `url`, `note`, `as` and `file` parts, from the site's Add page). */
+async function shared(req: Request): Promise<{ share: Share; uploads: File[] } | Response> {
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data")) return { share: await req.json().catch(() => ({})), uploads: [] };
+  const form = await req.formData().catch(() => undefined);
+  if (!form) return new Response("invalid multipart/form-data", { status: 400 });
+  const field = (k: string) => { const v = form.get(k); return typeof v === "string" ? v : undefined; };
+  const share: Share = { title: field("title"), text: field("text"), url: field("url"), note: field("note") };
+  if (field("as") !== undefined) share.as = field("as") as ShareAs; // checked by put
+  return { share, uploads: form.getAll("file").filter((v): v is File => typeof v !== "string") };
 }
 
 /** The bookmarklet's page (French): how to install it on Android Chrome, and the code, with this server's public origin baked in. */
@@ -193,7 +242,8 @@ export async function route(req: Request, deliver: Deliver = gitDeliver, base = 
     : {};
   if (pathname === "/share/api" && req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (pathname === "/share/api" && req.method === "POST") {
-    const r = await put(await req.json().catch(() => ({})), deliver);
+    const got = await shared(req);
+    const r = got instanceof Response ? got : await put(got.share, deliver, got.uploads);
     for (const [k, v] of Object.entries(cors)) r.headers.set(k, v);
     return r;
   }

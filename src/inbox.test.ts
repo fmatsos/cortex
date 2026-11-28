@@ -139,3 +139,11 @@ test("inbox: <name>.as makes the source a note or a resource whatever its input 
   const { docs } = await (await import("./lib")).readDocs(root, "raw");
   expect(Object.fromEntries(docs.map((d) => [d.fm.title, d.fm.content]))).toEqual({ "Une note": "note", "Une ressource": "resource", "Sans kind": "resource" }); // an invalid kind is ignored: the default of the content (resources)
 });
+
+test("inbox: sharedKinds names the kind of each entry: as first, then a link, a PDF or a captured page are resources, a text names none", async () => {
+  const { sharedKinds } = await import("./inbox");
+  const f = (...paths: string[]) => paths.map((path) => ({ path, content: path.endsWith(".as") ? "note\n" : new Uint8Array([1]) }));
+  expect(sharedKinds(f("inbox/a.pdf", "inbox/b.md", "inbox/c.url", "inbox/d.md", "inbox/d.md.origin", "inbox/e.txt", "inbox/e.txt.note"))).toEqual(["resource", "resource", "resource"]);
+  expect(sharedKinds(f("inbox/a.pdf", "inbox/a.pdf.as", "inbox/b.md"))).toEqual(["note"]); // an explicit kind wins over the PDF; the text names none
+  expect(sharedKinds(f("inbox/b.md", "inbox/b.md.note"))).toEqual([]);
+});

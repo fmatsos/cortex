@@ -7,22 +7,27 @@
 	import { Input } from "#lib/components/ui/input/index.js";
 	import * as Tabs from "#lib/components/ui/tabs/index.js";
 	import { Textarea } from "#lib/components/ui/textarea/index.js";
+	import ResourceForm from "#lib/components/add/resource-form.svelte";
 	import { fromFile, insert, type Insert } from "#lib/markdown-edit.js";
+	import { refusal, sendShare } from "#lib/share.js";
 	import { spaceApi } from "#lib/space.js";
 	import { spaces } from "#lib/spaces.svelte.js";
 	import { spaceKey } from "#lib/storage.js";
 	import { contentLang, t } from "#lib/i18n/index.js";
 
-	// Add something to the space. One tab for now (Note): a tab is a panel of this list, with its own form and its own `as` (what the source is),
-	// so another kind of addition is one more `Tabs.Trigger`, one more `Tabs.Content` and its own submit. A note goes through the share route of the
-	// space (`POST <space>/share/api`, the phone's and the extension's too): it lands in `inbox/`, is added as a raw source and waits to be compiled.
-	// Needs a signed-in visitor and a space that takes notes and is not read-only; the server decides anyway (409 with its reason). The draft stays
-	// in this browser (never required) until the note is sent. The preview is the wiki's own Markdown rendering, drawn by the server.
+	// Add something to the space: a tab per kind the space takes (Note, Resource). A tab is a panel of this list with its own form and its own `as` (what
+	// the source is): another kind of addition is one more `Tabs.Trigger`, one more `Tabs.Content` and its own submit. Everything goes through the share
+	// route of the space (`POST <space>/share/api`, the phone's and the extension's too, see share.ts): it lands in `inbox/`, is added as a raw source and
+	// waits to be compiled. Needs a signed-in visitor and a space that is not read-only; the server decides anyway (409 with its reason). The note's draft
+	// stays in this browser (never required) until it is sent; its preview is the wiki's own Markdown rendering, drawn by the server.
 	const uid = $props.id();
 	const DRAFT = "add-note";
 	const MAX_FILE = 2_000_000;
 
 	let tab = $state("note");
+	const hasNote = $derived(spaces.accepts("notes")), hasResource = $derived(spaces.accepts("resources"));
+	// the tab shown is one of those the space takes (a resources-only space has no Note tab)
+	$effect(() => { if ((tab === "note" && !hasNote && hasResource) || (tab === "resource" && !hasResource && hasNote)) tab = hasNote ? "note" : "resource"; });
 	let title = $state(""), body = $state(""), why = $state("");
 	let mode = $state<"write" | "preview">("write");
 	let area = $state<HTMLTextAreaElement | null>(null);
@@ -122,20 +127,17 @@
 		if (pending) return;
 		if (!title.trim() || !body.trim()) { (title.trim() ? area : titleField)?.focus(); return; }
 		pending = true;
-		try {
-			const r = await fetch(spaceApi("/share/api"), { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: title.trim(), text: body, note: why, as: "note" }) });
-			if (r.ok) {
-				title = ""; body = ""; why = ""; mode = "write"; submitted = false;
-				try { localStorage.removeItem(spaceKey(DRAFT)); } catch { /* nothing kept */ }
-				info = t("add.note.sent");
-			} else {
-				// the share route answers in plain text: 409 is the space refusing (read-only, or it does not hold notes), with its reason
-				const reason = (await r.text().catch(() => "")).trim();
-				error = r.status === 409 && reason ? t("add.refused", { reason }) : t("add.failed", { status: r.status });
-				if (r.status === 401) account.expire();
-			}
-		} catch { error = t("add.offline"); }
-		finally { pending = false; }
+		const r = await sendShare({ title: title.trim(), text: body, note: why, as: "note" });
+		if (r.ok) {
+			title = ""; body = ""; why = ""; mode = "write"; submitted = false;
+			try { localStorage.removeItem(spaceKey(DRAFT)); } catch { /* nothing kept */ }
+			info = t("add.note.sent");
+		} else {
+			// the share route answers in plain text: the space refusing (409: read-only, or it does not hold notes) says why
+			error = r.status === 0 ? t("add.offline") : refusal(r) ? t("add.refused", { reason: r.reason }) : t("add.failed", { status: r.status });
+			if (r.status === 401) account.expire();
+		}
+		pending = false;
 	}
 </script>
 
@@ -157,19 +159,24 @@
 				<Empty.Description>{t("add.signedOut.text")}</Empty.Description>
 			</Empty.Header>
 		</Empty.Root>
-	{:else if !spaces.accepts("notes")}
+	{:else if !hasNote && !hasResource}
 		<Empty.Root>
 			<Empty.Header>
 				<Empty.Media variant="icon"><Icon name="kind-add" size={20} /></Empty.Media>
-				<Empty.Title>{spaces.readOnly ? t("add.readOnly.title") : t("add.noNotes.title")}</Empty.Title>
-				<Empty.Description>{spaces.readOnly ? t("add.readOnly.text") : t("add.noNotes.text")}</Empty.Description>
+				<Empty.Title>{t("add.readOnly.title")}</Empty.Title>
+				<Empty.Description>{t("add.readOnly.text")}</Empty.Description>
 			</Empty.Header>
 		</Empty.Root>
 	{:else}
 		<Tabs.Root bind:value={tab}>
 			<Tabs.List variant="line" aria-label={t("add.tabs.label")}>
-				<Tabs.Trigger value="note">{t("add.tab.note")}</Tabs.Trigger>
+				{#if hasNote}<Tabs.Trigger value="note">{t("add.tab.note")}</Tabs.Trigger>{/if}
+				{#if hasResource}<Tabs.Trigger value="resource">{t("add.tab.resource")}</Tabs.Trigger>{/if}
 			</Tabs.List>
+			{#if hasResource}
+				<Tabs.Content value="resource" class="pt-4"><ResourceForm /></Tabs.Content>
+			{/if}
+			{#if hasNote}
 			<Tabs.Content value="note" class="pt-4">
 				<form onsubmit={submit} novalidate class="border-border bg-card shadow-surface flex flex-col gap-6 border p-4 sm:p-6">
 					<div class="flex flex-col gap-2">
@@ -229,6 +236,7 @@
 					<p role="alert" class="text-destructive text-sm empty:hidden">{error}</p>
 				</form>
 			</Tabs.Content>
+			{/if}
 		</Tabs.Root>
 	{/if}
 </div>

@@ -16,7 +16,7 @@ import { fuseSpaces, search, searchSpaces } from "./search";
 import { searchSite, type SearchHit } from "./search-api";
 import { refresh } from "./embed";
 import { searchInfo } from "./search-index";
-import { inbox, sharedKind } from "./inbox";
+import { inbox, sharedKinds } from "./inbox";
 import { verifyPage } from "./verify";
 import { commitAndPush, pullRebase } from "./sync";
 import { accountRoute } from "./account-api";
@@ -366,8 +366,8 @@ async function makeSite(root: string, o: ServeOpts, { say, serial, busy }: Share
     void rebuild();
   }).catch((e) => say(`inbox: ${(e as Error).message}`));
   const { route: shareRoute, ShareRefused } = await import("../scripts/share-server");
-  const deliver = async (files: { path: string; content: string }[]) => {
-    const kind = sharedKind(files), why = kind ? disabledKind(await loadConfig(root), root, kind) : undefined; // a link (or a share that says `as`) is refused by a space that leaves its kind out: the sender is told; a typed text takes the space's content
+  const deliver = async (files: { path: string; content: string | Uint8Array }[]) => {
+    const cfg = await loadConfig(root), why = sharedKinds(files).map((k) => disabledKind(cfg, root, k)).find(Boolean); // a link, a PDF (or a share that says `as`) is refused by a space that leaves its kind out: the sender is told; a typed text takes the space's content
     if (why) throw new ShareRefused(why);
     mkdirSync(join(root, "inbox"), { recursive: true });
     for (const f of files) await Bun.write(join(root, f.path), f.content);
