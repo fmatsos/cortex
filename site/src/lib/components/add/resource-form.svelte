@@ -1,37 +1,25 @@
 <script lang="ts">
 	import Icon from "#lib/components/icon.svelte";
 	import { Button } from "#lib/components/ui/button/index.js";
+	import FilePicker from "#lib/components/add/file-picker.svelte";
 	import { Input } from "#lib/components/ui/input/index.js";
 	import { refusal, sendShare, type ShareResult } from "#lib/share.js";
 	import { t } from "#lib/i18n/index.js";
 
 	// The Resource tab of the Add page: a link, or files (several at once, chosen or dropped), each with the optional "why I keep it". A link is sent as
 	// JSON like the extension does (`{ url, note, as: "resource" }`), the files as one multipart request (`as: "resource"`): the server names them, checks
-	// their type and size (415, 413) and answers 409 when the space does not take resources. Which types it takes is the server's list (scripts/share-server.ts,
-	// UPLOAD_TYPES); `ACCEPT` only narrows the file picker to the same ones.
-	const ACCEPT = ".pdf,.md,.markdown,.txt,application/pdf,text/markdown,text/plain";
+	// their type and size (415, 413) and answers 409 when the space does not take resources.
 	const uid = $props.id();
 
 	let url = $state(""), why = $state("");
 	let files = $state<File[]>([]);
-	let picker = $state<HTMLInputElement | null>(null);
 	let urlField = $state<HTMLInputElement | null>(null);
-	let dragging = $state(false), pending = $state(false), submitted = $state(false);
+	let pending = $state(false), submitted = $state(false);
 	let results = $state<{ ok: boolean; text: string }[]>([]);
 
 	const link = $derived(url.trim());
 	const urlError = $derived(submitted && link && !/^https?:\/\/\S+$/i.test(link) ? t("add.resource.badUrl") : "");
 	const emptyError = $derived(submitted && !link && !files.length ? t("add.resource.empty") : "");
-
-	const size = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`);
-	function add(list: Iterable<File>) {
-		for (const f of list) if (!files.some((g) => g.name === f.name && g.size === f.size)) files.push(f);
-	}
-	function dropped(e: DragEvent) {
-		e.preventDefault();
-		dragging = false;
-		add(e.dataTransfer?.files ?? []);
-	}
 
 	/** What the share route answered, as a line of the result list. */
 	const line = (what: string, r: ShareResult, ok: string) =>
@@ -72,33 +60,7 @@
 		<p id="{uid}-url-error" role="alert" class="text-destructive text-sm empty:hidden">{urlError}</p>
 	</div>
 
-	<div class="flex flex-col gap-2">
-		<p id="{uid}-files" class="text-sm font-semibold">{t("add.resource.files.label")}</p>
-		<div
-			role="group"
-			aria-labelledby="{uid}-files"
-			class="border-input flex flex-wrap items-center gap-3 border border-dashed p-4 {dragging ? 'bg-muted' : ''}"
-			ondragover={(e) => { e.preventDefault(); dragging = true; }}
-			ondragleave={() => (dragging = false)}
-			ondrop={dropped}
-		>
-			<Button type="button" variant="outline" size="sm" aria-describedby="{uid}-files-hint" onclick={() => picker?.click()}><Icon name="kind-ingest" size={16} />{t("add.resource.choose")}</Button>
-			<span class="text-muted-foreground text-sm">{t("add.resource.drop")}</span>
-			<input bind:this={picker} type="file" multiple accept={ACCEPT} hidden onchange={(e) => { add(e.currentTarget.files ?? []); e.currentTarget.value = ""; }} />
-		</div>
-		<p id="{uid}-files-hint" class="text-muted-foreground text-xs">{t("add.resource.files.hint")}</p>
-		{#if files.length}
-			<ul class="flex flex-col gap-1 text-sm">
-				{#each files as f (f.name + f.size)}
-					<li class="bg-secondary border-border flex items-center justify-between gap-3 border px-3 py-1">
-						<span class="[overflow-wrap:anywhere]">{f.name} <span class="text-muted-foreground text-xs">({size(f.size)})</span></span>
-						<Button type="button" variant="ghost" size="icon-sm" aria-label={t("add.resource.remove", { name: f.name })} onclick={() => (files = files.filter((g) => g !== f))}><Icon name="close-selection" size={16} /></Button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-		<p role="alert" class="text-destructive text-sm empty:hidden">{emptyError}</p>
-	</div>
+	<FilePicker bind:files label={t("add.resource.files.label")} hint={t("add.resource.files.hint")} error={emptyError} />
 
 	<div class="flex flex-col gap-2">
 		<label for="{uid}-why" class="text-sm font-semibold">{t("add.resource.why.label")}</label>

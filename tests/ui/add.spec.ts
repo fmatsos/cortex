@@ -45,7 +45,7 @@ test("Add > Note: toolbar, preview, import and draft; the share request carries 
   await expect(body).toHaveValue("**un mot**");
 
   // a .md file fills the body, its first # heading becomes the title and leaves the body
-  await note.locator('input[type="file"]').setInputFiles({ name: "idee.md", mimeType: "text/markdown", buffer: Buffer.from("# Titre importé\n\nCorps **importé**, avec un [lien](https://example.org).\n") });
+  await note.locator('input[type="file"]:not([multiple])').setInputFiles({ name: "idee.md", mimeType: "text/markdown", buffer: Buffer.from("# Titre importé\n\nCorps **importé**, avec un [lien](https://example.org).\n") });
   await expect(title).toHaveValue("Titre importé");
   await expect(body).toHaveValue("Corps **importé**, avec un [lien](https://example.org).\n");
 
@@ -117,4 +117,27 @@ test("Add: a space that holds resources only offers the Resource tab alone", asy
   await expect(page.getByRole("tab", { name: /^(Resource|Ressource)$/ })).toBeVisible();
   await expect(page.getByLabel(/^(Link|Lien)$/)).toBeVisible();
   await expect(page.locator('header nav a[href$="/add/"]')).toHaveCount(1);
+});
+
+test("Add > Note: attached files go with the note in one multipart request (text, as=note and the file parts)", async ({ page }) => {
+  const { shares } = await mount(page, ["notes", "resources"]);
+  await page.goto("/s/demo/add/");
+  const note = page.getByRole("tabpanel", { name: "Note" });
+  await note.getByLabel(/^(Title|Titre)$/).fill("Réunion");
+  await note.getByLabel(/^(Text|Texte)$/).fill("Compte rendu");
+  await note.getByLabel(/^(Why I keep it|Pourquoi je la garde)/).fill("à garder");
+  await note.locator('input[type="file"][multiple]').setInputFiles([
+    { name: "devis.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 x") },
+    { name: "liste.txt", mimeType: "text/plain", buffer: Buffer.from("du texte") },
+  ]);
+  await note.getByRole("button", { name: /(Remove|Retirer) liste\.txt/ }).click();
+  await note.getByRole("button", { name: /^(Add the note|Ajouter la note)$/ }).click();
+  await expect(page.getByText(/^(Added: the note is pending compilation\.|Ajoutée : la note attend sa compilation\.)$/)).toBeVisible();
+  expect(shares).toHaveLength(1);
+  expect(shares[0]!.type).toContain("multipart/form-data");
+  const form = shares[0]!.body;
+  for (const [k, v] of [["title", "Réunion"], ["text", "Compte rendu"], ["note", "à garder"], ["as", "note"]]) expect(form).toContain(`name="${k}"\r\n\r\n${v}`);
+  expect(form).toContain('name="file"; filename="devis.pdf"');
+  expect(form).not.toContain("liste.txt");
+  await expect(note.getByText("devis.pdf")).toHaveCount(0); // sent: the list is empty
 });

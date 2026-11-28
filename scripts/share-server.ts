@@ -163,7 +163,7 @@ async function upload(f: File, n: number): Promise<{ ext: string; content: strin
   return { ext, content: /^#[ \t]+\S/m.test(text) || !stem ? text : `# ${stem}\n\n${text}` };
 }
 
-/** `uploads`: the files of a `multipart/form-data` share; `note` and `as` of the share go with each one (`<file>.note`, `<file>.as`). */
+/** `uploads`: the files of a `multipart/form-data` share: attachments of its note when it is one (`as: "note"` with a text), else each one carries the share's `note` and `as` (`<file>.note`, `<file>.as`). */
 async function put(share: Share, deliver: Deliver, uploads: File[] = []): Promise<Response> {
   if (share.as !== undefined && !isShareAs(share.as)) return new Response(`"as" must be "note" or "resource"`, { status: 400 });
   if (uploads.length > MAX_UPLOADS) return new Response(`too many files (${MAX_UPLOADS} at most)`, { status: 413 });
@@ -174,9 +174,13 @@ async function put(share: Share, deliver: Deliver, uploads: File[] = []): Promis
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`;
   const out: { path: string; content: string | Uint8Array }[] = (files ?? []).map(([ext, content]) => ({ path: `inbox/partage-${id}.${ext}`, content }));
   const note = oneLine(share.note ?? "");
+  // a note with files: the files are its attachments (each its own source, tied to the note: `<file>.of` names the note's inbox file; the `as` and the
+  // note are the note's, an attachment is what `add` says it is). Otherwise `note` and `as` go on each file.
+  const attachedTo = share.as === "note" && out.length ? out[0]!.path.split("/").at(-1) : undefined;
   for (const [i, u] of taken.entries()) {
     const path = `inbox/partage-${id}-${i + 1}.${u.ext}`;
     out.push({ path, content: u.content });
+    if (attachedTo) { out.push({ path: `${path}.of`, content: `${attachedTo}\n` }); continue; }
     if (note) out.push({ path: `${path}.note`, content: `${note}\n` });
     if (share.as) out.push({ path: `${path}.as`, content: `${share.as}\n` });
   }

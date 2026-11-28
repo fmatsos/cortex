@@ -147,3 +147,45 @@ test("inbox: sharedKinds names the kind of each entry: as first, then a link, a 
   expect(sharedKinds(f("inbox/a.pdf", "inbox/a.pdf.as", "inbox/b.md"))).toEqual(["note"]); // an explicit kind wins over the PDF; the text names none
   expect(sharedKinds(f("inbox/b.md", "inbox/b.md.note"))).toEqual([]);
 });
+
+test("inbox: an attachment (<name>.of) is added after its note whatever the names sort to, tied to it both ways; it waits while the note is not added, and keeps the note's id", async () => {
+  const { inbox } = await import("./inbox");
+  const { existsSync, readdirSync, readFileSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "cortex-"));
+  await Bun.write(join(root, "cortex.json"), "{}");
+  const docs = async () => (await (await import("./lib")).readDocs(root, "raw")).docs;
+  const put = async (name: string, text: string, of?: string) => { await Bun.write(join(root, "inbox", name), text); if (of) await Bun.write(join(root, "inbox", `${name}.of`), `${of}\n`); };
+
+  // the note fails (a format `add` does not read): its attachment stays with it, nothing is linked
+  await put("partage-a.docx", "x");
+  await put("partage-a-1.txt", "# Devis\n\nUn devis en pièce jointe, avec assez de mots pour une source.\n", "partage-a.docx");
+  const first = await inbox(root);
+  expect(first.ok).toBe(false);
+  expect(await docs()).toHaveLength(0);
+  expect(first.messages.some((m) => m.text.includes("waits for its note partage-a.docx"))).toBe(true);
+  expect(readdirSync(join(root, "inbox")).sort()).toEqual(["partage-a-1.txt", "partage-a-1.txt.of", "partage-a.docx"]);
+  for (const f of readdirSync(join(root, "inbox"))) await Bun.file(join(root, "inbox", f)).delete();
+
+  // the note is added (the attachments sort before it: '-' < '.'); one attachment is readable, the other is not
+  await put("partage-b.md", "# Réunion\n\nCompte rendu de la réunion du lundi.\n");
+  await put("partage-b-1.txt", "# Devis\n\nUn devis en pièce jointe, avec assez de mots pour une source.\n", "partage-b.md");
+  await put("partage-b-2.docx", "x", "partage-b.md");
+  expect((await inbox(root)).ok).toBe(false);
+  const all = await docs();
+  const note = all.find((d) => d.fm.title === "Réunion")!, att = all.find((d) => d.fm.title === "Devis")!;
+  const [noteId, attId] = [note.path.split("/").at(-2)!, att.path.split("/").at(-2)!];
+  expect(String(note.fm.linked)).toBe(attId);
+  expect(String(att.fm.linked_from)).toBe(noteId);
+  expect(readdirSync(join(root, "inbox")).sort()).toEqual(["partage-b-2.docx", "partage-b-2.docx.of"]); // the failed one stays, now naming the note by its id
+  expect(readFileSync(join(root, "inbox/partage-b-2.docx.of"), "utf8").trim()).toBe(noteId);
+  expect(existsSync(join(root, "inbox/partage-b-1.txt.of"))).toBe(false);
+
+  // a later run, the note's file long gone: the attachment is tied to the note by its id
+  await Bun.file(join(root, "inbox/partage-b-2.docx")).delete();
+  await put("partage-b-2.txt", "# Photo\n\nLa légende de la photo, assez longue pour être une source.\n", noteId);
+  await Bun.file(join(root, "inbox/partage-b-2.docx.of")).delete();
+  expect((await inbox(root)).ok).toBe(true);
+  const photo = (await docs()).find((d) => d.fm.title === "Photo")!;
+  expect(String(photo.fm.linked_from)).toBe(noteId);
+  expect(String((await docs()).find((d) => d.fm.title === "Réunion")!.fm.linked).split(",").map((s) => s.trim()).sort()).toEqual([attId, photo.path.split("/").at(-2)!].sort());
+});

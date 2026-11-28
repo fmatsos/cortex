@@ -582,6 +582,29 @@ test("an uploaded file (multipart share): a PDF is a resource, refused by a spac
   expect(readdirSync(join(root, "spaces/both/inbox")).filter((f) => !f.startsWith("."))).toEqual([]);
 });
 
+test("a note with attachments (multipart share): each file is its own source tied to the note both ways; the attachment's own kind is checked", async () => {
+  const root = instance(["n", "both"], { ...AUTH, default_space: "both", spaces: { n: { content: ["notes"] }, both: { content: ["notes", "resources"] } } });
+  const { origin } = await start(root);
+  const share = (space: string, files: [string, BlobPart][]) => {
+    const form = new FormData();
+    form.set("as", "note"); form.set("title", "Une réunion"); form.set("text", "Le compte rendu de la réunion du lundi.");
+    for (const [name, body] of files) form.append("file", new File([body], name));
+    return fetch(`${origin}/s/${space}/share/api`, { method: "POST", body: form });
+  };
+  const refused = await share("n", [["devis.pdf", "%PDF-1.4 x"]]); // a note is taken by a notes space, its PDF (a resource) is not
+  expect([refused.status, await refused.text()]).toEqual([409, expect.stringContaining("space n holds notes, not resources")]);
+  expect(existsSync(join(root, "spaces/n/inbox"))).toBe(false);
+  expect((await share("both", [["Devis.txt", "Le devis du fournisseur, détaillé, tapé à la main."]])).status).toBe(200);
+  const sources = () => { try { return (readdirSync(join(root, "spaces/both/raw"), { recursive: true }) as string[]).filter((f) => f.endsWith("source.md")).map((f) => ({ id: f.split("/").at(-2)!, text: readFileSync(join(root, "spaces/both/raw", f), "utf8") })); } catch { return []; } };
+  const until = Date.now() + 5000;
+  while (sources().length < 2 && Date.now() < until) await Bun.sleep(20);
+  const note = sources().find((s) => s.text.includes("title: Une réunion"))!, att = sources().find((s) => s.text.includes("title: Devis"))!;
+  expect(note.text).toContain(`linked: [${att.id}]`);
+  expect(att.text).toContain(`linked_from: [${note.id}]`);
+  expect(note.text).toContain("content: note");
+  expect(readdirSync(join(root, "spaces/both/inbox")).filter((f) => !f.startsWith("."))).toEqual([]);
+});
+
 test("POST /s/<space>/api/markdown draws a Markdown text as the wiki does (sanitized), same origin only", async () => {
   const root = instance(["a"], { ...AUTH, default_space: "a" });
   const { send, origin } = await start(root);

@@ -7,6 +7,7 @@
 	import { Input } from "#lib/components/ui/input/index.js";
 	import * as Tabs from "#lib/components/ui/tabs/index.js";
 	import { Textarea } from "#lib/components/ui/textarea/index.js";
+	import FilePicker from "#lib/components/add/file-picker.svelte";
 	import ResourceForm from "#lib/components/add/resource-form.svelte";
 	import { fromFile, insert, type Insert } from "#lib/markdown-edit.js";
 	import { refusal, sendShare } from "#lib/share.js";
@@ -36,6 +37,7 @@
 	let pending = $state(false), submitted = $state(false);
 	let info = $state(""), error = $state("");
 	let html = $state(""), drawing = $state(false);
+	let attachments = $state<File[]>([]); // not part of the draft: a file cannot be kept in the browser's storage
 	let restored = $state(false);
 
 	const titleError = $derived(submitted && !title.trim() ? t("add.error.title") : "");
@@ -127,9 +129,16 @@
 		if (pending) return;
 		if (!title.trim() || !body.trim()) { (title.trim() ? area : titleField)?.focus(); return; }
 		pending = true;
-		const r = await sendShare({ title: title.trim(), text: body, note: why, as: "note" });
+		// with attachments: one multipart request, the files are tied to the note by the server (each its own source, linked both ways)
+		let share: Record<string, unknown> | FormData = { title: title.trim(), text: body, note: why, as: "note" };
+		if (attachments.length) {
+			share = new FormData();
+			for (const [k, v] of Object.entries({ title: title.trim(), text: body, note: why, as: "note" })) share.set(k, v);
+			for (const f of attachments) share.append("file", f);
+		}
+		const r = await sendShare(share);
 		if (r.ok) {
-			title = ""; body = ""; why = ""; mode = "write"; submitted = false;
+			title = ""; body = ""; why = ""; attachments = []; mode = "write"; submitted = false;
 			try { localStorage.removeItem(spaceKey(DRAFT)); } catch { /* nothing kept */ }
 			info = t("add.note.sent");
 		} else {
@@ -227,6 +236,8 @@
 						<Input id="{uid}-why" bind:value={why} maxlength={300} autocomplete="off" aria-describedby="{uid}-why-hint" />
 						<p id="{uid}-why-hint" class="text-muted-foreground text-xs">{t("add.note.why.hint")}</p>
 					</div>
+
+					<FilePicker bind:files={attachments} label={t("add.note.attach.label")} hint={t("add.note.attach.hint")} />
 
 					<div class="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
 						<p class="text-muted-foreground text-xs">{t("add.draft")}</p>

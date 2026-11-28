@@ -1353,5 +1353,7 @@
 	"add.resource.failed": "Non envoyé (erreur {status}). Réessayez.",
 	"add.resource.offline": "Le serveur est injoignable. Réessayez.",
 	"add.resource.files_one": "{count} fichier",
-	"add.resource.files_other": "{count} fichiers"
+	"add.resource.files_other": "{count} fichiers",
+	"add.note.attach.label": "Pièces jointes (facultatif)",
+	"add.note.attach.hint": "PDF, Markdown (.md, .markdown) ou texte (.txt), 25 Mo au maximum chacun. Chaque fichier devient une source à part, liée à la note."
 }

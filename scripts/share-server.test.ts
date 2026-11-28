@@ -83,6 +83,28 @@ test("share: multipart uploads are named by the server (never by the client), ch
   expect((await send(new FormData())).status).toBe(400); // nothing at all
 });
 
+test("share: a note with files makes its files attachments (<file>.of names the note, no as or note on them); without a text each file carries them", async () => {
+  const { route } = await import("./share-server");
+  const got: { path: string; content: string | Uint8Array }[][] = [];
+  const send = (form: FormData) => route(new Request("http://x/share/api", { method: "POST", body: form }), async (f) => { got.push(f); });
+  const form = new FormData();
+  form.set("as", "note"); form.set("title", "Réunion"); form.set("text", "Compte rendu"); form.set("note", "à garder");
+  form.append("file", new File([new TextEncoder().encode("%PDF-1.4")], "devis.pdf"));
+  form.append("file", new File(["du texte"], "liste.txt"));
+  expect((await send(form)).status).toBe(200);
+  const base = got[0]![0]!.path.split("/").at(-1)!;
+  expect(base).toMatch(/^partage-[\w-]+\.md$/);
+  expect(got[0]!.map((f) => f.path.replace(/^inbox\/partage-[\w-]+?(-\d)?\./, "$1 "))).toEqual([" md", " md.as", " md.note", "-1 pdf", "-1 pdf.of", "-2 txt", "-2 txt.of"]);
+  expect(got[0]!.filter((f) => f.path.endsWith(".of")).map((f) => f.content)).toEqual([`${base}\n`, `${base}\n`]);
+  expect(got[0]!.find((f) => f.path.endsWith(".md.as"))!.content).toBe("note\n");
+  // as note and files but no text: each file is a note, as before
+  got.length = 0;
+  const bare = new FormData();
+  bare.set("as", "note"); bare.set("note", "x"); bare.append("file", new File(["du texte"], "liste.txt"));
+  expect((await send(bare)).status).toBe(200);
+  expect(got[0]!.map((f) => f.path.replace(/^.*\.(?=txt)/, ""))).toEqual(["txt", "txt.note", "txt.as"]);
+});
+
 test("share: the extension origin gets CORS headers (preflight and POST), another origin none", async () => {
   const { route } = await import("./share-server");
   const ext = "chrome-extension://" + "a".repeat(32);
